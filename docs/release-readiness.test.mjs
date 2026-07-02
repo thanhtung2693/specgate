@@ -223,12 +223,15 @@ test("landing metadata points at shipped logo assets", () => {
 
 test("GitHub Pages deploys only the static landing site", () => {
   assert.match(pagesWorkflow, /name: pages/);
+  assert.match(pagesWorkflow, /push:\n\s+branches: \["main"\]/);
+  assert.doesNotMatch(pagesWorkflow, /\n\s+paths:/);
   assert.match(pagesWorkflow, /actions\/upload-pages-artifact@v5/);
   assert.match(pagesWorkflow, /actions\/deploy-pages@v5/);
   assert.match(pagesWorkflow, /path: app\/landing/);
   assert.doesNotMatch(pagesWorkflow, /npm ci|npm run build|app\/ui/);
   assert.match(landingReadme, /GitHub Pages/);
   assert.match(landingReadme, /app\/landing/);
+  assert.match(landingReadme, /avoids path filters/);
 });
 
 test("Node-backed workflows use Node 24 compatible setup-node actions", () => {

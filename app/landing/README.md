@@ -16,8 +16,9 @@ Open `http://127.0.0.1:4177`.
 ## GitHub Pages
 
 The repository publishes this static landing page from `app/landing` with the
-`pages` GitHub Actions workflow. The workflow runs on `main` when landing files
-or `.github/workflows/pages.yml` change, can also be started manually, validates
+`pages` GitHub Actions workflow. The workflow runs on every `main` push and can
+also be started manually. It intentionally avoids path filters so release squash
+or force-push workflows cannot leave the public site stale. Each run validates
 the dependency-free page, uploads `app/landing` as the Pages artifact, and
 deploys it to the `github-pages` environment.
 

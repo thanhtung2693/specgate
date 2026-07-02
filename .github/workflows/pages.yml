@@ -3,9 +3,6 @@ name: pages
 on:
   push:
     branches: ["main"]
-    paths:
-      - "app/landing/**"
-      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
