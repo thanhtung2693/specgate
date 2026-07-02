@@ -1,0 +1,39 @@
+[
+  {
+    "id": "pm-001",
+    "description": "deployment binding strengthens built-in standard to enhanced",
+    "built_in_level": "standard",
+    "bindings": [
+      {
+        "scope": "deployment",
+        "policy": {
+          "spec": {
+            "minimum_governance_level": "enhanced",
+            "approval_policy": "human_required",
+            "gates": [{"ref": "builtin/rollback-plan@1", "requirement": "always"}]
+          }
+        }
+      }
+    ],
+    "expect": {"governance_level": "enhanced", "approval_policy": "human_required", "gate_keys": ["builtin/rollback-plan@1"]}
+  },
+  {
+    "id": "pm-002",
+    "description": "org binding cannot weaken deployment binding",
+    "built_in_level": "standard",
+    "bindings": [
+      {"scope": "deployment", "policy": {"spec": {"minimum_governance_level": "enhanced"}}},
+      {"scope": "organization", "policy": {"spec": {"minimum_governance_level": "light"}}}
+    ],
+    "expect": {"governance_level": "enhanced"}
+  },
+  {
+    "id": "pm-003",
+    "description": "advisory gate never blocks even when failed",
+    "built_in_level": "light",
+    "bindings": [
+      {"scope": "deployment", "policy": {"spec": {"gates": [{"ref": "acme/advisory-check@1", "requirement": "advisory"}]}}}
+    ],
+    "expect": {"gate_keys": ["acme/advisory-check@1"], "advisory_keys": ["acme/advisory-check@1"]}
+  }
+]

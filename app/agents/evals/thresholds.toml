@@ -1,0 +1,9 @@
+# Per-target aggregate pass-rate gates.
+#
+# These are floors, not targets. The governance contract targets run a
+# deterministic FakeJudge baseline in CI, so they gate at 1.00 — any drift
+# in the judge or dataset surfaces as a regression on the next run.
+
+[targets]
+quality_gate_contract = 1.00
+ac_satisfaction_contract = 1.00

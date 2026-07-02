@@ -1,0 +1,27 @@
+name: doc-registry
+on:
+  push:
+    branches: ["main"]
+    paths: ["app/doc-registry/**", ".github/workflows/doc-registry.yml"]
+  pull_request:
+    paths: ["app/doc-registry/**", ".github/workflows/doc-registry.yml"]
+jobs:
+  test:
+    # doc-registry's DB tests use Postgres via testcontainers-go (it starts
+    # postgres:18-alpine itself using the runner's Docker daemon). So there is no
+    # `services:` block and no POSTGRES_DSN env — `make test` provisions Postgres on
+    # its own. ubuntu-latest ships Docker, which testcontainers needs.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/doc-registry
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: app/doc-registry/go.mod
+          cache-dependency-path: app/doc-registry/go.sum
+      - name: Test
+        # CI runners are tighter than local machines; avoid starting multiple
+        # Testcontainers-backed packages at once.
+        run: go test -race -count=1 -p=1 ./...

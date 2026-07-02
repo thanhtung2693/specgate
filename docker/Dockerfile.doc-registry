@@ -1,0 +1,43 @@
+# syntax=docker/dockerfile:1.7
+
+FROM golang:1.26.4-alpine AS builder
+RUN apk add --no-cache gcc musl-dev sqlite-dev python3
+WORKDIR /src
+COPY app/doc-registry/go.mod app/doc-registry/go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+COPY app/doc-registry/ .
+COPY plugins /src/plugins
+RUN SPECGATE_PLUGIN_SOURCE=/src/plugins \
+    SPECGATE_EMBEDDED_PLUGIN_DEST=/src/internal/agentpackages/plugins \
+    sh scripts/sync-embedded-plugins.sh
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_DATE=unknown
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=1 go build \
+  -ldflags "-X github.com/specgate/doc-registry/internal/buildinfo.Version=${VERSION} -X github.com/specgate/doc-registry/internal/buildinfo.Commit=${COMMIT} -X github.com/specgate/doc-registry/internal/buildinfo.Date=${BUILD_DATE}" \
+  -o /out/doc-registry ./cmd/doc-registry
+
+# Dev stage — hot reload via Air. docker-compose runs this target with the
+# source bind-mounted at /src/doc-registry, so a `.go` edit recompiles in place
+# (no image rebuild). CGO toolchain matches the builder (sqlite). Not for prod;
+# the default (final) build target stays the slim runtime below.
+FROM golang:1.26.4-alpine AS dev
+RUN apk add --no-cache gcc musl-dev sqlite-dev git python3 \
+    && go install github.com/air-verse/air@latest
+WORKDIR /src/doc-registry
+EXPOSE 8080
+CMD ["air", "-c", ".air.toml"]
+
+FROM alpine:3
+RUN apk add --no-cache ca-certificates sqlite-libs \
+    && adduser -D -u 10001 app \
+    && mkdir -p /data \
+    && chown app:app /data
+USER app
+WORKDIR /app
+COPY --from=builder /out/doc-registry /usr/local/bin/doc-registry
+EXPOSE 8080
+ENTRYPOINT ["doc-registry"]

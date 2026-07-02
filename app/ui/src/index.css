@@ -1,0 +1,157 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-heading: var(--font-sans);
+    --font-sans: 'Geist Variable', sans-serif;
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-success: var(--success);
+    --color-warning: var(--warning);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+    --background: #fbfbfa;
+    --foreground: #111216;
+    --card: #ffffff;
+    --card-foreground: #111216;
+    --popover: #ffffff;
+    --popover-foreground: #111216;
+    --primary: #5e6ad2;
+    --primary-foreground: #ffffff;
+    --secondary: #f4f3ef;
+    --secondary-foreground: #111216;
+    --muted: #f4f3ef;
+    --muted-foreground: #787774;
+    --accent: #efeee9;
+    --accent-foreground: #111216;
+    --destructive: #d24233;
+    --success: #1f9d3f;
+    --warning: #c98a1e;
+    --border: #e6e2da;
+    --input: #d8d3c8;
+    --ring: #5e6ad2;
+    --chart-1: #5e6ad2;
+    --chart-2: #27a644;
+    --chart-3: #e2a748;
+    --chart-4: #db5c57;
+    --chart-5: #8e94a0;
+    --radius: 0.5rem;
+    --sidebar: #ffffff;
+    --sidebar-foreground: #111216;
+    --sidebar-primary: #5e6ad2;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #f4f3ef;
+    --sidebar-accent-foreground: #111216;
+    --sidebar-border: #e6e2da;
+    --sidebar-ring: #5e6ad2;
+}
+
+.dark {
+    --background: #010102;
+    --foreground: #f7f8f8;
+    --card: #0f1011;
+    --card-foreground: #f7f8f8;
+    --popover: #141516;
+    --popover-foreground: #f7f8f8;
+    --primary: #828fff;
+    --primary-foreground: #010102;
+    --secondary: #141516;
+    --secondary-foreground: #f7f8f8;
+    --muted: #141516;
+    --muted-foreground: #8a8f98;
+    --accent: #18191a;
+    --accent-foreground: #f7f8f8;
+    --destructive: #db5c57;
+    --success: #27a644;
+    --warning: #e2a748;
+    --border: #23252a;
+    --input: #34343a;
+    --ring: #5e6ad2;
+    --chart-1: #5e6ad2;
+    --chart-2: #27a644;
+    --chart-3: #e2a748;
+    --chart-4: #db5c57;
+    --chart-5: #62666d;
+    --sidebar: #0f1011;
+    --sidebar-foreground: #f7f8f8;
+    --sidebar-primary: #828fff;
+    --sidebar-primary-foreground: #010102;
+    --sidebar-accent: #18191a;
+    --sidebar-accent-foreground: #f7f8f8;
+    --sidebar-border: #23252a;
+    --sidebar-ring: #5e6ad2;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground antialiased;
+    }
+  html {
+    @apply font-sans;
+    color-scheme: light;
+    scrollbar-gutter: stable;
+    }
+  html.dark {
+    color-scheme: dark;
+    }
+  #root {
+    min-height: 100dvh;
+    }
+}
+
+@keyframes sg-thinking-shimmer {
+    0% {
+        background-position: 220% 0;
+    }
+    100% {
+        background-position: -220% 0;
+    }
+}
+
+.sg-thinking-shimmer {
+    animation: sg-thinking-shimmer 1.4s linear infinite;
+}

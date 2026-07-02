@@ -1,0 +1,58 @@
+# SpecGate IDE Plugins
+
+SpecGate setup has two layers:
+
+1. Portable focused Agent Skills for readiness, pickup, implementation, and delivery:
+
+```bash
+npx skills add {{.SkillRepoURL}}
+```
+
+2. CLI install + agent-specific instruction files (pick your IDE interactively, or pass --agent):
+
+```bash
+curl -fsSL "{{.RegistryBaseURL}}/plugins/install.sh" | sh                      # interactive picker
+curl -fsSL "{{.RegistryBaseURL}}/plugins/install.sh" | sh -s -- --agent all    # cursor|codex|claude|all
+```
+
+Add `--dry-run` to preview what would be written without touching disk. Add
+`--skip-cli` when the CLI is already installed and you only want to refresh IDE
+Skills, hooks, and Cursor rules. By default, IDE files are installed globally
+under your home directory. Add `--project-local` only when the current
+repository should vendor its SpecGate agent setup.
+
+The installer:
+1. Downloads and installs the `specgate` CLI binary (via `{{.RegistryBaseURL}}/cli/install.sh`) unless `--skip-cli` is set.
+2. Configures `specgate config set server {{.RegistryBaseURL}}` so the CLI knows where to connect.
+3. Writes IDE-specific plugin packages, Skills, hooks, and Cursor rules to global user locations.
+
+The served `/plugins/package.json` file is the package inventory. It declares
+the focused Skills, retired Skill cleanup names, and exact files this server
+will publish under `/plugins/*`.
+
+Human mode prints three clear steps: choose IDE setup, install CLI, then write IDE files.
+Restart the selected IDEs after installation so their plugin, Skill, hook, and
+rule loaders pick up the new files.
+
+Per-IDE default destinations:
+- **Cursor**: writes `~/.cursor/rules/using-specgate.mdc` and focused skills to `~/.cursor/skills/`.
+- **Codex**: writes the native plugin package, including focused skills and bundled hooks, to `~/.codex/plugins/specgate/`.
+- **Claude Code**: writes the native plugin package, including focused skills and bundled hooks, to `~/.claude/skills/specgate/`.
+
+With `--project-local`, these destinations move under the current repository
+instead (`plugins/specgate/`, `.cursor/skills/`, `.cursor/rules/`,
+`.claude/skills/specgate/` as applicable).
+
+## Skill invocation modes
+
+`using-specgate` is the router. Use it for normal SpecGate work so the agent
+chooses exactly one narrower phase before acting.
+
+`setting-up-specgate-project` is explicit setup. Invoke it when installing or
+refreshing SpecGate for a repository, or when canonical docs, tracker mirrors,
+readiness rules, verification commands, or domain vocabulary are still unknown.
+
+Lifecycle skills stay focused: `shaping-work`, `checking-spec-readiness`,
+`picking-up-work`, `implementing-work`, and `completing-delivery` each describe
+one phase. Prefer reaching them through the router unless the user names the
+phase directly.

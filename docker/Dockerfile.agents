@@ -1,0 +1,26 @@
+# syntax=docker/dockerfile:1.7
+#
+# Agents container. The default CMD runs the LangGraph dev server (graph + HTTP
+# app from langgraph.json). Deployments may override the command to serve only
+# the FastAPI webapp via uvicorn (installed --system, so it is on PATH). Set
+# LANGSMITH_API_KEY for optional tracing.
+
+FROM python:3.13-slim
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install uv
+
+WORKDIR /deps/agents
+
+COPY app/agents /deps/agents
+
+# langgraph-cli[inmem] bundles the dev server + in-memory checkpointer/store.
+# Install it together with the local package in ONE resolution so the project's
+# [tool.uv] override-dependencies (langgraph-api>=0.8, past the cli's <0.8 cap)
+# is honored instead of being undone by a separate cli install.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system "langgraph-cli[inmem]" -e .
+
+EXPOSE 8000
+
+CMD ["langgraph", "dev", "--host", "0.0.0.0", "--port", "8000", "--no-browser"]

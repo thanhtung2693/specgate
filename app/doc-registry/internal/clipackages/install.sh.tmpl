@@ -1,0 +1,237 @@
+#!/usr/bin/env sh
+# SpecGate CLI installer — auto-configured for {{.ServerURL}}
+#
+# Installs the SpecGate CLI{{if .Version}} (default {{.Version}}){{end}} and configures it to
+# connect to this SpecGate instance.
+#
+# Usage: curl -fsSL {{.ServerURL}}/cli/install.sh | sh
+set -e
+
+SPECGATE_VERSION="{{.Version}}"
+INSTALL_DIR=""
+SERVER_URL="{{.ServerURL}}"
+NO_CONFIG=0
+GITHUB_REPO="thanhtung2693/specgate"
+BINARY_NAME="specgate"
+BUILD_FROM_SOURCE=0
+REPO_ROOT=""
+
+find_repo_root() {
+  dir="$PWD"
+  while [ "$dir" != "/" ]; do
+    if [ -f "$dir/app/cli/go.mod" ]; then
+      printf '%s\n' "$dir"
+      return 0
+    fi
+    dir=$(dirname "$dir")
+  done
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# Parse flags
+# ---------------------------------------------------------------------------
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --version)
+      SPECGATE_VERSION="$2"
+      shift 2
+      ;;
+    --install-dir)
+      INSTALL_DIR="$2"
+      shift 2
+      ;;
+    --server)
+      SERVER_URL="$2"
+      shift 2
+      ;;
+    --no-config)
+      NO_CONFIG=1
+      shift
+      ;;
+    *)
+      echo "Unknown flag: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+# ---------------------------------------------------------------------------
+# Defaults
+# ---------------------------------------------------------------------------
+if [ -z "$INSTALL_DIR" ]; then
+  if command -v "$BINARY_NAME" >/dev/null 2>&1; then
+    CURRENT_BIN="$(command -v "$BINARY_NAME" || true)"
+    case "$CURRENT_BIN" in
+      /*)
+        CURRENT_DIR="$(dirname "$CURRENT_BIN")"
+        if [ -w "$CURRENT_DIR" ]; then
+          INSTALL_DIR="$CURRENT_DIR"
+        fi
+        ;;
+    esac
+  fi
+fi
+
+if [ -z "$INSTALL_DIR" ] && [ -n "${HOME:-}" ]; then
+  USER_BIN="${HOME}/.local/bin"
+  mkdir -p "$USER_BIN" 2>/dev/null || true
+  if [ -w "$USER_BIN" ]; then
+    INSTALL_DIR="$USER_BIN"
+  fi
+fi
+
+if [ -z "$INSTALL_DIR" ]; then
+  INSTALL_DIR="/usr/local/bin"
+fi
+
+# ---------------------------------------------------------------------------
+# Detect OS and architecture
+# ---------------------------------------------------------------------------
+OS="$(uname -s)"
+ARCH="$(uname -m)"
+
+case "$OS" in
+  Darwin)  OS_NAME="darwin" ;;
+  Linux)   OS_NAME="linux" ;;
+  CYGWIN*|MINGW*|MSYS*) OS_NAME="windows" ;;
+  *)
+    echo "Unsupported OS: $OS" >&2
+    exit 1
+    ;;
+esac
+
+case "$ARCH" in
+  x86_64|amd64) ARCH_NAME="amd64" ;;
+  arm64|aarch64) ARCH_NAME="arm64" ;;
+  *)
+    echo "Unsupported architecture: $ARCH" >&2
+    exit 1
+    ;;
+esac
+
+# ---------------------------------------------------------------------------
+# Resolve version
+# ---------------------------------------------------------------------------
+if [ -z "$SPECGATE_VERSION" ]; then
+  echo "Step 1/4 Resolve version"
+  if ! command -v go >/dev/null 2>&1; then
+    echo "Go is required to install a dev SpecGate CLI build from source." >&2
+    exit 1
+  fi
+  if ! REPO_ROOT="$(find_repo_root)"; then
+    echo "Dev installer requires a local SpecGate checkout (expected app/cli/go.mod) or an explicit --version release tag." >&2
+    exit 1
+  fi
+  BUILD_FROM_SOURCE=1
+  SPECGATE_VERSION="dev"
+  echo "  Using local source build"
+else
+  echo "Step 1/4 Resolve version"
+  echo "  Using ${SPECGATE_VERSION}"
+fi
+
+echo "Step 2/4 Prepare install target"
+echo "  Installing SpecGate CLI ${SPECGATE_VERSION} (${OS_NAME}/${ARCH_NAME}) to ${INSTALL_DIR}"
+
+# ---------------------------------------------------------------------------
+# Acquire binary
+# ---------------------------------------------------------------------------
+TMPDIR="$(mktemp -d)"
+trap "rm -rf '$TMPDIR'" EXIT
+
+if [ "$BUILD_FROM_SOURCE" -eq 1 ]; then
+  echo "Step 3/4 Build binary"
+  echo "  Building SpecGate CLI from local source checkout at ${REPO_ROOT}..."
+  if [ "$OS_NAME" = "windows" ]; then
+    BINARY="${TMPDIR}/${BINARY_NAME}.exe"
+  else
+    BINARY="${TMPDIR}/${BINARY_NAME}"
+  fi
+  (cd "${REPO_ROOT}/app/cli" && go build -o "$BINARY" ./cmd/specgate)
+else
+  echo "Step 3/4 Download package"
+  BASE_URL="https://github.com/${GITHUB_REPO}/releases/download/${SPECGATE_VERSION}"
+  ARCHIVE_NAME="specgate_${SPECGATE_VERSION#v}_${OS_NAME}_${ARCH_NAME}"
+
+  if [ "$OS_NAME" = "windows" ]; then
+    ARCHIVE_FILE="${ARCHIVE_NAME}.zip"
+  else
+    ARCHIVE_FILE="${ARCHIVE_NAME}.tar.gz"
+  fi
+
+  CHECKSUMS_FILE="specgate_${SPECGATE_VERSION#v}_checksums.txt"
+
+  curl -fsSL "${BASE_URL}/${CHECKSUMS_FILE}" -o "${TMPDIR}/${CHECKSUMS_FILE}"
+  curl -fsSL "${BASE_URL}/${ARCHIVE_FILE}" -o "${TMPDIR}/${ARCHIVE_FILE}"
+
+  # ---------------------------------------------------------------------------
+  # Verify SHA-256 checksum
+  # ---------------------------------------------------------------------------
+  echo "  Verifying checksum..."
+  cd "$TMPDIR"
+  if command -v sha256sum >/dev/null 2>&1; then
+    SHA_CMD="sha256sum"
+  elif command -v shasum >/dev/null 2>&1; then
+    SHA_CMD="shasum -a 256"
+  else
+    echo "Neither sha256sum nor shasum found; skipping verification" >&2
+    SHA_CMD=""
+  fi
+
+  if [ -n "$SHA_CMD" ]; then
+    EXPECTED="$(grep " ${ARCHIVE_FILE}$" "${CHECKSUMS_FILE}" | awk '{print $1}')"
+    if [ -z "$EXPECTED" ]; then
+      echo "Checksum entry for ${ARCHIVE_FILE} not found" >&2
+      exit 1
+    fi
+    ACTUAL="$(${SHA_CMD} "${ARCHIVE_FILE}" | awk '{print $1}')"
+    if [ "$EXPECTED" != "$ACTUAL" ]; then
+      echo "Checksum mismatch: expected ${EXPECTED}, got ${ACTUAL}" >&2
+      exit 1
+    fi
+    echo "Checksum verified."
+  fi
+  cd - >/dev/null
+
+# ---------------------------------------------------------------------------
+# Extract archive
+# ---------------------------------------------------------------------------
+  if [ "$OS_NAME" = "windows" ]; then
+    unzip -q "${TMPDIR}/${ARCHIVE_FILE}" -d "$TMPDIR"
+    BINARY="${TMPDIR}/${BINARY_NAME}.exe"
+  else
+    tar -xzf "${TMPDIR}/${ARCHIVE_FILE}" -C "$TMPDIR"
+    BINARY="${TMPDIR}/${BINARY_NAME}"
+  fi
+fi
+
+chmod +x "$BINARY"
+
+# Atomic install: write to a temp file beside the target, then rename.
+echo "Step 4/4 Install binary"
+mkdir -p "$INSTALL_DIR"
+DEST="${INSTALL_DIR}/${BINARY_NAME}"
+if [ "$OS_NAME" = "windows" ]; then
+  DEST="${INSTALL_DIR}/${BINARY_NAME}.exe"
+fi
+TMP_DEST="${DEST}.tmp.$$"
+cp "$BINARY" "$TMP_DEST"
+mv "$TMP_DEST" "$DEST"
+
+echo "Installed: ${DEST}"
+
+# ---------------------------------------------------------------------------
+# Post-install configuration
+# ---------------------------------------------------------------------------
+if [ "$NO_CONFIG" -eq 0 ] && [ -n "$SERVER_URL" ]; then
+  echo "Configuring server: ${SERVER_URL}"
+  "${DEST}" config set server "${SERVER_URL}"
+  "${DEST}" doctor
+fi
+
+echo ""
+echo "SpecGate CLI ${SPECGATE_VERSION} installed successfully."
+if [ "$NO_CONFIG" -eq 1 ] || [ -z "$SERVER_URL" ]; then
+  echo "Run 'specgate config set server <url>' to configure your SpecGate instance."
+fi

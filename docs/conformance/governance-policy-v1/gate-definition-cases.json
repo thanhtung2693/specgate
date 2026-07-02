@@ -1,0 +1,55 @@
+[
+  {
+    "id": "gd-001",
+    "description": "minimal deterministic gate parses cleanly",
+    "input": {
+      "api_version": "specgate.policy/v1",
+      "kind": "GateDefinition",
+      "metadata": {"namespace": "builtin", "name": "ac-verifiability", "version": "1"},
+      "spec": {
+        "phase": "delivery",
+        "title": "AC verifiability",
+        "evaluation": {"mode": "deterministic"},
+        "outcomes": {"blocking": true}
+      }
+    },
+    "expect": {"valid": true, "key": "builtin/ac-verifiability@1"}
+  },
+  {
+    "id": "gd-002",
+    "description": "missing metadata.version is invalid",
+    "input": {
+      "api_version": "specgate.policy/v1",
+      "kind": "GateDefinition",
+      "metadata": {"namespace": "acme", "name": "custom-gate"},
+      "spec": {"phase": "delivery", "evaluation": {"mode": "semantic"}, "outcomes": {"blocking": true}}
+    },
+    "expect": {"valid": false, "error_contains": "version"}
+  },
+  {
+    "id": "gd-003",
+    "description": "ide_agent executor with evaluation_rubric skill ref",
+    "input": {
+      "api_version": "specgate.policy/v1",
+      "kind": "GateDefinition",
+      "metadata": {"namespace": "acme", "name": "api-compat", "version": "2"},
+      "spec": {
+        "phase": "delivery",
+        "title": "API compatibility",
+        "evaluation": {
+          "mode": "semantic",
+          "executors": {"allowed": ["ide_agent", "platform_llm"], "preferred": "ide_agent", "fallback": "human"},
+          "evaluation_rubric": {"skill": "acme/api-compat-review"}
+        },
+        "outcomes": {"blocking": true}
+      }
+    },
+    "expect": {"valid": true, "key": "acme/api-compat@2", "executor_preferred": "ide_agent"}
+  },
+  {
+    "id": "gd-004",
+    "description": "duplicate namespace/name/version: idempotent when digest matches, 409 when digest differs",
+    "note": "same triple + same digest = idempotent; same triple + different content = 409",
+    "expect": {"idempotent_ok": true, "different_digest_status": 409}
+  }
+]

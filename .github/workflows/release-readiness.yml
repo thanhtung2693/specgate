@@ -1,0 +1,18 @@
+name: release-readiness
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "26"
+          package-manager-cache: false
+      # Repo-wide release gate: positioning, retired-terminology scan across all
+      # tracked files, packaging/compose defaults, and cross-module contract docs.
+      # Pure node:test (no dependencies); uses `git ls-files`, so it needs the checkout.
+      - run: node --test docs/release-readiness.test.mjs

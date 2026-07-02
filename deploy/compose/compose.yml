@@ -1,0 +1,107 @@
+# SpecGate quickstart — image-based stack.
+#
+# Usage:
+#   cp doc-registry.env.example doc-registry.env   # fill SETTINGS_ENCRYPTION_KEY
+#   cp agents.env.example       agents.env          # optional tracing key
+#   echo "SPECGATE_VERSION=latest" > .env
+#   docker compose up
+#
+# Host ports:
+#   doc-registry  http://localhost:${DOC_REGISTRY_PORT:-8080}
+#   agents        http://localhost:${AGENTS_PORT:-2024}   (FastAPI webapp)
+#   ui            http://localhost:${UI_PORT:-3000}
+#   postgres      127.0.0.1:${POSTGRES_PORT:-5432}
+#
+# SPECGATE_VERSION is read from .env (created above). It selects the GHCR image
+# tag for doc-registry and agents. Use `latest` for the most recent release or
+# pin to a specific tag like `v1.2.3` for reproducible deployments.
+# SPECGATE_COMPOSE_PROJECT can be set in .env when multiple local stacks need to
+# run side by side.
+
+name: ${SPECGATE_COMPOSE_PROJECT:-specgate}
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.3-pg18
+    environment:
+      POSTGRES_USER: docreg
+      # Local-dev credentials. The port is bound to loopback only (below), so the
+      # DB is not reachable off-host. Change these + keep the bind for any shared host.
+      POSTGRES_PASSWORD: docreg
+      POSTGRES_DB: docreg
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docreg -d docreg"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  doc-registry:
+    image: ghcr.io/thanhtung2693/doc-registry:${SPECGATE_VERSION}
+    env_file:
+      - ./doc-registry.env
+    environment:
+      HTTP_ADDR: ":8080"
+      DATABASE_DRIVER: postgres
+      POSTGRES_DSN: postgres://docreg:docreg@postgres:5432/docreg?sslmode=disable
+      AGENTS_BASE_URL: http://agents:8000
+      MCP_ENABLED: "true"
+      # Set MCP_API_KEY in doc-registry.env to pin the MCP bearer token. Left
+      # unset here so the server mints a random key instead of shipping a
+      # guessable default.
+    ports:
+      - "${DOC_REGISTRY_PORT:-8080}:8080"
+    volumes:
+      - doc-registry-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  agents:
+    image: ghcr.io/thanhtung2693/agents:${SPECGATE_VERSION}
+    # Serve the FastAPI webapp via uvicorn.
+    command: ["uvicorn", "specgate_agents.governance.webapp:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file:
+      - ./agents.env
+    environment:
+      DOC_REGISTRY_BASE_URL: http://doc-registry:8080
+    ports:
+      - "${AGENTS_PORT:-2024}:8000"
+    depends_on:
+      doc-registry:
+        condition: service_started
+    restart: unless-stopped
+
+  ui:
+    image: ghcr.io/thanhtung2693/ui:${SPECGATE_VERSION}
+    ports:
+      - "${UI_PORT:-3000}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
+    depends_on:
+      doc-registry:
+        condition: service_healthy
+      agents:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  doc-registry-data:
+  postgres-data:

@@ -1,0 +1,20 @@
+name: cli
+on:
+  push:
+    branches: ["main"]
+    paths: ["app/cli/**", ".github/workflows/cli.yml"]
+  pull_request:
+    paths: ["app/cli/**", ".github/workflows/cli.yml"]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/cli
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: app/cli/go.mod
+          cache-dependency-path: app/cli/go.sum
+      - run: make test

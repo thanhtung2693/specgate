@@ -1,0 +1,726 @@
+-- Postgres schema for Doc Registry.
+-- Idempotent; safe to re-run. All tables use CREATE TABLE IF NOT EXISTS.
+-- The runner applies this file on every start; there is no migration-tracking table.
+-- Upgrade baseline: databases created before this initial schema
+-- (pre-release dev DBs only) are converted by the fold block below; anything
+-- older than that has no supported upgrade path — recreate instead.
+
+BEGIN;
+
+-- ─── artifacts ────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS artifacts (
+    id                          TEXT PRIMARY KEY,
+    feature_id                  TEXT NOT NULL,
+    version                     TEXT NOT NULL,
+    status                      TEXT NOT NULL,
+    request_type                TEXT NOT NULL,
+    impact_level                TEXT NOT NULL DEFAULT 'medium',
+    confidence_score            DOUBLE PRECISION,
+    ambiguity_score             DOUBLE PRECISION,
+    governance_version             TEXT,
+    created_by                  TEXT NOT NULL,
+    approved_by                 TEXT,
+    approved_at                 TIMESTAMPTZ,
+    artifact_phase              TEXT NOT NULL DEFAULT 'phase1',
+    artifact_completeness       TEXT NOT NULL DEFAULT 'partial',
+    source_kind                 TEXT NOT NULL DEFAULT '',
+    source_id                   TEXT NOT NULL DEFAULT '',
+    source_revision             TEXT NOT NULL DEFAULT '',
+    authority                   TEXT NOT NULL DEFAULT '',
+    gates_profile               TEXT NOT NULL DEFAULT '',
+    parent_artifact_id          TEXT NOT NULL DEFAULT '',
+    lineage_root_id             TEXT NOT NULL DEFAULT '',
+    gates_profile_version       TEXT NOT NULL DEFAULT '',
+    gates_profile_digest        TEXT NOT NULL DEFAULT '',
+    gates_profile_snapshot_json TEXT NOT NULL DEFAULT '{}',
+    created_at                  TIMESTAMPTZ NOT NULL,
+    updated_at                  TIMESTAMPTZ NOT NULL,
+    UNIQUE (feature_id, version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_artifacts_feature_id       ON artifacts (feature_id);
+CREATE INDEX IF NOT EXISTS idx_artifacts_status           ON artifacts (status);
+
+-- per spec §6.1: covers LatestApproved filter + sort in one index.
+CREATE INDEX IF NOT EXISTS idx_artifacts_feature_approved_at
+    ON artifacts (feature_id, approved_at DESC)
+    WHERE status = 'approved';
+
+-- ─── artifact_events ─────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS artifact_events (
+    id          TEXT PRIMARY KEY,
+    artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
+    event_type  TEXT NOT NULL,
+    payload     TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_artifact_events_created_at ON artifact_events (created_at);
+CREATE INDEX IF NOT EXISTS idx_artifact_events_type       ON artifact_events (event_type);
+
+-- ─── artifact_files (path-keyed, with role) ──────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS artifact_files (
+    artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
+    path        TEXT NOT NULL,
+    role        TEXT NOT NULL DEFAULT 'unspecified',
+    s3_path     TEXT NOT NULL,
+    size_bytes  BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (artifact_id, path)
+);
+
+-- ─── artifact_services ───────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS artifact_services (
+    artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    kind        TEXT NOT NULL CHECK (kind IN ('service', 'app')),
+    PRIMARY KEY (artifact_id, name, kind)
+);
+
+CREATE INDEX IF NOT EXISTS idx_artifact_services_name ON artifact_services (name);
+
+-- ─── gate tasks (IDE-agent dispatch/queue state; run history lives in gate_runs) ──
+
+CREATE TABLE IF NOT EXISTS gate_tasks (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    artifact_id      UUID NOT NULL,
+    gate_key         TEXT NOT NULL,
+    gate_version     TEXT NOT NULL,
+    gate_digest      TEXT NOT NULL,
+    artifact_digest  TEXT NOT NULL,
+    profile_digest   TEXT NOT NULL,
+    executor         TEXT NOT NULL,
+    skill_content    TEXT NOT NULL DEFAULT '',
+    expires_at       TIMESTAMPTZ NOT NULL,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_gate_tasks_artifact_id
+    ON gate_tasks (artifact_id);
+
+-- ─── artifact_edit_sessions ──────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS artifact_edit_sessions (
+    id                  TEXT PRIMARY KEY,
+    base_artifact_id    TEXT NOT NULL,
+    base_version        TEXT,
+    base_revision_id    TEXT,
+    state               TEXT NOT NULL,
+    saved_revision_id   TEXT,
+    last_diff_summary   TEXT,
+    requested_by        TEXT,
+    source_kind         TEXT NOT NULL DEFAULT '',
+    source_id           TEXT NOT NULL DEFAULT '',
+    compare_token       TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_aes_base
+    ON artifact_edit_sessions (base_artifact_id);
+
+CREATE TABLE IF NOT EXISTS artifact_edit_session_files (
+    session_id  TEXT NOT NULL,
+    file_key    TEXT NOT NULL,
+    role        TEXT NOT NULL,
+    content     TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (session_id, file_key, role)
+);
+
+CREATE TABLE IF NOT EXISTS artifact_edit_hunk_decisions (
+    id          TEXT PRIMARY KEY,
+    session_id  TEXT NOT NULL,
+    hunk_id     TEXT NOT NULL,
+    file_key    TEXT NOT NULL,
+    state       TEXT NOT NULL,
+    actor       TEXT,
+    decided_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_aehd_session
+    ON artifact_edit_hunk_decisions (session_id, decided_at);
+
+CREATE TABLE IF NOT EXISTS artifact_edit_revisions (
+    revision_id                  TEXT PRIMARY KEY,
+    base_artifact_id             TEXT NOT NULL,
+    artifact_id                  TEXT,
+    state                        TEXT NOT NULL,
+    session_id                   TEXT,
+    summary                      TEXT,
+    diff_json                    TEXT NOT NULL DEFAULT '{}',
+    parent_revision_id           TEXT,
+    lineage_root_artifact_id     TEXT,
+    created_at                   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_aer_base
+    ON artifact_edit_revisions (base_artifact_id, created_at);
+
+-- ─── artifact_attachments ────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS artifact_attachments (
+    id              TEXT PRIMARY KEY,
+    feature_id      TEXT NOT NULL,
+    kind            TEXT NOT NULL,
+    url             TEXT NOT NULL DEFAULT '',
+    governance_file_id TEXT NOT NULL DEFAULT '',
+    title           TEXT NOT NULL DEFAULT '',
+    note            TEXT NOT NULL DEFAULT '',
+    audience        TEXT NOT NULL DEFAULT 'gate',
+    created_by      TEXT NOT NULL DEFAULT '',
+    created_at      TIMESTAMPTZ NOT NULL
+);
+
+ALTER TABLE artifact_attachments
+    ADD COLUMN IF NOT EXISTS governance_file_id TEXT NOT NULL DEFAULT '';
+
+CREATE INDEX IF NOT EXISTS idx_artifact_attachments_feature_id
+    ON artifact_attachments(feature_id);
+
+-- ─── documents ───────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS documents (
+    document_id        TEXT NOT NULL,
+    version            TEXT NOT NULL,
+    parent_version     TEXT,
+    is_latest          BOOLEAN NOT NULL DEFAULT true,
+    title              TEXT NOT NULL,
+    document_type      TEXT NOT NULL,
+    authority_level    TEXT NOT NULL,
+    source_kind        TEXT NOT NULL,
+    source_uri         TEXT,
+    mime_type          TEXT,
+    original_filename  TEXT,
+    status             TEXT NOT NULL,
+    linked_feature_id  TEXT,
+    linked_request_id  TEXT,
+    uploaded_by        TEXT,
+    created_at         TIMESTAMPTZ NOT NULL,
+    updated_at         TIMESTAMPTZ NOT NULL,
+    summary            TEXT,
+    notes              TEXT,
+    tags               TEXT,
+    error_message      TEXT,
+    PRIMARY KEY (document_id, version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_documents_latest  ON documents(document_id, is_latest);
+CREATE INDEX IF NOT EXISTS idx_documents_feature ON documents(linked_feature_id, is_latest);
+CREATE INDEX IF NOT EXISTS idx_documents_request ON documents(linked_request_id, is_latest);
+CREATE INDEX IF NOT EXISTS idx_documents_type    ON documents(document_type, is_latest);
+CREATE INDEX IF NOT EXISTS idx_documents_status  ON documents(status);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_documents_one_latest ON documents(document_id) WHERE is_latest = true;
+
+-- ─── document_chunks ─────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS document_chunks (
+    id               TEXT PRIMARY KEY,
+    document_id      TEXT NOT NULL,
+    version          TEXT NOT NULL,
+    chunk_index      INTEGER NOT NULL,
+    chunk_text       TEXT NOT NULL,
+    token_count      INTEGER,
+    created_at       TIMESTAMPTZ NOT NULL,
+    FOREIGN KEY (document_id, version)
+        REFERENCES documents(document_id, version)
+        ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_document_chunks_document ON document_chunks(document_id, version);
+
+-- ─── document_links ──────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS document_links (
+    id             TEXT PRIMARY KEY,
+    document_id    TEXT NOT NULL,
+    version        TEXT NOT NULL,
+    entity_type    TEXT NOT NULL,
+    entity_id      TEXT NOT NULL,
+    relation_type  TEXT NOT NULL,
+    FOREIGN KEY (document_id, version)
+        REFERENCES documents(document_id, version)
+        ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_document_links_entity ON document_links(entity_type, entity_id);
+
+-- ─── settings ────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL DEFAULT '',
+    encrypted  BOOLEAN NOT NULL DEFAULT false,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+
+-- ─── local identity / workspaces ────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS users (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username     TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    email        TEXT NOT NULL DEFAULT '',
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS workspaces (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    slug       TEXT NOT NULL UNIQUE,
+    name       TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS workspace_members (
+    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role         TEXT NOT NULL DEFAULT 'owner',
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_workspace_members_user_id
+    ON workspace_members (user_id);
+
+-- ─── skills ──────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS skills (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    prompt      TEXT NOT NULL DEFAULT '',
+    created_at  TIMESTAMPTZ NOT NULL,
+    updated_at  TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_skills_updated_at ON skills(updated_at);
+
+-- ─── workboard_extractions ─────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS workboard_extractions (
+    id                    TEXT PRIMARY KEY,
+    source_kind           TEXT NOT NULL,
+    source_id             TEXT NOT NULL,
+    source_version        TEXT,
+    status                TEXT NOT NULL CHECK (status IN ('proposed', 'approved', 'rejected')),
+    proposals_json        TEXT NOT NULL,
+    approval_result_json  TEXT,
+    created_by            TEXT,
+    approved_by           TEXT,
+    created_at            TIMESTAMPTZ NOT NULL,
+    updated_at            TIMESTAMPTZ NOT NULL,
+    approved_at           TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_workboard_extractions_source
+    ON workboard_extractions (source_kind, source_id);
+CREATE INDEX IF NOT EXISTS idx_workboard_extractions_status
+    ON workboard_extractions (status);
+
+-- ─── governance_files ───────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS governance_files (
+    id            TEXT PRIMARY KEY,
+    name          TEXT NOT NULL,
+    mime          TEXT NOT NULL,
+    size_bytes    BIGINT NOT NULL,
+    object_key    TEXT NOT NULL UNIQUE,
+    status        TEXT NOT NULL,
+    created_at    TIMESTAMPTZ NOT NULL,
+    last_used_at  TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_governance_files_last_used_at
+    ON governance_files(last_used_at);
+CREATE INDEX IF NOT EXISTS idx_governance_files_status
+    ON governance_files(status);
+
+-- ─── governance_threads ─────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS governance_threads (
+    thread_id  TEXT PRIMARY KEY,
+    title      TEXT NOT NULL,
+    preview    TEXT NOT NULL DEFAULT '',
+    archived   BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_governance_threads_archived_updated
+    ON governance_threads (archived, updated_at DESC);
+
+-- ─── workboard_lifecycle_events ──────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS workboard_lifecycle_events (
+    id             TEXT PRIMARY KEY,
+    entity_kind    TEXT NOT NULL,
+    entity_id      TEXT NOT NULL,
+    event_type     TEXT NOT NULL,
+    actor          TEXT,
+    payload_json   TEXT NOT NULL DEFAULT '{}',
+    created_at     TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_pb_lifecycle_entity
+    ON workboard_lifecycle_events (entity_kind, entity_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pb_lifecycle_event_type
+    ON workboard_lifecycle_events (event_type, created_at DESC);
+
+-- ─── gate_runs ───────────────────────────────────────────────────────────────
+-- Unified run/readiness history: one row per gate evaluation snapshot, scoped
+-- by subject_kind to a change request (workboard gates, delivery_review) or an
+-- artifact (readiness gates, IDE-agent gate-task results). IDE-agent result
+-- rows use the dispatching gate_tasks.id as the run id (one result per task,
+-- last-wins upsert).
+
+CREATE TABLE IF NOT EXISTS gate_runs (
+    id            TEXT PRIMARY KEY,
+    subject_kind  TEXT NOT NULL CHECK (subject_kind IN ('artifact', 'change_request')),
+    subject_id    TEXT NOT NULL,
+    gate          TEXT NOT NULL,
+    state         TEXT NOT NULL,
+    hint          TEXT NOT NULL DEFAULT '',
+    executor      TEXT NOT NULL DEFAULT 'platform',
+    proposal_ref  TEXT,
+    evidence_json TEXT NOT NULL DEFAULT '{}',
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_gate_runs_subject_created
+    ON gate_runs (subject_kind, subject_id, created_at DESC);
+
+-- Fold the pre-unification stores into gate_runs, then drop them. Guarded on
+-- table existence so the block is a no-op on fresh installs and on every
+-- re-run after the fold (the runner re-applies this file on each boot).
+DO $$
+BEGIN
+    IF to_regclass('workboard_gate_runs') IS NOT NULL THEN
+        INSERT INTO gate_runs (id, subject_kind, subject_id, gate, state, hint, executor, proposal_ref, evidence_json, created_at)
+        SELECT w.id, 'change_request', w.change_request_id, w.gate, w.state, w.hint, 'platform', w.proposal_ref, w.evidence_json, w.created_at
+        FROM workboard_gate_runs w
+        WHERE NOT EXISTS (SELECT 1 FROM gate_runs g WHERE g.id = w.id);
+        DROP TABLE workboard_gate_runs;
+    END IF;
+
+    IF to_regclass('artifact_readiness_runs') IS NOT NULL THEN
+        INSERT INTO gate_runs (id, subject_kind, subject_id, gate, state, hint, executor, proposal_ref, evidence_json, created_at)
+        SELECT r.id, 'artifact', r.artifact_id, r.gate, r.state, r.hint, 'platform', NULL, r.evidence_json, r.created_at
+        FROM artifact_readiness_runs r
+        WHERE NOT EXISTS (SELECT 1 FROM gate_runs g WHERE g.id = r.id);
+        DROP TABLE artifact_readiness_runs;
+    END IF;
+
+    IF to_regclass('gate_results') IS NOT NULL THEN
+        -- A submitted result IS a run: subject is the task's artifact, the run id
+        -- is the task id (matching the one-result-per-task upsert going forward),
+        -- and the result-only fields ride evidence_json.
+        INSERT INTO gate_runs (id, subject_kind, subject_id, gate, state, hint, executor, proposal_ref, evidence_json, created_at)
+        SELECT DISTINCT ON (r.task_id)
+               r.task_id::text, 'artifact', t.artifact_id::text, t.gate_key, r.state, '', r.executor, NULL,
+               jsonb_build_object(
+                   'task_id', r.task_id::text,
+                   'result_id', r.id::text,
+                   'gate_digest', r.gate_digest,
+                   'trust', r.trust,
+                   'evaluator', r.evaluator,
+                   'findings', r.findings
+               )::text,
+               r.submitted_at
+        FROM gate_results r
+        JOIN gate_tasks t ON t.id = r.task_id
+        WHERE NOT EXISTS (SELECT 1 FROM gate_runs g WHERE g.id = r.task_id::text)
+        ORDER BY r.task_id, r.submitted_at DESC;
+        DROP TABLE gate_results;
+    END IF;
+
+    -- Drop never-queried tables from existing dev databases: the policy-v1
+    -- registry and gate-definition tables, and the evidence-manifest protocol
+    -- store (the live evidence path is the completion report / delivery review).
+    DROP TABLE IF EXISTS gate_definitions;
+    DROP TABLE IF EXISTS governance_policies;
+    DROP TABLE IF EXISTS policy_bindings;
+    DROP TABLE IF EXISTS policy_packages;
+    DROP TABLE IF EXISTS artifact_evidence_manifests;
+END $$;
+
+-- ─── features ────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS features (
+    id                       TEXT PRIMARY KEY,
+    key                      TEXT NOT NULL UNIQUE,
+    name                     TEXT NOT NULL,
+    summary                  TEXT,
+    status                   TEXT NOT NULL CHECK (status IN ('candidate', 'planned', 'active', 'rejected', 'deprecated')),
+    version                  INTEGER NOT NULL DEFAULT 1,
+    canonical_artifact_id    TEXT,
+    source_document_ids_json TEXT NOT NULL DEFAULT '[]',
+    source_artifact_ids_json TEXT NOT NULL DEFAULT '[]',
+    summary_md               TEXT NOT NULL DEFAULT '',
+    summary_source_version   TEXT NOT NULL DEFAULT '',
+    created_at               TIMESTAMPTZ NOT NULL,
+    updated_at               TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_features_status ON features (status);
+
+-- ─── change_requests ─────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS change_requests (
+    id                       TEXT PRIMARY KEY,
+    key                      TEXT NOT NULL UNIQUE,
+    feature_id               TEXT,
+    epic_id                  TEXT,
+    work_type                TEXT NOT NULL CHECK (work_type IN ('new_feature', 'feature_change', 'bug_fix', 'research', 'documentation', 'cleanup')),
+    title                    TEXT NOT NULL,
+    intent_md                TEXT,
+    acceptance_criteria_json TEXT NOT NULL DEFAULT '[]',
+    non_goals_json           TEXT NOT NULL DEFAULT '[]',
+    open_questions_json      TEXT NOT NULL DEFAULT '[]',
+    source_refs_json         TEXT NOT NULL DEFAULT '[]',
+    lead_artifact_id         TEXT,
+    context_pack_artifact_id TEXT,
+    governance_thread_id     TEXT NOT NULL DEFAULT '',
+    workspace_id             TEXT NOT NULL DEFAULT '',
+    archived                 BOOLEAN NOT NULL DEFAULT FALSE,
+    archived_at              TIMESTAMPTZ,
+    archived_by              TEXT,
+    archive_reason           TEXT,
+    created_by               TEXT,
+    created_at               TIMESTAMPTZ NOT NULL,
+    updated_at               TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_change_requests_feature
+    ON change_requests (feature_id);
+CREATE INDEX IF NOT EXISTS idx_change_requests_epic
+    ON change_requests (epic_id);
+CREATE INDEX IF NOT EXISTS idx_change_requests_work_type
+    ON change_requests (work_type);
+CREATE INDEX IF NOT EXISTS idx_change_requests_archived
+    ON change_requests (archived, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_change_requests_workspace
+    ON change_requests(workspace_id);
+
+-- ─── acceptance_criteria ─────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS acceptance_criteria (
+    id                TEXT PRIMARY KEY,
+    change_request_id TEXT NOT NULL REFERENCES change_requests(id) ON DELETE CASCADE,
+    text              TEXT NOT NULL,
+    done              BOOLEAN NOT NULL DEFAULT FALSE,
+    source            TEXT NOT NULL DEFAULT 'llm' CHECK (source IN ('llm', 'human')),
+    sort_order        INTEGER NOT NULL DEFAULT 0,
+    created_at        TIMESTAMPTZ NOT NULL,
+    updated_at        TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_acceptance_criteria_cr
+    ON acceptance_criteria (change_request_id, sort_order);
+
+-- ─── integrations ────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS integrations (
+    id                              TEXT PRIMARY KEY,
+    provider                        TEXT NOT NULL,
+    name                            TEXT NOT NULL,
+    status                          TEXT NOT NULL DEFAULT 'connected' CHECK (status IN ('connected', 'disabled', 'error')),
+    base_url                        TEXT NOT NULL DEFAULT '',
+    config_json                     TEXT NOT NULL DEFAULT '{}',
+    webhook_secret_encrypted        TEXT NOT NULL DEFAULT '',
+    api_token_encrypted             TEXT NOT NULL DEFAULT '',
+    auth_method                     TEXT NOT NULL DEFAULT '',
+    oauth_access_token_encrypted    TEXT NOT NULL DEFAULT '',
+    oauth_refresh_token_encrypted   TEXT NOT NULL DEFAULT '',
+    oauth_expires_at                TIMESTAMPTZ NULL,
+    oauth_token_type                TEXT NOT NULL DEFAULT '',
+    oauth_scope                     TEXT NOT NULL DEFAULT '',
+    oauth_account_id                TEXT NOT NULL DEFAULT '',
+    oauth_account_name              TEXT NOT NULL DEFAULT '',
+    oauth_account_email             TEXT NOT NULL DEFAULT '',
+    oauth_host_key                  TEXT NOT NULL DEFAULT '',
+    last_health_check_at            TIMESTAMPTZ,
+    last_error                      TEXT NOT NULL DEFAULT '',
+    created_at                      TIMESTAMPTZ NOT NULL,
+    updated_at                      TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_integrations_provider_status
+    ON integrations (provider, status);
+
+-- ─── integration_resources ───────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS integration_resources (
+    id                       TEXT PRIMARY KEY,
+    integration_id           TEXT NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
+    resource_type            TEXT NOT NULL,
+    external_id              TEXT NOT NULL DEFAULT '',
+    external_key             TEXT NOT NULL,
+    display_name             TEXT NOT NULL DEFAULT '',
+    default_ref              TEXT NOT NULL DEFAULT '',
+    config_json              TEXT NOT NULL DEFAULT '{}',
+    webhook_secret_encrypted TEXT NOT NULL DEFAULT '',
+    created_at               TIMESTAMPTZ NOT NULL,
+    updated_at               TIMESTAMPTZ NOT NULL,
+    UNIQUE(integration_id, resource_type, external_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_integration_resources_integration
+    ON integration_resources (integration_id, resource_type, external_key);
+
+-- ─── integration_webhook_events ──────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS integration_webhook_events (
+    id                TEXT PRIMARY KEY,
+    integration_id    TEXT NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
+    resource_id       TEXT NOT NULL DEFAULT '',
+    provider          TEXT NOT NULL,
+    event_type        TEXT NOT NULL,
+    external_event_id TEXT NOT NULL DEFAULT '',
+    payload_hash      TEXT NOT NULL DEFAULT '',
+    correlation_id    TEXT NOT NULL DEFAULT '',
+    payload_json      TEXT NOT NULL DEFAULT '{}',
+    received_at       TIMESTAMPTZ NOT NULL,
+    processed_at      TIMESTAMPTZ,
+    status            TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processed', 'failed', 'ignored')),
+    error             TEXT NOT NULL DEFAULT '',
+    created_at        TIMESTAMPTZ NOT NULL,
+    updated_at        TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_integration_webhook_events_inbox
+    ON integration_webhook_events (integration_id, status, received_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_integration_webhook_events_external
+    ON integration_webhook_events (integration_id, external_event_id)
+    WHERE external_event_id <> '';
+
+-- ─── integration_delivery_links ──────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS integration_delivery_links (
+    id                TEXT PRIMARY KEY,
+    integration_id    TEXT NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
+    resource_id       TEXT NOT NULL REFERENCES integration_resources(id) ON DELETE CASCADE,
+    feature_id        TEXT NOT NULL DEFAULT '',
+    change_request_id TEXT NOT NULL DEFAULT '',
+    external_type     TEXT NOT NULL,
+    external_id       TEXT NOT NULL DEFAULT '',
+    external_iid      TEXT NOT NULL,
+    external_key      TEXT NOT NULL DEFAULT '',
+    url               TEXT NOT NULL DEFAULT '',
+    title             TEXT NOT NULL DEFAULT '',
+    state             TEXT NOT NULL DEFAULT 'opened' CHECK (state IN ('opened', 'merged', 'closed')),
+    source_branch     TEXT NOT NULL DEFAULT '',
+    target_branch     TEXT NOT NULL DEFAULT '',
+    merge_commit_sha  TEXT NOT NULL DEFAULT '',
+    last_event_id     TEXT NOT NULL DEFAULT '',
+    created_at        TIMESTAMPTZ NOT NULL,
+    updated_at        TIMESTAMPTZ NOT NULL,
+    UNIQUE(resource_id, external_type, external_iid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_integration_delivery_links_work_item
+    ON integration_delivery_links (change_request_id, resource_id, state);
+
+-- ─── governance_feedback_events ─────────────────────────────────────────────────
+-- Note: integration_id is plain TEXT NOT NULL DEFAULT '' (no FK) so
+-- agent-originated feedback can carry an empty integration_id.
+
+CREATE TABLE IF NOT EXISTS governance_feedback_events (
+    id                TEXT PRIMARY KEY,
+    integration_id    TEXT NOT NULL DEFAULT '',
+    resource_id       TEXT NOT NULL DEFAULT '',
+    webhook_event_id  TEXT NOT NULL DEFAULT '',
+    delivery_link_id  TEXT NOT NULL DEFAULT '',
+    feature_id        TEXT NOT NULL DEFAULT '',
+    change_request_id TEXT NOT NULL DEFAULT '',
+    artifact_id       TEXT NOT NULL DEFAULT '',
+    event_type        TEXT NOT NULL,
+    payload_json      TEXT NOT NULL DEFAULT '{}',
+    status            TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processed', 'ignored')),
+    reason            TEXT NOT NULL DEFAULT '',
+    created_at        TIMESTAMPTZ NOT NULL,
+    updated_at        TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_governance_feedback_events_status
+    ON governance_feedback_events (status, created_at);
+CREATE INDEX IF NOT EXISTS idx_governance_feedback_events_work_item
+    ON governance_feedback_events (change_request_id, event_type, created_at);
+
+-- ─── integration_oauth_states ────────────────────────────────────────────────
+-- Note: integration_id is plain TEXT with DEFAULT '' (no FK) to support
+-- create-on-callback flows where the integration row does not exist yet.
+
+CREATE TABLE IF NOT EXISTS integration_oauth_states (
+    id                  TEXT PRIMARY KEY,
+    state               TEXT NOT NULL UNIQUE,
+    integration_id      TEXT NOT NULL DEFAULT '',
+    provider            TEXT NOT NULL,
+    host_key            TEXT NOT NULL,
+    redirect_target     TEXT NOT NULL DEFAULT '',
+    code_verifier       TEXT NOT NULL DEFAULT '',
+    pending_name        TEXT NOT NULL DEFAULT '',
+    pending_base_url    TEXT NOT NULL DEFAULT '',
+    pending_config_json TEXT NOT NULL DEFAULT '',
+    expires_at          TIMESTAMPTZ NOT NULL,
+    consumed_at         TIMESTAMPTZ NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_integration_oauth_states_integration_id
+    ON integration_oauth_states(integration_id);
+CREATE INDEX IF NOT EXISTS idx_integration_oauth_states_expires_at
+    ON integration_oauth_states(expires_at);
+
+-- ─── tracker_links ───────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS tracker_links (
+    id                TEXT PRIMARY KEY,
+    integration_id    TEXT NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
+    feature_id        TEXT NOT NULL DEFAULT '',
+    change_request_id TEXT NOT NULL DEFAULT '',
+    lane              TEXT NOT NULL DEFAULT '',
+    external_id       TEXT NOT NULL DEFAULT '',
+    external_key      TEXT NOT NULL DEFAULT '',
+    url               TEXT NOT NULL DEFAULT '',
+    title             TEXT NOT NULL DEFAULT '',
+    state             TEXT NOT NULL DEFAULT 'opened' CHECK (state IN ('opened', 'closed', 'removed')),
+    tracker_state     TEXT NOT NULL DEFAULT '',
+    created_at        TIMESTAMPTZ NOT NULL,
+    updated_at        TIMESTAMPTZ NOT NULL,
+    UNIQUE(integration_id, external_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tracker_links_work_item
+    ON tracker_links (change_request_id, state);
+
+-- ─── governance_profiles ─────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS governance_profiles (
+    id              TEXT PRIMARY KEY,
+    namespace       TEXT NOT NULL,
+    key             TEXT NOT NULL,
+    version         TEXT NOT NULL,
+    display_name    TEXT NOT NULL DEFAULT '',
+    change_type     TEXT NOT NULL DEFAULT '',
+    definition_json TEXT NOT NULL DEFAULT '{}',
+    digest          TEXT NOT NULL DEFAULT '',
+    source          TEXT NOT NULL DEFAULT 'import',
+    source_repo     TEXT NOT NULL DEFAULT '',
+    source_path     TEXT NOT NULL DEFAULT '',
+    status          TEXT NOT NULL DEFAULT 'active',
+    imported_at     TIMESTAMPTZ NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL,
+    updated_at      TIMESTAMPTZ NOT NULL,
+    CONSTRAINT uq_governance_profiles_key_version UNIQUE (namespace, key, version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_governance_profiles_status
+    ON governance_profiles (status, namespace, key, created_at);
+
+COMMIT;

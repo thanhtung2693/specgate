@@ -1,0 +1,183 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release-cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: app/cli/go.mod
+          cache-dependency-path: app/cli/go.sum
+
+      - name: Install GoReleaser
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          GOBIN="$RUNNER_TEMP/bin" go install github.com/goreleaser/goreleaser/v2@latest
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Run GoReleaser
+        run: goreleaser release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Mark prerelease tags
+        if: contains(github.ref_name, '-')
+        run: gh release edit "${{ github.ref_name }}" --prerelease
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Compose bundle for `specgate init` to download + SHA-256 verify
+      # (see app/cli/internal/deploy/bundle.go: DownloadBundle).
+      - name: Build + upload compose bundle
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          TAR="specgate-compose_${VERSION}.tar.gz"
+          SUMS="specgate-compose_${VERSION}_checksums.txt"
+          tar -czf "$TAR" -C deploy/compose .
+          sha256sum "$TAR" > "$SUMS"
+          gh release upload "$VERSION" "$TAR" "$SUMS" --clobber
+
+  release-images:
+    name: release-images (${{ matrix.image }}, ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    needs: release-cli
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: doc-registry
+            dockerfile: docker/Dockerfile.doc-registry
+            platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-latest
+          - image: doc-registry
+            dockerfile: docker/Dockerfile.doc-registry
+            platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - image: agents
+            dockerfile: docker/Dockerfile.agents
+            platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-latest
+          - image: agents
+            dockerfile: docker/Dockerfile.agents
+            platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - image: ui
+            dockerfile: docker/Dockerfile.ui
+            platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-latest
+          - image: ui
+            dockerfile: docker/Dockerfile.ui
+            platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Verify plugin package freshness
+        if: matrix.image == 'doc-registry'
+        run: make check-plugins
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push ${{ matrix.image }} digest
+        run: |
+          image="ghcr.io/thanhtung2693/${{ matrix.image }}"
+          metadata="$RUNNER_TEMP/metadata.json"
+
+          args=(
+            --file "${{ matrix.dockerfile }}"
+            --platform "${{ matrix.platform }}"
+            --cache-from "type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}"
+            --cache-to "type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}"
+            --provenance=false
+            --metadata-file "$metadata"
+            --output "type=image,name=${image},push-by-digest=true,name-canonical=true,push=true"
+          )
+
+          case "${{ matrix.image }}" in
+            doc-registry)
+              args+=(
+                --build-arg "VERSION=${{ github.ref_name }}"
+                --build-arg "COMMIT=${{ github.sha }}"
+                --build-arg "BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              )
+              ;;
+            ui)
+              args+=(--build-arg BUILD_MODE=production)
+              ;;
+          esac
+
+          docker buildx build "${args[@]}" .
+
+          digest="$(jq -r '."containerimage.digest"' "$metadata")"
+          test -n "$digest"
+          mkdir -p "$RUNNER_TEMP/digests/${{ matrix.image }}"
+          touch "$RUNNER_TEMP/digests/${{ matrix.image }}/${digest#sha256:}"
+
+      - name: Upload image digest
+        uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ matrix.image }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/${{ matrix.image }}/*
+          if-no-files-found: error
+          retention-days: 1
+
+  release-image-manifests:
+    runs-on: ubuntu-latest
+    needs: release-images
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [doc-registry, agents, ui]
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Download image digests
+        uses: actions/download-artifact@v7
+        with:
+          pattern: digests-${{ matrix.image }}-*
+          path: ${{ runner.temp }}/digests/${{ matrix.image }}
+          merge-multiple: true
+
+      - name: Create ${{ matrix.image }} manifest
+        run: |
+          image="ghcr.io/thanhtung2693/${{ matrix.image }}"
+          refs=()
+          while IFS= read -r digest_file; do
+            refs+=("${image}@sha256:$(basename "$digest_file")")
+          done < <(find "$RUNNER_TEMP/digests/${{ matrix.image }}" -type f | sort)
+
+          test "${#refs[@]}" -eq 2
+          docker buildx imagetools create \
+            --tag "${image}:${{ github.ref_name }}" \
+            --tag "${image}:latest" \
+            "${refs[@]}"

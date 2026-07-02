@@ -1,0 +1,230 @@
+# Root compose — builds and runs all three modules plus their infra deps.
+#
+# Usage:
+#   cp .env.example .env                                      # optional: override host ports if you have conflicts
+#   cp app/doc-registry/.env.example app/doc-registry/.env   # fill SETTINGS_ENCRYPTION_KEY (LLM/embedding keys are set in-app: Settings → Model)
+#   cp app/agents/.env.example       app/agents/.env         # fill LANGSMITH_API_KEY if using the self-hosted image
+#   docker compose up --build
+#
+# Host ports (override in root .env if you have conflicts — see .env.example):
+#   doc-registry  http://localhost:${DOC_REGISTRY_PORT:-8080}
+#   agents        http://localhost:${AGENTS_PORT:-2024}       (LangGraph dev server)
+#   ui            http://localhost:${UI_PORT:-3000}
+#   postgres      127.0.0.1:${POSTGRES_PORT:-5432}
+#   minio         http://localhost:${MINIO_PORT:-9000}   console http://localhost:${MINIO_CONSOLE_PORT:-9001}  (profile: s3)
+#   redis         localhost:${REDIS_PORT:-6379}           (profile: redis)
+#
+# Per-module env files are loaded as-is; `environment:` overrides values that
+# differ inside the compose network (container hostnames instead of localhost).
+
+name: specgate
+
+services:
+  redis:
+    image: redis:8-alpine
+    profiles: ["redis"]
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    profiles: ["s3"]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-specgate-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-specgate-minio-dev-only}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  postgres:
+    image: pgvector/pgvector:0.8.3-pg18
+    environment:
+      POSTGRES_USER: docreg
+      POSTGRES_PASSWORD: docreg
+      POSTGRES_DB: docreg
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # postgres:18+ recommends mounting one level above /data so pg_upgrade can run in place.
+      - postgres-data:/var/lib/postgresql
+      # One-shot init on fresh volumes: creates the `langgraph` database alongside `docreg`.
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docreg -d docreg"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  doc-registry:
+    # Runs the Air `dev` target: the source is bind-mounted below, so a `.go`
+    # edit recompiles in place (~1-2s) with no image rebuild. CI builds the prod
+    # image from the Dockerfile's default (final) stage, not this target.
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.doc-registry
+      target: dev
+    env_file:
+      - ./app/doc-registry/.env
+    environment:
+      HTTP_ADDR: ":8080"
+      SQLITE_PATH: /data/registry.db
+      DATABASE_DRIVER: postgres  # compose runs on postgres; local .env defaults to sqlite
+      POSTGRES_DSN: postgres://docreg:docreg@postgres:5432/docreg?sslmode=disable
+      # Default local storage is file-backed. Enable the `s3` profile and set
+      # STORAGE_DRIVER=s3 / S3_ENDPOINT=http://minio:9000 to use bundled MinIO.
+      # For bundled MinIO, S3_ACCESS_KEY/S3_SECRET_KEY must match
+      # MINIO_ROOT_USER/MINIO_ROOT_PASSWORD.
+      # S3_BUCKET defaults to "doc-registry"; uncomment + edit when sharing a
+      # bucket with other services. Within the bucket, S3_KEY_PREFIX
+      # (default "doc-registry/") namespaces every object key.
+      # S3_BUCKET: shared-bucket
+      # S3_KEY_PREFIX: doc-registry/
+      # Internal agents URL for the in-IDE readiness tool (specgate_check_readiness).
+      # Uses the `agents` service hostname + its container port (8000); host-mode
+      # .env uses http://localhost:2024. Soft edge: doc-registry calls this lazily
+      # at tool-invocation, so no depends_on/startup ordering is needed.
+      AGENTS_BASE_URL: http://agents:8000
+      # Enable MCP; doc-registry auto-mints the bearer token when none is set.
+      MCP_ENABLED: "true"
+      # Default queue driver is sync (no Redis). Enable the `redis` profile and
+      # set QUEUE_DRIVER=redis / REDIS_URL=redis://redis:6379/2 for async webhooks.
+    ports:
+      - "${DOC_REGISTRY_PORT:-8080}:8080"
+    volumes:
+      - doc-registry-data:/data
+      # Live source for Air hot reload. Edit app/doc-registry/*.go on the host and
+      # Air rebuilds inside the container.
+      - ./app/doc-registry:/src/doc-registry
+      # Canonical plugin sources live at repo root. Air watches this read-only
+      # mount and syncs the relevant files into internal/agentpackages/plugins
+      # before rebuilding the embedded-assets binary.
+      - ./plugins:/src/doc-registry/watch/plugins:ro
+      # Keep the module cache + Air's build output off the host bind mount
+      # (persistence + speed).
+      - doc-registry-go-pkg:/go/pkg/mod
+      - doc-registry-air-tmp:/src/doc-registry/tmp
+    healthcheck:
+      # Air (dev mode) compiles the Go binary on first boot (~45-90s on a cold
+      # module cache). start_period covers that window so `docker compose up
+      # --wait` blocks until the HTTP server is actually accepting requests,
+      # not just until the container process started.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 90s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./app/doc-registry/.env
+          target: /tmp/.env.watch
+
+  agents:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.agents
+    env_file:
+      - ./app/agents/.env
+    environment:
+      # Inside the compose network, these MUST use the `doc-registry` service
+      # hostname. `localhost` inside the agents container loops back to itself.
+      # agents/.env keeps `localhost` on purpose so host-mode runs
+      # (uv run langgraph dev) still work — the compose override below only
+      # applies when the agent runs as part of `docker compose up`.
+      DOC_REGISTRY_BASE_URL: http://doc-registry:8080
+      MCP_SERVER_URL: http://doc-registry:8080/mcp/stream
+      # LangGraph dev runs in-memory. Self-hosted/durable LangGraph deployments
+      # should set DATABASE_URI / REDIS_URI in agents.env and enable/provide Redis.
+      DATABASE_URI: postgres://docreg:docreg@postgres:5432/langgraph?sslmode=disable
+      # LANGSMITH_API_KEY comes from ./app/agents/.env — required by Self-Hosted Lite.
+    ports:
+      - "${AGENTS_PORT:-2024}:8000"
+    depends_on:
+      doc-registry:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    # Dev-loop ergonomics. The base image installs the governance package with
+    # `uv pip install -e` so Python changes under src/ become live as soon as
+    # the file lands in /deps/agents. `docker compose watch` syncs host edits
+    # into the container and restarts the langgraph workers (whose process
+    # caches imports) on changes that need a fresh process — currently
+    # langgraph.json, pyproject.toml, and the .env file.
+    #
+    # Usage:
+    #   docker compose up -d agents
+    #   docker compose watch agents
+    #
+    # `docker compose up --build agents` is still required when the base
+    # image, Dockerfile, or installed dependency set changes (uv lock /
+    # pyproject change). Plain edits to src/ do NOT require a rebuild.
+    develop:
+      watch:
+        - action: sync
+          path: ./app/agents/src
+          target: /deps/agents/src
+          ignore:
+            - "**/__pycache__"
+            - "**/*.pyc"
+        - action: sync
+          path: ./app/agents/scripts
+          target: /deps/agents/scripts
+        - action: sync+restart
+          path: ./app/agents/langgraph.json
+          target: /deps/agents/langgraph.json
+        - action: rebuild
+          path: ./app/agents/pyproject.toml
+        - action: rebuild
+          path: ./app/agents/uv.lock
+        - action: sync+restart
+          path: ./app/agents/.env
+          target: /tmp/.env.watch
+
+  ui:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ui
+      args:
+        # VITE_* are baked in at build time. The browser talks to host-exposed ports,
+        # so use localhost here — not the compose service names.
+        # If you change DOC_REGISTRY_PORT / AGENTS_PORT in .env, rebuild the UI image.
+        VITE_DOC_REGISTRY_URL: http://localhost:${DOC_REGISTRY_PORT:-8080}
+        VITE_LANGGRAPH_API_URL: http://localhost:${AGENTS_PORT:-2024}
+    ports:
+      - "${UI_PORT:-3000}:80"
+    depends_on:
+      - doc-registry
+      - agents
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  minio-data:
+  doc-registry-data:
+  doc-registry-go-pkg:
+  doc-registry-air-tmp:
+  postgres-data:

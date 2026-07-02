@@ -1,0 +1,4596 @@
+import { act, render, screen, waitFor, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { MemoryRouter, useNavigate } from "react-router-dom"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+import { GovernanceAgent } from "@/components/agent/governance-agent"
+import { TooltipProvider } from "@/components/ui/tooltip"
+
+import App from "./App"
+
+const langGraphClientMock = vi.hoisted(() => ({
+  create: vi.fn(),
+  delete: vi.fn(),
+  get: vi.fn(),
+  getState: vi.fn(),
+  search: vi.fn(),
+  update: vi.fn(),
+}))
+
+const sessionStorageKey = "specgate.ui.session.v1"
+
+function seedLocalSession() {
+  localStorage.setItem(
+    sessionStorageKey,
+    JSON.stringify({
+      profile: {
+        name: "SpecGate Core",
+        user: {
+          id: "user-local",
+          username: "thanhtung",
+          name: "Tung Local",
+          email: "tung@example.com",
+        },
+      },
+    }),
+  )
+}
+
+vi.mock("@langchain/langgraph-sdk", () => ({
+  Client: vi.fn(function Client() {
+    return {
+      threads: langGraphClientMock,
+    }
+  }),
+}))
+
+function renderApp(path = "/work") {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <App />
+    </MemoryRouter>,
+  )
+}
+
+const registryWorkItems = [
+  {
+    id: "SG-142",
+    key: "SG-142",
+    work_type: "cleanup",
+    title: "Simplify CLI command surface",
+    intent_md: "Reduce command sprawl while keeping governed handoff behavior explicit.",
+    created_by: "Product",
+    created_at: "2026-06-27T05:00:00Z",
+    updated_at: "2026-06-27T05:12:00Z",
+  },
+  {
+    id: "SG-136",
+    key: "SG-136",
+    work_type: "new_feature",
+    title: "Workspace and user onboarding review",
+    intent_md: "Clarify workspace/user setup, docs, and username-dependent surfaces.",
+    created_by: "DX",
+    created_at: "2026-06-27T04:00:00Z",
+    updated_at: "2026-06-27T05:00:00Z",
+  },
+  {
+    id: "SG-151",
+    key: "SG-151",
+    work_type: "new_feature",
+    title: "Agent skills setup primitives",
+    intent_md: "Define small setup skills for project onboarding and plugin refresh.",
+    context_pack_artifact_id: "artifact-SG-151",
+    created_by: "Governance",
+    created_at: "2026-06-27T04:20:00Z",
+    updated_at: "2026-06-27T05:10:00Z",
+  },
+  {
+    id: "SG-155",
+    key: "SG-155",
+    work_type: "cleanup",
+    title: "Doc Registry migration cleanup",
+    intent_md: "Ready for delivery review with Context Pack.",
+    context_pack_artifact_id: "artifact-SG-155",
+    created_by: "Backend",
+    created_at: "2026-06-27T04:30:00Z",
+    updated_at: "2026-06-27T05:20:00Z",
+  },
+  {
+    id: "SG-153",
+    key: "SG-153",
+    work_type: "new_feature",
+    title: "Delivery evidence trust stamp",
+    intent_md: "Expose trustworthy evidence state for delivery review and audits.",
+    context_pack_artifact_id: "artifact-SG-153",
+    created_by: "Platform",
+    created_at: "2026-06-27T03:30:00Z",
+    updated_at: "2026-06-27T04:55:00Z",
+  },
+  {
+    id: "SG-147",
+    key: "SG-147",
+    work_type: "cleanup",
+    title: "Pre-release verification sweep",
+    intent_md: "Complete pre-release verification evidence.",
+    phase: "Review",
+    created_by: "QA",
+    created_at: "2026-06-27T03:00:00Z",
+    updated_at: "2026-06-27T04:45:00Z",
+  },
+]
+
+function defaultRegistryResponse(input: RequestInfo | URL, init?: RequestInit) {
+  const url = String(input)
+  if (url.endsWith("/api/v1/workspaces")) {
+    return Promise.resolve(
+      new Response(JSON.stringify({ items: [{ id: "workspace-main", name: "SpecGate Core", slug: "specgate-core", is_default: true }] }), {
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+  }
+  if (url.includes("/workboard/change-requests") && init?.method !== "PATCH") {
+    return Promise.resolve(new Response(JSON.stringify({ items: registryWorkItems }), { headers: { "Content-Type": "application/json" } }))
+  }
+  if (url.endsWith("/artifact-edit/proposals")) {
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          items: [
+            {
+              id: "proposal-SG-147-browser-smoke",
+              base_artifact_id: "artifact-SG-147",
+              base_version: "v0.1",
+              state: "active",
+              last_diff_summary: "1 file changed",
+              source_kind: "feedback_event",
+              source_id: "feedback-SG-147-browser-smoke",
+              updated_at: "2026-06-27T04:50:00Z",
+            },
+          ],
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      ),
+    )
+  }
+  if (url.includes("/artifact-edit/sessions/") && url.endsWith("/diff")) {
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          summary: "1 file changed",
+          files: [{ key: "verification.md", status: "modified", modified: true }],
+          unified_diff:
+            "--- verification.md\n+++ verification.md\n@@\n-# Browser smoke\n-\n-Browser smoke: pending\n+## Browser smoke\n+\n+Browser smoke: required before delivery review can pass\n",
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      ),
+    )
+  }
+  if (url.endsWith("/governance/feedback-events?status=received&limit=20")) {
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          items: [
+            {
+              id: "feedback-SG-147-browser-smoke",
+              event_type: "coding_agent.blocked_ambiguity",
+              status: "received",
+              reason: "Browser smoke evidence is required before delivery review can pass.",
+              change_request_id: "SG-147",
+              artifact_id: "artifact-SG-147",
+              created_at: "2026-06-27T04:51:00Z",
+            },
+          ],
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      ),
+    )
+  }
+  if (url.endsWith("/workboard/features")) {
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          items: [
+            {
+              id: "SG-155",
+              key: "SG-155",
+              name: "Doc Registry migration cleanup",
+              status: "approved",
+              version: 1,
+              canonical_artifact_id: "artifact-SG-155",
+              summary_md: "Migration cleanup summary.",
+              summary_source_version: "v0.1",
+            },
+            {
+              id: "SG-151",
+              key: "SG-151",
+              name: "Agent skills setup primitives",
+              status: "approved",
+              version: 1,
+              canonical_artifact_id: "artifact-SG-151",
+              summary_md: "Agent skills setup summary.",
+              summary_source_version: "v0.1",
+            },
+          ],
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      ),
+    )
+  }
+  if (url.endsWith("/workboard/features/SG-155")) {
+    return Promise.resolve(new Response(JSON.stringify({ id: "SG-155", key: "SG-155", name: "Doc Registry migration cleanup", canonical_artifact_id: "artifact-SG-155", summary_md: "Migration cleanup summary.", summary_source_version: "v0.1" }), { headers: { "Content-Type": "application/json" } }))
+  }
+  if (url.endsWith("/workboard/features/SG-151")) {
+    return Promise.resolve(new Response(JSON.stringify({ id: "SG-151", key: "SG-151", name: "Agent skills setup primitives", canonical_artifact_id: "artifact-SG-151", summary_md: "Agent skills setup summary.", summary_source_version: "v0.1" }), { headers: { "Content-Type": "application/json" } }))
+  }
+  if (url.endsWith("/api/v1/work-items/SG-155/context-pack")) {
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          state: "assembled",
+          markdown: "# Context Pack\n\nRun `specgate work context SG-155` before implementation.",
+          context_pack_uri: "specgate://context-pack/SG-155",
+          change_request_id: "SG-155",
+          feature_id: "SG-155",
+          context_pack_artifact_id: "artifact-SG-155",
+          governance_level: "standard",
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      ),
+    )
+  }
+  if (url.endsWith("/artifacts?limit=50")) {
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          items: [
+            {
+              id: "artifact-SG-155",
+              feature_id: "SG-155",
+              feature_name: "Doc Registry migration cleanup",
+              version: "v0.1",
+              status: "approved",
+              request_type: "change_request",
+              impact_level: "low",
+              artifact_completeness: "full",
+              source_kind: "context_pack",
+              created_by: "governance",
+              updated_at: "2026-06-27T05:20:00Z",
+              expected_gates: ["spec_completeness", "delivery_pack"],
+            },
+            {
+              id: "artifact-SG-151",
+              feature_id: "SG-151",
+              feature_name: "Agent skills setup primitives",
+              version: "v0.1",
+              status: "approved",
+              request_type: "change_request",
+              impact_level: "low",
+              artifact_completeness: "full",
+              source_kind: "context_pack",
+              created_by: "governance",
+              updated_at: "2026-06-27T05:10:00Z",
+              expected_gates: ["spec_completeness"],
+            },
+          ],
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      ),
+    )
+  }
+  if (url.endsWith("/artifacts?feature_id=SG-155&limit=100")) {
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          items: [
+            {
+              id: "artifact-SG-155",
+              feature_id: "SG-155",
+              feature_name: "Doc Registry migration cleanup",
+              version: "v0.1",
+              status: "approved",
+              request_type: "change_request",
+              impact_level: "low",
+              artifact_completeness: "full",
+              source_kind: "context_pack",
+              updated_at: "2026-06-27T05:20:00Z",
+            },
+            {
+              id: "artifact-SG-155-previous",
+              feature_id: "SG-155",
+              feature_name: "Doc Registry migration cleanup",
+              version: "v0.0",
+              status: "superseded",
+              request_type: "change_request",
+              impact_level: "low",
+              artifact_completeness: "full",
+              source_kind: "context_pack",
+              updated_at: "2026-06-27T04:20:00Z",
+            },
+          ],
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      ),
+    )
+  }
+  if (url.endsWith("/artifacts?feature_id=SG-151&limit=100")) {
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          items: [
+            {
+              id: "artifact-SG-151",
+              feature_id: "SG-151",
+              feature_name: "Agent skills setup primitives",
+              version: "v0.1",
+              status: "approved",
+              request_type: "change_request",
+              impact_level: "low",
+              artifact_completeness: "full",
+              source_kind: "context_pack",
+              updated_at: "2026-06-27T05:10:00Z",
+            },
+          ],
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      ),
+    )
+  }
+  if (url.endsWith("/artifacts/artifact-SG-155/files")) {
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          items: [
+            { path: "migration/spec.md", role: "spec", size_bytes: 3900, updated_at: "2026-06-27T05:20:00Z" },
+            { path: "migration/tasks.md", role: "tasks", size_bytes: 1600, updated_at: "2026-06-27T05:20:00Z" },
+            { path: "migration/verification.md", role: "verification", size_bytes: 1200, updated_at: "2026-06-27T05:20:00Z" },
+          ],
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      ),
+    )
+  }
+  if (url.endsWith("/artifacts/artifact-SG-151/files")) {
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          items: [
+            { path: "setup/spec.md", role: "spec", size_bytes: 4200, updated_at: "2026-06-27T05:10:00Z" },
+            { path: "setup/tasks.md", role: "tasks", size_bytes: 1800, updated_at: "2026-06-27T05:10:00Z" },
+          ],
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      ),
+    )
+  }
+  if (url.includes("/artifacts/artifact-SG-155/files/_?path=migration%2Fspec.md")) {
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          content:
+            "# Doc Registry migration cleanup\n\nThis spec keeps migration behavior deterministic while reducing noisy expected misses.\n\n```mermaid\nsequenceDiagram\n  participant CI\n  participant DB\n  CI->>DB: Apply migrations\n  DB-->>CI: Schema ready\n```\n",
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      ),
+    )
+  }
+  if (url.includes("/artifacts/artifact-SG-155-previous/files/_?path=migration%2Fspec.md")) {
+    return Promise.resolve(new Response(JSON.stringify({ content: "# Doc Registry migration cleanup\n\nPrevious version reduced expected migration misses.\n" }), { headers: { "Content-Type": "application/json" } }))
+  }
+  if (url.includes("/artifacts/artifact-SG-155/files/_?path=migration%2Ftasks.md")) {
+    return Promise.resolve(new Response(JSON.stringify({ content: "# Doc Registry migration cleanup Tasks\n\n- Report completion through the governed delivery loop.\n" }), { headers: { "Content-Type": "application/json" } }))
+  }
+  if (url.endsWith("/features/SG-155/attachments")) {
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          items: [{ id: "attachment-SG-155", kind: "link", title: "Migration rollout note", note: "Reference used by quality-gate review.", audience: "gate", created_by: "governance", created_at: "2026-06-27T05:00:00Z" }],
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      ),
+    )
+  }
+  if (url.endsWith("/governance/feedback-events?artifact_id=artifact-SG-155&limit=20")) {
+    return Promise.resolve(new Response(JSON.stringify({ items: [{ id: "feedback-SG-155", artifact_id: "artifact-SG-155", event_type: "coding_agent.completed", status: "received", reason: "Completion evidence is ready for delivery review.", created_at: "2026-06-27T05:00:00Z" }] }), { headers: { "Content-Type": "application/json" } }))
+  }
+  if (url.endsWith("/artifacts/artifact-SG-155/readiness-runs?limit=20")) {
+    return Promise.resolve(new Response(JSON.stringify({ items: [{ id: "readiness-SG-155", gate: "spec_completeness", state: "warn", hint: "missing constraints", created_at: "2026-06-27T05:00:00Z" }] }), { headers: { "Content-Type": "application/json" } }))
+  }
+  if (url.endsWith("/events?artifact_id=artifact-SG-155&limit=20")) {
+    return Promise.resolve(new Response(JSON.stringify({ items: [{ id: "event-SG-155", artifact_id: "artifact-SG-155", event_type: "artifact.published", payload: { version: "v0.1" }, created_at: "2026-06-27T05:00:00Z" }] }), { headers: { "Content-Type": "application/json" } }))
+  }
+  if (url.endsWith("/artifacts/artifact-SG-155/revisions")) {
+    return Promise.resolve(new Response(JSON.stringify({ items: [{ revision_id: "artifact-SG-155-revision-1", base_artifact_id: "artifact-SG-155", materialized_artifact_id: "artifact-SG-155-draft", state: "saved", created_at: "2026-06-27T05:00:00Z" }] }), { headers: { "Content-Type": "application/json" } }))
+  }
+  if (url.endsWith("/api/v1/artifacts/artifact-SG-155/gate-preview")) {
+    return Promise.resolve(new Response(JSON.stringify({ preview_tasks: [{ gate_key: "spec_completeness", note: "Expected gate from artifact snapshot." }] }), { headers: { "Content-Type": "application/json" } }))
+  }
+  if (url.endsWith("/api/v1/artifacts/artifact-SG-155/policy")) {
+    return Promise.resolve(new Response(JSON.stringify({ governance_level: "standard", title: "Standard governance", summary: "Policy snapshot.", reasons: [], obligations: [] }), { headers: { "Content-Type": "application/json" } }))
+  }
+  return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+}
+
+async function openSettings(path = "/work") {
+  renderApp(path)
+  const user = userEvent.setup()
+  await user.click(screen.getByRole("button", { name: "Settings" }))
+  return {
+    user,
+    settingsDialog: await screen.findByRole("dialog", { name: "Settings" }),
+  }
+}
+
+describe("SpecGate UI shell", () => {
+  beforeEach(() => {
+    localStorage.clear()
+    seedLocalSession()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    vi.stubEnv("VITE_LANGGRAPH_API_URL", "")
+    vi.stubGlobal("fetch", vi.fn(defaultRegistryResponse))
+    langGraphClientMock.create.mockResolvedValue({
+      thread_id: "thread-created",
+      metadata: { source: "specgate-ui", surface: "governance-agent", title: "Governance thread" },
+      updated_at: "2026-06-30T00:00:00Z",
+    })
+    langGraphClientMock.delete.mockResolvedValue(undefined)
+    langGraphClientMock.get.mockResolvedValue({
+      thread_id: "thread-delivery",
+      metadata: { source: "specgate-ui", surface: "governance-agent", title: "Delivery review" },
+      updated_at: "2026-06-30T00:00:00Z",
+    })
+    langGraphClientMock.getState.mockResolvedValue({ values: { messages: [] } })
+    langGraphClientMock.search.mockResolvedValue([])
+    langGraphClientMock.update.mockResolvedValue(undefined)
+  })
+
+  afterEach(() => {
+    localStorage.clear()
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
+    vi.clearAllMocks()
+  })
+
+  it("auto-starts a local session without an onboarding gate", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+    localStorage.clear()
+
+    renderApp("/work")
+
+    expect(await screen.findByRole("heading", { name: "Work" })).toBeInTheDocument()
+    expect(screen.queryByRole("heading", { name: "Welcome to SpecGate" })).not.toBeInTheDocument()
+    expect(screen.getByText("Dev")).toBeInTheDocument()
+    expect(screen.getByText("Local Workspace")).toBeInTheDocument()
+    expect(JSON.parse(localStorage.getItem(sessionStorageKey) ?? "{}")).toMatchObject({
+      profile: {
+        name: "Local Workspace",
+        user: {
+          username: "dev",
+        },
+      },
+    })
+  })
+
+  it("renders Work as the primary app surface", async () => {
+    renderApp()
+    const user = userEvent.setup()
+
+    expect(screen.getByRole("heading", { name: "Work" })).toBeInTheDocument()
+    expect(screen.getByText("Governance Board")).toBeInTheDocument()
+    expect(screen.getByText("Work queue")).toBeInTheDocument()
+    expect(screen.getByLabelText("Search work")).toBeInTheDocument()
+    expect(screen.getByText("Needs attention")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Board" })).toHaveAttribute("aria-pressed", "false")
+    expect(screen.getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true")
+    expect(screen.getByText("SpecGate Core")).toBeInTheDocument()
+
+    await waitFor(() => {
+      const enabledTrigger = screen
+        .getAllByRole("button", { name: "Open governance agent" })
+        .find((button) => !button.hasAttribute("disabled"))
+      expect(enabledTrigger).toBeTruthy()
+    })
+    const agentTrigger = screen
+      .getAllByRole("button", { name: "Open governance agent" })
+      .find((button) => !button.hasAttribute("disabled"))
+
+    await user.click(agentTrigger!)
+
+    expect(await screen.findByRole("heading", { name: "Governance agent" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "View agent threads" })).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "View agent threads" }))
+    expect(screen.getAllByText("Threads").length).toBeGreaterThan(0)
+    expect(screen.getByRole("button", { name: "New agent thread" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Back to chat" })).toBeInTheDocument()
+    expect(screen.queryByText(/LangGraph/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Local conversations/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Back to chat" }))
+    const composer = screen.getByPlaceholderText("Ask about gate failures, blockers, or artifacts. Type / for commands")
+    expect(composer).toBeInTheDocument()
+
+    await user.type(composer, "@")
+    expect(screen.queryByText("Work items")).not.toBeInTheDocument()
+
+    await user.clear(composer)
+    await user.type(composer, "/")
+    expect(await screen.findByText("Prepare handoff")).toBeInTheDocument()
+    expect(screen.getByText("Evidence summary")).toBeInTheDocument()
+  })
+
+  it("sends governance-agent messages with Enter", async () => {
+    renderApp("/work")
+    const user = userEvent.setup()
+
+    const agentTrigger = await screen.findAllByRole("button", { name: "Open governance agent" }).then((buttons) =>
+      buttons.find((button) => !button.hasAttribute("disabled")),
+    )
+    await user.click(agentTrigger!)
+
+    const composer = await screen.findByPlaceholderText("Ask about gate failures, blockers, or artifacts. Type / for commands")
+    await user.type(composer, "Check delivery gates{Enter}")
+
+    expect(await screen.findByText(/For this prompt, I would inspect: "Check delivery gates"/)).toBeInTheDocument()
+  })
+
+  it("manages governance-agent threads with search, rename, archive, and delete", async () => {
+    vi.stubEnv("VITE_LANGGRAPH_API_URL", "http://agents.test")
+    const threadFixtures = [
+      {
+        thread_id: "thread-delivery",
+        metadata: { source: "specgate-ui", surface: "governance-agent", title: "Delivery review" },
+        updated_at: "2026-06-30T00:00:00Z",
+      },
+      {
+        thread_id: "thread-cleanup",
+        metadata: { source: "specgate-ui", surface: "governance-agent", title: "Draft cleanup" },
+        updated_at: "2026-06-29T00:00:00Z",
+      },
+      {
+        thread_id: "thread-archived",
+        metadata: { source: "specgate-ui", surface: "governance-agent", title: "Archived delivery", archived: true },
+        updated_at: "2026-06-28T00:00:00Z",
+      },
+    ]
+    langGraphClientMock.search.mockImplementation(async () => threadFixtures)
+    langGraphClientMock.get.mockImplementation(async (threadId: string) => {
+      const thread = threadFixtures.find((item) => item.thread_id === threadId)
+      if (!thread) throw new Error(`missing thread ${threadId}`)
+      return thread
+    })
+    langGraphClientMock.update.mockImplementation(async (threadId: string, input: { metadata?: Record<string, unknown> }) => {
+      const thread = threadFixtures.find((item) => item.thread_id === threadId)
+      if (thread && input.metadata) {
+        thread.metadata = { ...thread.metadata, ...input.metadata }
+      }
+    })
+    render(
+      <TooltipProvider>
+        <GovernanceAgent />
+      </TooltipProvider>,
+    )
+    const user = userEvent.setup()
+
+    expect(await screen.findByRole("heading", { name: "Governance agent" })).toBeInTheDocument()
+    await user.click(await screen.findByRole("button", { name: "View agent threads" }))
+
+    const search = await screen.findByRole("searchbox", { name: "Search agent threads" })
+    await user.type(search, "delivery")
+
+    expect(await screen.findByText("Delivery review")).toBeInTheDocument()
+    expect(screen.queryByText("Draft cleanup")).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Rename thread Delivery review" }))
+    const titleInput = screen.getByRole("textbox", { name: "Thread title" })
+    await user.clear(titleInput)
+    await user.type(titleInput, "Release gates")
+    await user.click(screen.getByRole("button", { name: "Save thread title" }))
+
+    expect(langGraphClientMock.update).toHaveBeenCalledWith(
+      "thread-delivery",
+      expect.objectContaining({
+        metadata: expect.objectContaining({ title: "Release gates" }),
+        returnMinimal: true,
+      }),
+    )
+
+    await user.clear(search)
+    await user.click(screen.getByRole("button", { name: /Archive thread (Delivery review|Release gates)/ }))
+    expect(langGraphClientMock.update).toHaveBeenCalledWith(
+      "thread-delivery",
+      expect.objectContaining({
+        metadata: expect.objectContaining({ archived: true }),
+        returnMinimal: true,
+      }),
+    )
+
+    await user.click(screen.getByRole("button", { name: "Show archived threads" }))
+    expect(await screen.findByText("Archived delivery")).toBeInTheDocument()
+    expect(screen.queryByText("Draft cleanup")).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Restore thread Archived delivery" }))
+    expect(langGraphClientMock.update).toHaveBeenCalledWith(
+      "thread-archived",
+      expect.objectContaining({
+        metadata: expect.objectContaining({ archived: false }),
+        returnMinimal: true,
+      }),
+    )
+    expect(await screen.findByText("Archived delivery")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Archive thread Archived delivery" })).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Delete thread Draft cleanup" }))
+    await user.click(screen.getByRole("button", { name: "Confirm delete Draft cleanup" }))
+
+    expect(langGraphClientMock.delete).toHaveBeenCalledWith("thread-cleanup")
+  })
+
+  it("does not fetch or render legacy governance thread artifact links", async () => {
+    vi.stubEnv("VITE_LANGGRAPH_API_URL", "http://agents.test")
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const threadFixtures = [
+      {
+        thread_id: "thread-delivery",
+        metadata: { source: "specgate-ui", surface: "governance-agent", title: "Delivery review" },
+        updated_at: "2026-06-30T00:00:00Z",
+      },
+    ]
+    langGraphClientMock.search.mockImplementation(async () => threadFixtures)
+    langGraphClientMock.get.mockImplementation(async () => threadFixtures[0])
+    langGraphClientMock.getState.mockResolvedValue({ values: { messages: [] } })
+    const fetchMock = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input)
+      if (url === "http://registry.test/governance/threads/thread-delivery/artifacts") {
+        return Promise.reject(new Error("legacy thread artifact endpoint should not be called"))
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    render(
+      <TooltipProvider>
+        <GovernanceAgent />
+      </TooltipProvider>,
+    )
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("button", { name: "View agent threads" }))
+    await user.click(await screen.findByText("Delivery review"))
+
+    await waitFor(() => expect(screen.getByPlaceholderText("Ask about gate failures, blockers, or artifacts. Type / for commands")).toBeInTheDocument())
+    expect(screen.queryByText("Thread artifacts")).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalledWith("http://registry.test/governance/threads/thread-delivery/artifacts", expect.any(Object))
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_LANGGRAPH_API_URL", "")
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("switches work views and filters the list queue", async () => {
+    renderApp("/work")
+    const user = userEvent.setup()
+
+    expect(screen.getByText("Work queue")).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Board" }))
+    expect(screen.getByText("Lifecycle lanes")).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "List" }))
+
+    await user.type(screen.getByLabelText("Search work"), "verification")
+
+    expect(screen.getAllByText("Pre-release verification sweep").length).toBeGreaterThan(0)
+    expect(screen.queryByText("Doc Registry migration cleanup")).not.toBeInTheDocument()
+
+    await user.clear(screen.getByLabelText("Search work"))
+    await user.click(screen.getByRole("button", { name: /^Blocked3$/ }))
+
+    expect(screen.getAllByText("Pre-release verification sweep").length).toBeGreaterThan(0)
+    expect(screen.queryByText("Delivery evidence trust stamp")).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: /Ready for pickup/ }))
+    expect(screen.queryByRole("button", { name: /Gate failures/ })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: /Needs attention/ }))
+    expect(screen.getByRole("button", { name: /Reason: All reasons/ })).toBeInTheDocument()
+    await user.click(screen.getByRole("link", { name: "Agent skills setup primitives" }))
+
+    expect(screen.getAllByRole("heading", { name: "Agent skills setup primitives" }).length).toBeGreaterThan(0)
+  })
+
+  it("applies Work queue filters from summary metrics", async () => {
+    renderApp("/work")
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole("button", { name: /Open gate failures/ }))
+
+    expect(screen.getByRole("button", { name: /Needs attention/ })).toHaveClass("bg-secondary")
+    expect(screen.getByRole("button", { name: /Reason: Gate failures/ })).toBeInTheDocument()
+    expect(screen.getAllByText("Pre-release verification sweep").length).toBeGreaterThan(0)
+    expect(screen.queryByText("Doc Registry migration cleanup")).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: /Blocked by ambiguity/ }))
+
+    expect(screen.getByRole("button", { name: /Reason: All reasons/ })).toBeInTheDocument()
+    expect(screen.getAllByText("Pre-release verification sweep").length).toBeGreaterThan(0)
+  })
+
+  it("fetches governance stats when the disclosure expands and links ledger rows to verification", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes("/api/v1/stats")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              window_days: 30,
+              reviewed_items: 5,
+              first_pass: 4,
+              gate_catches_pre_build: 3,
+              review_catches_post_build: 2,
+              review_catches_fixed: 1,
+              rework: 2,
+              items_with_rework: 1,
+              ambiguity_blocks: 1,
+              cycle_time_avg_hours: 6.4,
+              cycle_time_items: 4,
+              ledger: [
+                {
+                  occurred_at: "2026-06-27T05:00:00Z",
+                  change_request_key: "SG-142",
+                  kind: "gate_catch",
+                  gate: "spec_completeness",
+                  detail: "Acceptance criteria are missing measurable outcomes.",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return defaultRegistryResponse(input, init)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    renderApp("/work")
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("button", { name: "Governance stats · last 30 days" }))
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("http://registry.test/api/v1/stats?days=30", expect.any(Object)),
+    )
+    const statsRegion = screen.getByRole("region", { name: "Governance stats" })
+    expect(await within(statsRegion).findByText("80%")).toBeInTheDocument()
+    expect(within(statsRegion).getByText("First-pass yield")).toBeInTheDocument()
+    const ledgerLink = within(statsRegion).getByRole("link", { name: "SG-142" })
+    expect(ledgerLink).toHaveAttribute("href", "/work/SG-142?tab=verification")
+    expect(within(statsRegion).getByText("Gate Catch")).toBeInTheDocument()
+    expect(within(statsRegion).getByText("Acceptance criteria are missing measurable outcomes.")).toBeInTheDocument()
+  })
+
+  it("shows the not-enough-data line instead of percentages when nothing was reviewed", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes("/api/v1/stats")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ window_days: 30, reviewed_items: 0, first_pass: 0, ledger: [] }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return defaultRegistryResponse(input, init)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    renderApp("/work")
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("button", { name: "Governance stats · last 30 days" }))
+
+    expect(await screen.findByText("Not enough data yet — run a few governed work items first.")).toBeInTheDocument()
+    const statsRegion = screen.getByRole("region", { name: "Governance stats" })
+    expect(within(statsRegion).queryByText(/%/)).not.toBeInTheDocument()
+    expect(within(statsRegion).queryByText("First-pass yield")).not.toBeInTheDocument()
+  })
+
+  it("does not fetch governance stats before the disclosure is expanded", async () => {
+    const fetchMock = vi.fn(defaultRegistryResponse)
+    vi.stubGlobal("fetch", fetchMock)
+
+    renderApp("/work")
+
+    expect(await screen.findByRole("button", { name: "Governance stats · last 30 days" })).toBeInTheDocument()
+    expect(await screen.findByText("Work queue")).toBeInTheDocument()
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes("/api/v1/stats"))).toHaveLength(0)
+  })
+
+  it("keeps work creation outside the UI workspace", () => {
+    renderApp("/work")
+
+    expect(screen.queryByRole("button", { name: "Create work" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("dialog", { name: "Create work" })).not.toBeInTheDocument()
+  })
+
+  it("shows setup placeholders instead of bundled sample work without Doc Registry", () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+
+    renderApp("/work")
+
+    expect(screen.getByText("No work items in this workspace")).toBeInTheDocument()
+    expect(screen.getByText(/Publish or pick up governed work from the CLI or IDE agent/)).toBeInTheDocument()
+    expect(screen.getByText("specgate work list")).toBeInTheDocument()
+    expect(screen.queryByText("Simplify CLI command surface")).not.toBeInTheDocument()
+  })
+
+  it("creates a quick Context Pack from the work detail tab", async () => {
+    vi.stubEnv("VITE_LANGGRAPH_API_URL", "http://agents.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (init?.method === "POST" && url.endsWith("/workboard/change-requests/SG-142/context-pack")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              artifact: { id: "artifact-context-pack" },
+              change_request: {
+                id: "SG-142",
+                key: "SG-142",
+                work_type: "cleanup",
+                title: "Simplify CLI command surface",
+                intent_md: "Reduce command sprawl while keeping governed handoff behavior explicit.",
+                context_pack_artifact_id: "artifact-context-pack",
+                created_by: "Product",
+                created_at: "2026-06-27T05:00:00Z",
+                updated_at: "2026-06-27T05:20:00Z",
+              },
+              content_md: "# Context Pack",
+              warnings: [],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return defaultRegistryResponse(input, init)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/work/SG-142")
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("tab", { name: "Handoff" }))
+    expect(screen.getByText("Creates an approved quick-mode Context Pack for this work item. It does not start implementation or send anything to a tracker.")).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Create quick Context Pack" }))
+
+    const dialog = screen.getByRole("dialog", { name: "Create quick Context Pack?" })
+    expect(within(dialog).getByText(/Implementation and tracker handoff stay separate/)).toBeInTheDocument()
+    await user.click(within(dialog).getByRole("button", { name: "Create Context Pack" }))
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Create quick Context Pack?" })).not.toBeInTheDocument())
+    expect(screen.getByText("specgate://context-pack/SG-142")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Copy URI" })).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://agents.test/workboard/change-requests/SG-142/context-pack",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          quick_mode: true,
+          source_evidence: "Reduce command sprawl while keeping governed handoff behavior explicit.",
+        }),
+      }),
+    )
+
+    vi.unstubAllGlobals()
+  })
+
+  it("does not fake quick Context Pack success without a persisted work item", async () => {
+    vi.stubEnv("VITE_LANGGRAPH_API_URL", "http://agents.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (init?.method === "POST" && url.endsWith("/workboard/change-requests/SG-142/context-pack")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              artifact: { id: "artifact-context-pack" },
+              content_md: "# Context Pack",
+              warnings: [],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return defaultRegistryResponse(input, init)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/work/SG-142")
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("tab", { name: "Handoff" }))
+    await user.click(screen.getByRole("button", { name: "Create quick Context Pack" }))
+    const dialog = screen.getByRole("dialog", { name: "Create quick Context Pack?" })
+    await user.click(within(dialog).getByRole("button", { name: "Create Context Pack" }))
+
+    expect(await within(dialog).findByText(/updated work item/)).toBeInTheDocument()
+    expect(screen.queryByText("specgate://context-pack/SG-142")).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Copy URI" })).not.toBeInTheDocument()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_LANGGRAPH_API_URL", "")
+  })
+
+  it("does not hydrate route-only work details from bundled sample data", () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+
+    renderApp("/work/SG-142")
+
+    expect(screen.getByText("Work item not found")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Confirm route" })).not.toBeInTheDocument()
+    expect(screen.queryByText("Simplify CLI command surface")).not.toBeInTheDocument()
+  })
+
+  it("checks and persists route choice through the configured services", async () => {
+    vi.stubEnv("VITE_LANGGRAPH_API_URL", "http://agents.test")
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (init?.method === "POST" && url.endsWith("/workboard/change-requests/SG-136/classify-route")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              change_request_id: "SG-136",
+              route: "quick",
+              confidence: 0.93,
+              rationale: "Small contained cleanup.",
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (init?.method === "PATCH" && url.endsWith("/workboard/change-requests/SG-136")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: "SG-136",
+              key: "SG-136",
+              work_type: "cleanup",
+              title: "Workspace and user onboarding review",
+              intent_md: "Clarify workspace/user setup, docs, and username-dependent surfaces.",
+              created_by: "DX",
+              created_at: "2026-06-27T05:00:00Z",
+              updated_at: "2026-06-27T05:30:00Z",
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/workboard/change-requests")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "SG-136",
+                  key: "SG-136",
+                  work_type: "new_feature",
+                  title: "Workspace and user onboarding review",
+                  intent_md: "Clarify workspace/user setup, docs, and username-dependent surfaces.",
+                  created_by: "DX",
+                  created_at: "2026-06-27T05:00:00Z",
+                  updated_at: "2026-06-27T05:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/work/SG-136")
+    const user = userEvent.setup()
+
+    expect((await screen.findAllByText("Workspace and user onboarding review")).length).toBeGreaterThan(0)
+    await user.click(screen.getByRole("tab", { name: "Overview" }))
+    await user.click(screen.getByRole("button", { name: "Check route" }))
+
+    expect(await screen.findByText("Suggested Quick")).toBeInTheDocument()
+    expect(screen.getByText("Small contained cleanup.")).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Confirm quick" }))
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://registry.test/workboard/change-requests/SG-136",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ work_type: "cleanup" }),
+        }),
+      ),
+    )
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("clears registry mutation overlays when switching workspaces", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith("/api/v1/workspaces")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                { id: "ws-old", name: "SpecGate Core", slug: "core" },
+                { id: "ws-new", name: "SpecGate Docs", slug: "docs" },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (init?.method === "PATCH" && url.endsWith("/workboard/change-requests/SG-136")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: "SG-136",
+              key: "SG-136",
+              work_type: "cleanup",
+              title: "Workspace scoped mutation",
+              intent_md: "Persisted in the original workspace only.",
+              created_by: "DX",
+              created_at: "2026-06-27T05:00:00Z",
+              updated_at: "2026-06-27T05:30:00Z",
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url === "http://registry.test/workboard/change-requests?workspace_id=ws-old") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "SG-136",
+                  key: "SG-136",
+                  work_type: "new_feature",
+                  title: "Workspace scoped mutation",
+                  intent_md: "Persisted in the original workspace only.",
+                  created_by: "DX",
+                  created_at: "2026-06-27T05:00:00Z",
+                  updated_at: "2026-06-27T05:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url === "http://registry.test/workboard/change-requests?workspace_id=ws-new") {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/work/SG-136")
+    const user = userEvent.setup()
+
+    expect((await screen.findAllByText("Workspace scoped mutation")).length).toBeGreaterThan(0)
+    await user.click(screen.getByRole("tab", { name: "Overview" }))
+    await user.click(screen.getByRole("button", { name: /QuickSmall/ }))
+    await user.click(screen.getByRole("button", { name: "Confirm quick" }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("http://registry.test/workboard/change-requests/SG-136", expect.any(Object)))
+
+    await user.click(screen.getByRole("button", { name: "Open workspace menu" }))
+    await user.click(screen.getByRole("menuitem", { name: "Change workspace" }))
+    const workspaceDialog = screen.getByRole("dialog", { name: "Change workspace" })
+    await user.click(within(workspaceDialog).getByRole("button", { name: "SpecGate Docs" }))
+    await user.click(within(workspaceDialog).getByRole("button", { name: "Switch workspace" }))
+
+    expect(await screen.findByText("Work item not found")).toBeInTheDocument()
+    expect(screen.queryByText("Workspace scoped mutation")).not.toBeInTheDocument()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("exposes the primary navigation structure", async () => {
+    renderApp("/reviews")
+
+    expect(screen.getByRole("link", { name: /^Work$/ })).toHaveAttribute("href", "/work")
+    expect(screen.getByRole("link", { name: /^Reviews$/ })).toHaveAttribute("href", "/reviews")
+    expect(screen.getByRole("link", { name: /^Artifacts$/ })).toHaveAttribute("href", "/artifacts")
+    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument()
+    expect(await screen.findByText(/items need review/)).toBeInTheDocument()
+    expect(screen.getByText("Review queue")).toBeInTheDocument()
+    expect(screen.getByLabelText("Search reviews")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /Needs changes/ })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /Ready/ })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /Gate failed/ })).toBeInTheDocument()
+    expect(
+      screen.getAllByRole("link", { name: /Inspect review/ }).some((link) => {
+        const href = link.getAttribute("href") ?? ""
+        return href.startsWith("/work/") && href.includes("tab=verification")
+      }),
+    ).toBe(true)
+    expect(screen.getByText("Artifact proposals")).toBeInTheDocument()
+    expect(screen.getByText("proposal-SG-147-browser-smoke")).toBeInTheDocument()
+    expect(screen.getByText("Feedback signals")).toBeInTheDocument()
+    expect(screen.getAllByText("feedback-SG-147-browser-smoke").length).toBeGreaterThan(0)
+    expect(screen.getByRole("button", { name: "Ask about review gaps" })).toBeInTheDocument()
+    expect(await screen.findByRole("button", { name: "Ask review summary" })).toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: /Skills/ })).not.toBeInTheDocument()
+  })
+
+  it("opens the work item Verification tab from the review queue", async () => {
+    renderApp("/reviews")
+    const user = userEvent.setup()
+
+    const keyLink = await screen.findByRole("link", { name: "SG-155" })
+    expect(keyLink).toHaveAttribute("href", "/work/SG-155?tab=verification")
+
+    await user.click(keyLink)
+
+    expect((await screen.findAllByRole("heading", { name: "Doc Registry migration cleanup" })).length).toBeGreaterThan(0)
+    expect(screen.getByRole("tab", { name: "Verification", selected: true })).toBeInTheDocument()
+  })
+
+  it("opens artifact proposal diffs from the review queue", async () => {
+    renderApp("/reviews")
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("button", { name: "Inspect proposal diff" }))
+
+    const dialog = await screen.findByRole("dialog", { name: "Proposal diff" })
+    expect(within(dialog).getByText("verification.md")).toBeInTheDocument()
+    expect(within(dialog).getAllByRole("heading", { name: "Browser smoke" }).length).toBeGreaterThan(1)
+    expect(within(dialog).getByText(/Browser smoke: required/)).toBeInTheDocument()
+  })
+
+  it("approves an artifact proposal from the review queue and refreshes it", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    let proposalListCalls = 0
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === "http://registry.test/artifact-edit/proposals") {
+        proposalListCalls += 1
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items:
+                proposalListCalls === 1
+                  ? [
+                      {
+                        id: "session-approve-1",
+                        base_artifact_id: "artifact-9",
+                        base_version: "v3",
+                        state: "active",
+                        last_diff_summary: "Tighten spec wording",
+                        source_kind: "feedback_event",
+                        source_id: "fe-1",
+                      },
+                    ]
+                  : [],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url === "http://registry.test/artifact-edit/sessions/session-approve-1/save" && init?.method === "POST") {
+        return Promise.resolve(new Response(JSON.stringify({ id: "rev-1" }), { headers: { "Content-Type": "application/json" } }))
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    renderApp("/reviews")
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("button", { name: "Approve proposal session-approve-1" }))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://registry.test/artifact-edit/sessions/session-approve-1/save",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ requested_by: "thanhtung" }),
+        }),
+      )
+    })
+    await waitFor(() => expect(proposalListCalls).toBeGreaterThan(1))
+    await waitFor(() => expect(screen.queryByText("Tighten spec wording")).not.toBeInTheDocument())
+  })
+
+  it("shows a capability placeholder when the chat model has no key", async () => {
+    vi.stubEnv("VITE_LANGGRAPH_API_URL", "http://agents.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === "http://agents.test/governance/chat/health") {
+        return Promise.resolve(
+          new Response(JSON.stringify({ configured: false, provider: "openai", model: "gpt-5.4-mini" }), {
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    langGraphClientMock.search.mockResolvedValue([])
+
+    renderApp("/work")
+    const user = userEvent.setup()
+
+    const agentTrigger = await screen.findAllByRole("button", { name: "Open governance agent" }).then((buttons) =>
+      buttons.find((button) => !button.hasAttribute("disabled")),
+    )
+    await user.click(agentTrigger!)
+
+    expect(await screen.findByText("Chat model not configured")).toBeInTheDocument()
+    expect(screen.getByText(/GOVERNANCE_OPS_API_KEY/)).toBeInTheDocument()
+    expect(screen.getByText("Run artifact readiness checks on demand")).toBeInTheDocument()
+    expect(screen.getByText(/separate from Settings → Models/)).toBeInTheDocument()
+    expect(
+      screen.queryByPlaceholderText("Ask about gate failures, blockers, or artifacts. Type / for commands"),
+    ).not.toBeInTheDocument()
+  })
+
+  it("shows registry feedback signals in Reviews without status mutation controls", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/api/v1/workspaces")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [{ id: "workspace-main", name: "SpecGate Core", slug: "specgate-core", is_default: true }],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.includes("/workboard/change-requests")) {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      if (url.endsWith("/artifact-edit/proposals")) {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      if (url.endsWith("/governance/feedback-events?status=received&limit=20")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "fb-live-1",
+                  event_type: "delivery.comment_scope_drift",
+                  status: "received",
+                  reason: "A PR comment asks for work outside the approved artifact.",
+                  change_request_id: "SG-241",
+                  artifact_id: "artifact-SG-241",
+                  integration_id: "int-github",
+                  created_at: "2026-06-30T03:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/reviews")
+    const user = userEvent.setup()
+
+    expect(await screen.findByText("fb-live-1")).toBeInTheDocument()
+    expect(screen.getByText("delivery.comment_scope_drift")).toBeInTheDocument()
+    expect(screen.getByText("A PR comment asks for work outside the approved artifact.")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Open feedback work item" })).toHaveAttribute("href", "/work/SG-241")
+    expect(screen.getByRole("link", { name: "Open feedback artifact" })).toHaveAttribute("href", "/artifacts?artifact=artifact-SG-241")
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://registry.test/governance/feedback-events?status=received&limit=20",
+      expect.any(Object),
+    )
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringMatching(/feedback-events\/fb-live-1\/status/), expect.anything())
+    expect(screen.queryByRole("button", { name: /Resolve/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /Dismiss/i })).not.toBeInTheDocument()
+
+    await user.type(screen.getByLabelText("Search reviews"), "comment")
+    expect(screen.getByText("fb-live-1")).toBeInTheDocument()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("does not synthesize live artifact proposal rows without registry ids", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/api/v1/workspaces")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [{ id: "workspace-main", name: "SpecGate Core", slug: "specgate-core", is_default: true }],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.includes("/workboard/change-requests")) {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      if (url.endsWith("/artifact-edit/proposals")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  base_artifact_id: "artifact-live-missing-id",
+                  base_version: "v1.0",
+                  state: "active",
+                  last_diff_summary: "1 file changed",
+                  source_kind: "feedback_event",
+                  source_id: "feedback-live",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/governance/feedback-events?status=received&limit=20")) {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/reviews")
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("http://registry.test/artifact-edit/proposals", expect.any(Object)))
+    expect(screen.queryByText("proposal-1")).not.toBeInTheDocument()
+    expect(screen.queryByText("artifact-live-missing-id")).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Inspect proposal diff" })).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalledWith("http://registry.test/artifact-edit/sessions/proposal-1/diff", expect.any(Object))
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("does not synthesize live feedback signal rows without registry ids", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/api/v1/workspaces")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [{ id: "workspace-main", name: "SpecGate Core", slug: "specgate-core", is_default: true }],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.includes("/workboard/change-requests")) {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      if (url.endsWith("/artifact-edit/proposals")) {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      if (url.endsWith("/governance/feedback-events?status=received&limit=20")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  event_type: "delivery.comment_scope_drift",
+                  status: "received",
+                  reason: "A PR comment asks for work outside the approved artifact.",
+                  change_request_id: "SG-241",
+                  artifact_id: "artifact-SG-241",
+                  integration_id: "int-github",
+                  created_at: "2026-06-30T03:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/reviews")
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("http://registry.test/governance/feedback-events?status=received&limit=20", expect.any(Object)),
+    )
+    expect(screen.queryByText("feedback-1")).not.toBeInTheDocument()
+    expect(screen.queryByText("delivery.comment_scope_drift")).not.toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: "Open feedback work item" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: "Open feedback artifact" })).not.toBeInTheDocument()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("runs contextual review prompts in the governance agent", async () => {
+    renderApp("/reviews")
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("button", { name: "Ask review summary" }))
+
+    expect(await screen.findByRole("heading", { name: "Governance agent" })).toBeInTheDocument()
+    expect((await screen.findAllByText(/Summarize the \d+ visible review items/)).length).toBeGreaterThan(0)
+    expect(await screen.findByText(/For this prompt, I would inspect/)).toBeInTheDocument()
+  })
+
+  it("filters the review queue by review reason", async () => {
+    renderApp("/reviews")
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole("button", { name: /Needs changes/ }))
+
+    expect(screen.getByLabelText("1 visible items")).toBeInTheDocument()
+    expect(screen.getByText("visible items")).toBeInTheDocument()
+    expect(screen.getByText("Pre-release verification sweep")).toBeInTheDocument()
+    expect(screen.queryByText("Doc Registry migration cleanup")).not.toBeInTheDocument()
+
+    await user.type(screen.getByLabelText("Search reviews"), "zzzz")
+
+    expect(screen.getByText("No reviews in this view")).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Clear filters" }))
+    expect(screen.getByText("Doc Registry migration cleanup")).toBeInTheDocument()
+  })
+
+  it("opens workspace actions from the sidebar user block", async () => {
+    renderApp("/work")
+    const user = userEvent.setup()
+
+    expect(screen.queryByRole("button", { name: /SpecGate Core/ })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Open workspace menu" }))
+
+    expect(screen.getByRole("menuitem", { name: "Change name" })).toBeInTheDocument()
+    // Workspace switching only appears with more than one workspace; local
+    // sessions have none, and logout no longer exists (local attribution only).
+    expect(screen.queryByRole("menuitem", { name: "Change workspace" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("menuitem", { name: "Logout" })).not.toBeInTheDocument()
+  })
+
+  it("updates the local display name from the sidebar menu", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+    renderApp("/work")
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole("button", { name: "Open workspace menu" }))
+    await user.click(screen.getByRole("menuitem", { name: "Change name" }))
+    const nameDialog = screen.getByRole("dialog", { name: "Change name" })
+    const nameInput = within(nameDialog).getByLabelText("Display name")
+    await user.clear(nameInput)
+    await user.type(nameInput, "Tung Local")
+    await user.click(within(nameDialog).getByRole("button", { name: "Save name" }))
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Change name" })).not.toBeInTheDocument())
+    expect(screen.getByText("Tung Local")).toBeInTheDocument()
+    expect(JSON.parse(localStorage.getItem(sessionStorageKey) ?? "{}")).toMatchObject({
+      profile: { user: { name: "Tung Local" } },
+    })
+  })
+
+  it("does not show local workspace fallback choices when registry workspaces are unavailable", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === "http://registry.test/api/v1/workspaces") {
+        return Promise.resolve(new Response("registry unavailable", { status: 503 }))
+      }
+      if (url === "http://registry.test/workboard/change-requests") {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      if (url.includes("openrouter.ai")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [] }) } as Response)
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    renderApp("/work")
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole("button", { name: "Open workspace menu" }))
+
+    // With registry workspaces unavailable there is at most the profile's own
+    // workspace, so no bundled fallback choices and no switcher entry at all.
+    expect(screen.queryByRole("menuitem", { name: "Change workspace" })).not.toBeInTheDocument()
+    expect(screen.queryByText("SpecGate Sandbox")).not.toBeInTheDocument()
+    expect(screen.queryByText("SpecGate Docs")).not.toBeInTheDocument()
+  })
+
+  it("does not send browser-local workspace ids to Doc Registry workboard requests", async () => {
+    localStorage.setItem(
+      sessionStorageKey,
+      JSON.stringify({
+        profile: {
+          id: "local-core",
+          slug: "core",
+          name: "SpecGate Core",
+          user: {
+            id: "user-local",
+            username: "thanhtung",
+            name: "Tung Local",
+            email: "tung@example.com",
+          },
+        },
+      }),
+    )
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === "http://registry.test/api/v1/workspaces") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ items: [{ id: "workspace-main", name: "SpecGate", slug: "specgate" }] }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url === "http://registry.test/workboard/change-requests?workspace_id=workspace-main") {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    renderApp("/work")
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://registry.test/workboard/change-requests?workspace_id=workspace-main",
+        expect.any(Object),
+      ),
+    )
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "http://registry.test/workboard/change-requests?workspace_id=local-core",
+      expect.any(Object),
+    )
+  })
+
+  it("falls back to a local default session when Doc Registry is unavailable", async () => {
+    localStorage.clear()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === "http://registry.test/api/v1/workspaces" || url.endsWith("/api/v1/identity/bootstrap")) {
+        return Promise.resolve(new Response("registry unavailable", { status: 503 }))
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    renderApp("/work")
+
+    expect(await screen.findByRole("heading", { name: "Work" })).toBeInTheDocument()
+    expect(screen.queryByRole("heading", { name: "Welcome to SpecGate" })).not.toBeInTheDocument()
+    expect(screen.getByText("Local Workspace")).toBeInTheDocument()
+  })
+
+  it("auto-bootstraps through Doc Registry reusing the first existing workspace", async () => {
+    localStorage.clear()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === "http://registry.test/api/v1/workspaces") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                { id: "ws-core", slug: "core", name: "SpecGate Core" },
+                { id: "ws-docs", slug: "docs", name: "SpecGate Docs" },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url === "http://registry.test/api/v1/identity/bootstrap" && init?.method === "POST") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              user: {
+                id: "user-dev",
+                username: "dev",
+                display_name: "Dev",
+              },
+              workspace: { id: "ws-core", slug: "core", name: "SpecGate Core" },
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url === "http://registry.test/workboard/change-requests?workspace_id=ws-core") {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      return Promise.resolve(new Response("{}", { status: 404 }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    renderApp("/work")
+
+    await screen.findByRole("heading", { name: "Work" })
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://registry.test/api/v1/identity/bootstrap",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            workspace_name: "SpecGate Core",
+            display_name: "Dev",
+            username: "dev",
+          }),
+        }),
+      )
+    })
+    await waitFor(() => {
+      expect(screen.getAllByText("SpecGate Core").length).toBeGreaterThan(0)
+    })
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://registry.test/workboard/change-requests?workspace_id=ws-core",
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      )
+    })
+  })
+
+  it("renders route-backed work item detail", async () => {
+    renderApp("/work/SG-155")
+
+    expect(screen.getByRole("heading", { name: "Work" })).toBeInTheDocument()
+    expect((await screen.findAllByRole("heading", { name: "Doc Registry migration cleanup" })).length).toBeGreaterThan(0)
+    expect(await screen.findByRole("tab", { name: "Handoff" })).toBeInTheDocument()
+    expect(screen.getByText("Governance agent context")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Ask about handoff blockers" })).toBeInTheDocument()
+    expect(screen.getByText("Resume in CLI")).toBeInTheDocument()
+  })
+
+  it("shows an explicit state for unknown work item routes", async () => {
+    renderApp("/work/SG-404")
+
+    expect(await screen.findByRole("heading", { name: "Work item not found" })).toBeInTheDocument()
+    expect(screen.getByText("SG-404")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Back to work" })).toHaveAttribute("href", "/work")
+    expect(screen.queryByText("Work queue")).not.toBeInTheDocument()
+  })
+
+  it("does not show not-found while a registry work item route is loading", () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})))
+
+    renderApp("/work/CR-LIVE")
+
+    expect(screen.getByRole("heading", { name: "Loading work item" })).toBeInTheDocument()
+    expect(screen.getByText("CR-LIVE")).toBeInTheDocument()
+    expect(screen.queryByRole("heading", { name: "Work item not found" })).not.toBeInTheDocument()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("does not synthesize live gate runs without registry ids", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/api/v1/workspaces")) {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      if (url.endsWith("/workboard/change-requests")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "cr-gate-run-missing",
+                  key: "CR-GATE-RUN-MISSING",
+                  work_type: "cleanup",
+                  title: "Gate run missing id",
+                  intent_md: "Do not render fake gate-run rows.",
+                  context_pack_artifact_id: "artifact-cr-gate-run-missing",
+                  created_by: "DX",
+                  created_at: "2026-06-27T05:00:00Z",
+                  updated_at: "2026-06-27T05:30:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/workboard/change-requests/cr-gate-run-missing/gate-runs?limit=10")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  gate: "delivery_review",
+                  state: "fail",
+                  hint: "Missing delivery evidence",
+                  created_at: "2026-06-27T06:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/work/CR-GATE-RUN-MISSING")
+    const user = userEvent.setup()
+
+    expect(await screen.findByText("Gate run missing id")).toBeInTheDocument()
+    await user.click(screen.getByRole("tab", { name: "Verification" }))
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://registry.test/workboard/change-requests/cr-gate-run-missing/gate-runs?limit=10",
+        expect.any(Object),
+      ),
+    )
+    expect(screen.getByText("No persisted gate runs yet.")).toBeInTheDocument()
+    expect(screen.queryByText("Missing delivery evidence")).not.toBeInTheDocument()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("shows live no-fallback errors for work item readback sections", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/api/v1/workspaces")) {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      if (url.endsWith("/workboard/change-requests")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "cr-readback",
+                  key: "CR-READBACK",
+                  feature_id: "feature-readback",
+                  work_type: "cleanup",
+                  title: "Work readback outage",
+                  intent_md: "Show registry readback failures without sample fallbacks.",
+                  created_by: "DX",
+                  created_at: "2026-06-27T07:00:00Z",
+                  updated_at: "2026-06-27T07:30:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (
+        url.endsWith("/workboard/change-requests/cr-readback/acceptance-criteria") ||
+        url.endsWith("/workboard/change-requests/cr-readback/next-actions") ||
+        url.endsWith("/workboard/change-requests/cr-readback/gate-runs?limit=10") ||
+        url.endsWith("/workboard/change-requests/cr-readback/tracker-links") ||
+        url.endsWith("/workboard/features/feature-readback") ||
+        url.endsWith("/api/v1/work-items/cr-readback/policy") ||
+        url.endsWith("/api/v1/work-items/cr-readback/delivery-status?detail=true")
+      ) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: "registry unavailable" }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/work/CR-READBACK")
+    const user = userEvent.setup()
+
+    expect(await screen.findByText("Work readback outage")).toBeInTheDocument()
+    expect(await screen.findByText(/Feature context unavailable/)).toBeInTheDocument()
+    expect(screen.getByText(/Acceptance criteria unavailable/)).toBeInTheDocument()
+    expect(screen.getByText(/Linked issues unavailable/)).toBeInTheDocument()
+    expect(screen.queryByText(/No acceptance criteria are recorded for this work item yet/)).not.toBeInTheDocument()
+    expect(screen.queryByText("No tracker links recorded.")).not.toBeInTheDocument()
+    await user.click(screen.getByRole("tab", { name: "Verification" }))
+
+    expect(await screen.findByText(/Gate next actions unavailable/)).toBeInTheDocument()
+    expect(screen.getByText(/Gate run history unavailable/)).toBeInTheDocument()
+    expect(await screen.findByText(/Policy explanation unavailable/)).toBeInTheDocument()
+    expect(screen.getByText(/no fallback policy guidance is shown/)).toBeInTheDocument()
+    expect(screen.getByText(/Delivery review readback unavailable/)).toBeInTheDocument()
+    expect(screen.getByText(/no fallback delivery review detail is shown/)).toBeInTheDocument()
+    expect(screen.queryByText("No next actions recorded.")).not.toBeInTheDocument()
+    expect(screen.queryByText("No persisted gate runs yet.")).not.toBeInTheDocument()
+    expect(screen.queryByText(/Current verdict is/)).not.toBeInTheDocument()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("does not synthesize live tracker links without registry identifiers and URLs", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/api/v1/workspaces")) {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      if (url.endsWith("/workboard/change-requests")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "cr-tracker-missing",
+                  key: "CR-TRACKER-MISSING",
+                  feature_id: "feature-tracker-missing",
+                  work_type: "cleanup",
+                  title: "Tracker link missing id",
+                  intent_md: "Do not render fake issue links.",
+                  created_by: "DX",
+                  created_at: "2026-06-27T07:00:00Z",
+                  updated_at: "2026-06-27T07:30:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/workboard/change-requests/cr-tracker-missing/tracker-links")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                { lane: "full", state: "opened", tracker_state: "Open" },
+                { identifier: "ENG-123", state: "opened", tracker_state: "Open" },
+                { url: "https://tracker.test/ENG-124", state: "opened", tracker_state: "Open" },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/work/CR-TRACKER-MISSING")
+
+    expect(await screen.findByText("Tracker link missing id")).toBeInTheDocument()
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://registry.test/workboard/change-requests/cr-tracker-missing/tracker-links",
+        expect.any(Object),
+      ),
+    )
+    expect(screen.getByText("No tracker links recorded.")).toBeInTheDocument()
+    expect(screen.queryByText("tracker-1")).not.toBeInTheDocument()
+    expect(screen.queryByText("ENG-123")).not.toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: /tracker/i })).not.toBeInTheDocument()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("shows work-item freshness signals as read-only registry context", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/api/v1/workspaces")) {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      if (url.endsWith("/workboard/change-requests")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "cr-live",
+                  key: "CR-LIVE",
+                  feature_id: "feature-live",
+                  work_type: "cleanup",
+                  title: "Freshness signal check",
+                  intent_md: "Show stale Context Pack and tracker contradiction without fixing it from the browser.",
+                  context_pack_artifact_id: "artifact-context-pack",
+                  created_by: "DX",
+                  created_at: "2026-06-27T05:00:00Z",
+                  updated_at: "2026-06-27T05:30:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/workboard/stale-warnings?change_request_id=cr-live")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  code: "context_pack_stale",
+                  severity: "warning",
+                  message: "Context Pack may be stale after delivery changed.",
+                  feature_id: "feature-live",
+                  change_request_id: "cr-live",
+                  artifact_id: "artifact-context-pack",
+                },
+                {
+                  code: "tracker_status_conflict",
+                  severity: "warning",
+                  message: "Tracker says complete but merge evidence is missing.",
+                  feature_id: "feature-live",
+                  change_request_id: "cr-live",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/work/CR-LIVE")
+
+    expect((await screen.findAllByText("Freshness signal check")).length).toBeGreaterThan(0)
+    expect(await screen.findByText("Freshness signals")).toBeInTheDocument()
+    expect(screen.getByText("Context Pack Stale")).toBeInTheDocument()
+    expect(screen.getByText("Context Pack may be stale after delivery changed.")).toBeInTheDocument()
+    expect(screen.getByText("Tracker Status Conflict")).toBeInTheDocument()
+    expect(screen.getByText("Tracker says complete but merge evidence is missing.")).toBeInTheDocument()
+    expect(screen.getByText("artifact-context-pack")).toBeInTheDocument()
+    expect(screen.getByText("read-only")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /Regenerate/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /Rerun/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /Resolve/i })).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://registry.test/workboard/stale-warnings?change_request_id=cr-live",
+      expect.any(Object),
+    )
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("renders artifact list and selected artifact detail", async () => {
+    renderApp("/artifacts")
+    const user = userEvent.setup()
+
+    expect(screen.getByRole("heading", { name: "Artifacts" })).toBeInTheDocument()
+    expect(screen.getByText("Artifact library")).toBeInTheDocument()
+    expect(screen.getByLabelText("Search artifacts")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "All" })).toBeInTheDocument()
+    expect(await screen.findByRole("button", { name: "Approved" })).toBeInTheDocument()
+    expect((await screen.findAllByText("Doc Registry migration cleanup")).length).toBeGreaterThan(0)
+    expect(screen.queryByText("Documents")).not.toBeInTheDocument()
+    expect(screen.queryByRole("dialog", { name: "Document inspector" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Preview spec" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Download summary" })).not.toBeInTheDocument()
+
+    await user.click(await screen.findByRole("button", { name: /Doc Registry migration cleanup/ }))
+
+    const detailDialog = await screen.findByRole("dialog", { name: "Doc Registry migration cleanup" })
+    const detailScrollArea = detailDialog.querySelector("[data-slot='scroll-area']")
+    expect(detailDialog).toHaveClass("grid")
+    expect(detailScrollArea).toHaveClass("min-h-0", "overflow-hidden")
+    expect(within(detailDialog).getByText("Documents")).toBeInTheDocument()
+    expect(within(detailDialog).getAllByText("migration/spec.md").length).toBeGreaterThan(0)
+    expect(within(detailDialog).getByText("Feedback")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("Attachments")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("Migration rollout note")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("Completion evidence is ready for delivery review.")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("Expected gates")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("Readiness history")).toBeInTheDocument()
+    expect(within(detailDialog).getAllByText("Spec Completeness").length).toBeGreaterThan(0)
+    expect(within(detailDialog).getByText("missing constraints")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("Saved revisions")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("artifact-SG-155-revision-1")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("Audit events")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("Artifact Published")).toBeInTheDocument()
+    expect(within(detailDialog).getByRole("link", { name: "Open work" })).toHaveAttribute("href", "/work/SG-155")
+    expect(within(detailDialog).getByRole("button", { name: "Ask agent" })).toBeInTheDocument()
+    expect(within(detailDialog).queryByRole("button", { name: /Refresh readiness/i })).not.toBeInTheDocument()
+    expect(within(detailDialog).queryByRole("button", { name: /Rerun/i })).not.toBeInTheDocument()
+    expect(within(detailDialog).queryByRole("button", { name: /Save revision/i })).not.toBeInTheDocument()
+
+    await user.click(within(detailDialog).getByRole("button", { name: /migration\/spec\.md/ }))
+
+    const previewDialog = await screen.findByRole("dialog", { name: "Document inspector" })
+    expect(within(previewDialog).getByRole("button", { name: "View" })).toBeInTheDocument()
+    expect(within(previewDialog).getByRole("button", { name: "Diff" })).toBeInTheDocument()
+    expect(within(previewDialog).getByLabelText("Version")).toBeInTheDocument()
+    expect(within(previewDialog).getByRole("button", { name: "Markdown" })).toBeInTheDocument()
+    expect(within(previewDialog).getByRole("button", { name: "Code" })).toBeInTheDocument()
+    expect(within(previewDialog).getByRole("button", { name: "Copy" })).toBeInTheDocument()
+    expect(await within(previewDialog).findByText("Mermaid diagram")).toBeInTheDocument()
+    expect(await within(previewDialog).findByLabelText("Mermaid diagram viewport")).toBeInTheDocument()
+    expect(within(previewDialog).getByRole("button", { name: "Source" })).toBeInTheDocument()
+    expect(within(previewDialog).queryByText("sample")).not.toBeInTheDocument()
+    await user.click(within(previewDialog).getByRole("button", { name: "Code" }))
+    expect(within(previewDialog).getByText(/```mermaid/)).toBeInTheDocument()
+    await user.click(within(previewDialog).getByRole("button", { name: "Diff" }))
+    expect(await within(previewDialog).findByText("Line diff")).toBeInTheDocument()
+    expect(within(previewDialog).queryByLabelText("Compare")).not.toBeInTheDocument()
+    expect(within(previewDialog).getByText("Latest v0.1")).toBeInTheDocument()
+    expect(within(previewDialog).getByText(/noisy expected misses/)).toBeInTheDocument()
+    await user.click(within(previewDialog).getByRole("button", { name: "Close" }))
+    await user.click(within(detailDialog).getByRole("button", { name: "Close" }))
+
+    await user.click(screen.getByRole("button", { name: /Agent skills setup primitives/ }))
+
+    const skillsDialog = await screen.findByRole("dialog", { name: "Agent skills setup primitives" })
+    expect(within(skillsDialog).getAllByText("setup/spec.md").length).toBeGreaterThan(0)
+  })
+
+  it("filters artifacts by search and status", async () => {
+    renderApp("/artifacts")
+    const user = userEvent.setup()
+
+    await user.type(screen.getByLabelText("Search artifacts"), "skills")
+
+    expect(screen.getAllByText("Agent skills setup primitives").length).toBeGreaterThan(0)
+    expect(screen.queryByRole("button", { name: /Doc Registry migration cleanup/ })).not.toBeInTheDocument()
+
+    await user.clear(screen.getByLabelText("Search artifacts"))
+    await user.type(screen.getByLabelText("Search artifacts"), "missing artifact")
+
+    expect(screen.getByText("No artifacts match")).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Clear filters" }))
+    await user.click(screen.getByRole("button", { name: "Approved" }))
+
+    expect(screen.getAllByText("Doc Registry migration cleanup").length).toBeGreaterThan(0)
+  })
+
+  it("restores the selected artifact from the URL query", async () => {
+    renderApp("/artifacts?artifact=artifact-SG-151")
+
+    const detailDialog = await screen.findByRole("dialog", { name: "Agent skills setup primitives" })
+    expect(within(detailDialog).getByRole("link", { name: "Open work" })).toHaveAttribute("href", "/work/SG-151")
+    expect((await within(detailDialog).findAllByText("setup/spec.md")).length).toBeGreaterThan(0)
+  })
+
+  it("runs artifact detail actions", async () => {
+    renderApp("/artifacts")
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("button", { name: /Doc Registry migration cleanup/ }))
+    const detailDialog = await screen.findByRole("dialog", { name: "Doc Registry migration cleanup" })
+    await user.click(within(detailDialog).getByRole("button", { name: /migration\/tasks\.md/ }))
+    const previewDialog = await screen.findByRole("dialog", { name: "Document inspector" })
+    expect(await within(previewDialog).findByText("Doc Registry migration cleanup Tasks")).toBeInTheDocument()
+    expect(within(previewDialog).queryByText("No previewable Markdown content available.")).not.toBeInTheDocument()
+    await user.click(within(previewDialog).getByRole("button", { name: "Close" }))
+
+    await user.click(within(detailDialog).getByRole("button", { name: "Ask agent" }))
+    expect(await screen.findByRole("heading", { name: "Governance agent" })).toBeInTheDocument()
+    expect((await screen.findAllByText(/Review artifact artifact-SG-155/)).length).toBeGreaterThan(0)
+  })
+
+  it("disables document actions when live artifact content is unavailable", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/artifacts?limit=50")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "artifact-empty-body",
+                  feature_id: "SG-201",
+                  feature_name: "Unavailable live document",
+                  version: "v0.2",
+                  status: "approved",
+                  request_type: "change_request",
+                  impact_level: "low",
+                  artifact_completeness: "full",
+                  source_kind: "context_pack",
+                  updated_at: "2026-06-29T10:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/artifacts/artifact-empty-body/files")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [{ path: "live/spec.md", role: "spec", size_bytes: 2048 }],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/artifacts?feature_id=SG-201&limit=100")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "artifact-empty-body",
+                  feature_id: "SG-201",
+                  feature_name: "Unavailable live document",
+                  version: "v0.2",
+                  status: "approved",
+                  request_type: "change_request",
+                  impact_level: "low",
+                  artifact_completeness: "full",
+                  source_kind: "context_pack",
+                  updated_at: "2026-06-29T10:00:00Z",
+                },
+                {
+                  id: "artifact-empty-body-previous",
+                  feature_id: "SG-201",
+                  feature_name: "Unavailable live document",
+                  version: "v0.1",
+                  status: "superseded",
+                  request_type: "change_request",
+                  impact_level: "low",
+                  artifact_completeness: "full",
+                  source_kind: "context_pack",
+                  updated_at: "2026-06-28T10:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/artifacts/artifact-empty-body/files/_?path=live%2Fspec.md")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ signed_url: "registry://artifact-empty-body/live/spec.md" }), {
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/artifacts")
+    const user = userEvent.setup()
+
+    expect((await screen.findAllByText("Unavailable live document")).length).toBeGreaterThan(0)
+    await user.click(screen.getByRole("button", { name: /Unavailable live document/ }))
+    const detailDialog = await screen.findByRole("dialog", { name: "Unavailable live document" })
+    await user.click(await within(detailDialog).findByRole("button", { name: /live\/spec\.md/ }))
+
+    const previewDialog = await screen.findByRole("dialog", { name: "Document inspector" })
+    expect(await within(previewDialog).findByText(/stored content is unavailable/)).toBeInTheDocument()
+    expect(within(previewDialog).getByRole("button", { name: "Copy" })).toBeDisabled()
+    expect(within(previewDialog).getByRole("button", { name: "Diff" })).toBeDisabled()
+    expect(within(previewDialog).queryByText("sample")).not.toBeInTheDocument()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("shows a live no-fallback error when artifact version history is unavailable", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/artifacts?limit=50")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "artifact-version-history-error",
+                  feature_id: "SG-206",
+                  feature_name: "Version history outage",
+                  version: "v0.2",
+                  status: "approved",
+                  request_type: "change_request",
+                  impact_level: "medium",
+                  artifact_completeness: "full",
+                  source_kind: "context_pack",
+                  updated_at: "2026-06-29T15:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/artifacts/artifact-version-history-error/files")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [{ path: "live/spec.md", role: "spec", size_bytes: 2048 }],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/artifacts?feature_id=SG-206&limit=100")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: "registry unavailable" }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+      }
+      if (url.endsWith("/artifacts/artifact-version-history-error/files/_?path=live%2Fspec.md")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ content: "# Live Spec\n\nReal registry body." }), {
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/artifacts")
+    const user = userEvent.setup()
+
+    expect((await screen.findAllByText("Version history outage")).length).toBeGreaterThan(0)
+    await user.click(screen.getByRole("button", { name: /Version history outage/ }))
+    const detailDialog = await screen.findByRole("dialog", { name: "Version history outage" })
+    await user.click(await within(detailDialog).findByRole("button", { name: /live\/spec\.md/ }))
+
+    const previewDialog = await screen.findByRole("dialog", { name: "Document inspector" })
+    expect(await within(previewDialog).findByText("Live Spec")).toBeInTheDocument()
+    expect(await within(previewDialog).findByText(/Version history unavailable/)).toBeInTheDocument()
+    expect(within(previewDialog).getByText(/no fallback version comparison is shown/)).toBeInTheDocument()
+    expect(within(previewDialog).getByRole("button", { name: "Diff" })).toBeDisabled()
+    expect(within(previewDialog).queryByText(/Latest v0\.2/)).not.toBeInTheDocument()
+    expect(within(previewDialog).queryByText("sample")).not.toBeInTheDocument()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("shows a live no-fallback error when artifact documents are unavailable", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/artifacts?limit=50")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "artifact-documents-error",
+                  feature_id: "SG-205",
+                  feature_name: "Document list outage",
+                  version: "v0.1",
+                  status: "approved",
+                  request_type: "change_request",
+                  impact_level: "low",
+                  artifact_completeness: "full",
+                  source_kind: "context_pack",
+                  updated_at: "2026-06-29T14:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/artifacts/artifact-documents-error/files")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: "registry unavailable" }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/artifacts")
+    const user = userEvent.setup()
+
+    expect((await screen.findAllByText("Document list outage")).length).toBeGreaterThan(0)
+    await user.click(screen.getByRole("button", { name: /Document list outage/ }))
+    const detailDialog = await screen.findByRole("dialog", { name: "Document list outage" })
+
+    expect(await within(detailDialog).findByText(/Artifact documents unavailable/)).toBeInTheDocument()
+    expect(within(detailDialog).getByText(/no fallback document list is shown/)).toBeInTheDocument()
+    expect(within(detailDialog).queryByText("No documents are available for this artifact yet.")).not.toBeInTheDocument()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("does not synthesize live artifact rows without registry ids", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/artifacts?limit=50")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  feature_id: "SG-MISSING-ID",
+                  feature_name: "Missing id artifact",
+                  version: "v0.1",
+                  status: "approved",
+                  request_type: "change_request",
+                  impact_level: "low",
+                  artifact_completeness: "full",
+                  source_kind: "context_pack",
+                  updated_at: "2026-06-29T14:30:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    renderApp("/artifacts")
+
+    expect(await screen.findByText("No artifacts in this workspace")).toBeInTheDocument()
+    expect(screen.getByText("specgate artifact list")).toBeInTheDocument()
+    expect(screen.queryByText("Missing id artifact")).not.toBeInTheDocument()
+    expect(screen.queryByText("artifact-1")).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalledWith("http://registry.test/artifacts/artifact-1/files", expect.any(Object))
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("opens feature detail from the feature list with summary and canonical artifact actions", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/artifacts?limit=50")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "artifact-feature-canonical",
+                  feature_id: "SG-301",
+                  feature_name: "Feature console",
+                  version: "v0.3",
+                  status: "approved",
+                  request_type: "change_request",
+                  impact_level: "medium",
+                  artifact_completeness: "full",
+                  source_kind: "context_pack",
+                  updated_at: "2026-06-30T12:00:00Z",
+                },
+                {
+                  id: "artifact-feature-previous",
+                  feature_id: "SG-301",
+                  feature_name: "Feature console previous",
+                  version: "v0.2",
+                  status: "superseded",
+                  request_type: "change_request",
+                  impact_level: "medium",
+                  artifact_completeness: "full",
+                  source_kind: "context_pack",
+                  updated_at: "2026-06-29T12:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/workboard/features")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "feature-301",
+                  key: "SG-301",
+                  name: "Feature console",
+                  status: "approved",
+                  version: 3,
+                  canonical_artifact_id: "artifact-feature-canonical",
+                  summary_source_version: "v0.3",
+                  summary_md: "### Governed overview\nReviewers can inspect the governed feature before opening the artifact bundle.",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/artifacts")
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("button", { name: "Features" }))
+    await user.click(await screen.findByRole("button", { name: /Open feature SG-301/ }))
+    const featureDialog = await screen.findByRole("dialog", { name: "Feature console" })
+
+    expect(within(featureDialog).getByRole("heading", { name: "Feature summary" })).toBeInTheDocument()
+    expect(within(featureDialog).getByText("Governed overview")).toBeInTheDocument()
+    expect(within(featureDialog).getByText(/Reviewers can inspect the governed feature/)).toBeInTheDocument()
+    expect(within(featureDialog).getAllByText("summary v0.3").length).toBeGreaterThan(0)
+    expect(within(featureDialog).getByRole("heading", { name: "Related artifacts" })).toBeInTheDocument()
+    expect(within(featureDialog).getByText("artifact-feature-previous")).toBeInTheDocument()
+    expect(within(featureDialog).getByText("Canonical")).toBeInTheDocument()
+
+    await user.click(within(featureDialog).getByRole("button", { name: "Open artifact artifact-feature-previous" }))
+    const previousArtifactDialog = await screen.findByRole("dialog", { name: "Feature console previous" })
+    expect(within(previousArtifactDialog).getByText("artifact-feature-previous")).toBeInTheDocument()
+
+    await user.click(within(previousArtifactDialog).getByRole("button", { name: /Open feature detail/ }))
+    const reopenedFeatureDialog = await screen.findByRole("dialog", { name: "Feature console" })
+    await user.click(within(reopenedFeatureDialog).getByRole("button", { name: /Open canonical artifact/ }))
+    const artifactDialog = await screen.findByRole("dialog", { name: "Feature console" })
+    expect(within(artifactDialog).getAllByText("artifact-feature-canonical").length).toBeGreaterThan(0)
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("moves artifact feature summary behind the feature detail CTA", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/artifacts?limit=50")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "artifact-linked-feature",
+                  feature_id: "SG-302",
+                  feature_name: "Linked feature",
+                  version: "v1.0",
+                  status: "approved",
+                  request_type: "change_request",
+                  impact_level: "low",
+                  artifact_completeness: "full",
+                  source_kind: "context_pack",
+                  updated_at: "2026-06-30T13:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/workboard/features")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "feature-302",
+                  key: "SG-302",
+                  name: "Linked feature",
+                  status: "approved",
+                  version: 10,
+                  canonical_artifact_id: "artifact-linked-feature",
+                  summary_source_version: "v1.0",
+                  summary_md: "This summary should appear only in the feature detail dialog.",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/artifacts")
+    const user = userEvent.setup()
+
+    expect((await screen.findAllByText("Linked feature")).length).toBeGreaterThan(0)
+    await user.click(screen.getByRole("button", { name: /Linked feature/ }))
+    const artifactDialog = await screen.findByRole("dialog", { name: "Linked feature" })
+
+    expect(await within(artifactDialog).findByRole("button", { name: /Open feature detail/ })).toBeInTheDocument()
+    expect(within(artifactDialog).queryByText(/This summary should appear only/)).not.toBeInTheDocument()
+
+    await user.click(within(artifactDialog).getByRole("button", { name: /Open feature detail/ }))
+    const featureDialog = await screen.findByRole("dialog", { name: "Linked feature" })
+    expect(await within(featureDialog).findByText(/This summary should appear only/)).toBeInTheDocument()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("does not synthesize live artifact document rows without registry paths", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/artifacts?limit=50")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "artifact-missing-path",
+                  feature_id: "SG-MISSING-PATH",
+                  feature_name: "Missing path artifact",
+                  version: "v0.1",
+                  status: "approved",
+                  request_type: "change_request",
+                  impact_level: "low",
+                  artifact_completeness: "full",
+                  source_kind: "context_pack",
+                  updated_at: "2026-06-29T14:45:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/artifacts/artifact-missing-path/files")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [{ role: "spec", size_bytes: 128, updated_at: "2026-06-29T14:46:00Z" }],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    renderApp("/artifacts")
+    const user = userEvent.setup()
+
+    expect((await screen.findAllByText("Missing path artifact")).length).toBeGreaterThan(0)
+    await user.click(screen.getByRole("button", { name: /Missing path artifact/ }))
+    const detailDialog = await screen.findByRole("dialog", { name: "Missing path artifact" })
+
+    expect(await within(detailDialog).findByText("No documents are available for this artifact yet.")).toBeInTheDocument()
+    expect(within(detailDialog).queryByRole("button", { name: /document-1\.md/ })).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "http://registry.test/artifacts/artifact-missing-path/files/_?path=document-1.md",
+      expect.any(Object),
+    )
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("shows a live no-fallback error when artifact gate preview is unavailable", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/artifacts?limit=50")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "artifact-gate-preview-error",
+                  feature_id: "SG-202",
+                  feature_name: "Gate preview outage",
+                  version: "v0.1",
+                  status: "approved",
+                  request_type: "change_request",
+                  impact_level: "low",
+                  artifact_completeness: "full",
+                  source_kind: "context_pack",
+                  updated_at: "2026-06-29T11:00:00Z",
+                  expected_gates: ["scope_clear"],
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/api/v1/artifacts/artifact-gate-preview-error/gate-preview")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: "gate preview unavailable" }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/artifacts")
+    const user = userEvent.setup()
+
+    expect((await screen.findAllByText("Gate preview outage")).length).toBeGreaterThan(0)
+    await user.click(screen.getByRole("button", { name: /Gate preview outage/ }))
+    const detailDialog = await screen.findByRole("dialog", { name: "Gate preview outage" })
+
+    expect(await within(detailDialog).findByText(/Gate preview unavailable/)).toBeInTheDocument()
+    expect(within(detailDialog).getByText(/no fallback gate snapshot is shown/)).toBeInTheDocument()
+    expect(within(detailDialog).queryByText("Scope Clear")).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://registry.test/api/v1/artifacts/artifact-gate-preview-error/gate-preview",
+      expect.any(Object),
+    )
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("shows live no-fallback errors for artifact detail evidence sections", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/artifacts?limit=50")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "artifact-evidence-errors",
+                  feature_id: "SG-203",
+                  feature_name: "Artifact evidence outage",
+                  version: "v0.1",
+                  status: "approved",
+                  request_type: "change_request",
+                  impact_level: "low",
+                  artifact_completeness: "full",
+                  source_kind: "context_pack",
+                  updated_at: "2026-06-29T12:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/artifacts/artifact-evidence-errors/files")) {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      if (
+        url.endsWith("/features/SG-203/attachments") ||
+        url.endsWith("/governance/feedback-events?artifact_id=artifact-evidence-errors&limit=20") ||
+        url.endsWith("/artifacts/artifact-evidence-errors/readiness-runs?limit=20") ||
+        url.endsWith("/artifacts/artifact-evidence-errors/revisions") ||
+        url.endsWith("/events?artifact_id=artifact-evidence-errors&limit=20")
+      ) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: "registry unavailable" }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/artifacts")
+    const user = userEvent.setup()
+
+    expect((await screen.findAllByText("Artifact evidence outage")).length).toBeGreaterThan(0)
+    await user.click(screen.getByRole("button", { name: /Artifact evidence outage/ }))
+    const detailDialog = await screen.findByRole("dialog", { name: "Artifact evidence outage" })
+
+    expect(await within(detailDialog).findByText(/Reference attachments unavailable/)).toBeInTheDocument()
+    expect(within(detailDialog).getByText(/Artifact feedback unavailable/)).toBeInTheDocument()
+    expect(within(detailDialog).getByText(/Readiness history unavailable/)).toBeInTheDocument()
+    expect(within(detailDialog).getByText(/Saved revisions unavailable/)).toBeInTheDocument()
+    expect(within(detailDialog).getByText(/Audit events unavailable/)).toBeInTheDocument()
+    expect(within(detailDialog).queryByText("No reference attachments pinned to this feature.")).not.toBeInTheDocument()
+    expect(within(detailDialog).queryByText("No artifact-linked feedback recorded.")).not.toBeInTheDocument()
+    expect(within(detailDialog).queryByText("No persisted readiness runs recorded.")).not.toBeInTheDocument()
+    expect(within(detailDialog).queryByText("No saved draft revisions recorded.")).not.toBeInTheDocument()
+    expect(within(detailDialog).queryByText("No artifact audit events recorded.")).not.toBeInTheDocument()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("does not synthesize live artifact feedback rows without registry ids", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/artifacts?limit=50")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "artifact-feedback-missing-id",
+                  feature_id: "SG-205",
+                  feature_name: "Artifact feedback missing id",
+                  version: "v0.1",
+                  status: "approved",
+                  request_type: "change_request",
+                  impact_level: "low",
+                  artifact_completeness: "full",
+                  source_kind: "context_pack",
+                  updated_at: "2026-06-29T12:30:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/governance/feedback-events?artifact_id=artifact-feedback-missing-id&limit=20")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  event_type: "delivery.comment_scope_drift",
+                  status: "received",
+                  reason: "A PR comment asks for work outside the approved artifact.",
+                  created_at: "2026-06-30T03:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/artifacts")
+    const user = userEvent.setup()
+
+    expect((await screen.findAllByText("Artifact feedback missing id")).length).toBeGreaterThan(0)
+    await user.click(screen.getByRole("button", { name: /Artifact feedback missing id/ }))
+    const detailDialog = await screen.findByRole("dialog", { name: "Artifact feedback missing id" })
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://registry.test/governance/feedback-events?artifact_id=artifact-feedback-missing-id&limit=20",
+        expect.any(Object),
+      ),
+    )
+    expect(within(detailDialog).getByText("No artifact-linked feedback recorded.")).toBeInTheDocument()
+    expect(within(detailDialog).queryByText("delivery comment scope drift")).not.toBeInTheDocument()
+    expect(within(detailDialog).queryByText("A PR comment asks for work outside the approved artifact.")).not.toBeInTheDocument()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("does not synthesize live artifact evidence rows without registry ids", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/artifacts?limit=50")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "artifact-evidence-missing-ids",
+                  feature_id: "SG-206",
+                  feature_name: "Artifact evidence missing ids",
+                  version: "v0.1",
+                  status: "approved",
+                  request_type: "change_request",
+                  impact_level: "low",
+                  artifact_completeness: "full",
+                  source_kind: "context_pack",
+                  updated_at: "2026-06-29T12:40:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/features/SG-206/attachments")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [{ title: "Attachment without id", kind: "link", audience: "gate", created_at: "2026-06-30T03:00:00Z" }],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/artifacts/artifact-evidence-missing-ids/readiness-runs?limit=20")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [{ gate: "spec_completeness", state: "fail", hint: "Missing constraints", created_at: "2026-06-30T03:01:00Z" }],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/events?artifact_id=artifact-evidence-missing-ids&limit=20")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [{ event_type: "artifact.published", payload: { status: "approved" }, created_at: "2026-06-30T03:02:00Z" }],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/artifacts/artifact-evidence-missing-ids/revisions")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [{ base_artifact_id: "artifact-evidence-missing-ids", state: "saved", created_at: "2026-06-30T03:03:00Z" }],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/artifacts")
+    const user = userEvent.setup()
+
+    expect((await screen.findAllByText("Artifact evidence missing ids")).length).toBeGreaterThan(0)
+    await user.click(screen.getByRole("button", { name: /Artifact evidence missing ids/ }))
+    const detailDialog = await screen.findByRole("dialog", { name: "Artifact evidence missing ids" })
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://registry.test/artifacts/artifact-evidence-missing-ids/readiness-runs?limit=20",
+        expect.any(Object),
+      ),
+    )
+    expect(within(detailDialog).getByText("No reference attachments pinned to this feature.")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("No persisted readiness runs recorded.")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("No artifact audit events recorded.")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("No saved draft revisions recorded.")).toBeInTheDocument()
+    expect(within(detailDialog).queryByText("Attachment without id")).not.toBeInTheDocument()
+    expect(within(detailDialog).queryByText("Missing constraints")).not.toBeInTheDocument()
+    expect(within(detailDialog).queryByText("Artifact Published")).not.toBeInTheDocument()
+    expect(within(detailDialog).queryByText("revision-1")).not.toBeInTheDocument()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("shows live no-fallback errors for artifact feature and policy readback", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/artifacts?limit=50")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "artifact-policy-errors",
+                  feature_id: "SG-204",
+                  feature_name: "Artifact policy outage",
+                  version: "v0.1",
+                  status: "approved",
+                  request_type: "change_request",
+                  impact_level: "low",
+                  artifact_completeness: "full",
+                  source_kind: "context_pack",
+                  updated_at: "2026-06-29T13:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/workboard/features") || url.endsWith("/api/v1/artifacts/artifact-policy-errors/policy")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: "registry unavailable" }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/artifacts")
+    const user = userEvent.setup()
+
+    expect((await screen.findAllByText("Artifact policy outage")).length).toBeGreaterThan(0)
+    await user.click(screen.getByRole("button", { name: /Artifact policy outage/ }))
+    const detailDialog = await screen.findByRole("dialog", { name: "Artifact policy outage" })
+
+    expect(await within(detailDialog).findByText(/Feature context unavailable/)).toBeInTheDocument()
+    expect(within(detailDialog).getByText(/Policy snapshot unavailable/)).toBeInTheDocument()
+    expect(within(detailDialog).getByText(/no fallback policy explanation is shown/)).toBeInTheDocument()
+    expect(within(detailDialog).queryByText("No policy explanation recorded for this artifact.")).not.toBeInTheDocument()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("collapses long artifact document lists", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/artifacts?limit=50")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "artifact-many",
+                  feature_id: "SG-200",
+                  feature_name: "Large artifact bundle",
+                  version: "v0.1",
+                  status: "approved",
+                  request_type: "change_request",
+                  impact_level: "low",
+                  artifact_completeness: "full",
+                  source_kind: "context_pack",
+                  updated_at: "now",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/artifacts/artifact-many/files")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: Array.from({ length: 8 }, (_, index) => ({
+                path: `doc-${index + 1}.md`,
+                role: "reference",
+                size_bytes: 100 + index,
+              })),
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/artifacts/artifact-many/readiness-runs?limit=20")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "run-live-1",
+                  gate: "acceptance_criteria_verifiable",
+                  state: "pass",
+                  hint: "acceptance criteria are checkable",
+                  created_at: "2026-06-28T10:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/api/v1/artifacts/artifact-many/gate-preview")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              artifact_id: "artifact-many",
+              preview_tasks: [
+                {
+                  gate_key: "scope_clear",
+                  gate_version: "v1",
+                  executor: "ide_agent",
+                  note: "preview - not persisted",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/artifacts/artifact-many/revisions")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  revision_id: "rev-live-1",
+                  base_artifact_id: "artifact-many",
+                  materialized_artifact_id: "artifact-many-draft",
+                  state: "saved",
+                  created_at: "2026-06-28T11:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/events?artifact_id=artifact-many&limit=20")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "event-live-1",
+                  artifact_id: "artifact-many",
+                  event_type: "artifact.published",
+                  payload: { version: "v0.1", status: "approved" },
+                  created_at: "2026-06-28T12:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/api/v1/artifacts/artifact-many/policy")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              governance_level: "standard",
+              title: "Standard governance",
+              summary: "Context Pack handoff, evidence, and delivery review are required.",
+              reasons: ["Persisted artifact snapshot"],
+              obligations: ["Keep implementation inside the approved artifact scope."],
+              policy_lineage: [
+                {
+                  key: "builtin/standard",
+                  version: "1",
+                  digest: "sha256:artifactpolicyabcdef",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ content: "# Document" }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/artifacts")
+    const user = userEvent.setup()
+
+    expect((await screen.findAllByText("Large artifact bundle")).length).toBeGreaterThan(0)
+    await user.click(screen.getByRole("button", { name: /Large artifact bundle/ }))
+    const detailDialog = await screen.findByRole("dialog", { name: "Large artifact bundle" })
+    expect(await within(detailDialog).findByRole("button", { name: /doc-3\.md/ })).toBeInTheDocument()
+    expect(await within(detailDialog).findByText("Readiness history")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("Scope Clear")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("preview - not persisted")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("ide_agent")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("Acceptance Criteria Verifiable")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("acceptance criteria are checkable")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("Saved revisions")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("rev-live-1")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("draft artifact-many-draft")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("Audit events")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("version: v0.1 / status: approved")).toBeInTheDocument()
+    expect(within(detailDialog).getAllByText("Governance policy").length).toBeGreaterThan(0)
+    expect(within(detailDialog).getByText("Standard governance")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("Context Pack handoff, evidence, and delivery review are required.")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("Persisted artifact snapshot")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("Keep implementation inside the approved artifact scope.")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("builtin/standard")).toBeInTheDocument()
+    expect(within(detailDialog).getByRole("button", { name: /doc-4\.md/ })).toBeInTheDocument()
+    expect(within(detailDialog).queryByRole("button", { name: /doc-5\.md/ })).not.toBeInTheDocument()
+    expect(within(detailDialog).queryByRole("button", { name: /Refresh readiness/i })).not.toBeInTheDocument()
+    expect(within(detailDialog).queryByRole("button", { name: /Apply revision/i })).not.toBeInTheDocument()
+    expect(within(detailDialog).queryByRole("button", { name: /Accept exception|Resolve policy|Switch policy/i })).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://registry.test/artifacts/artifact-many/readiness-runs?limit=20",
+      expect.any(Object),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://registry.test/api/v1/artifacts/artifact-many/gate-preview",
+      expect.any(Object),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://registry.test/artifacts/artifact-many/revisions",
+      expect.any(Object),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://registry.test/events?artifact_id=artifact-many&limit=20",
+      expect.any(Object),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://registry.test/api/v1/artifacts/artifact-many/policy",
+      expect.any(Object),
+    )
+
+    await user.click(within(detailDialog).getByRole("button", { name: "Show 4 more documents" }))
+
+    expect(within(detailDialog).getByRole("button", { name: /doc-8\.md/ })).toBeInTheDocument()
+    expect(within(detailDialog).getByRole("button", { name: "Show fewer documents" })).toBeInTheDocument()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("supports Context Pack copy and markdown download from work detail", async () => {
+    let downloadedBlob: Blob | undefined
+    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+      if (blob instanceof Blob) downloadedBlob = blob
+      return "blob:context-pack"
+    })
+    const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined)
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined)
+    renderApp("/work/SG-155")
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("tab", { name: "Handoff" }))
+    await user.click(screen.getByRole("button", { name: "Copy URI" }))
+    expect(await screen.findByRole("button", { name: "URI copied" })).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Copy handoff" }))
+    expect(await screen.findByRole("button", { name: "Handoff copied" })).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Download .md" }))
+    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob))
+    expect(click).toHaveBeenCalled()
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:context-pack")
+    await expect(downloadedBlob?.text()).resolves.toContain("specgate work context SG-155")
+
+    createObjectURL.mockRestore()
+    revokeObjectURL.mockRestore()
+    click.mockRestore()
+  })
+
+  it("previews and copies the canonical registry Context Pack in work detail", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    let downloadedBlob: Blob | undefined
+    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+      if (blob instanceof Blob) downloadedBlob = blob
+      return "blob:canonical-context-pack"
+    })
+    const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined)
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined)
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/api/v1/workspaces")) {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      if (url.endsWith("/workboard/change-requests")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "cr-live-pack",
+                  key: "CR-LIVE-PACK",
+                  feature_id: "feature-pack",
+                  work_type: "cleanup",
+                  title: "Canonical Context Pack preview",
+                  intent_md: "Show the exact handoff material that CLI and IDE agents read.",
+                  context_pack_artifact_id: "artifact-pack",
+                  created_by: "DX",
+                  created_at: "2026-06-27T05:00:00Z",
+                  updated_at: "2026-06-27T05:30:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/api/v1/work-items/cr-live-pack/context-pack")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              state: "assembled",
+              markdown:
+                "# Canonical Context Pack\n\n## Execution Brief\n\nUse the registry-assembled pack, not a browser summary.\n\n## Resume\n\n```bash\nspecgate work context cr-live-pack\n```",
+              change_request_id: "cr-live-pack",
+              feature_id: "feature-pack",
+              source_artifact_id: "artifact-pack",
+              context_pack_artifact_id: "artifact-pack",
+              context_pack_uri: "specgate://context-pack/cr-live-pack",
+              warnings: [{ code: "linked_knowledge_newer", message: "Linked knowledge changed after handoff." }],
+              knowledge_provenance: [{ document_id: "knowledge-1", title: "Domain terms", version: "v1.0" }],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/work/CR-LIVE-PACK")
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("tab", { name: "Handoff" }))
+
+    expect(await screen.findByText("Canonical Context Pack")).toBeInTheDocument()
+    expect(screen.getByText("Use the registry-assembled pack, not a browser summary.")).toBeInTheDocument()
+    expect(screen.getByText("Linked knowledge changed after handoff.")).toBeInTheDocument()
+    expect(screen.getByText("Domain terms")).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Copy handoff" }))
+    expect(await screen.findByRole("button", { name: "Handoff copied" })).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Download .md" }))
+    await expect(downloadedBlob?.text()).resolves.toContain("# Canonical Context Pack")
+    await expect(downloadedBlob?.text()).resolves.toContain("specgate work context cr-live-pack")
+    expect(fetchMock).toHaveBeenCalledWith("http://registry.test/api/v1/work-items/cr-live-pack/context-pack", expect.any(Object))
+
+    createObjectURL.mockRestore()
+    revokeObjectURL.mockRestore()
+    click.mockRestore()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("disables live handoff markdown actions when canonical Context Pack readback fails", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/api/v1/workspaces")) {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      if (url.endsWith("/workboard/change-requests")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "cr-live-pack-error",
+                  key: "CR-LIVE-PACK-ERROR",
+                  feature_id: "feature-pack-error",
+                  work_type: "cleanup",
+                  title: "Canonical Context Pack outage",
+                  intent_md: "Do not hand off browser fallback markdown when canonical readback fails.",
+                  context_pack_artifact_id: "artifact-pack-error",
+                  created_by: "DX",
+                  created_at: "2026-06-27T06:00:00Z",
+                  updated_at: "2026-06-27T06:30:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/api/v1/work-items/cr-live-pack-error/context-pack")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: "context pack unavailable" }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/work/CR-LIVE-PACK-ERROR")
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("tab", { name: "Handoff" }))
+
+    expect(await screen.findByText("specgate://context-pack/cr-live-pack-error")).toBeInTheDocument()
+    expect(await screen.findByText(/Canonical Context Pack unavailable/)).toBeInTheDocument()
+    expect(screen.getByText(/no fallback handoff markdown is copied or downloaded/)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Copy URI" })).toBeEnabled()
+    expect(screen.getByRole("button", { name: "Copy handoff" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Download .md" })).toBeDisabled()
+    expect(screen.queryByText("Canonical preview")).not.toBeInTheDocument()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("disables live handoff markdown actions when canonical Context Pack is not assembled", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith("/api/v1/workspaces")) {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      if (url.endsWith("/workboard/change-requests")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "cr-live-pack-pending",
+                  key: "CR-LIVE-PACK-PENDING",
+                  feature_id: "feature-pack-pending",
+                  work_type: "cleanup",
+                  title: "Pending Context Pack assembly",
+                  intent_md: "Do not hand off browser fallback markdown when canonical pack assembly is incomplete.",
+                  context_pack_artifact_id: "artifact-pack-pending",
+                  created_by: "DX",
+                  created_at: "2026-06-27T07:00:00Z",
+                  updated_at: "2026-06-27T07:30:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/api/v1/work-items/cr-live-pack-pending/context-pack")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              state: "pending",
+              markdown: "",
+              context_pack_uri: "specgate://context-pack/cr-live-pack-pending",
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/work/CR-LIVE-PACK-PENDING")
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("tab", { name: "Handoff" }))
+
+    expect(await screen.findByText("specgate://context-pack/cr-live-pack-pending")).toBeInTheDocument()
+    expect(await screen.findByText(/Canonical Context Pack unavailable/)).toBeInTheDocument()
+    expect(screen.getByText(/no fallback handoff markdown is copied or downloaded/)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Copy URI" })).toBeEnabled()
+    expect(screen.getByRole("button", { name: "Copy handoff" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Download .md" })).toBeDisabled()
+    expect(screen.queryByText("Canonical preview")).not.toBeInTheDocument()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("keeps Settings focused on configuration surfaces", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+    const { user, settingsDialog } = await openSettings()
+    expect(within(settingsDialog).getByRole("heading", { name: "Settings" })).toBeInTheDocument()
+    expect(within(settingsDialog).queryByText("Inspect local configuration and open direct setup actions.")).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Toggle sidebar" })).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("General settings")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText(/VITE_DOC_REGISTRY_URL/)).toBeInTheDocument()
+    expect(within(settingsDialog).getByRole("button", { name: "Save" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Open governance agent" })).toBeInTheDocument()
+    expect(within(settingsDialog).getAllByRole("button", { name: "Close" }).length).toBeGreaterThan(0)
+    expect(within(settingsDialog).queryByRole("button", { name: "Save settings" })).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByRole("button", { name: "Refresh" })).not.toBeInTheDocument()
+
+    await user.click(within(settingsDialog).getByRole("button", { name: /Plugins/ }))
+    expect(within(settingsDialog).getByText("IDE plugins")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText(/installed and updated via the CLI/)).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("specgate plugins install")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("specgate plugins doctor")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("specgate update")).toBeInTheDocument()
+    expect(within(settingsDialog).queryByText("Codex")).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByText("CLI-managed")).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByText("0.1.0")).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByText("needs refresh")).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByText("not checked")).not.toBeInTheDocument()
+    await user.click(within(settingsDialog).getAllByRole("button", { name: "Copy" })[0])
+    expect(await within(settingsDialog).findByRole("button", { name: "Copied" })).toBeInTheDocument()
+
+    await user.click(within(settingsDialog).getByRole("button", { name: /Models/ }))
+    expect(within(settingsDialog).getByText("Model settings")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText(/VITE_DOC_REGISTRY_URL/)).toBeInTheDocument()
+    expect(within(settingsDialog).getByRole("button", { name: "Save" })).toBeDisabled()
+    expect(within(settingsDialog).queryByRole("button", { name: "Save draft" })).not.toBeInTheDocument()
+
+    expect(within(settingsDialog).queryByRole("button", { name: /Workspace/ })).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByRole("button", { name: /Knowledge/ })).not.toBeInTheDocument()
+
+    await user.click(within(settingsDialog).getByRole("button", { name: /Integrations/ }))
+    expect(within(settingsDialog).getByText("Experimental")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText(/VITE_DOC_REGISTRY_URL/)).toBeInTheDocument()
+    expect(within(settingsDialog).getByText(/No integrations connected yet/)).toBeInTheDocument()
+    expect(within(settingsDialog).queryByRole("img", { name: "GitHub" })).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByRole("img", { name: "Linear" })).not.toBeInTheDocument()
+    expect(within(settingsDialog).getByRole("button", { name: "Add integration" })).toBeDisabled()
+    expect(within(settingsDialog).queryByRole("button", { name: "Add" })).not.toBeInTheDocument()
+  })
+
+  it("opens a settings section page when a settings query arrives while Settings is already open", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+    let navigateToGovernanceSettings: (() => void) | undefined
+    function DeepLinkProbe() {
+      const navigate = useNavigate()
+      navigateToGovernanceSettings = () => navigate("/work?settings=governance")
+      return null
+    }
+
+    render(
+      <MemoryRouter initialEntries={["/work"]}>
+        <App />
+        <DeepLinkProbe />
+      </MemoryRouter>,
+    )
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole("button", { name: "Settings" }))
+    const settingsDialog = await screen.findByRole("dialog", { name: "Settings" })
+    expect(within(settingsDialog).getByText("General settings")).toBeInTheDocument()
+    expect(within(settingsDialog).queryByRole("button", { name: "Back to settings sections" })).not.toBeInTheDocument()
+
+    await act(async () => {
+      navigateToGovernanceSettings?.()
+    })
+
+    expect(within(settingsDialog).getByRole("button", { name: "Back to settings sections" })).toBeInTheDocument()
+    expect(await within(settingsDialog).findByRole("heading", { name: "Governance" })).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("Configure VITE_DOC_REGISTRY_URL to view governance policy and profile context.")).toBeInTheDocument()
+  })
+
+  it("keeps MCP tools and resources out of browser Settings", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === "http://registry.test/api/v1/skills") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "skill-readiness",
+                  name: "checking-spec-readiness",
+                  description: "Review artifacts for minimum executable contract coverage.",
+                  prompt: "Check goal, scope, non-goals, acceptance criteria, constraints, risks, and verification.",
+                  created_at: "2026-06-20T10:00:00Z",
+                  updated_at: "2026-06-27T10:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { settingsDialog } = await openSettings()
+
+    expect(within(settingsDialog).queryByText("Team rubric Skills")).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByText("Agent tool catalog")).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByText("Resources")).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByText("specgate://skills")).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByText("search_knowledge")).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByRole("button", { name: /Execute tool|Run tool|Rotate token/i })).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByText(/API key/i)).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalledWith("http://registry.test/mcp/info", expect.any(Object))
+    expect(fetchMock).not.toHaveBeenCalledWith("http://registry.test/api/v1/skills", expect.any(Object))
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("manages registry team rubric Skills without plugin mutation controls", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === "http://registry.test/api/v1/skills") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "skill-readiness",
+                  name: "checking-spec-readiness",
+                  description: "Review artifacts for minimum executable contract coverage.",
+                  prompt: "Check goal, scope, non-goals, acceptance criteria, constraints, risks, and verification.",
+                  created_at: "2026-06-20T10:00:00Z",
+                  updated_at: "2026-06-27T10:00:00Z",
+                },
+                {
+                  id: "skill-delivery",
+                  name: "completing-delivery",
+                  description: "Report implementation evidence against approved Context Pack criteria.",
+                  prompt: "Collect evidence and submit delivery feedback.",
+                  created_at: "2026-06-20T10:00:00Z",
+                  updated_at: "2026-06-28T10:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url === "http://registry.test/api/v1/skills/skill-readiness") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              body: {
+                id: "skill-readiness",
+                name: "checking-spec-readiness",
+                description: "Review artifacts for minimum executable contract coverage.",
+                prompt: "# Checking spec readiness\n\nCheck goal, scope, non-goals, acceptance criteria, constraints, risks, and verification.",
+                created_at: "2026-06-20T10:00:00Z",
+                updated_at: "2026-06-27T10:00:00Z",
+              },
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url === "http://registry.test/skills" && init?.method === "POST") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              body: {
+                id: "skill-created",
+                name: "delivery-evidence",
+                description: "Use when reviewing delivery evidence.",
+                prompt: "# Delivery evidence\n\nCheck changed files, tests, and docs.",
+                created_at: "2026-06-30T10:00:00Z",
+                updated_at: "2026-06-30T10:00:00Z",
+              },
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url === "http://registry.test/skills/skill-readiness" && init?.method === "PUT") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              body: {
+                id: "skill-readiness",
+                name: "checking-spec-readiness",
+                description: "Use when evaluating readiness evidence.",
+                prompt: "# Checking spec readiness\n\nCheck approved evidence only.",
+                created_at: "2026-06-20T10:00:00Z",
+                updated_at: "2026-06-30T10:05:00Z",
+              },
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url === "http://registry.test/skills/skill-readiness" && init?.method === "DELETE") {
+        return Promise.resolve(new Response(JSON.stringify({ body: { ok: true } }), { headers: { "Content-Type": "application/json" } }))
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { user, settingsDialog } = await openSettings()
+
+    expect(within(settingsDialog).queryByText("Team rubric Skills")).not.toBeInTheDocument()
+    await user.click(within(settingsDialog).getByRole("button", { name: "GovernanceSkills, policy, and profiles" }))
+
+    expect(await within(settingsDialog).findByText("Team rubric Skills")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("checking-spec-readiness")).toBeInTheDocument()
+    expect(within(settingsDialog).queryByText(/^Registry$/)).not.toBeInTheDocument()
+    const skillDescription = within(settingsDialog).getByText("Review artifacts for minimum executable contract coverage.")
+    expect(skillDescription).toHaveClass("break-words")
+    expect(within(settingsDialog).getByText("completing-delivery")).toBeInTheDocument()
+    expect(within(settingsDialog).getByRole("button", { name: "Add Skill" })).toBeInTheDocument()
+    expect(within(settingsDialog).queryByRole("button", { name: /Install skill/i })).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith("http://registry.test/api/v1/skills", expect.any(Object))
+
+    await user.click(within(settingsDialog).getByRole("button", { name: "Add Skill" }))
+    const addDialog = await screen.findByRole("dialog", { name: "Add Skill" })
+    await user.type(within(addDialog).getByLabelText("Skill name"), "delivery-evidence")
+    await user.type(within(addDialog).getByLabelText("Description"), "Use when reviewing delivery evidence.")
+    await user.type(within(addDialog).getByLabelText("Prompt"), "# Delivery evidence\n\nCheck changed files, tests, and docs.")
+    await user.click(within(addDialog).getByRole("button", { name: "Create Skill" }))
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Add Skill" })).not.toBeInTheDocument())
+    expect(within(settingsDialog).getByText("delivery-evidence")).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://registry.test/skills",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          name: "delivery-evidence",
+          description: "Use when reviewing delivery evidence.",
+          prompt: "# Delivery evidence\n\nCheck changed files, tests, and docs.",
+        }),
+      }),
+    )
+
+    await user.click(within(settingsDialog).getByRole("button", { name: "Inspect checking-spec-readiness Skill" }))
+    const detailDialog = await screen.findByRole("dialog", { name: "checking-spec-readiness" })
+    expect(within(detailDialog).getByText("Check goal, scope, non-goals, acceptance criteria, constraints, risks, and verification.")).toBeInTheDocument()
+    await user.click(within(detailDialog).getByRole("button", { name: "Edit Skill" }))
+    expect(screen.queryByRole("dialog", { name: "Edit Skill" })).not.toBeInTheDocument()
+    await user.clear(within(detailDialog).getByLabelText("Description"))
+    await user.type(within(detailDialog).getByLabelText("Description"), "Use when evaluating readiness evidence.")
+    await user.clear(within(detailDialog).getByLabelText("Prompt"))
+    await user.type(within(detailDialog).getByLabelText("Prompt"), "# Checking spec readiness\n\nCheck approved evidence only.")
+    await user.click(within(detailDialog).getByRole("button", { name: "Save Skill" }))
+    await waitFor(() => expect(within(detailDialog).queryByLabelText("Prompt")).not.toBeInTheDocument())
+    expect(screen.getByText("Check approved evidence only.")).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://registry.test/skills/skill-readiness",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({
+          name: "checking-spec-readiness",
+          description: "Use when evaluating readiness evidence.",
+          prompt: "# Checking spec readiness\n\nCheck approved evidence only.",
+        }),
+      }),
+    )
+
+    await user.click(within(detailDialog).getByRole("button", { name: "Delete Skill" }))
+    const deleteDialog = await screen.findByRole("dialog", { name: "Delete checking-spec-readiness Skill?" })
+    await user.click(within(deleteDialog).getByRole("button", { name: "Delete Skill" }))
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "checking-spec-readiness" })).not.toBeInTheDocument())
+    expect(within(settingsDialog).queryByText("checking-spec-readiness")).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith("http://registry.test/skills/skill-readiness", expect.objectContaining({ method: "DELETE" }))
+    expect(fetchMock).toHaveBeenCalledWith("http://registry.test/api/v1/skills/skill-readiness", expect.any(Object))
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("does not render live registry Skills without registry ids", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === "http://registry.test/governance-profiles") {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      if (url === "http://registry.test/api/v1/policies/levels") {
+        return Promise.resolve(new Response(JSON.stringify({ levels: [] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      if (url === "http://registry.test/api/v1/skills") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  name: "missing-id-skill",
+                  description: "This Skill should not be editable without a registry id.",
+                  prompt: "No durable id.",
+                  updated_at: "2026-06-30T10:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { user, settingsDialog } = await openSettings()
+    await user.click(within(settingsDialog).getByRole("button", { name: "GovernanceSkills, policy, and profiles" }))
+
+    expect(await within(settingsDialog).findByText("Team rubric Skills")).toBeInTheDocument()
+    expect(await within(settingsDialog).findByText("No team rubric Skills found.")).toBeInTheDocument()
+    expect(within(settingsDialog).queryByText("missing-id-skill")).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByRole("button", { name: "Inspect missing-id-skill Skill" })).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalledWith("http://registry.test/api/v1/skills/missing-id-skill", expect.any(Object))
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("keeps team rubric Skills available when governance catalog loading fails", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === "http://registry.test/governance-profiles") {
+        return Promise.resolve(new Response(JSON.stringify({ error: "catalog unavailable" }), { status: 503 }))
+      }
+      if (url === "http://registry.test/api/v1/policies/levels") {
+        return Promise.resolve(new Response(JSON.stringify({ levels: [] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      if (url === "http://registry.test/api/v1/skills") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "skill-readiness",
+                  name: "checking-spec-readiness",
+                  description: "Review artifacts for executable handoff coverage.",
+                  prompt: "Check goal, scope, non-goals, acceptance criteria, constraints, risks, and verification.",
+                  updated_at: "2026-06-27T10:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { user, settingsDialog } = await openSettings()
+    await user.click(within(settingsDialog).getByRole("button", { name: "GovernanceSkills, policy, and profiles" }))
+
+    expect(await within(settingsDialog).findByText("Governance catalog unavailable.")).toBeInTheDocument()
+    expect(await within(settingsDialog).findByText("Team rubric Skills")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("checking-spec-readiness")).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith("http://registry.test/api/v1/skills", expect.any(Object))
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("shows governance profiles, policy tiers, and outcome health as a read-only catalog", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === "http://registry.test/governance-profiles") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  namespace: "builtin",
+                  key: "high_impact_feature",
+                  full_key: "builtin/high_impact_feature",
+                  version: "1",
+                  display_name: "High impact feature",
+                  change_type: "feature_change",
+                  required_roles: ["PM", "Tech Lead"],
+                  required_topics: ["rollout"],
+                  required_evidence: ["acceptance_map"],
+                  enabled_gates: ["spec_completeness", "delivery_review"],
+                  source: "builtin",
+                  approval_policy: "human_required",
+                  evidence_policy: "corroborated_required",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url === "http://registry.test/api/v1/policies/levels") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              levels: [
+                {
+                  governance_level: "enhanced",
+                  display_name: "Enhanced",
+                  approval_policy: "human_required",
+                  evidence_policy: "corroborated_required",
+                  required_roles: ["PM", "QA"],
+                  required_topics: ["risk"],
+                  required_evidence: ["test_report"],
+                  enabled_gates: ["readiness", "delivery_review"],
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url === "http://registry.test/api/v1/policy-health") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              policies: [
+                {
+                  policy_id: "policy/enhanced",
+                  total_feedback: 3,
+                  override_count: 1,
+                  rejected_evidence_count: 1,
+                  post_merge_rollback_count: 0,
+                  escaped_defect_count: 1,
+                  gate_breakdown: [{ gate_key: "delivery_review", override_count: 1 }],
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url === "http://registry.test/api/v1/outcome-feedback") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "outcome-1",
+                  work_item_id: "CR-OUTCOME",
+                  artifact_id: "artifact-1",
+                  policy_id: "policy/enhanced",
+                  type: "escaped_defect",
+                  gate_key: "delivery_review",
+                  reason: "checkout escaped after policy override",
+                  actor: "reviewer@example.com",
+                  recorded_at: "2026-06-30T09:00:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { user, settingsDialog } = await openSettings()
+    await user.click(within(settingsDialog).getByRole("button", { name: /GovernanceSkills, policy, and profiles/ }))
+
+    expect(await within(settingsDialog).findByRole("heading", { name: "Governance" })).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("Policy catalog")).toBeInTheDocument()
+    expect(within(settingsDialog).queryByText("read-only")).not.toBeInTheDocument()
+    expect(within(settingsDialog).getByText("Governance health")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("Signals")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("Overrides")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("Escaped defects")).toBeInTheDocument()
+    expect(within(settingsDialog).getAllByText("policy/enhanced").length).toBeGreaterThan(0)
+    expect(within(settingsDialog).getByText(/3 signals/)).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("Escaped Defect")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("CR-OUTCOME")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("checkout escaped after policy override")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("Policy tiers")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("Enhanced")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("High impact feature")).toBeInTheDocument()
+    expect(within(settingsDialog).getAllByText("human_required").length).toBeGreaterThan(0)
+    expect(within(settingsDialog).getAllByText("corroborated_required").length).toBeGreaterThan(0)
+    expect(within(settingsDialog).getAllByText("delivery_review").length).toBeGreaterThan(0)
+    expect(within(settingsDialog).queryByRole("button", { name: /Import profile|Activate policy|Accept exception|Resolve policy|Record feedback/i })).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith("http://registry.test/governance-profiles", expect.any(Object))
+    expect(fetchMock).toHaveBeenCalledWith("http://registry.test/api/v1/policies/levels", expect.any(Object))
+    expect(fetchMock).toHaveBeenCalledWith("http://registry.test/api/v1/policy-health", expect.any(Object))
+    expect(fetchMock).toHaveBeenCalledWith("http://registry.test/api/v1/outcome-feedback", expect.any(Object))
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("keeps registry diagnostics out of browser Settings", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn(() => {
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { settingsDialog } = await openSettings()
+
+    expect(within(settingsDialog).queryByRole("button", { name: /Diagnostics|Registry and CLI/ })).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByRole("heading", { name: "Diagnostics" })).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByText("Registry build")).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalledWith("http://registry.test/api/v1/meta", expect.any(Object))
+    expect(fetchMock).not.toHaveBeenCalledWith("http://registry.test/api/v1/status", expect.any(Object))
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("lets mobile Settings sections return to the section list", async () => {
+    const { user, settingsDialog } = await openSettings()
+
+    expect(within(settingsDialog).queryByRole("button", { name: "Back to settings sections" })).not.toBeInTheDocument()
+
+    await user.click(within(settingsDialog).getByRole("button", { name: /Integrations/ }))
+
+    expect(within(settingsDialog).getByRole("button", { name: "Back to settings sections" })).toBeInTheDocument()
+    expect(within(settingsDialog).getByRole("heading", { name: "Integrations" })).toBeInTheDocument()
+
+    await user.click(within(settingsDialog).getByRole("button", { name: "Back to settings sections" }))
+
+    expect(within(settingsDialog).queryByRole("button", { name: "Back to settings sections" })).not.toBeInTheDocument()
+    expect(within(settingsDialog).getByRole("button", { name: /Models/ })).toBeInTheDocument()
+    expect(within(settingsDialog).getByRole("button", { name: /General/ })).toBeInTheDocument()
+  })
+
+  it("does not expose Settings as a standalone route", () => {
+    renderApp("/settings")
+
+    expect(screen.getByRole("heading", { name: "Work" })).toBeInTheDocument()
+    expect(screen.queryByRole("dialog", { name: "Settings" })).not.toBeInTheDocument()
+  })
+
+  it("opens Settings Integrations from the OAuth return query", async () => {
+    renderApp("/work?settings=integrations")
+
+    const settingsDialog = await screen.findByRole("dialog", { name: "Settings" })
+    expect(await within(settingsDialog).findByRole("heading", { name: "Integrations" })).toBeInTheDocument()
+    expect(within(settingsDialog).getByRole("button", { name: /Integrations/ })).toHaveAttribute("aria-current", "page")
+  })
+
+  it("preserves Settings return query when redirecting the retired Settings route", async () => {
+    renderApp("/settings?settings=integrations")
+
+    const settingsDialog = await screen.findByRole("dialog", { name: "Settings" })
+    expect(await within(settingsDialog).findByRole("heading", { name: "Integrations" })).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: "Work" })).toBeInTheDocument()
+  })
+
+  it("adds an integration through Doc Registry", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    let createdBody: Record<string, string> | null = null
+    let tokenBody: Record<string, string> | null = null
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === "http://registry.test/integrations" && init?.method === "POST") {
+        createdBody = JSON.parse(String(init.body)) as Record<string, string>
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            id: "int-github",
+            provider: "github",
+            name: createdBody?.name,
+            status: "connected",
+            base_url: createdBody?.base_url,
+            config_json: createdBody?.config_json,
+            auth_method: "pat",
+            has_api_token: false,
+          }),
+        } as Response)
+      }
+      if (url === "http://registry.test/integrations/int-github/api-token" && init?.method === "PUT") {
+        tokenBody = JSON.parse(String(init.body)) as Record<string, string>
+        return Promise.resolve({ ok: true, status: 204, text: async () => "" } as Response)
+      }
+      if (url === "http://registry.test/integrations") {
+        return Promise.resolve({ ok: true, json: async () => ({ items: [] }) } as Response)
+      }
+      if (url.includes("openrouter.ai")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [] }) } as Response)
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ items: [] }) } as Response)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { user, settingsDialog } = await openSettings()
+
+    await user.click(within(settingsDialog).getByRole("button", { name: /Integrations/ }))
+    expect(await within(settingsDialog).findByText("No integrations connected yet. Add GitHub, GitLab, or Linear when you need provider signals.")).toBeInTheDocument()
+    await user.click(within(settingsDialog).getByRole("button", { name: "Add integration" }))
+
+    const addDialog = screen.getByRole("dialog", { name: "Add integration" })
+    const nameInput = within(addDialog).getByPlaceholderText("GitHub")
+    await user.clear(nameInput)
+    await user.type(nameInput, "GitHub workspace")
+    expect(within(addDialog).queryByText("Base URL")).not.toBeInTheDocument()
+    await user.type(within(addDialog).getByPlaceholderText("ghp_..."), "ghp_test")
+    await user.click(within(addDialog).getByRole("button", { name: "Add integration" }))
+
+    await waitFor(() => expect(createdBody).not.toBeNull())
+    expect(createdBody).toMatchObject({
+      provider: "github",
+      name: "GitHub workspace",
+      config_json: JSON.stringify({ enabled: true }),
+    })
+    expect(createdBody).not.toHaveProperty("base_url")
+    expect(tokenBody).toEqual({ api_token: "ghp_test" })
+    expect(await within(settingsDialog).findByText("GitHub workspace")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("API token stored. Link resources here; reprovisioning, disconnect, and webhook-secret management stay with backend/admin flows.")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("No linked resources yet. Use Link resource to register a repository or team; webhook management stays in backend/admin flows.")).toBeInTheDocument()
+    expect(within(settingsDialog).queryByText("Loading linked resources...")).not.toBeInTheDocument()
+  })
+
+  it("does not render live integrations without registry ids", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === "http://registry.test/integrations") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            items: [
+              {
+                provider: "github",
+                name: "Missing id integration",
+                status: "connected",
+                auth_method: "pat",
+                has_api_token: true,
+              },
+            ],
+          }),
+        } as Response)
+      }
+      if (url.includes("openrouter.ai")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [] }) } as Response)
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ items: [] }) } as Response)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { user, settingsDialog } = await openSettings()
+    await user.click(within(settingsDialog).getByRole("button", { name: /Integrations/ }))
+
+    expect(await within(settingsDialog).findByText("No integrations connected yet. Add GitHub, GitLab, or Linear when you need provider signals.")).toBeInTheDocument()
+    expect(within(settingsDialog).queryByText("Missing id integration")).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalledWith("http://registry.test/integrations/undefined/resources")
+    expect(fetchMock).not.toHaveBeenCalledWith("http://registry.test/integrations/undefined/webhook-events?limit=3")
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("shows linked integration resources as read-only health", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === "http://registry.test/integrations") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            items: [
+              {
+                id: "int-gitlab",
+                provider: "gitlab",
+                name: "GitLab delivery",
+                status: "connected",
+                auth_method: "pat",
+                has_api_token: true,
+              },
+            ],
+          }),
+        } as Response)
+      }
+      if (url === "http://registry.test/integrations/int-gitlab/resources") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            items: [
+              {
+                id: "res-web",
+                resource_type: "project",
+                external_key: "specgate/web",
+                display_name: "SpecGate Web",
+                default_ref: "main",
+                has_webhook_secret: true,
+                config_json: JSON.stringify({
+                  webhook_status: "connected",
+                  provider_webhook_id: "hook-42",
+                }),
+              },
+              {
+                id: "res-secret",
+                resource_type: "project",
+                external_key: "specgate/legacy",
+                display_name: "Legacy Repo",
+                has_webhook_secret: true,
+                config_json: "{not-json",
+              },
+              {
+                id: "res-error",
+                resource_type: "repo",
+                external_key: "specgate/broken",
+                display_name: "Broken Hook",
+                config_json: JSON.stringify({
+                  webhook_status: "error",
+                  webhook_last_error: "permission denied",
+                }),
+              },
+            ],
+          }),
+        } as Response)
+      }
+      if (url === "http://registry.test/integrations/int-gitlab/webhook-events?limit=3") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            items: [
+              {
+                id: "webhook-1",
+                event_type: "tracker_issue",
+                status: "processed",
+                correlation_id: "CR-7D0AD9AF",
+                received_at: "2026-06-30T06:01:00Z",
+              },
+              {
+                id: "webhook-2",
+                event_type: "comment",
+                status: "failed",
+                error: "signature mismatch",
+                received_at: "2026-06-30T06:00:00Z",
+              },
+            ],
+          }),
+        } as Response)
+      }
+      if (url.includes("openrouter.ai")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [] }) } as Response)
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ items: [] }) } as Response)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { user, settingsDialog } = await openSettings()
+
+    await user.click(within(settingsDialog).getByRole("button", { name: /Integrations/ }))
+    expect(await within(settingsDialog).findByText("GitLab delivery")).toBeInTheDocument()
+
+    // Details are lazy: nothing is fetched per integration until it is expanded.
+    expect(within(settingsDialog).queryByText("Linked resources")).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalledWith("http://registry.test/integrations/int-gitlab/resources")
+    expect(fetchMock).not.toHaveBeenCalledWith("http://registry.test/integrations/int-gitlab/webhook-events?limit=3")
+
+    await user.click(within(settingsDialog).getByRole("button", { name: "Show details" }))
+    expect(await within(settingsDialog).findByText("Linked resources")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("SpecGate Web")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("Ref main")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("Webhook connected")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("Provider hook hook-42")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("Legacy Repo")).toBeInTheDocument()
+    expect(within(settingsDialog).getAllByText("Webhook connected")).toHaveLength(1)
+    expect(within(settingsDialog).getAllByText("Webhook secret stored").length).toBeGreaterThan(0)
+    expect(within(settingsDialog).getByText("Broken Hook")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("Webhook error")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("permission denied")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("Recent webhooks")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("Tracker issue")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("processed")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("CR-7D0AD9AF")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("Comment")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("failed")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("signature mismatch")).toBeInTheDocument()
+    expect(within(settingsDialog).queryByRole("button", { name: /Reprovision/ })).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByRole("button", { name: /Delete resource/ })).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByRole("button", { name: /Record webhook/ })).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith("http://registry.test/integrations/int-gitlab/resources")
+    expect(fetchMock).toHaveBeenCalledWith("http://registry.test/integrations/int-gitlab/webhook-events?limit=3")
+  })
+
+  it("links a repository resource through Doc Registry without admin controls", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    let linkedBody: Record<string, string> | null = null
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === "http://registry.test/integrations") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            items: [
+              {
+                id: "int-github",
+                provider: "github",
+                name: "GitHub delivery",
+                status: "connected",
+                auth_method: "pat",
+                has_api_token: true,
+              },
+            ],
+          }),
+        } as Response)
+      }
+      if (url === "http://registry.test/integrations/int-github/resources") {
+        if (init?.method === "POST") {
+          linkedBody = JSON.parse(String(init.body)) as Record<string, string>
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              id: "res-api",
+              resource_type: linkedBody?.resource_type,
+              external_id: linkedBody?.external_id,
+              external_key: linkedBody?.external_key,
+              display_name: linkedBody?.display_name,
+              default_ref: linkedBody?.default_ref,
+              has_webhook_secret: true,
+              config_json: JSON.stringify({ webhook_status: "connected", provider_webhook_id: "hook-api" }),
+            }),
+          } as Response)
+        }
+        return Promise.resolve({ ok: true, json: async () => ({ items: [] }) } as Response)
+      }
+      if (url === "http://registry.test/integrations/int-github/repos?limit=50") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            items: [
+              {
+                external_id: "987",
+                external_key: "specgate/api",
+                display_name: "SpecGate API",
+                default_ref: "main",
+              },
+            ],
+          }),
+        } as Response)
+      }
+      if (url === "http://registry.test/integrations/int-github/webhook-events?limit=3") {
+        return Promise.resolve({ ok: true, json: async () => ({ items: [] }) } as Response)
+      }
+      if (url.includes("openrouter.ai")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [] }) } as Response)
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ items: [] }) } as Response)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { user, settingsDialog } = await openSettings()
+    await user.click(within(settingsDialog).getByRole("button", { name: /Integrations/ }))
+    expect(await within(settingsDialog).findByText("GitHub delivery")).toBeInTheDocument()
+
+    await user.click(within(settingsDialog).getByRole("button", { name: "Link resource" }))
+    const linkDialog = await screen.findByRole("dialog", { name: "Link resource" })
+    expect(await within(linkDialog).findByText("SpecGate API")).toBeInTheDocument()
+    await user.click(within(linkDialog).getByRole("button", { name: "Link resource" }))
+
+    await waitFor(() => expect(linkedBody).not.toBeNull())
+    expect(linkedBody).toMatchObject({
+      resource_type: "project",
+      external_id: "987",
+      external_key: "specgate/api",
+      display_name: "SpecGate API",
+      default_ref: "main",
+    })
+    expect(await within(settingsDialog).findByText("Webhook connected")).toBeInTheDocument()
+    expect(within(settingsDialog).getByText("Provider hook hook-api")).toBeInTheDocument()
+    expect(within(settingsDialog).queryByRole("button", { name: /Reprovision/ })).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByRole("button", { name: /Delete resource/ })).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByRole("button", { name: /Rotate secret/ })).not.toBeInTheDocument()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("does not link integration resource candidates without registry keys", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    let linkedBody: Record<string, string> | null = null
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === "http://registry.test/integrations") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            items: [
+              {
+                id: "int-github",
+                provider: "github",
+                name: "GitHub delivery",
+                status: "connected",
+                auth_method: "pat",
+                has_api_token: true,
+              },
+            ],
+          }),
+        } as Response)
+      }
+      if (url === "http://registry.test/integrations/int-github/repos?limit=50") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            items: [
+              {
+                external_id: "987",
+                display_name: "SpecGate API",
+                default_ref: "main",
+              },
+            ],
+          }),
+        } as Response)
+      }
+      if (url === "http://registry.test/integrations/int-github/resources") {
+        if (init?.method === "POST") {
+          linkedBody = JSON.parse(String(init.body)) as Record<string, string>
+        }
+        return Promise.resolve({ ok: true, json: async () => ({ items: [] }) } as Response)
+      }
+      if (url === "http://registry.test/integrations/int-github/webhook-events?limit=3") {
+        return Promise.resolve({ ok: true, json: async () => ({ items: [] }) } as Response)
+      }
+      if (url.includes("openrouter.ai")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [] }) } as Response)
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ items: [] }) } as Response)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { user, settingsDialog } = await openSettings()
+    await user.click(within(settingsDialog).getByRole("button", { name: /Integrations/ }))
+    expect(await within(settingsDialog).findByText("GitHub delivery")).toBeInTheDocument()
+
+    await user.click(within(settingsDialog).getByRole("button", { name: "Link resource" }))
+    const linkDialog = await screen.findByRole("dialog", { name: "Link resource" })
+    expect(await within(linkDialog).findByText("No repositories returned for this integration credential.")).toBeInTheDocument()
+    expect(within(linkDialog).queryByText("SpecGate API")).not.toBeInTheDocument()
+    expect(within(linkDialog).getByRole("button", { name: "Link resource" })).toBeDisabled()
+    expect(linkedBody).toBeNull()
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("only asks for integration Base URL for self-hosted API-token setup", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    let createdBody: Record<string, string> | null = null
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === "http://registry.test/integrations" && init?.method === "POST") {
+        createdBody = JSON.parse(String(init.body)) as Record<string, string>
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            id: "int-gitlab",
+            provider: "gitlab",
+            name: createdBody?.name,
+            status: "connected",
+            base_url: createdBody?.base_url,
+            config_json: createdBody?.config_json,
+            auth_method: "pat",
+            has_api_token: false,
+          }),
+        } as Response)
+      }
+      if (url === "http://registry.test/integrations/int-gitlab/api-token" && init?.method === "PUT") {
+        return Promise.resolve({ ok: true, status: 204, text: async () => "" } as Response)
+      }
+      if (url === "http://registry.test/integrations") {
+        return Promise.resolve({ ok: true, json: async () => ({ items: [] }) } as Response)
+      }
+      if (url.includes("openrouter.ai")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [] }) } as Response)
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ items: [] }) } as Response)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { user, settingsDialog } = await openSettings()
+    await user.click(within(settingsDialog).getByRole("button", { name: /Integrations/ }))
+    await user.click(await within(settingsDialog).findByRole("button", { name: "Add integration" }))
+
+    const addDialog = screen.getByRole("dialog", { name: "Add integration" })
+    await user.click(within(addDialog).getByRole("button", { name: /GitLab/ }))
+    expect(within(addDialog).queryByText("Base URL")).not.toBeInTheDocument()
+
+    await user.click(within(addDialog).getByRole("checkbox", { name: /Self-hosted GitLab/ }))
+    const baseUrlInput = within(addDialog).getByLabelText("Base URL")
+    await user.clear(baseUrlInput)
+    await user.type(baseUrlInput, "https://gitlab.example.com")
+    await user.type(within(addDialog).getByPlaceholderText("glpat-..."), "glpat-test")
+    await user.click(within(addDialog).getByRole("button", { name: "Add integration" }))
+
+    await waitFor(() => expect(createdBody).not.toBeNull())
+    expect(createdBody).toMatchObject({
+      provider: "gitlab",
+      name: "GitLab",
+      base_url: "https://gitlab.example.com",
+    })
+  })
+
+  it("starts hosted integration OAuth without Base URL or API token", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    let oauthBody: Record<string, string> | null = null
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === "http://registry.test/integrations/oauth/begin" && init?.method === "POST") {
+        oauthBody = JSON.parse(String(init.body)) as Record<string, string>
+        return Promise.resolve({ ok: true, json: async () => ({ authorize_url: "#oauth-provider" }) } as Response)
+      }
+      if (url === "http://registry.test/integrations") {
+        return Promise.resolve({ ok: true, json: async () => ({ items: [] }) } as Response)
+      }
+      if (url.includes("openrouter.ai")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [] }) } as Response)
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ items: [] }) } as Response)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { user, settingsDialog } = await openSettings()
+    await user.click(within(settingsDialog).getByRole("button", { name: /Integrations/ }))
+    await user.click(await within(settingsDialog).findByRole("button", { name: "Add integration" }))
+
+    const addDialog = screen.getByRole("dialog", { name: "Add integration" })
+    await user.click(within(addDialog).getByRole("button", { name: /OAuth/ }))
+    expect(within(addDialog).queryByText("Base URL")).not.toBeInTheDocument()
+    expect(within(addDialog).queryByLabelText("API token")).not.toBeInTheDocument()
+    await user.click(within(addDialog).getByRole("button", { name: "Add integration" }))
+
+    await waitFor(() => expect(oauthBody).not.toBeNull())
+    expect(oauthBody).toMatchObject({
+      provider: "github",
+      name: "GitHub",
+      config_json: JSON.stringify({ enabled: true }),
+    })
+    expect(oauthBody).not.toHaveProperty("base_url")
+    expect(oauthBody).toHaveProperty("redirect_target")
+    expect(oauthBody!.redirect_target).toContain("settings=integrations")
+    expect(window.location.hash).toBe("#oauth-provider")
+    window.history.replaceState(null, "", "/")
+  })
+
+  it("shows an integration OAuth error when Doc Registry omits the authorize URL", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === "http://registry.test/integrations/oauth/begin" && init?.method === "POST") {
+        return Promise.resolve({ ok: true, json: async () => ({}) } as Response)
+      }
+      if (url === "http://registry.test/integrations") {
+        return Promise.resolve({ ok: true, json: async () => ({ items: [] }) } as Response)
+      }
+      if (url.includes("openrouter.ai")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [] }) } as Response)
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ items: [] }) } as Response)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { user, settingsDialog } = await openSettings()
+    await user.click(within(settingsDialog).getByRole("button", { name: /Integrations/ }))
+    await user.click(await within(settingsDialog).findByRole("button", { name: "Add integration" }))
+
+    const addDialog = screen.getByRole("dialog", { name: "Add integration" })
+    await user.click(within(addDialog).getByRole("button", { name: /OAuth/ }))
+    await user.click(within(addDialog).getByRole("button", { name: "Add integration" }))
+
+    expect(await within(addDialog).findByText(/provider authorization URL was not returned/i)).toBeInTheDocument()
+    expect(window.location.hash).not.toBe("#oauth-provider")
+  })
+
+  it("loads and saves OpenRouter governance model settings", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    let savedSettings: Record<string, string> | null = null
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes("openrouter.ai")) {
+        if (url.includes("output_modalities=embeddings")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              data: [
+                { id: "mistralai/mistral-embed-2312", name: "Mistral Embed", architecture: { output_modalities: ["embeddings"] } },
+                { id: "someorg/chat-only", name: "Chat Only", architecture: { output_modalities: ["text"] } },
+              ],
+            }),
+          } as Response)
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            data: [
+              { id: "deepseek/deepseek-v4-flash", name: "DeepSeek V4 Flash", architecture: { output_modalities: ["text"] } },
+              { id: "anthropic/claude-sonnet-4.6", name: "Claude Sonnet 4.6", architecture: { output_modalities: ["text"] } },
+              { id: "someorg/image-gen", name: "Image Gen", architecture: { output_modalities: ["image", "text"] } },
+            ],
+          }),
+        } as Response)
+      }
+      if (url === "http://registry.test/settings" && init?.method === "PUT") {
+        savedSettings = JSON.parse(String(init.body)).settings as Record<string, string>
+        return Promise.resolve({ ok: true, json: async () => ({ settings: savedSettings }) } as Response)
+      }
+      if (url === "http://registry.test/settings") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            settings: {
+              "governance.model_provider": "openrouter",
+              "governance.model": "deepseek/deepseek-v4-flash",
+              "governance.default_thinking_level": "medium",
+              "embedding.model_provider": "openrouter",
+              "embedding.model": "mistralai/mistral-embed-2312",
+              "openrouter.api_key": "***",
+            },
+          }),
+        } as Response)
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ items: [] }) } as Response)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { user, settingsDialog } = await openSettings()
+
+    await user.click(within(settingsDialog).getByRole("button", { name: /Models/ }))
+    expect(await within(settingsDialog).findByText("DeepSeek V4 Flash")).toBeInTheDocument()
+    expect(await within(settingsDialog).findByText("Claude Sonnet 4.6")).toBeInTheDocument()
+    expect(await within(settingsDialog).findByText("Mistral Embed")).toBeInTheDocument()
+    expect(within(settingsDialog).queryByText("Chat Only")).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByText("Image Gen")).not.toBeInTheDocument()
+    expect(within(settingsDialog).getByRole("button", { name: "Save" })).toBeDisabled()
+
+    const search = within(settingsDialog).getByPlaceholderText("Search models or type vendor/model")
+    await user.type(search, "z-ai/glm-5.1")
+    await user.click(await within(settingsDialog).findByRole("button", { name: /Use z-ai\/glm-5\.1/ }))
+    expect(within(settingsDialog).getByRole("button", { name: "Save" })).toBeEnabled()
+    await user.click(within(settingsDialog).getByRole("button", { name: "Save" }))
+
+    await waitFor(() => expect(savedSettings).not.toBeNull())
+    expect(savedSettings!["governance.model_provider"]).toBe("openrouter")
+    expect(savedSettings!["governance.model"]).toBe("z-ai/glm-5.1")
+    expect(savedSettings!["governance.default_thinking_level"]).toBe("medium")
+    expect(savedSettings!["embedding.model_provider"]).toBe("openrouter")
+    expect(savedSettings!["embedding.model"]).toBe("mistralai/mistral-embed-2312")
+    expect(savedSettings!["openrouter.api_key"]).toBe("***")
+  })
+
+  it("loads and saves General governance defaults and auto-archive without retention mutation controls", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    let savedSettings: Record<string, string> | null = null
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === "http://registry.test/settings" && init?.method === "PUT") {
+        savedSettings = JSON.parse(String(init.body)).settings as Record<string, string>
+        return Promise.resolve({ ok: true, json: async () => ({ settings: savedSettings }) } as Response)
+      }
+      if (url === "http://registry.test/settings") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            settings: {
+              "governance.auto_feature_summary": "true",
+              "governance.auto_archive_on_delivery_pass": "false",
+              "governance.feature_freshness_sla_days": "7",
+              "governance.artifact_stale_days": "5",
+              "governancefiles.ttl_days": "90",
+              "governance.gate_confidence_threshold": "0.7",
+            },
+          }),
+        } as Response)
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ items: [] }) } as Response)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { user, settingsDialog } = await openSettings()
+
+    await user.click(within(settingsDialog).getByRole("button", { name: /General/ }))
+    expect(await within(settingsDialog).findByRole("heading", { name: "General settings" })).toBeInTheDocument()
+    expect(within(settingsDialog).getByLabelText("Auto-refresh Feature overviews")).toBeChecked()
+    expect(within(settingsDialog).getByLabelText("Auto-archive after passed delivery review")).not.toBeChecked()
+    expect(within(settingsDialog).getByLabelText("Feature freshness SLA days")).toHaveValue(7)
+    expect(within(settingsDialog).getByLabelText("Artifact stale after days")).toHaveValue(5)
+    expect(within(settingsDialog).queryByText("Operational boundaries")).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByText("Governance file retention")).not.toBeInTheDocument()
+    expect(within(settingsDialog).queryByLabelText(/Governance file retention days/i)).not.toBeInTheDocument()
+
+    await user.click(within(settingsDialog).getByLabelText("Auto-refresh Feature overviews"))
+    await user.click(within(settingsDialog).getByLabelText("Auto-archive after passed delivery review"))
+    await user.clear(within(settingsDialog).getByLabelText("Feature freshness SLA days"))
+    await user.type(within(settingsDialog).getByLabelText("Feature freshness SLA days"), "14")
+    await user.clear(within(settingsDialog).getByLabelText("Artifact stale after days"))
+    await user.type(within(settingsDialog).getByLabelText("Artifact stale after days"), "8")
+    expect(within(settingsDialog).getByRole("button", { name: "Save" })).toBeEnabled()
+    await user.click(within(settingsDialog).getByRole("button", { name: "Save" }))
+
+    await waitFor(() => expect(savedSettings).not.toBeNull())
+    expect(savedSettings).toEqual({
+      "governance.auto_feature_summary": "false",
+      "governance.auto_archive_on_delivery_pass": "true",
+      "governance.feature_freshness_sla_days": "14",
+      "governance.artifact_stale_days": "8",
+    })
+    expect(savedSettings).not.toHaveProperty("governancefiles.ttl_days")
+    expect(savedSettings).not.toHaveProperty("governance.gate_confidence_threshold")
+
+    vi.unstubAllGlobals()
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("shows saved custom model slugs even when they are missing from the catalog", async () => {
+    vi.stubEnv("VITE_DOC_REGISTRY_URL", "http://registry.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes("openrouter.ai")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            data: [
+              { id: "deepseek/deepseek-v4-flash", name: "DeepSeek V4 Flash", architecture: { output_modalities: ["text"] } },
+              { id: "mistralai/mistral-embed-2312", name: "Mistral Embed", architecture: { output_modalities: ["embeddings"] } },
+            ],
+          }),
+        } as Response)
+      }
+      if (url === "http://registry.test/settings") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            settings: {
+              "governance.model_provider": "openrouter",
+              "governance.model": "vendor/private-governance",
+              "governance.default_thinking_level": "medium",
+              "embedding.model_provider": "openrouter",
+              "embedding.model": "vendor/private-embedding",
+              "openrouter.api_key": "***",
+            },
+          }),
+        } as Response)
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ items: [] }) } as Response)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { user, settingsDialog } = await openSettings()
+
+    await user.click(within(settingsDialog).getByRole("button", { name: /Models/ }))
+
+    expect(await within(settingsDialog).findByRole("button", { name: /vendor\/private-governance/ })).toHaveTextContent(
+      "Selected",
+    )
+    expect(await within(settingsDialog).findByRole("button", { name: /vendor\/private-embedding/ })).toHaveTextContent(
+      "Selected",
+    )
+  })
+
+  it("redirects unknown sections back to Work", () => {
+    renderApp("/not-a-section")
+
+    expect(screen.getByRole("heading", { name: "Work" })).toBeInTheDocument()
+  })
+})

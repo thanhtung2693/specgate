@@ -1,0 +1,11 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "governance": "./src/specgate_agents/governance/governance_chat.py:graph"
+  },
+  "http": {
+    "app": "./src/specgate_agents/governance/webapp.py:app"
+  },
+  "env": ".env",
+  "python_version": "3.13"
+}

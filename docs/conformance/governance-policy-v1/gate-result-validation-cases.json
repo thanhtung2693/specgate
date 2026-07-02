@@ -1,0 +1,56 @@
+[
+  {
+    "id": "gr-001",
+    "description": "valid ide_agent result is accepted and stamped agent_attested",
+    "task": {
+      "task_id": "t1",
+      "gate": {"key": "acme/api-compat@2", "digest": "sha256:abc"},
+      "artifact": {"id": "a1", "digest": "sha256:def"},
+      "executor": "ide_agent"
+    },
+    "result": {
+      "gate": "acme/api-compat@2",
+      "gate_digest": "sha256:abc",
+      "input_digest": "sha256:def",
+      "state": "pass",
+      "evaluator": {"executor": "ide_agent"}
+    },
+    "expect": {"accepted": true, "trust": "agent_attested"}
+  },
+  {
+    "id": "gr-002",
+    "description": "stale gate_digest is rejected",
+    "task": {
+      "task_id": "t2",
+      "gate": {"key": "acme/api-compat@2", "digest": "sha256:abc"},
+      "artifact": {"id": "a1", "digest": "sha256:def"},
+      "executor": "ide_agent"
+    },
+    "result": {
+      "gate": "acme/api-compat@2",
+      "gate_digest": "sha256:STALE",
+      "input_digest": "sha256:def",
+      "state": "pass",
+      "evaluator": {"executor": "ide_agent"}
+    },
+    "expect": {"accepted": false, "error_contains": "stale"}
+  },
+  {
+    "id": "gr-003",
+    "description": "ide_agent result is stamped agent_attested, never platform_evaluated",
+    "task": {
+      "task_id": "t3",
+      "gate": {"key": "acme/api-compat@2", "digest": "sha256:abc"},
+      "artifact": {"id": "a1", "digest": "sha256:def"},
+      "executor": "ide_agent"
+    },
+    "result": {
+      "gate": "acme/api-compat@2",
+      "gate_digest": "sha256:abc",
+      "input_digest": "sha256:def",
+      "state": "pass",
+      "evaluator": {"executor": "ide_agent"}
+    },
+    "expect": {"accepted": true, "trust": "agent_attested", "trust_not": "platform_evaluated"}
+  }
+]

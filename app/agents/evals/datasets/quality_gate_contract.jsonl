@@ -1,0 +1,2 @@
+{"id":"qg-contract-001","suite":"quality_gate","input":{"artifact_md":"Includes rollback plan and KPI metric table.","knowledge_snippets":["payments timeout note"],"feedback_events":["test:checkout_flaky_fixed"]},"expected":{"verdict":"pass","confidence_min":0.8}}
+{"id":"qg-contract-002","suite":"quality_gate","input":{"artifact_md":"Draft without measurable KPI or fallback strategy.","knowledge_snippets":[],"feedback_events":[]},"expected":{"verdict":"warn","confidence_min":0.2}}

@@ -1,0 +1,36 @@
+*
+
+!app/ui/
+!app/ui/package.json
+!app/ui/package-lock.json
+!app/ui/index.html
+!app/ui/components.json
+!app/ui/vite.config.ts
+!app/ui/tsconfig.json
+!app/ui/tsconfig.app.json
+!app/ui/tsconfig.node.json
+!app/ui/src/
+!app/ui/src/**
+!app/ui/public/
+!app/ui/public/**
+!app/ui/docker/
+!app/ui/docker/**
+
+app/ui/node_modules
+app/ui/dist
+app/ui/coverage
+app/ui/test-results
+app/ui/docs
+app/ui/e2e
+app/ui/.env
+app/ui/.env.*
+app/ui/.env.*.local
+!app/ui/.env.example
+# Per-mode env files MUST ship into the build context so Vite can read them
+# at build time (`vite build --mode <mode>` loads app/ui/.env.<mode>). Add a new
+# branch/mode here when you create a matching app/ui/.env.<branch> file.
+# Do NOT put secrets in these files — values are inlined into the public JS bundle.
+!app/ui/.env.staging
+!app/ui/.env.production
+!app/ui/.env.development
+!app/ui/.env.test

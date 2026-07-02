@@ -1,0 +1,28 @@
+{
+  "name": "specgate",
+  "owner": {
+    "name": "SpecGate"
+  },
+  "metadata": {
+    "description": "SpecGate focused lifecycle skills for Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "specgate",
+      "source": "./",
+      "description": "Focused SpecGate skills for project setup, work preparation, and delivery.",
+      "version": "0.1.0",
+      "author": {
+        "name": "SpecGate"
+      },
+      "strict": true,
+      "skills": [
+        "./skills/using-specgate",
+        "./skills/setting-up-specgate-project",
+        "./skills/preparing-work",
+        "./skills/delivering-work"
+      ],
+      "hooks": "./hooks/hooks-claude.json"
+    }
+  ]
+}

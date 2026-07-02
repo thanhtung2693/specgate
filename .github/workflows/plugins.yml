@@ -1,0 +1,13 @@
+name: plugins
+on:
+  push:
+    branches: ["main"]
+    paths: ["plugins/**", "Makefile", ".github/workflows/plugins.yml"]
+  pull_request:
+    paths: ["plugins/**", "Makefile", ".github/workflows/plugins.yml"]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: make check-plugins

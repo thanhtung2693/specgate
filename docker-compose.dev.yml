@@ -1,0 +1,47 @@
+# Onboarding override.
+#
+# Runs the agents service on the keyless in-memory LangGraph runtime
+# (`langgraph dev`) instead of the Self-Hosted Lite server, so the whole stack
+# comes up with NO LANGSMITH_API_KEY. `make setup` / `make up` apply this file.
+#
+# Production deployments use docker-compose.yml ALONE — that path keeps the
+# Self-Hosted Lite image (`langchain/langgraph-api`, durable Postgres runtime)
+# which requires a LANGSMITH_API_KEY / license. `langgraph dev` uses in-memory
+# persistence (threads are not durable across restart), which is fine for local
+# evaluation; the governance-ops HTTP endpoints do not depend on thread storage.
+services:
+  agents:
+    # Bypass the licensed prod entrypoint (/storage/entrypoint.sh) and run the
+    # dev server, which needs no license / LangSmith key. The CLI is already
+    # in the image (langgraph-cli[inmem]); reuses the built image, no rebuild.
+    entrypoint: ["langgraph", "dev", "--host", "0.0.0.0", "--port", "8000", "--no-browser", "--no-reload"]
+    command: []
+
+  # UI hot-reload override — switches the production nginx image to the Vite HMR
+  # dev server. Same host port (localhost:3000), true HMR on every save.
+  #
+  # First run: `docker compose up --build ui` (builds the `dev` target once).
+  # Subsequent runs: plain `make up` — no rebuild needed on source changes.
+  # When package.json changes: rebuild to refresh the node_modules image layer.
+  ui:
+    build:
+      target: dev    # Vite dev server stage (see docker/Dockerfile.ui)
+      args: {}       # Clear baked VITE_* build-args; dev server reads env at runtime
+    environment:
+      # Browser talks to host-mapped ports, so localhost URLs are correct.
+      VITE_DOC_REGISTRY_URL: http://localhost:${DOC_REGISTRY_PORT:-8080}
+      VITE_LANGGRAPH_API_URL: http://localhost:${AGENTS_PORT:-2024}
+      # Enable Vite's built-in polling watcher (vite.config.ts reads this var).
+      # Required on macOS + Docker Desktop where virtiofs doesn't deliver
+      # inotify events inside the container (chokidar polling alone isn't enough
+      # — Vite 8+ uses its own Node.js watcher that also needs usePolling).
+      VITE_USE_POLLING: "1"
+    volumes:
+      - ./app/ui:/app
+      # Named volume shadows node_modules inside the bind mount — preserves the
+      # container's npm install (from the deps stage) so the host directory's
+      # node_modules (if any) never overwrite the image's packages.
+      - ui-dev-node-modules:/app/node_modules
+
+volumes:
+  ui-dev-node-modules:

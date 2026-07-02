@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="SpecGate is the framework-neutral spec governance layer for AI coding agents: bring any spec format - OpenSpec, Spec Kit, or your own - and SpecGate versions it, runs readiness gates, hands off a Context Pack through the CLI, and reviews delivery evidence against acceptance criteria."
+    />
+    <meta
+      name="keywords"
+      content="AI-DLC, ADLC, AI development lifecycle, spec governance, framework-neutral, spec-driven development, any spec format, spec profiles, governance envelope, OpenSpec, Spec Kit, spec quality gate, readiness gate, post-build verification, acceptance criteria verification, AI coding agent, AI SDLC, context pack, spec versioning, lineage, canonical spec, organizational memory, agentic development, CLI, Cursor, Claude Code, Codex, Linear, GitHub, GitLab"
+    />
+    <meta name="author" content="SpecGate" />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#010102" />
+    <link rel="canonical" href="https://thanhtung2693.github.io/specgate/" />
+    <title>SpecGate - Approve specs. Verify AI-agent builds.</title>
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="SpecGate" />
+    <meta property="og:url" content="https://thanhtung2693.github.io/specgate/" />
+    <meta property="og:title" content="SpecGate - Approve specs. Verify AI-agent builds." />
+    <meta
+      property="og:description"
+      content="Any spec format in - OpenSpec, Spec Kit, or your own - governed, approved context out, implementation evidence back. SpecGate versions and reviews the spec, then checks delivery evidence against acceptance criteria."
+    />
+    <meta property="og:image" content="https://thanhtung2693.github.io/specgate/logo.svg" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="SpecGate - Approve specs. Verify AI-agent builds." />
+    <meta
+      name="twitter:description"
+      content="Any spec format in, governed approved context out, implementation evidence back. SpecGate versions and gates the spec, then checks delivery evidence against acceptance criteria."
+    />
+    <meta name="twitter:image" content="https://thanhtung2693.github.io/specgate/logo.svg" />
+
+    <!-- Structured data -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://thanhtung2693.github.io/specgate/#org",
+            "name": "SpecGate",
+            "url": "https://thanhtung2693.github.io/specgate/",
+            "description": "Framework-neutral spec governance and post-build verification layer for AI coding agents."
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "SpecGate",
+            "applicationCategory": "DeveloperApplication",
+            "operatingSystem": "Web",
+            "url": "https://thanhtung2693.github.io/specgate/",
+            "publisher": { "@id": "https://thanhtung2693.github.io/specgate/#org" },
+            "description": "SpecGate is the framework-neutral governance layer around your AI coding agent. Bring any spec format - OpenSpec, Spec Kit, or your own document structure - and SpecGate maps each document to a role, versions and reviews the package against a readiness profile, packages a Context Pack for your IDE agent, and reviews delivery evidence against acceptance criteria.",
+            "keywords": "spec governance, framework-neutral, any spec format, spec profiles, governance envelope, OpenSpec, Spec Kit, spec quality gate, post-build verification, AI coding agent, context pack, spec versioning, lineage"
+          },
+          {
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "How is this different from spec tools?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Those help the agent write and follow a spec, in your repo. SpecGate is framework-neutral: it accepts the spec they produce, versions it, runs readiness gates, and proves the build satisfied it - across sessions, agents, and trackers. The governance envelope and verification verdict are the parts they don't have."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What spec formats do you accept?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Any. SpecGate doesn't impose a fixed PRD/spec/QA template. Bring proposal/requirements/design/tasks, an OpenSpec or Spec Kit project, or your own document set. A profile maps each document to a role and decides which readiness gates apply - flexible documents inside a fixed governance envelope."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Do we have to leave our coding agent?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. SpecGate installs CLI-powered guidance for Cursor, Claude Code, and Codex. The agent pulls the Context Pack and reports evidence; humans review readiness and delivery verdicts at the governed checkpoints."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Does it replace Linear, GitHub, or GitLab?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. Issues, sprints, and assignment stay in your tracker. SpecGate owns the approved contract, Context Pack, delivery review, and proof. Linear, GitHub, and GitLab connectors are alpha-stage experimental features that mirror status one way."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What does verify actually check?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Each acceptance criterion against the agent's reported evidence and automated checks (tests, types, lint) - a per-criterion met/unmet/unclear and an overall Pass/Fail. On Fail, the failing criteria carry into the next Context Pack so the next handoff targets the gaps."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Is this spec-driven development?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes - an approved spec is the contract every agent builds against, and the build is checked back against it. Spec-driven, plus the verification verdict that spec-only tools stop short of."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What's in a Context Pack?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "The approved spec, implementation tasks, acceptance criteria, scope and blast radius, risks, design references, and any unresolved review feedback - everything an agent needs to build the right thing with less rework."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "How do I know it's working?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Run specgate stats: a readout computed from real gate runs and delivery reviews - first-pass yield, pre-build gate catches, post-build review catches, rework depth, ambiguity saves, and cycle time - plus a ledger of concrete catches. With no data it reports 'not enough data yet' rather than inventing a score."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Which trackers do you connect?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Experimental connectors are available for Linear, GitHub, and GitLab. One integration per provider; SpecGate mirrors status one way (tracker to SpecGate) so there's never a second source of truth."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+    <link rel="icon" href="./logo.svg" type="image/svg+xml" />
+    <script>
+      document.documentElement.dataset.theme =
+        localStorage.getItem("specgate-landing-theme") ||
+        (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <svg class="sprite" aria-hidden="true" width="0" height="0">
+      <defs>
+        <symbol id="i-spec" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z" /><path d="M14 3v5h5" /><path d="M8.5 13h7M8.5 16.5h7" /></symbol>
+        <symbol id="i-code" viewBox="0 0 24 24"><polyline points="15 17 20 12 15 7" /><polyline points="9 7 4 12 9 17" /></symbol>
+        <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5.5c0 4.2-3 7.4-7 8.5-4-1.1-7-4.3-7-8.5V6l7-3z" /><path d="M9 12l2 2 4-4.5" /></symbol>
+        <symbol id="i-kanban" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="12" rx="1" /><rect x="9.5" y="4" width="5" height="8" rx="1" /><rect x="16" y="4" width="5" height="14" rx="1" /></symbol>
+        <symbol id="i-list" viewBox="0 0 24 24"><path d="M10 6h10M10 12h10M10 18h10" /><path d="M4 5.5l1.2 1.2L7.5 4M4 11.5l1.2 1.2L7.5 10M4 17.5l1.2 1.2L7.5 16" /></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M8.5 12.2l2.4 2.4 4.6-5" /></symbol>
+        <symbol id="i-loop" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4" /><polyline points="21 3 21 8 16 8" /></symbol>
+        <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 2v5M15 2v5" /><path d="M7 7h10v3a5 5 0 0 1-10 0z" /><path d="M12 15v7" /></symbol>
+        <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15" /><polyline points="13 6 19 12 13 18" /></symbol>
+        <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20 11.5a7.5 7.5 0 0 1-10.6 6.8L4 20l1.7-5A7.5 7.5 0 1 1 20 11.5z" /><path d="M9 11h6M9 14h4" /></symbol>
+        <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 4l1.7 5.3L19 11l-5.3 1.7L12 18l-1.7-5.3L5 11l5.3-1.7z" /></symbol>
+        <symbol id="i-gate" viewBox="0 0 24 24"><path d="M4 5h16l-6 7v6l-4-2v-4z" /></symbol>
+        <symbol id="i-pack" viewBox="0 0 24 24"><path d="M21 8l-9-4.5L3 8v8l9 4.5L21 16z" /><path d="M3 8l9 4.5L21 8M12 12.5V21" /></symbol>
+        <symbol id="i-github" viewBox="0 0 24 24"><path d="M12 2.5a9.5 9.5 0 0 0-3 18.5c.48.08.65-.2.65-.45v-1.7c-2.66.58-3.22-1.14-3.22-1.14-.43-1.1-1.06-1.39-1.06-1.39-.87-.59.07-.58.07-.58.96.07 1.47.99 1.47.99.86 1.47 2.25 1.05 2.8.8.08-.62.33-1.05.6-1.29-2.12-.24-4.35-1.06-4.35-4.72 0-1.04.37-1.89.98-2.56-.1-.24-.43-1.22.09-2.52 0 0 .8-.26 2.62.98a9.1 9.1 0 0 1 4.76 0c1.82-1.24 2.62-.98 2.62-.98.52 1.3.19 2.28.09 2.52.61.67.98 1.52.98 2.56 0 3.67-2.23 4.47-4.36 4.71.34.3.64.88.64 1.78v2.64c0 .25.17.54.66.45A9.5 9.5 0 0 0 12 2.5z" /></symbol>
+      </defs>
+    </svg>
+    <div class="grid-bg" aria-hidden="true"></div>
+    <div class="scanlines" aria-hidden="true"></div>
+    <div class="beam" aria-hidden="true"></div>
+
+    <header class="nav">
+      <a class="brand" href="#top" aria-label="SpecGate home">
+        <span class="brand-mark" aria-hidden="true">
+          <img src="./logo.svg" alt="" decoding="async" />
+        </span>
+        <span class="brand-word">SpecGate</span>
+      </a>
+      <nav class="nav-links" aria-label="Sections">
+        <a href="#how">How it works</a>
+        <a href="#run">See it run</a>
+        <a href="#compare">Where it fits</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+      <div class="nav-actions">
+        <button class="theme-toggle" type="button" aria-label="Switch color theme" aria-pressed="false">
+          <span class="theme-dot" aria-hidden="true"></span>
+          <span class="theme-label">Light</span>
+        </button>
+        <a class="btn btn-accent nav-github" href="https://github.com/thanhtung2693/specgate" aria-label="Open SpecGate on GitHub"><svg class="ic" aria-hidden="true"><use href="#i-github" /></svg><span>GitHub</span></a>
+      </div>
+    </header>
+
+    <main id="top">
+      <!-- HERO -->
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow reveal" style="--d: 0ms">Spec governance for AI coding agents</p>
+          <h1 class="reveal" style="--d: 60ms">
+            Approve specs.<br />
+            <span class="hl">Verify builds.</span>
+          </h1>
+          <p class="lede reveal" style="--d: 140ms">
+            SpecGate turns a reviewed, versioned spec package into a governed Context Pack for AI coding agents, then checks delivery evidence against each acceptance criterion.
+          </p>
+          <div class="hero-actions reveal" style="--d: 220ms">
+            <a class="btn btn-accent btn-lg" href="https://github.com/thanhtung2693/specgate#quickstart">Run the local demo<svg class="ic ic-btn" aria-hidden="true"><use href="#i-arrow" /></svg></a>
+            <a class="btn btn-ghost btn-lg" href="#run">Watch the CLI</a>
+          </div>
+        </div>
+
+        <!-- Verdict console (the protagonist) -->
+        <div class="console reveal" style="--d: 200ms" aria-label="Delivery verification console">
+          <div class="console-top">
+            <span class="mono">WI-101 / audit-log permissions</span>
+            <span class="verdict-chip" id="verdict-chip" data-state="run">Verifying…</span>
+          </div>
+          <p class="console-eyebrow mono">Acceptance criteria / evidence</p>
+          <ul class="check-list" id="check-list">
+            <li data-status="pending"><span class="tick" aria-hidden="true"></span><span>Admins can view permission-change audit events</span></li>
+            <li data-status="pending"><span class="tick" aria-hidden="true"></span><span>Member roles cannot read restricted event payloads</span></li>
+            <li data-status="pending"><span class="tick" aria-hidden="true"></span><span>Regression tests cover allow and deny paths</span></li>
+            <li data-status="pending"><span class="tick" aria-hidden="true"></span><span>Docs explain rollback and support evidence</span></li>
+          </ul>
+          <div class="console-checks" id="console-checks">
+            <span class="chk mono" data-k="tests">tests</span>
+            <span class="chk mono" data-k="types">types</span>
+            <span class="chk mono" data-k="lint">lint</span>
+          </div>
+          <div class="console-foot">
+            <span class="mono dim">delivery review / per-criterion evidence</span>
+            <button class="console-replay" type="button" id="console-replay" aria-label="Replay verification">replay ↻</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- TRUST BAR -->
+      <section class="trustbar" aria-label="What stays where">
+        <span class="tb-item mono"><svg class="ic" aria-hidden="true"><use href="#i-code" /></svg>YOUR IDE builds</span>
+        <span class="dot" aria-hidden="true"></span>
+        <span class="tb-item mono"><svg class="ic" aria-hidden="true"><use href="#i-kanban" /></svg>YOUR TRACKER assigns</span>
+        <span class="dot" aria-hidden="true"></span>
+        <span class="tb-item mono accent"><svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg>SPECGATE governs + verifies</span>
+      </section>
+
+      <!-- WORKS WITH -->
+      <section class="wordmarks" aria-label="Works with your tools">
+        <div class="wm-groups">
+          <div class="wm-group">
+            <p class="wm-group-title mono">IDE handoff through CLI</p>
+            <ul class="wm-list">
+              <li><img src="https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/cursor.svg" alt="Cursor" loading="lazy" width="26" height="26" /></li>
+              <li><img src="https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/claudecode-color.svg" alt="Claude Code" loading="lazy" width="26" height="26" /></li>
+              <li><img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/openai.svg" alt="OpenAI Codex" loading="lazy" width="26" height="26" /></li>
+            </ul>
+          </div>
+          <div class="wm-group wm-group-muted">
+            <p class="wm-group-title mono">Experimental tracker mirrors</p>
+            <ul class="wm-list">
+              <li><img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/linear.svg" alt="Linear" loading="lazy" width="26" height="26" /></li>
+              <li><img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/github.svg" alt="GitHub" loading="lazy" width="26" height="26" /></li>
+              <li><img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/gitlab.svg" alt="GitLab" loading="lazy" width="26" height="26" /></li>
+            </ul>
+          </div>
+        </div>
+        <p class="wm-label mono">The alpha core is CLI-first. Tracker connectors mirror status one way.</p>
+      </section>
+
+      <!-- HOW IT WORKS -->
+      <section class="band loop" id="how">
+        <div class="band-head reveal-up">
+          <h2>The governed loop in three moves.</h2>
+          <p class="band-sub">
+            SpecGate does not replace your spec tool, tracker, or IDE. It makes the handoff explicit,
+            then checks the finished work against the approved contract.
+          </p>
+        </div>
+        <div class="loop-grid">
+          <article class="loop-card reveal-up" style="--d: 0ms">
+            <span class="loop-kicker mono">1 / Publish</span>
+            <h3>Bring any spec format</h3>
+            <p>OpenSpec, Spec Kit, a quick change note, or your own document set. A profile declares roles, gates, and required topics.</p>
+          </article>
+          <article class="loop-card loop-card-hero reveal-up" style="--d: 80ms">
+            <span class="loop-kicker mono">2 / Handoff</span>
+            <h3>Approve one Context Pack</h3>
+            <p>The coding agent gets the approved version, acceptance criteria, non-goals, risks, tasks, and applicable Skills through the CLI.</p>
+          </article>
+          <article class="loop-card reveal-up" style="--d: 160ms">
+            <span class="loop-kicker mono">3 / Verify</span>
+            <h3>Review delivery evidence</h3>
+            <p>SpecGate compares completion claims, tests, docs, and changed files against every acceptance criterion before you close the work.</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- SEE IT RUN -->
+      <section class="band run" id="run">
+        <div class="band-head reveal-up">
+          <h2>See it run, command by command.</h2>
+          <p class="band-sub">
+            The CLI is the supported alpha path. Use it directly, or let Cursor, Claude Code,
+            or Codex pull the same Context Pack and report evidence.
+          </p>
+        </div>
+        <div class="cast-carousel reveal-up" data-carousel aria-label="SpecGate workflow demos">
+          <div class="termcast cast-stage">
+            <div class="term-bar">
+              <span></span><span></span><span></span>
+              <span class="term-title mono" data-cast-title>specgate / your shell</span>
+            </div>
+            <pre class="term-body mono" data-cast-body role="tabpanel" aria-live="polite"></pre>
+          </div>
+          <ol class="cast-segments" role="tablist" aria-label="Feature demos" data-cast-segments></ol>
+          <p class="cast-caption" data-cast-caption><b>Drive it from your shell.</b> <span>list ready work, pull the governed pack, report evidence, and read the verdict.</span></p>
+        </div>
+      </section>
+
+      <!-- WHERE IT FITS -->
+      <section class="band fit" id="compare">
+        <div class="band-head reveal-up">
+          <h2>Keep your stack. Add the governed handoff.</h2>
+          <p class="band-sub">
+            SpecGate connects planning and implementation. Author where you already work,
+            approve one version, then verify the build against it.
+          </p>
+        </div>
+        <div class="fit-grid">
+          <article class="fit-card reveal-up" style="--d: 0ms">
+            <span class="cmp-tag mono"><svg class="ic" aria-hidden="true"><use href="#i-spec" /></svg> SPEC TOOLS</span>
+            <h3>Shape the work</h3>
+            <p>OpenSpec, Spec Kit, Markdown, and custom docs stay useful as authoring systems.</p>
+          </article>
+          <article class="fit-card fit-card-hero reveal-up" style="--d: 80ms">
+            <span class="cmp-tag mono accent"><svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg> SPECGATE</span>
+            <h3>Own the contract</h3>
+            <p>Versioned approval, readiness gates, Context Packs, delivery review, and evidence trust live here.</p>
+          </article>
+          <article class="fit-card reveal-up" style="--d: 160ms">
+            <span class="cmp-tag mono"><svg class="ic" aria-hidden="true"><use href="#i-code" /></svg> TRACKER + IDE</span>
+            <h3>Run execution</h3>
+            <p>Issues, sprints, code changes, PRs, and day-to-day collaboration stay in your existing stack.</p>
+          </article>
+        </div>
+        <p class="cmp-note mono reveal-up">Experimental connectors mirror tracker status into SpecGate. Your tracker does not become a second spec source.</p>
+      </section>
+
+      <!-- FAQ -->
+      <section class="band faq" id="faq">
+        <div class="band-head reveal-up">
+          <h2>What teams ask first.</h2>
+        </div>
+        <div class="faq-list">
+          <details class="faq-item reveal-up" open>
+            <summary><span>How is this different from spec tools?</span></summary>
+            <p>Those help shape specs in your repo. SpecGate accepts the output, versions it, runs readiness gates, creates the Context Pack, and verifies delivery evidence against the approved contract.</p>
+          </details>
+          <details class="faq-item reveal-up">
+            <summary><span>What spec formats do you accept?</span></summary>
+            <p>Any document set your team can name clearly. Bring an OpenSpec or Spec Kit project, Markdown notes, or custom docs. A profile maps documents to roles and decides which gates apply.</p>
+          </details>
+          <details class="faq-item reveal-up">
+            <summary><span>Do we have to leave our coding agent?</span></summary>
+            <p>No. Cursor, Claude Code, Codex, or a human can use the CLI. The agent pulls the Context Pack before coding and reports completion evidence when the build is ready for review.</p>
+          </details>
+          <details class="faq-item reveal-up">
+            <summary><span>Do I need an LLM API key?</span></summary>
+            <p>No. The deterministic gates need nothing, and the LLM readiness gates and delivery review can run through your IDE coding agent. Configure a server-side model (OpenAI, Anthropic, Google, or OpenRouter) only when you want those steps to run without a coding agent in the loop.</p>
+          </details>
+          <details class="faq-item reveal-up">
+            <summary><span>Does it replace Linear, GitHub, or GitLab?</span></summary>
+            <p>No. Issues, sprints, PRs, and assignment stay where they are. SpecGate owns the approved contract, Context Pack, delivery review, and proof. Experimental connectors mirror tracker status one way.</p>
+          </details>
+          <details class="faq-item reveal-up">
+            <summary><span>What does "verify" actually check?</span></summary>
+            <p>Each acceptance criterion is checked against reported evidence and automated checks such as tests, types, and lint. The verdict records what is met, unmet, or unclear, then carries failed criteria into the next Context Pack.</p>
+          </details>
+          <details class="faq-item reveal-up">
+            <summary><span>Which trackers do you connect?</span></summary>
+            <p>Experimental connectors are available for Linear, GitHub, and GitLab. One integration per provider. Status mirrors from tracker to SpecGate so there is no second source of truth.</p>
+          </details>
+          <details class="faq-item reveal-up">
+            <summary><span>What's supported in the alpha vs experimental?</span></summary>
+            <p>The supported alpha core is the governed loop: gates, Context Pack, delivery review, evidence trust, and CLI + IDE handoff. Integrations, knowledge search, governance chat, and the web UI are experimental.</p>
+          </details>
+          <details class="faq-item reveal-up">
+            <summary><span>How do I know it's working?</span></summary>
+            <p>Run <code>specgate stats</code>. It uses real gate runs and delivery reviews to show first-pass yield, catches before build, catches before merge, rework depth, ambiguity saves, and cycle time. With no data it says "not enough data yet".</p>
+          </details>
+        </div>
+      </section>
+
+      <!-- CTA -->
+      <section class="cta" id="cta">
+        <span class="cta-badge mono">Self-host today / in active development</span>
+        <h2>Install the governed handoff loop.</h2>
+        <p class="cta-sub">Run the stack locally, try the governed loop, hand off the Context Pack, and verify the delivery evidence.</p>
+        <ol class="cta-steps mono">
+          <li>Install the CLI</li>
+          <li>Try the governed loop</li>
+          <li>Hand off the pack</li>
+        </ol>
+        <div class="hero-actions">
+          <a class="btn btn-accent btn-lg" href="https://github.com/thanhtung2693/specgate#quickstart">Run the local demo<svg class="ic ic-btn" aria-hidden="true"><use href="#i-arrow" /></svg></a>
+          <a class="btn btn-ghost btn-lg" href="https://github.com/thanhtung2693/specgate#quickstart">Read the quickstart</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span class="brand-word">SpecGate</span>
+      <nav class="footer-links mono" aria-label="Footer">
+        <a href="https://github.com/thanhtung2693/specgate">GitHub</a>
+        <a href="#how">How it works</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+      <span class="mono dim">spec governance &amp; verification for AI delivery</span>
+    </footer>
+
+    <script src="./script.js"></script>
+  </body>
+</html>
