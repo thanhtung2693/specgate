@@ -52,7 +52,11 @@ type ServiceStatus struct {
 	Status string `json:"Status"`
 }
 
-const managedLabelFilter = "label=org.specgate.managed=true"
+const (
+	managedLabelFilter = "label=org.specgate.managed=true"
+	projectEnvKey      = "SPECGATE_COMPOSE_PROJECT"
+	defaultProjectName = "specgate"
+)
 
 // bundleFetcher downloads + extracts the compose bundle into destDir.
 type bundleFetcher func(ctx context.Context, baseURL, version, destDir string) error
@@ -269,10 +273,11 @@ func (s *Service) RemoveImages(ctx context.Context, images []string) error {
 	return s.runner.Run(ctx, "docker", args...)
 }
 
-// RemoveLabeledResources removes Docker resources marked as managed by
-// SpecGate. It is intentionally label-based so cleanup does not rely on compose
-// project names or user-chosen deployment directories.
-func (s *Service) RemoveLabeledResources(ctx context.Context, includeImages bool) error {
+// RemoveLabeledResources removes leftover Docker resources for this SpecGate
+// deployment. It uses SpecGate labels plus the deployment's compose project so
+// purging one local stack does not remove another.
+func (s *Service) RemoveLabeledResources(ctx context.Context) error {
+	projectFilter := "label=org.specgate.project=" + s.ProjectName()
 	steps := []struct {
 		kind string
 		args []string
@@ -281,14 +286,8 @@ func (s *Service) RemoveLabeledResources(ctx context.Context, includeImages bool
 		{kind: "volume", args: []string{"volume", "rm"}},
 		{kind: "network", args: []string{"network", "rm"}},
 	}
-	if includeImages {
-		steps = append(steps, struct {
-			kind string
-			args []string
-		}{kind: "image", args: []string{"image", "rm"}})
-	}
 	for _, step := range steps {
-		ids, err := s.labeledResourceIDs(ctx, step.kind)
+		ids, err := s.labeledResourceIDs(ctx, step.kind, projectFilter)
 		if err != nil {
 			return err
 		}
@@ -303,12 +302,47 @@ func (s *Service) RemoveLabeledResources(ctx context.Context, includeImages bool
 	return nil
 }
 
-func (s *Service) labeledResourceIDs(ctx context.Context, kind string) ([]string, error) {
-	out, err := s.runner.Output(ctx, "docker", kind, "ls", "-q", "--filter", managedLabelFilter)
+// ProjectName returns the compose project used by this deployment.
+func (s *Service) ProjectName() string {
+	value, err := envFileValue(filepath.Join(s.dir, ".env"), projectEnvKey)
+	if err == nil && value != "" {
+		return value
+	}
+	return defaultProjectName
+}
+
+func (s *Service) labeledResourceIDs(ctx context.Context, kind string, filters ...string) ([]string, error) {
+	args := []string{kind, "ls", "-q"}
+	for _, filter := range append([]string{managedLabelFilter}, filters...) {
+		args = append(args, "--filter", filter)
+	}
+	out, err := s.runner.Output(ctx, "docker", args...)
 	if err != nil {
 		return nil, err
 	}
 	return parseLines(out), nil
+}
+
+func envFileValue(path, key string) (string, error) {
+	lines, err := readEnvLines(path)
+	if err != nil {
+		return "", err
+	}
+	prefix := key + "="
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if after, ok := strings.CutPrefix(line, prefix); ok {
+			return cleanEnvValue(after), nil
+		}
+	}
+	return "", nil
+}
+
+func cleanEnvValue(value string) string {
+	return strings.Trim(strings.TrimSpace(value), `"'`)
 }
 
 // LocalStatus returns the runtime status of each compose service.

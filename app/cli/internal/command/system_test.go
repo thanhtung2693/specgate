@@ -947,10 +947,9 @@ func TestUninstallPurgeDataRemovesDeploymentDir(t *testing.T) {
 		t.Fatalf("missing filtered image rm command in:\n%s", gotCommands)
 	}
 	for _, want := range []string{
-		"docker container ls -q --filter label=org.specgate.managed=true",
-		"docker volume ls -q --filter label=org.specgate.managed=true",
-		"docker network ls -q --filter label=org.specgate.managed=true",
-		"docker image ls -q --filter label=org.specgate.managed=true",
+		"docker container ls -q --filter label=org.specgate.managed=true --filter label=org.specgate.project=specgate",
+		"docker volume ls -q --filter label=org.specgate.managed=true --filter label=org.specgate.project=specgate",
+		"docker network ls -q --filter label=org.specgate.managed=true --filter label=org.specgate.project=specgate",
 	} {
 		if !strings.Contains(gotCommands, want) {
 			t.Fatalf("missing labeled cleanup command %q in:\n%s", want, gotCommands)
@@ -961,6 +960,35 @@ func TestUninstallPurgeDataRemovesDeploymentDir(t *testing.T) {
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Fatalf("deployment dir should be removed with --purge-data; stat err=%v", err)
+	}
+}
+
+func TestUninstallPurgeDataScopesLabeledCleanupToComposeProject(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	setupTestBundle(t, dir)
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("SPECGATE_COMPOSE_PROJECT=alpha\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := &fakeDeployRunner{OutputByCommand: map[string][]byte{
+		"docker compose -f " + filepath.Join(dir, "compose.yml") + " config --images": []byte("ghcr.io/thanhtung2693/agents:v0.1.0-alpha.1\n"),
+	}}
+	deps, out := newTestDeps(t, "")
+	deps.DeployRunner = runner
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "uninstall", "--dir", dir, "--purge-data")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	gotCommands := strings.Join(runner.Commands, "\n")
+	for _, want := range []string{
+		"docker container ls -q --filter label=org.specgate.managed=true --filter label=org.specgate.project=alpha",
+		"docker volume ls -q --filter label=org.specgate.managed=true --filter label=org.specgate.project=alpha",
+		"docker network ls -q --filter label=org.specgate.managed=true --filter label=org.specgate.project=alpha",
+	} {
+		if !strings.Contains(gotCommands, want) {
+			t.Fatalf("missing project-scoped cleanup command %q in:\n%s", want, gotCommands)
+		}
 	}
 }
 

@@ -250,24 +250,25 @@ This removes:
 - SpecGate-managed Docker volumes;
 - SpecGate-managed Docker networks;
 - the deployment directory;
-- SpecGate service images.
+- SpecGate service images referenced by that deployment.
 
-Shared base images such as Postgres or Redis are not removed unless they carry
-SpecGate labels.
+Containers, volumes, and networks are filtered by `org.specgate.managed=true`
+and the deployment compose project so one local stack does not purge another.
+Shared base images such as Postgres or Redis are not removed.
 
 ### Verify cleanup
 
 ```bash
-docker ps -a --filter label=org.specgate.managed=true
-docker volume ls --filter label=org.specgate.managed=true
-docker network ls --filter label=org.specgate.managed=true
+docker ps -a --filter label=org.specgate.managed=true --filter label=org.specgate.project=specgate
+docker volume ls --filter label=org.specgate.managed=true --filter label=org.specgate.project=specgate
+docker network ls --filter label=org.specgate.managed=true --filter label=org.specgate.project=specgate
 docker image ls --filter label=org.specgate.managed=true
 ```
 
-These commands should show no SpecGate resources after a full purge. Release
-containers, volumes, networks, and service images carry
-`org.specgate.managed=true`, so cleanup is label-based rather than
-name-based.
+The container, volume, and network commands should show no resources for the
+purged project after a full purge. Image output may still show images used by
+another SpecGate stack or retained by Docker because another container
+references them.
 
 ## Troubleshooting
 

@@ -25,6 +25,7 @@ services:
     image: pgvector/pgvector:0.8.3-pg18
     labels:
       org.specgate.managed: "true"
+      org.specgate.project: ${SPECGATE_COMPOSE_PROJECT:-specgate}
       org.specgate.component: postgres
     environment:
       POSTGRES_USER: docreg
@@ -49,6 +50,7 @@ services:
     image: ghcr.io/thanhtung2693/doc-registry:${SPECGATE_VERSION}
     labels:
       org.specgate.managed: "true"
+      org.specgate.project: ${SPECGATE_COMPOSE_PROJECT:-specgate}
       org.specgate.component: doc-registry
     env_file:
       - ./doc-registry.env
@@ -80,6 +82,7 @@ services:
     image: ghcr.io/thanhtung2693/agents:${SPECGATE_VERSION}
     labels:
       org.specgate.managed: "true"
+      org.specgate.project: ${SPECGATE_COMPOSE_PROJECT:-specgate}
       org.specgate.component: agents
     # Serve the FastAPI webapp via uvicorn.
     command: ["uvicorn", "specgate_agents.governance.webapp:app", "--host", "0.0.0.0", "--port", "8000"]
@@ -98,6 +101,7 @@ services:
     image: ghcr.io/thanhtung2693/ui:${SPECGATE_VERSION}
     labels:
       org.specgate.managed: "true"
+      org.specgate.project: ${SPECGATE_COMPOSE_PROJECT:-specgate}
       org.specgate.component: ui
     ports:
       - "${UI_PORT:-3000}:80"
@@ -118,14 +122,17 @@ volumes:
   doc-registry-data:
     labels:
       org.specgate.managed: "true"
+      org.specgate.project: ${SPECGATE_COMPOSE_PROJECT:-specgate}
       org.specgate.component: doc-registry
   postgres-data:
     labels:
       org.specgate.managed: "true"
+      org.specgate.project: ${SPECGATE_COMPOSE_PROJECT:-specgate}
       org.specgate.component: postgres
 
 networks:
   default:
     labels:
       org.specgate.managed: "true"
+      org.specgate.project: ${SPECGATE_COMPOSE_PROJECT:-specgate}
       org.specgate.component: network

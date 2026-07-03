@@ -150,7 +150,7 @@ test("machine-local SpecGate artifacts stay out of release sources", () => {
 
 test("release images use production-safe runtime defaults", () => {
   assert.match(docRegistryDockerfile, /mkdir -p \/data/);
-  assert.match(docRegistryDockerfile, /chown app:app \/data/);
+  assert.match(docRegistryDockerfile, /chown (?:-R )?app:app \/data/);
   assert.match(releaseWorkflow, /dockerfile: docker\/Dockerfile\.ui/);
   assert.match(releaseWorkflow, /runner: ubuntu-24\.04-arm/);
   assert.match(releaseWorkflow, /--platform "\$\{\{ matrix\.platform \}\}"/);

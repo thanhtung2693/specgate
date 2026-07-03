@@ -35,6 +35,7 @@ func TestReleaseComposeUsesPublishedImages(t *testing.T) {
 		"${AGENTS_PORT:-2024}:8000",
 		"${UI_PORT:-3000}:80",
 		"org.specgate.managed: \"true\"",
+		"org.specgate.project: ${SPECGATE_COMPOSE_PROJECT:-specgate}",
 		"org.specgate.component: network",
 	} {
 		if !strings.Contains(raw, want) {

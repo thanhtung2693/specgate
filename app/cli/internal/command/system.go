@@ -913,8 +913,8 @@ func newUninstallCmd(deps *Deps) *cobra.Command {
 					result.RemovedImages = removableImages
 				}
 			}
-			if purgeData || purgeImages {
-				if err := svc.RemoveLabeledResources(cmd.Context(), purgeImages); err != nil {
+			if purgeData {
+				if err := svc.RemoveLabeledResources(cmd.Context()); err != nil {
 					code := deps.Printer.Error("uninstall", output.ErrorPayload{Code: "unavailable", Message: err.Error()})
 					return &output.ExitError{Code: code, Err: err}
 				}

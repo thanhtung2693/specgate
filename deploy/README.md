@@ -39,9 +39,10 @@ specgate up
 
 `specgate init` downloads the Compose bundle, generates a random encryption key,
 copies the `.env.example` files, and starts the stack with `docker compose up --wait`.
-The release bundle labels SpecGate-managed containers, volumes, networks, and
-runtime images with `org.specgate.managed=true`, so `specgate uninstall` can
-clean them up without relying on project-name guessing.
+The release bundle labels SpecGate-managed containers, volumes, and networks
+with `org.specgate.managed=true` plus the compose project, so
+`specgate uninstall` can clean the selected local stack without touching another
+SpecGate stack on the same host.
 
 Use `--dir <path>` to choose a non-default directory:
 
@@ -242,22 +243,25 @@ docker compose down -v
 
 ## Docker resource labels
 
-The release Compose bundle labels SpecGate-managed containers, volumes,
-networks, and runtime images:
+The release Compose bundle labels SpecGate-managed containers, volumes, and
+networks:
 
 | Label | Purpose |
 |---|---|
 | `org.specgate.managed=true` | Marks resources that belong to SpecGate |
+| `org.specgate.project=<project>` | Narrows cleanup to one Compose project |
 | `org.specgate.component=<name>` | Identifies the component, such as `doc-registry`, `agents`, `ui`, `postgres`, or `network` |
 
-The CLI uses these labels during `specgate uninstall --purge-data --yes` so it
-can remove SpecGate resources without depending on a particular Compose project
-name. Manual operators can inspect the same resources:
+Runtime images also carry `org.specgate.managed=true` and
+`org.specgate.component=<name>`. During `specgate uninstall --purge-data --yes`,
+the CLI removes the images referenced by the selected deployment's Compose file
+and removes labeled containers, volumes, and networks for that deployment's
+project. Manual operators can inspect the same resources:
 
 ```bash
-docker ps -a --filter label=org.specgate.managed=true
-docker volume ls --filter label=org.specgate.managed=true
-docker network ls --filter label=org.specgate.managed=true
+docker ps -a --filter label=org.specgate.managed=true --filter label=org.specgate.project=specgate
+docker volume ls --filter label=org.specgate.managed=true --filter label=org.specgate.project=specgate
+docker network ls --filter label=org.specgate.managed=true --filter label=org.specgate.project=specgate
 docker image ls --filter label=org.specgate.managed=true
 ```
 

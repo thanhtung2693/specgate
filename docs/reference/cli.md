@@ -162,12 +162,13 @@ specgate uninstall --purge-data --yes
 - SpecGate-managed Docker volumes;
 - SpecGate-managed Docker networks;
 - the deployment directory;
-- SpecGate service images.
+- SpecGate service images referenced by that deployment.
 
-Release Docker resources are labelled with `org.specgate.managed=true`, and
-uninstall uses those labels for cleanup. Image cleanup removes SpecGate service
-images, not shared base images such as Postgres or Redis unless they carry the
-SpecGate label.
+Release containers, volumes, and networks are labelled with
+`org.specgate.managed=true` and `org.specgate.project=<project>`. Uninstall uses
+both labels for cleanup so purging one local stack does not remove another.
+Image cleanup removes the selected deployment's SpecGate service images, not
+shared base images such as Postgres or Redis.
 
 ### Advanced governance
 
