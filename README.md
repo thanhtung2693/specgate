@@ -80,34 +80,28 @@ across those systems.
 
 ## Roadmap
 
-The supported core is the governed loop above. Everything here ships behind it,
-roughly in order; no dates, and the list only carries work we actually intend
-to do.
+Roughly in order; no dates.
 
 **Graduating the experimental surfaces**
 
-- [ ] **Tracker and git integrations** - harden the Linear, GitHub, and GitLab
-      connectors (one-way status mirroring, webhook delivery evidence) from
-      experimental to supported.
-- [ ] **Knowledge search** - stabilize uploading team knowledge (briefs, SRS,
-      design references) and retrieval-backed artifact generation.
-- [ ] **Governance chat agent** - grow the advisory chat (explain gate
-      failures, blockers, artifact context) into a dependable daily surface.
-- [ ] **Web UI** - promote the review and board surfaces from experimental
-      once the CLI/UI loop has survived more real team use.
+- [ ] **Tracker and git integrations** - Linear, GitHub, and GitLab mirrors
+      plus webhook delivery evidence.
+- [ ] **Knowledge search** - team knowledge upload and retrieval-backed
+      artifact generation.
+- [ ] **Governance chat agent** - a dependable advisory surface for gate
+      failures and artifact context.
+- [ ] **Web UI** - promote from experimental after more real team use.
 
 **Deepening verification**
 
-- [ ] **Knowledge-aware readiness gates** - once knowledge search graduates,
-      check specs against source-of-truth team knowledge so a spec that
-      contradicts recorded decisions gets caught before handoff.
-- [ ] **Uniform trust marking** - delivery reviews still mark their origin via
-      the judge name; move them onto the same first-class `executor` field
-      gate runs and readiness history already expose.
+- [ ] **Knowledge-aware readiness gates** - catch specs that contradict
+      recorded team knowledge before handoff.
+- [ ] **Uniform trust marking** - delivery reviews adopt the first-class
+      `executor` field gate runs already expose.
 - [ ] **Richer stats** - count artifact readiness catches in
-      `specgate stats` pre-build numbers now that gate runs share one store.
+      `specgate stats` pre-build numbers.
 
-Found something missing or broken?
+Missing something?
 [Open an issue](https://github.com/thanhtung2693/specgate/issues).
 
 ## Quickstart
