@@ -12,6 +12,8 @@ and cross-module contracts. Product users normally start from
 - [Release-readiness gate](../release-readiness.test.mjs) — executable release
   contract checks
 - [Governance conformance fixtures](../conformance/) — policy and gate compatibility cases
+- [Issue labeler](../../.github/scripts/issue-labeler.mjs) — GitHub Actions
+  classifier for type, scope, and triage labels on new issues
 
 ## Module documentation
 
