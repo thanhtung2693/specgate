@@ -78,6 +78,38 @@ SpecGate does not replace your spec authoring tool, issue tracker, coding IDE,
 pull request review, or CI. It records the governed handoff and delivery review
 across those systems.
 
+## Roadmap
+
+The supported core is the governed loop above. Everything here ships behind it,
+roughly in order; no dates, and the list only carries work we actually intend
+to do.
+
+**Graduating the experimental surfaces**
+
+- [ ] **Tracker and git integrations** - harden the Linear, GitHub, and GitLab
+      connectors (one-way status mirroring, webhook delivery evidence) from
+      experimental to supported.
+- [ ] **Knowledge search** - stabilize uploading team knowledge (briefs, SRS,
+      design references) and retrieval-backed artifact generation.
+- [ ] **Governance chat agent** - grow the advisory chat (explain gate
+      failures, blockers, artifact context) into a dependable daily surface.
+- [ ] **Web UI** - promote the review and board surfaces from experimental
+      once the CLI/UI loop has survived more real team use.
+
+**Deepening verification**
+
+- [ ] **Knowledge-aware readiness gates** - once knowledge search graduates,
+      check specs against source-of-truth team knowledge so a spec that
+      contradicts recorded decisions gets caught before handoff.
+- [ ] **Uniform trust marking** - delivery reviews still mark their origin via
+      the judge name; move them onto the same first-class `executor` field
+      gate runs and readiness history already expose.
+- [ ] **Richer stats** - count artifact readiness catches in
+      `specgate stats` pre-build numbers now that gate runs share one store.
+
+Found something missing or broken?
+[Open an issue](https://github.com/thanhtung2693/specgate/issues).
+
 ## Quickstart
 
 **Prerequisite:** Docker with Docker Compose v2. You do not need a source
