@@ -339,48 +339,27 @@ func printStatusNextAction(deps *Deps, st *client.GovernanceStatus, allWorkspace
 
 // specgate doctor
 func newDoctorCmd(deps *Deps) *cobra.Command {
-	return &cobra.Command{
+	var fix bool
+	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Check CLI-to-server connectivity and capability health",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
 
-			// Probe liveness first (failure is non-fatal — endpoint is optional).
-			_ = deps.Client.Healthz(ctx)
-
-			meta, err := deps.Client.Meta(ctx)
+			meta, payload, err := runDoctorChecks(ctx, deps)
 			if err != nil {
-				code := deps.Printer.Error("doctor", mapAPIError("doctor", err))
-				return &output.ExitError{Code: code, Err: err}
-			}
-
-			if meta.APIVersion != apiVersion {
-				payload := output.ErrorPayload{
-					Code:    "incompatible",
-					Message: fmt.Sprintf("server api_version %q is not supported (want %q)", meta.APIVersion, apiVersion),
-				}
-				code := deps.Printer.Error("doctor", payload)
-				return &output.ExitError{Code: code}
-			}
-
-			if meta.Capabilities != nil {
-				if agents, set := meta.Capabilities["agents"]; set && !agents {
-					payload := output.ErrorPayload{
-						Code:    "unavailable",
-						Message: "agents service is not available on this server",
+				if fix && payload.Code == "unavailable" {
+					if repairErr := runDoctorFix(ctx, deps); repairErr != nil {
+						code := deps.Printer.Error("doctor", output.ErrorPayload{Code: "unavailable", Message: repairErr.Error()})
+						return &output.ExitError{Code: code, Err: repairErr}
 					}
-					code := deps.Printer.Error("doctor", payload)
-					return &output.ExitError{Code: code}
+					meta, payload, err = runDoctorChecks(ctx, deps)
+					if err == nil && deps.Printer.Mode() != output.ModeJSON {
+						fmt.Fprintln(deps.Stdout, "Environment repaired successfully.")
+					}
 				}
 			}
-
-			// Probe the board endpoint the daily commands depend on: a healthy
-			// process with a failing workflow surface is not a healthy setup.
-			if _, err := deps.Client.Status(ctx, ""); err != nil {
-				payload := output.ErrorPayload{
-					Code:    "unavailable",
-					Message: fmt.Sprintf("board endpoint failing (status/work list will not work): %v", err),
-				}
+			if err != nil {
 				code := deps.Printer.Error("doctor", payload)
 				return &output.ExitError{Code: code, Err: err}
 			}
@@ -394,6 +373,85 @@ func newDoctorCmd(deps *Deps) *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&fix, "fix", false, "Interactively repair common local setup issues")
+	return cmd
+}
+
+func runDoctorChecks(ctx context.Context, deps *Deps) (*client.Meta, output.ErrorPayload, error) {
+	// Probe liveness first (failure is non-fatal — endpoint is optional).
+	_ = deps.Client.Healthz(ctx)
+
+	meta, err := deps.Client.Meta(ctx)
+	if err != nil {
+		return nil, mapAPIError("doctor", err), err
+	}
+
+	if meta.APIVersion != apiVersion {
+		return nil, output.ErrorPayload{
+			Code:    "incompatible",
+			Message: fmt.Sprintf("server api_version %q is not supported (want %q)", meta.APIVersion, apiVersion),
+		}, fmt.Errorf("server api_version %q is not supported", meta.APIVersion)
+	}
+
+	if meta.Capabilities != nil {
+		if agents, set := meta.Capabilities["agents"]; set && !agents {
+			return nil, output.ErrorPayload{
+				Code:    "unavailable",
+				Message: "agents service is not available on this server",
+			}, fmt.Errorf("agents service is not available on this server")
+		}
+	}
+
+	// Probe the board endpoint the daily commands depend on: a healthy process
+	// with a failing workflow surface is not a healthy setup.
+	if _, err := deps.Client.Status(ctx, ""); err != nil {
+		return nil, output.ErrorPayload{
+			Code:    "unavailable",
+			Message: fmt.Sprintf("board endpoint failing (status/work list will not work): %v", err),
+		}, err
+	}
+
+	return meta, output.ErrorPayload{}, nil
+}
+
+func runDoctorFix(ctx context.Context, deps *Deps) error {
+	dir := resolveDeployDir(deps)
+	if _, err := os.Stat(filepath.Join(dir, "compose.yml")); err != nil {
+		return fmt.Errorf("no CLI-managed deployment found in %s; run `specgate init` first", dir)
+	}
+
+	const localStackAction = "local-stack"
+	actions := []interactive.Option{
+		{Label: "Start or repair local Docker services", Value: localStackAction},
+	}
+	defaults := []string{localStackAction}
+	selected := defaults
+	if !deps.Yes {
+		if deps.NoInput {
+			return errors.New("doctor --fix needs an interactive terminal or --yes")
+		}
+		values, err := deps.Prompter.MultiSelect("Repair SpecGate environment", actions, defaults)
+		if err != nil {
+			return err
+		}
+		selected = values
+	}
+	if !stringSliceContains(selected, localStackAction) {
+		return errors.New("no repair actions selected")
+	}
+	if deps.Printer.Mode() != output.ModeJSON {
+		fmt.Fprintf(deps.Stdout, "Repairing local stack (%s)...\n", dir)
+	}
+	return makeDeployService(deps, dir).Up(ctx)
+}
+
+func stringSliceContains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 // printDoctorLocalStack renders a "Local stack" section when a CLI-managed

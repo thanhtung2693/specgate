@@ -413,6 +413,93 @@ func TestDoctorSkipsLocalStackWithoutDeployment(t *testing.T) {
 	}
 }
 
+func TestDoctorFixOffersLocalStackRepairChecklist(t *testing.T) {
+	var statusCalls int
+	srv := (&fakeServer{
+		metaHandler: jsonMeta("specgate.api/v1", map[string]bool{"agents": true}),
+		statusHandler: func(w http.ResponseWriter, _ *http.Request) {
+			statusCalls++
+			if statusCalls == 1 {
+				http.Error(w, "starting", http.StatusServiceUnavailable)
+				return
+			}
+			_, _ = w.Write([]byte(`{"counts":{},"attention":[]}`))
+		},
+	}).build(t)
+
+	dir := t.TempDir()
+	setupTestBundle(t, dir)
+
+	runner := &fakeDeployRunner{}
+	prompter := &fakePrompter{multiValues: []string{"local-stack"}}
+	deps, out := newTestDeps(t, srv.URL)
+	deps.DeployRunner = runner
+	deps.Prompter = prompter
+	if err := (config.Config{DeploymentDir: dir}).SaveTo(deps.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--server", srv.URL, "doctor", "--fix")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if prompter.multiTitle != "Repair SpecGate environment" {
+		t.Fatalf("multi-select title = %q", prompter.multiTitle)
+	}
+	gotCommands := strings.Join(runner.Commands, "\n")
+	if !strings.Contains(gotCommands, "docker compose -f "+filepath.Join(dir, "compose.yml")+" up -d --wait") {
+		t.Fatalf("missing compose up repair command in:\n%s", gotCommands)
+	}
+	if statusCalls < 2 {
+		t.Fatalf("doctor should re-run checks after repair; status calls = %d", statusCalls)
+	}
+	if !strings.Contains(out.String(), "Environment repaired successfully.") {
+		t.Fatalf("output missing repaired message:\n%s", out.String())
+	}
+}
+
+func TestDoctorFixYesRepairsWithoutPrompt(t *testing.T) {
+	var statusCalls int
+	srv := (&fakeServer{
+		metaHandler: jsonMeta("specgate.api/v1", map[string]bool{"agents": true}),
+		statusHandler: func(w http.ResponseWriter, _ *http.Request) {
+			statusCalls++
+			if statusCalls == 1 {
+				http.Error(w, "starting", http.StatusServiceUnavailable)
+				return
+			}
+			_, _ = w.Write([]byte(`{"counts":{},"attention":[]}`))
+		},
+	}).build(t)
+
+	dir := t.TempDir()
+	setupTestBundle(t, dir)
+
+	runner := &fakeDeployRunner{}
+	prompter := &fakePrompter{}
+	deps, out := newTestDeps(t, srv.URL)
+	deps.DeployRunner = runner
+	deps.Prompter = prompter
+	if err := (config.Config{DeploymentDir: dir}).SaveTo(deps.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "--server", srv.URL, "doctor", "--fix")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if prompter.multiTitle != "" {
+		t.Fatalf("--yes should not prompt, got title %q", prompter.multiTitle)
+	}
+	gotCommands := strings.Join(runner.Commands, "\n")
+	if !strings.Contains(gotCommands, "docker compose -f "+filepath.Join(dir, "compose.yml")+" up -d --wait") {
+		t.Fatalf("missing compose up repair command in:\n%s", gotCommands)
+	}
+	if statusCalls < 2 {
+		t.Fatalf("doctor should re-run checks after repair; status calls = %d", statusCalls)
+	}
+}
+
 func TestServerCommandWarnsWhenCLIBehindRecommendedVersion(t *testing.T) {
 	oldVersion := buildinfo.Version
 	buildinfo.Version = "v0.1.0-alpha.1"

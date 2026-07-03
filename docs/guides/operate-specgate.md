@@ -274,6 +274,7 @@ references them.
 
 ### `specgate doctor` reports unavailable
 
+- run `specgate doctor --fix` to start or repair CLI-managed local services;
 - run `specgate local-status`;
 - inspect `docker compose ps`;
 - check Doc Registry logs;

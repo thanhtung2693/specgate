@@ -226,6 +226,21 @@ In human/plain output, `doctor` also shows a "Local stack" section with the
 running compose services when a CLI-managed deployment exists. `local-status`
 is the script-facing command for the same data.
 
+Use `--fix` to repair common local setup failures:
+
+```bash
+specgate doctor --fix
+```
+
+In an interactive terminal, `doctor --fix` shows a checkbox list before changing
+the local machine. The first repair action starts or repairs the CLI-managed
+Docker services and then reruns the same doctor checks. For automation, combine
+it with `--yes`:
+
+```bash
+specgate doctor --fix --yes
+```
+
 For human/plain output, server-backed commands also warn when the connected
 server recommends a different CLI version. Use the built-in updater:
 
