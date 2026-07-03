@@ -32,7 +32,7 @@ const revealObserver = new IntersectionObserver(
       }
     });
   },
-  { rootMargin: "0px 0px -10% 0px", threshold: 0.15 },
+  { rootMargin: "0px 0px -4% 0px", threshold: 0.05 },
 );
 
 document.querySelectorAll(".reveal-up").forEach((el) => revealObserver.observe(el));
@@ -397,4 +397,28 @@ if (spyTargets.length) {
     { threshold: 0.4 },
   );
   io.observe(root);
+})();
+
+/* Governance rail: stamp a section's gate once the reader has
+   genuinely entered it. Stamps stay stamped (a passed gate does
+   not un-pass on scroll-up). */
+(function initGateRail() {
+  const gates = document.querySelectorAll(".band-rail");
+  if (!gates.length) return;
+  if (prefersReducedMotion) {
+    gates.forEach((band) => band.classList.add("gate-passed"));
+    return;
+  }
+  const gateObserver = new IntersectionObserver(
+    (entries, observer) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("gate-passed");
+          observer.unobserve(entry.target);
+        }
+      });
+    },
+    { rootMargin: "-30% 0px -30% 0px", threshold: 0 },
+  );
+  gates.forEach((band) => gateObserver.observe(band));
 })();

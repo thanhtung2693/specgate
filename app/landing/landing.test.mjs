@@ -152,7 +152,7 @@ test("hero message is direct and action-oriented", () => {
 });
 
 test("governed loop copy does not overpromise format parsing", () => {
-  const loop = html.match(/<section class="band loop" id="how">(?<body>[\s\S]*?)<\/section>/)?.groups?.body ?? "";
+  const loop = html.match(/<section class="band band-rail loop" id="how">(?<body>[\s\S]*?)<\/section>/)?.groups?.body ?? "";
 
   assert.match(loop, /Bring any spec format/);
   assert.match(loop, /OpenSpec, Spec Kit, a quick change note/);

@@ -3,6 +3,14 @@
 Standalone static landing page for introducing SpecGate, CLI-first IDE handoff,
 artifact governance, and post-build verification.
 
+Design language: "the governed pipeline". A governance rail runs down the
+content spine and each section is a gate that stamps PASS as the reader
+crosses it; consoles and the SpecGate panel carry reticle corner frames, and
+the verdict stamp (mono, boxed, slightly rotated, semantic green) is the
+recurring identity token. Dark and light themes share the token set in
+`styles.css`; `landing.test.mjs` is the executable gate for copy, a11y, and
+structure.
+
 ## Preview
 
 From the repository root:

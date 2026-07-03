@@ -256,7 +256,8 @@
         </div>
 
         <!-- Verdict console (the protagonist) -->
-        <div class="console reveal" style="--d: 200ms" aria-label="Delivery verification console">
+        <div class="console gate-frame reveal" style="--d: 200ms" aria-label="Delivery verification console">
+          <i class="gf" aria-hidden="true"></i><i class="gf" aria-hidden="true"></i><i class="gf" aria-hidden="true"></i><i class="gf" aria-hidden="true"></i>
           <div class="console-top">
             <span class="mono">WI-101 / audit-log permissions</span>
             <span class="verdict-chip" id="verdict-chip" data-state="run">Verifying…</span>
@@ -313,7 +314,8 @@
       </section>
 
       <!-- HOW IT WORKS -->
-      <section class="band loop" id="how">
+      <section class="band band-rail loop" id="how">
+        <span class="gate-node" aria-hidden="true"><span class="gate-node-label">pass</span></span>
         <div class="band-head reveal-up">
           <h2>The governed loop in three moves.</h2>
           <p class="band-sub">
@@ -321,27 +323,53 @@
             then checks the finished work against the approved contract.
           </p>
         </div>
-        <div class="loop-grid">
-          <article class="loop-card reveal-up" style="--d: 0ms">
-            <span class="loop-kicker mono">1 / Publish</span>
-            <h3>Bring any spec format</h3>
-            <p>OpenSpec, Spec Kit, a quick change note, or your own document set. A profile declares roles, gates, and required topics.</p>
-          </article>
-          <article class="loop-card loop-card-hero reveal-up" style="--d: 80ms">
-            <span class="loop-kicker mono">2 / Handoff</span>
-            <h3>Approve one Context Pack</h3>
-            <p>The coding agent gets the approved version, acceptance criteria, non-goals, risks, tasks, and applicable Skills through the CLI.</p>
-          </article>
-          <article class="loop-card reveal-up" style="--d: 160ms">
-            <span class="loop-kicker mono">3 / Verify</span>
-            <h3>Review delivery evidence</h3>
-            <p>SpecGate compares completion claims, tests, docs, and changed files against every acceptance criterion before you close the work.</p>
-          </article>
-        </div>
+        <ol class="loop-stages">
+          <li class="loop-stage reveal-up" style="--d: 0ms">
+            <div>
+              <span class="loop-verb">Publish</span>
+              <h3>Bring any spec format</h3>
+              <p>OpenSpec, Spec Kit, a quick change note, or your own document set. A profile declares roles, gates, and required topics.</p>
+            </div>
+            <div class="loop-artifact" aria-hidden="true">
+              <span class="la-head"><span>spec package</span><span>v0.3</span></span>
+              <span class="la-acc"># Audit-log permissions</span><br />
+              <span class="la-dim">## Scope / non-goals</span><br />
+              <span class="la-dim">## Acceptance criteria</span><br />
+              <span>[ ] Admins can view audit events</span>
+            </div>
+          </li>
+          <li class="loop-stage reveal-up" style="--d: 60ms">
+            <div>
+              <span class="loop-verb">Hand off</span>
+              <h3>Approve one Context Pack</h3>
+              <p>The coding agent gets the approved version, acceptance criteria, non-goals, risks, tasks, and applicable Skills through the CLI.</p>
+            </div>
+            <div class="loop-artifact" aria-hidden="true">
+              <span class="la-head"><span>context-pack.md</span><span class="la-acc">approved</span></span>
+              <span>$ specgate work context WI-101</span><br />
+              <span class="la-dim">contract, criteria, risks, tasks</span><br />
+              <span class="la-dim">for Cursor / Claude Code / Codex</span>
+            </div>
+          </li>
+          <li class="loop-stage reveal-up" style="--d: 120ms">
+            <div>
+              <span class="loop-verb">Verify</span>
+              <h3>Review delivery evidence</h3>
+              <p>SpecGate compares completion claims, tests, docs, and changed files against every acceptance criterion before you close the work.</p>
+            </div>
+            <div class="loop-artifact" aria-hidden="true">
+              <span class="la-head"><span>delivery review</span><span class="la-ok">pass</span></span>
+              <span class="la-ok">4/4 criteria met</span><br />
+              <span class="la-dim">tests, types, lint verified</span><br />
+              <span class="la-dim">evidence recorded per criterion</span>
+            </div>
+          </li>
+        </ol>
       </section>
 
       <!-- SEE IT RUN -->
-      <section class="band run" id="run">
+      <section class="band band-rail run" id="run">
+        <span class="gate-node" aria-hidden="true"><span class="gate-node-label">pass</span></span>
         <div class="band-head reveal-up">
           <h2>See it run, command by command.</h2>
           <p class="band-sub">
@@ -350,7 +378,8 @@
           </p>
         </div>
         <div class="cast-carousel reveal-up" data-carousel aria-label="SpecGate workflow demos">
-          <div class="termcast cast-stage">
+          <div class="termcast cast-stage gate-frame">
+            <i class="gf" aria-hidden="true"></i><i class="gf" aria-hidden="true"></i><i class="gf" aria-hidden="true"></i><i class="gf" aria-hidden="true"></i>
             <div class="term-bar">
               <span></span><span></span><span></span>
               <span class="term-title mono" data-cast-title>specgate / your shell</span>
@@ -363,7 +392,8 @@
       </section>
 
       <!-- WHERE IT FITS -->
-      <section class="band fit" id="compare">
+      <section class="band band-rail fit" id="compare">
+        <span class="gate-node" aria-hidden="true"><span class="gate-node-label">pass</span></span>
         <div class="band-head reveal-up">
           <h2>Keep your stack. Add the governed handoff.</h2>
           <p class="band-sub">
@@ -372,27 +402,37 @@
           </p>
         </div>
         <div class="fit-grid">
-          <article class="fit-card reveal-up" style="--d: 0ms">
-            <span class="cmp-tag mono"><svg class="ic" aria-hidden="true"><use href="#i-spec" /></svg> SPEC TOOLS</span>
-            <h3>Shape the work</h3>
-            <p>OpenSpec, Spec Kit, Markdown, and custom docs stay useful as authoring systems.</p>
-          </article>
-          <article class="fit-card fit-card-hero reveal-up" style="--d: 80ms">
+          <div class="fit-side">
+            <article class="fit-card reveal-up" style="--d: 0ms">
+              <span class="cmp-tag mono"><svg class="ic" aria-hidden="true"><use href="#i-spec" /></svg> SPEC TOOLS</span>
+              <h3>Shape the work</h3>
+              <p>OpenSpec, Spec Kit, Markdown, and custom docs stay useful as authoring systems.</p>
+            </article>
+            <article class="fit-card reveal-up" style="--d: 60ms">
+              <span class="cmp-tag mono"><svg class="ic" aria-hidden="true"><use href="#i-code" /></svg> TRACKER + IDE</span>
+              <h3>Run execution</h3>
+              <p>Issues, sprints, code changes, PRs, and day-to-day collaboration stay in your existing stack.</p>
+            </article>
+          </div>
+          <article class="fit-card fit-card-hero gate-frame reveal-up" style="--d: 120ms">
+            <i class="gf" aria-hidden="true"></i><i class="gf" aria-hidden="true"></i><i class="gf" aria-hidden="true"></i><i class="gf" aria-hidden="true"></i>
             <span class="cmp-tag mono accent"><svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg> SPECGATE</span>
             <h3>Own the contract</h3>
             <p>Versioned approval, readiness gates, Context Packs, delivery review, and evidence trust live here.</p>
-          </article>
-          <article class="fit-card reveal-up" style="--d: 160ms">
-            <span class="cmp-tag mono"><svg class="ic" aria-hidden="true"><use href="#i-code" /></svg> TRACKER + IDE</span>
-            <h3>Run execution</h3>
-            <p>Issues, sprints, code changes, PRs, and day-to-day collaboration stay in your existing stack.</p>
+            <ul class="fit-owns">
+              <li>Approved spec versions</li>
+              <li>Readiness gates</li>
+              <li>Context Pack handoff</li>
+              <li>Delivery review verdicts</li>
+            </ul>
           </article>
         </div>
         <p class="cmp-note mono reveal-up">Experimental connectors mirror tracker status into SpecGate. Your tracker does not become a second spec source.</p>
       </section>
 
       <!-- FAQ -->
-      <section class="band faq" id="faq">
+      <section class="band band-rail faq" id="faq">
+        <span class="gate-node" aria-hidden="true"><span class="gate-node-label">pass</span></span>
         <div class="band-head reveal-up">
           <h2>What teams ask first.</h2>
         </div>
