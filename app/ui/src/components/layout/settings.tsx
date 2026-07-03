@@ -50,8 +50,6 @@ import {
 import {
   loadGovernanceCatalog,
   type GovernanceCatalog,
-  type GovernanceOutcomeFeedbackSummary,
-  type GovernancePolicyHealthSummary,
   type GovernancePolicyLevelSummary,
   type GovernanceProfileSummary,
 } from "@/data/governance"
@@ -89,7 +87,7 @@ import {
 } from "@/data/skills"
 import { formatDateTime, formatRelativeTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { gateCatalog, gateText, readableKey, statusTone, toneClass, type WorkspaceProfile } from "./shared"
+import { gateCatalog, gateText, statusTone, toneClass, type WorkspaceProfile } from "./shared"
 import { ActionTooltip, copyText, MarkdownText } from "./shared-ui"
 
 const pluginCliCommands = [
@@ -641,7 +639,7 @@ function GovernanceCatalogSection() {
         <div>
           <h3 className="text-sm font-semibold">Policy catalog</h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            Read-only policy tiers, profiles, and outcome health for the CLI and IDE-agent delivery loop.
+            Read-only policy tiers and profiles for the CLI and IDE-agent delivery loop.
           </p>
         </div>
         {status === "ready" ? (
@@ -660,143 +658,11 @@ function GovernanceCatalogSection() {
         <p className="rounded-md border bg-background/70 p-3 text-sm text-muted-foreground">Governance catalog unavailable.</p>
       ) : catalog ? (
         <div className="grid gap-5">
-          <GovernanceHealthPanel health={catalog.policyHealth} feedback={catalog.outcomeFeedback} />
           <GovernancePolicyLevels levels={catalog.policyLevels} />
           <GovernanceProfiles profiles={catalog.profiles} />
         </div>
       ) : null}
     </section>
-  )
-}
-
-function GovernanceHealthPanel({
-  health,
-  feedback,
-}: {
-  health: GovernancePolicyHealthSummary[]
-  feedback: GovernanceOutcomeFeedbackSummary[]
-}) {
-  const totals = health.reduce(
-    (acc, item) => ({
-      feedback: acc.feedback + item.totalFeedback,
-      overrides: acc.overrides + item.overrideCount,
-      rejected: acc.rejected + item.rejectedEvidenceCount,
-      rollbacks: acc.rollbacks + item.postMergeRollbackCount,
-      escaped: acc.escaped + item.escapedDefectCount,
-    }),
-    { feedback: 0, overrides: 0, rejected: 0, rollbacks: 0, escaped: 0 },
-  )
-
-  return (
-    <section className="grid gap-3">
-      <div>
-        <h3 className="text-sm font-semibold">Governance health</h3>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Outcome signals recorded by CLI, MCP, agents, and reviewers.
-        </p>
-      </div>
-      {health.length === 0 && feedback.length === 0 ? (
-        <p className="rounded-md border bg-background/70 p-3 text-sm text-muted-foreground">
-          No outcome feedback recorded yet, or the outcome store is not configured.
-        </p>
-      ) : (
-        <div className="grid gap-3">
-          <div className="grid gap-2 md:grid-cols-5">
-            <GovernanceHealthMetric label="Signals" value={totals.feedback} />
-            <GovernanceHealthMetric label="Overrides" value={totals.overrides} />
-            <GovernanceHealthMetric label="Rejected evidence" value={totals.rejected} />
-            <GovernanceHealthMetric label="Rollbacks" value={totals.rollbacks} />
-            <GovernanceHealthMetric label="Escaped defects" value={totals.escaped} />
-          </div>
-          {health.length > 0 ? (
-            <div className="grid gap-2">
-              {health.slice(0, 5).map((policy) => (
-                <GovernancePolicyHealthRow key={policy.policyId} policy={policy} />
-              ))}
-              {health.length > 5 ? (
-                <p className="px-1 text-xs text-muted-foreground">Showing 5 of {health.length} policy health rows.</p>
-              ) : null}
-            </div>
-          ) : null}
-          {feedback.length > 0 ? (
-            <div className="grid gap-2">
-              <p className="text-xs font-semibold text-muted-foreground">Outcome feedback</p>
-              {feedback.slice(0, 5).map((item) => (
-                <GovernanceOutcomeFeedbackRow key={item.id} item={item} />
-              ))}
-            </div>
-          ) : null}
-        </div>
-      )}
-    </section>
-  )
-}
-
-function GovernanceHealthMetric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-md border bg-background/70 p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 font-mono text-lg font-semibold">{value}</p>
-    </div>
-  )
-}
-
-function GovernancePolicyHealthRow({ policy }: { policy: GovernancePolicyHealthSummary }) {
-  return (
-    <div className="rounded-md border bg-background/70 p-3">
-      <div className="min-w-0">
-        <p className="font-medium">{policy.policyId}</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {policy.totalFeedback} signals · {policy.overrideCount} overrides · {policy.escapedDefectCount} escaped defects
-        </p>
-      </div>
-      {policy.gateBreakdown.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {policy.gateBreakdown.slice(0, 6).map((gate) => (
-            <span key={gate.gateKey} className="rounded-md border bg-card/70 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
-              {gate.gateKey}: {gate.overrideCount}
-            </span>
-          ))}
-          {policy.gateBreakdown.length > 6 ? <span className="px-1.5 py-0.5 text-[11px]">+{policy.gateBreakdown.length - 6}</span> : null}
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-function GovernanceOutcomeFeedbackRow({ item }: { item: GovernanceOutcomeFeedbackSummary }) {
-  return (
-    <div className="rounded-md border bg-background/70 p-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="font-medium">{readableKey(item.type)}</p>
-          <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{item.workItemId}</p>
-        </div>
-        {item.recordedAt ? (
-          <Badge variant="outline" className="rounded-md border text-[0.7rem]">
-            {formatDateTime(item.recordedAt)}
-          </Badge>
-        ) : null}
-      </div>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {item.policyId ? (
-          <Badge variant="outline" className="rounded-md font-mono text-[0.68rem]">
-            {item.policyId}
-          </Badge>
-        ) : null}
-        {item.gateKey ? (
-          <Badge variant="outline" className="rounded-md font-mono text-[0.68rem]">
-            {item.gateKey}
-          </Badge>
-        ) : null}
-        {item.actor ? (
-          <Badge variant="outline" className="rounded-md text-[0.68rem]">
-            {item.actor}
-          </Badge>
-        ) : null}
-      </div>
-      {item.reason ? <p className="mt-2 text-xs leading-5 text-muted-foreground">{item.reason}</p> : null}
-    </div>
   )
 }
 
@@ -1054,28 +920,6 @@ function GeneralSettingsPanel({ onSaveStatusChange }: { onSaveStatusChange: (sta
       ) : null}
 
       <div className="grid gap-3">
-        <div className="rounded-lg border bg-background/70 p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <label htmlFor="auto-feature-summary" className="text-sm font-semibold">
-                Auto-refresh Feature overviews
-              </label>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Let the governance service refresh a Feature overview when the canonical artifact changes.
-              </p>
-            </div>
-            <Switch
-              id="auto-feature-summary"
-              checked={settings["governance.auto_feature_summary"] === "true"}
-              disabled={loading}
-              onCheckedChange={(checked) => {
-                setMessage(null)
-                setSettings((current) => ({ ...current, "governance.auto_feature_summary": checked ? "true" : "false" }))
-              }}
-            />
-          </div>
-        </div>
-
         <div className="rounded-lg border bg-background/70 p-4">
           <div className="flex items-start justify-between gap-4">
             <div>

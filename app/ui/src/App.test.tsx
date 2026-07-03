@@ -4073,48 +4073,6 @@ describe("SpecGate UI shell", () => {
           ),
         )
       }
-      if (url === "http://registry.test/api/v1/policy-health") {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              policies: [
-                {
-                  policy_id: "policy/enhanced",
-                  total_feedback: 3,
-                  override_count: 1,
-                  rejected_evidence_count: 1,
-                  post_merge_rollback_count: 0,
-                  escaped_defect_count: 1,
-                  gate_breakdown: [{ gate_key: "delivery_review", override_count: 1 }],
-                },
-              ],
-            }),
-            { headers: { "Content-Type": "application/json" } },
-          ),
-        )
-      }
-      if (url === "http://registry.test/api/v1/outcome-feedback") {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              items: [
-                {
-                  id: "outcome-1",
-                  work_item_id: "CR-OUTCOME",
-                  artifact_id: "artifact-1",
-                  policy_id: "policy/enhanced",
-                  type: "escaped_defect",
-                  gate_key: "delivery_review",
-                  reason: "checkout escaped after policy override",
-                  actor: "reviewer@example.com",
-                  recorded_at: "2026-06-30T09:00:00Z",
-                },
-              ],
-            }),
-            { headers: { "Content-Type": "application/json" } },
-          ),
-        )
-      }
       return Promise.resolve(new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }))
     })
     vi.stubGlobal("fetch", fetchMock)
@@ -4125,15 +4083,7 @@ describe("SpecGate UI shell", () => {
     expect(await within(settingsDialog).findByRole("heading", { name: "Governance" })).toBeInTheDocument()
     expect(within(settingsDialog).getByText("Policy catalog")).toBeInTheDocument()
     expect(within(settingsDialog).queryByText("read-only")).not.toBeInTheDocument()
-    expect(within(settingsDialog).getByText("Governance health")).toBeInTheDocument()
-    expect(within(settingsDialog).getByText("Signals")).toBeInTheDocument()
-    expect(within(settingsDialog).getByText("Overrides")).toBeInTheDocument()
-    expect(within(settingsDialog).getByText("Escaped defects")).toBeInTheDocument()
-    expect(within(settingsDialog).getAllByText("policy/enhanced").length).toBeGreaterThan(0)
-    expect(within(settingsDialog).getByText(/3 signals/)).toBeInTheDocument()
-    expect(within(settingsDialog).getByText("Escaped Defect")).toBeInTheDocument()
-    expect(within(settingsDialog).getByText("CR-OUTCOME")).toBeInTheDocument()
-    expect(within(settingsDialog).getByText("checkout escaped after policy override")).toBeInTheDocument()
+    expect(within(settingsDialog).queryByText("Governance health")).not.toBeInTheDocument()
     expect(within(settingsDialog).getByText("Policy tiers")).toBeInTheDocument()
     expect(within(settingsDialog).getByText("Enhanced")).toBeInTheDocument()
     expect(within(settingsDialog).getByText("High impact feature")).toBeInTheDocument()
@@ -4151,8 +4101,8 @@ describe("SpecGate UI shell", () => {
     expect(within(settingsDialog).queryByRole("button", { name: /Import profile|Activate policy|Accept exception|Resolve policy|Record feedback/i })).not.toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith("http://registry.test/governance-profiles", expect.any(Object))
     expect(fetchMock).toHaveBeenCalledWith("http://registry.test/api/v1/policies/levels", expect.any(Object))
-    expect(fetchMock).toHaveBeenCalledWith("http://registry.test/api/v1/policy-health", expect.any(Object))
-    expect(fetchMock).toHaveBeenCalledWith("http://registry.test/api/v1/outcome-feedback", expect.any(Object))
+    expect(fetchMock).not.toHaveBeenCalledWith("http://registry.test/api/v1/policy-health", expect.any(Object))
+    expect(fetchMock).not.toHaveBeenCalledWith("http://registry.test/api/v1/outcome-feedback", expect.any(Object))
 
     vi.unstubAllGlobals()
     vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
@@ -4824,7 +4774,6 @@ describe("SpecGate UI shell", () => {
           ok: true,
           json: async () => ({
             settings: {
-              "governance.auto_feature_summary": "true",
               "governance.auto_archive_on_delivery_pass": "false",
               "governance.feature_freshness_sla_days": "7",
               "governance.artifact_stale_days": "5",
@@ -4842,7 +4791,7 @@ describe("SpecGate UI shell", () => {
 
     await user.click(within(settingsDialog).getByRole("button", { name: /General/ }))
     expect(await within(settingsDialog).findByRole("heading", { name: "General settings" })).toBeInTheDocument()
-    expect(within(settingsDialog).getByLabelText("Auto-refresh Feature overviews")).toBeChecked()
+    expect(within(settingsDialog).queryByLabelText("Auto-refresh Feature overviews")).not.toBeInTheDocument()
     expect(within(settingsDialog).getByLabelText("Auto-archive after passed delivery review")).not.toBeChecked()
     expect(within(settingsDialog).getByLabelText("Feature freshness SLA days")).toHaveValue(7)
     expect(within(settingsDialog).getByLabelText("Artifact stale after days")).toHaveValue(5)
@@ -4850,7 +4799,6 @@ describe("SpecGate UI shell", () => {
     expect(within(settingsDialog).queryByText("Governance file retention")).not.toBeInTheDocument()
     expect(within(settingsDialog).queryByLabelText(/Governance file retention days/i)).not.toBeInTheDocument()
 
-    await user.click(within(settingsDialog).getByLabelText("Auto-refresh Feature overviews"))
     await user.click(within(settingsDialog).getByLabelText("Auto-archive after passed delivery review"))
     await user.clear(within(settingsDialog).getByLabelText("Feature freshness SLA days"))
     await user.type(within(settingsDialog).getByLabelText("Feature freshness SLA days"), "14")
@@ -4861,7 +4809,6 @@ describe("SpecGate UI shell", () => {
 
     await waitFor(() => expect(savedSettings).not.toBeNull())
     expect(savedSettings).toEqual({
-      "governance.auto_feature_summary": "false",
       "governance.auto_archive_on_delivery_pass": "true",
       "governance.feature_freshness_sla_days": "14",
       "governance.artifact_stale_days": "8",
