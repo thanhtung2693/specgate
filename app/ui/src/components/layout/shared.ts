@@ -48,6 +48,9 @@ const statusToneByDomain = {
     warn: "warning",
     needs_human_review: "warning",
     pending: "warning",
+    met: "success",
+    unmet: "danger",
+    unclear: "warning",
   },
   severity: {
     warning: "warning",
@@ -124,4 +127,10 @@ export function deliveryText(delivery: WorkItem["delivery"]) {
 
 export function looksLikeWorkItemKey(value: string | undefined) {
   return /^SG-\d+$/i.test(value ?? "")
+}
+
+// Server-derived board phase for change requests whose latest delivery review
+// passed. The phase arrives through `lifecycle`; older servers never send it.
+export function isDeliveredWorkItem(item: Pick<WorkItem, "lifecycle">) {
+  return item.lifecycle.trim().toLowerCase() === "delivered"
 }

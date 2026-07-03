@@ -71,6 +71,24 @@ describe("workboard data adapter", () => {
     )
   })
 
+  it("maps the server-derived delivered phase to a passed delivery", () => {
+    const item = mapChangeRequestToWorkItem({
+      id: "cr-160",
+      key: "SG-160",
+      work_type: "cleanup",
+      title: "Delivered settings polish",
+      phase: "delivered",
+    })
+
+    expect(item).toMatchObject({
+      key: "SG-160",
+      lifecycle: "delivered",
+      gate: "pass",
+      delivery: "passed",
+      blocker: "none",
+    })
+  })
+
   it("keeps incomplete change requests visible with conservative defaults", () => {
     const item = mapChangeRequestToWorkItem({ id: "cr-1", title: "Clarify setup" })
 

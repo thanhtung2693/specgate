@@ -397,13 +397,21 @@ function lifecycleForChangeRequest(item: ChangeRequestDTO): string {
   return "Intake"
 }
 
+// Server-derived phase for change requests whose latest delivery review
+// passed. Additive: old servers never send it and nothing else changes.
+function isDeliveredPhase(phase: string | undefined): boolean {
+  return phase?.trim().toLowerCase() === "delivered"
+}
+
 function deliveryForChangeRequest(item: ChangeRequestDTO): WorkItem["delivery"] {
+  if (isDeliveredPhase(item.phase)) return "passed"
   if (item.phase === "Review") return "needs_changes"
   if (item.context_pack_artifact_id) return "ready"
   return "not_started"
 }
 
 function gateForChangeRequest(item: ChangeRequestDTO): WorkItem["gate"] {
+  if (isDeliveredPhase(item.phase)) return "pass"
   if (item.context_pack_artifact_id) return "pass"
   if (item.phase === "Review") return "fail"
   return "pending"
@@ -432,7 +440,7 @@ export function mapChangeRequestToWorkItem(item: ChangeRequestDTO): WorkItem {
     status: item.tracker_status || lifecycle.toLowerCase(),
     gate: gateForChangeRequest(item),
     delivery: deliveryForChangeRequest(item),
-    blocker: contextPackId ? "none" : "needs governance progress",
+    blocker: contextPackId || isDeliveredPhase(item.phase) ? "none" : "needs governance progress",
     age: formatDateTime(item.created_at ?? item.updated_at),
     updated: formatDateTime(item.updated_at),
     contextPackId,
@@ -684,9 +692,11 @@ function buildLanes(items: WorkItem[]): Lane[] {
 }
 
 function buildSignals(items: WorkItem[]): Signal[] {
-  const ready = items.filter((item) => item.delivery === "ready" || item.gate === "pass").length
-  const blocked = items.filter((item) => item.blocker !== "none").length
-  const gateDebt = items.filter((item) => item.gate !== "pass").length
+  // Delivered items are finished work: they are not handoff candidates.
+  const active = items.filter((item) => !(item.lifecycle.trim().toLowerCase() === "delivered"))
+  const ready = active.filter((item) => item.delivery === "ready" || item.gate === "pass").length
+  const blocked = active.filter((item) => item.blocker !== "none").length
+  const gateDebt = active.filter((item) => item.gate !== "pass").length
 
   return [
     { label: "Ready for handoff", value: String(ready), detail: "handoff candidates", tone: ready > 0 ? "success" : "neutral" },

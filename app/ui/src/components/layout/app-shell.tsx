@@ -78,6 +78,7 @@ import {
   updateWorkItemRoute,
   useWorkboardData,
   useWorkItemDetail,
+  type AcceptanceCriterionSummary,
   type CreateWorkResult,
   type ContextPackSummary,
   type DeliveryStatusSummary,
@@ -100,11 +101,13 @@ import { cn } from "@/lib/utils"
 import {
   deliveryText,
   gateText,
+  isDeliveredWorkItem,
   readableKey,
   stateText,
   statusTone,
   toneClass,
   userInitials,
+  type Tone,
   type WorkspaceProfile,
 } from "./shared"
 import { ActionTooltip, copyText, MarkdownText, openGovernanceAgentModal, PolicyExplanationSection, runGovernanceAgentPrompt } from "./shared-ui"
@@ -513,6 +516,7 @@ const queueViews = [
   { id: "in_implementation", label: "In implementation" },
   { id: "needs_review", label: "Needs review" },
   { id: "blocked", label: "Blocked" },
+  { id: "delivered", label: "Delivered" },
   { id: "all_work", label: "All work" },
 ] as const
 
@@ -529,10 +533,16 @@ const routeLabels: Record<WorkItem["route"], string> = {
 }
 
 function queueViewMatches(item: WorkItem, view: QueueViewId) {
-  if (view === "needs_attention") return item.blocker !== "none" || item.delivery !== "not_started" || item.gate !== "pass"
-  if (view === "ready_for_pickup") return item.gate === "pass" && item.delivery === "ready" && Boolean(item.contextPackId)
+  if (view === "delivered") return isDeliveredWorkItem(item)
+  if (view === "needs_attention")
+    return !isDeliveredWorkItem(item) && (item.blocker !== "none" || item.delivery !== "not_started" || item.gate !== "pass")
+  if (view === "ready_for_pickup") {
+    return !isDeliveredWorkItem(item) && item.gate === "pass" && item.delivery === "ready" && Boolean(item.contextPackId)
+  }
   if (view === "in_implementation") return item.lifecycle === "Implementation" || item.status.includes("implement")
-  if (view === "needs_review") return item.delivery !== "not_started" || item.gate === "fail"
+  if (view === "needs_review") {
+    return !isDeliveredWorkItem(item) && (item.delivery !== "not_started" || item.gate === "fail")
+  }
   if (view === "blocked") return item.blocker !== "none" || item.gate === "fail"
   return true
 }
@@ -677,25 +687,39 @@ function QueueViewControls({
 
 function WorkQueueTable({
   workItems,
+  totalItems,
   filtersActive,
   source,
   status,
   onClearFilters,
 }: {
   workItems: WorkItem[]
+  totalItems: number
   filtersActive: boolean
   source: WorkboardView["source"]
   status: WorkboardView["status"]
   onClearFilters: () => void
 }) {
-  const isLiveEmpty = source === "registry" && !filtersActive
+  // Three empty cases: the workspace has nothing at all, the default
+  // attention view is clear (items exist but none need a human), or active
+  // filters hide everything.
+  const isWorkspaceEmpty = source === "registry" && !filtersActive && totalItems === 0
+  const isAttentionClear = source === "registry" && !filtersActive && totalItems > 0
   const isLoading = status === "loading"
-  const emptyTitle = isLoading ? "Loading work items" : isLiveEmpty ? "No work items in this workspace" : "No work items match"
+  const emptyTitle = isLoading
+    ? "Loading work items"
+    : isWorkspaceEmpty
+      ? "No work items in this workspace"
+      : isAttentionClear
+        ? "Nothing needs attention"
+        : "No work items match"
   const emptyDescription = isLoading
     ? "Reading the active workspace from Doc Registry."
-    : isLiveEmpty
+    : isWorkspaceEmpty
       ? "Publish or pick up governed work from the CLI or IDE agent, then refresh this board."
-      : "Clear search or queue filters to inspect the full queue."
+      : isAttentionClear
+        ? "Everything is in flight or delivered — check the other queue views above."
+        : "Clear search or queue filters to inspect the full queue."
 
   return (
     <section className="overflow-hidden rounded-lg border bg-card">
@@ -711,18 +735,16 @@ function WorkQueueTable({
       <div className="overflow-x-auto">
         <table className="w-full min-w-[680px] table-fixed text-left text-xs md:min-w-full">
           <colgroup>
-            <col className="w-[30%]" />
+            <col className="w-[33%]" />
+            <col className="w-[15%]" />
             <col className="w-[13%]" />
+            <col className="w-[27%]" />
             <col className="w-[12%]" />
-            <col className="w-[12%]" />
-            <col className="w-[23%]" />
-            <col className="w-[10%]" />
           </colgroup>
           <thead className="border-b bg-muted/40 text-xs text-muted-foreground">
             <tr>
               <th className="px-3 py-2 font-medium">Item</th>
               <th className="px-3 py-2 font-medium">Status</th>
-              <th className="px-3 py-2 font-medium">Owner</th>
               <th className="px-3 py-2 font-medium">Review</th>
               <th className="px-3 py-2 font-medium">Blocker</th>
               <th className="px-3 py-2 font-medium">Updated</th>
@@ -731,14 +753,14 @@ function WorkQueueTable({
           <tbody>
             {workItems.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center">
+                <td colSpan={5} className="px-4 py-8 text-center">
                   <h3 className="text-sm font-semibold">{emptyTitle}</h3>
                   <p className="mt-1 text-sm text-muted-foreground">{emptyDescription}</p>
                   {filtersActive ? (
                     <Button type="button" variant="outline" size="sm" className="mt-3 rounded-md" onClick={onClearFilters}>
                       Clear filters
                     </Button>
-                  ) : isLiveEmpty ? (
+                  ) : isWorkspaceEmpty ? (
                     <div className="mt-3 inline-flex rounded-md border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
                       specgate work list
                     </div>
@@ -768,7 +790,6 @@ function WorkQueueTable({
                   </div>
                 </td>
                 <td className="truncate px-3 py-2">{item.status}</td>
-                <td className="truncate px-3 py-2">{item.owner}</td>
                 <td className="truncate px-3 py-2">{deliveryText(item.delivery)}</td>
                 <td className="px-3 py-2 leading-5" title={item.blocker}>{item.blocker}</td>
                 <td className="truncate px-3 py-2 text-muted-foreground">{formatDateTime(item.updated)}</td>
@@ -1017,6 +1038,7 @@ function WorkPage({ workboard, workspaceId }: { workboard: WorkboardView; worksp
       ) : (
         <WorkQueueTable
           workItems={visibleWorkItems}
+          totalItems={workboard.workItems.length}
           filtersActive={filtersActive}
           source={workboard.source}
           status={workboard.status}
@@ -1048,9 +1070,29 @@ function WorkItemDetail({
     return requested && ["overview", "handoff", "verification", "activity"].includes(requested) ? requested : "overview"
   })
   const needsRouteConfirmation = item.blocker.toLowerCase().includes("route confirmation")
-  const nextActionTab = needsRouteConfirmation ? "overview" : item.delivery === "needs_changes" ? "verification" : "handoff"
-  const nextActionLabel = needsRouteConfirmation ? "Confirm route" : item.delivery === "needs_changes" ? "Inspect gaps" : pack ? "View handoff" : "Prepare handoff"
-  const agentPrompt = item.delivery === "needs_changes" || item.gate === "fail"
+  const delivered = isDeliveredWorkItem(item)
+  const nextActionTab = delivered
+    ? "verification"
+    : needsRouteConfirmation
+      ? "overview"
+      : item.delivery === "needs_changes"
+        ? "verification"
+        : "handoff"
+  const nextActionLabel = delivered
+    ? "View verdict"
+    : needsRouteConfirmation
+      ? "Confirm route"
+      : item.delivery === "needs_changes"
+        ? "Inspect gaps"
+        : pack
+          ? "View handoff"
+          : "Prepare handoff"
+  const agentPrompt = delivered
+    ? {
+        label: "Ask for review summary",
+        prompt: `Summarize the delivery review outcome for ${item.key}.`,
+      }
+    : item.delivery === "needs_changes" || item.gate === "fail"
     ? {
         label: "Ask about review gaps",
         prompt: `For ${item.key}, summarize the missing evidence, failed gates, or acceptance criteria that block delivery review.`,
@@ -1101,10 +1143,11 @@ function WorkItemDetail({
             <ContextPackDetail item={item} pack={pack} detail={detail} onCreateQuickContextPack={onCreateQuickContextPack} />
           </TabsContent>
           <TabsContent value="verification" className="mt-4">
+            {/* Verdict first: Reviews deep-links here to read the delivery outcome. */}
             <div className="grid gap-3">
+              <DeliverySummary item={item} detail={detail} />
               <GateSummary item={item} detail={detail} />
               <PolicyExplanationSection policy={detail.policy} status={detail.readback.policy} context="work" />
-              <DeliverySummary item={item} detail={detail} />
             </div>
           </TabsContent>
           <TabsContent value="activity" className="mt-4">
@@ -1226,13 +1269,30 @@ function FeatureOverview({ detail }: { detail: WorkItemDetailData }) {
   )
 }
 
+// When a delivery verdict carries per-criterion results, the verdict owns the
+// criterion check state; the registry `done` flag is only the fallback.
+function acceptanceCriterionVerdict(
+  criterion: AcceptanceCriterionSummary,
+  deliveryStatus: DeliveryStatusSummary | undefined,
+): string | undefined {
+  const criteria = deliveryStatus?.criteria ?? []
+  if (criteria.length === 0) return undefined
+  const match = criteria.find((row) => row.id === criterion.id) ?? criteria.find((row) => row.text === criterion.text)
+  return match?.verdict
+}
+
+function acceptanceCriterionDone(criterion: AcceptanceCriterionSummary, deliveryStatus: DeliveryStatusSummary | undefined) {
+  const verdict = acceptanceCriterionVerdict(criterion, deliveryStatus)
+  return verdict ? verdict === "met" : criterion.done
+}
+
 function AcceptanceCriteriaSummary({ detail }: { detail: WorkItemDetailData }) {
   return (
     <section className="rounded-lg border bg-background/70 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-sm font-semibold">Acceptance criteria</h3>
         <Badge variant="outline" className="font-mono">
-          {detail.acceptanceCriteria.filter((criterion) => criterion.done).length}/{detail.acceptanceCriteria.length}
+          {detail.acceptanceCriteria.filter((criterion) => acceptanceCriterionDone(criterion, detail.deliveryStatus)).length}/{detail.acceptanceCriteria.length}
         </Badge>
       </div>
       <div className="mt-3 grid gap-2">
@@ -1245,21 +1305,32 @@ function AcceptanceCriteriaSummary({ detail }: { detail: WorkItemDetailData }) {
             No acceptance criteria are recorded for this work item yet. Shape or update the governed artifact from the CLI or IDE workflow, then refresh the registry view.
           </p>
         ) : (
-          detail.acceptanceCriteria.map((criterion) => (
-            <div key={criterion.id} className="flex items-start justify-between gap-3 rounded-md border bg-card/70 p-3">
-              <div className="flex min-w-0 items-start gap-2 text-sm">
-                {criterion.done ? (
-                  <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-success" />
-                ) : (
-                  <CircleDotIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                )}
-                <span className="leading-5">{criterion.text}</span>
+          detail.acceptanceCriteria.map((criterion) => {
+            const verdict = acceptanceCriterionVerdict(criterion, detail.deliveryStatus)
+            const done = verdict ? verdict === "met" : criterion.done
+            return (
+              <div key={criterion.id} className="flex items-start justify-between gap-3 rounded-md border bg-card/70 p-3">
+                <div className="flex min-w-0 items-start gap-2 text-sm">
+                  {done ? (
+                    <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-success" />
+                  ) : (
+                    <CircleDotIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                  )}
+                  <span className="leading-5">{criterion.text}</span>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {verdict ? (
+                    <Badge variant="outline" className={cn("border text-[11px]", toneClass(statusTone("state", verdict)))}>
+                      {stateText(verdict)}
+                    </Badge>
+                  ) : null}
+                  <Badge variant="outline" className="text-[11px]">
+                    {criterion.source}
+                  </Badge>
+                </div>
               </div>
-              <Badge variant="outline" className="shrink-0 text-[11px]">
-                {criterion.source}
-              </Badge>
-            </div>
-          ))
+            )
+          })
         )}
       </div>
     </section>
@@ -1406,16 +1477,8 @@ function ContextSummary({
             <p className="mt-1">{item.route}</p>
           </div>
           <div>
-            <span className="text-xs text-muted-foreground">Owner</span>
-            <p className="mt-1">{item.owner}</p>
-          </div>
-          <div>
             <span className="text-xs text-muted-foreground">Blocker</span>
             <p className="mt-1">{item.blocker}</p>
-          </div>
-          <div>
-            <span className="text-xs text-muted-foreground">Detail source</span>
-            <p className="mt-1">{detail.source}</p>
           </div>
         </div>
       </div>
@@ -1752,7 +1815,7 @@ function ContextPackDetail({
         <div className="rounded-lg border bg-card/70 p-3">
           <span className="text-xs text-muted-foreground">Acceptance</span>
           <p className="mt-1 text-sm font-medium">
-            {detail.acceptanceCriteria.filter((criterion) => criterion.done).length}/{detail.acceptanceCriteria.length}
+            {detail.acceptanceCriteria.filter((criterion) => acceptanceCriterionDone(criterion, detail.deliveryStatus)).length}/{detail.acceptanceCriteria.length}
           </p>
         </div>
         <div className="rounded-lg border bg-card/70 p-3">
@@ -1764,6 +1827,31 @@ function ContextPackDetail({
   )
 }
 
+// Worst-state ordering for the collapsed gate summary line and its tone.
+const gateStateOrder = ["fail", "needs_human_review", "warn", "pending", "pass", "not_applicable"]
+const toneRank: Record<Tone, number> = { success: 0, neutral: 1, warning: 2, danger: 3 }
+
+function gateStateSummary(nextActions: NextActionSummary[]): { label: string; tone: Tone } {
+  const counts = new Map<string, number>()
+  for (const action of nextActions) {
+    counts.set(action.state, (counts.get(action.state) ?? 0) + 1)
+  }
+  const rank = (state: string) => {
+    const index = gateStateOrder.indexOf(state)
+    return index === -1 ? gateStateOrder.length : index
+  }
+  const states = [...counts.keys()].sort((a, b) => rank(a) - rank(b))
+  const label = [
+    `${nextActions.length} ${nextActions.length === 1 ? "gate" : "gates"}`,
+    ...states.map((state) => `${counts.get(state)} ${stateText(state).toLowerCase()}`),
+  ].join(" · ")
+  const tone = states.reduce<Tone>((worst, state) => {
+    const candidate = statusTone("state", state)
+    return toneRank[candidate] > toneRank[worst] ? candidate : worst
+  }, "success")
+  return { label, tone }
+}
+
 function GateActionRows({
   nextActions,
   status,
@@ -1771,6 +1859,9 @@ function GateActionRows({
   nextActions: NextActionSummary[]
   status: "ready" | "loading" | "error"
 }) {
+  const [expanded, setExpanded] = useState(false)
+  const summary = gateStateSummary(nextActions)
+
   return (
     <div className="mt-4 grid gap-2">
       {status === "error" ? (
@@ -1778,20 +1869,55 @@ function GateActionRows({
       ) : nextActions.length === 0 ? (
         <p className="text-sm text-muted-foreground">No next actions recorded.</p>
       ) : (
-        nextActions.map((action) => (
-          <div key={`${action.gate}-${action.state}`} className="rounded-md border bg-card/70 p-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <span className="text-xs font-medium">{gateText(action.gate)}</span>
-              <Badge variant="outline" className={cn("border", toneClass(statusTone("state",action.state)))}>
-                {stateText(action.state)}
-              </Badge>
-            </div>
-            <p className="mt-2 text-sm leading-5 text-muted-foreground">{action.hint}</p>
-          </div>
-        ))
+        <>
+          <button
+            type="button"
+            aria-expanded={expanded}
+            className="flex w-fit items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            onClick={() => setExpanded((current) => !current)}
+          >
+            <ChevronRightIcon className={cn("size-3.5 transition-transform", expanded && "rotate-90")} />
+            <Badge variant="outline" className={cn("border", toneClass(summary.tone))}>
+              {summary.label}
+            </Badge>
+          </button>
+          {expanded
+            ? nextActions.map((action) => (
+                <div
+                  key={`${action.gate}-${action.state}`}
+                  className={cn("rounded-md border bg-card/70 p-3", action.state === "not_applicable" && "opacity-60")}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <span className="text-xs font-medium">{gateText(action.gate)}</span>
+                    <Badge variant="outline" className={cn("border", toneClass(statusTone("state",action.state)))}>
+                      {stateText(action.state)}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-sm leading-5 text-muted-foreground">{action.hint}</p>
+                </div>
+              ))
+            : null}
+        </>
       )}
     </div>
   )
+}
+
+// Registry gate-run history repeats identical rows per refresh; default to the
+// latest run per gate and keep the chronological list behind Show all runs.
+function latestGateRuns(gateRuns: GateRunSummary[]): GateRunSummary[] {
+  const latestByGate = new Map<string, GateRunSummary>()
+  for (const run of gateRuns) {
+    const current = latestByGate.get(run.gate)
+    if (!current) {
+      latestByGate.set(run.gate, run)
+      continue
+    }
+    if (run.createdAt && current.createdAt && new Date(run.createdAt).getTime() > new Date(current.createdAt).getTime()) {
+      latestByGate.set(run.gate, run)
+    }
+  }
+  return [...latestByGate.values()]
 }
 
 function GateRunRows({
@@ -1801,6 +1927,10 @@ function GateRunRows({
   gateRuns: GateRunSummary[]
   status: "ready" | "loading" | "error"
 }) {
+  const [showAllRuns, setShowAllRuns] = useState(false)
+  const latestRuns = latestGateRuns(gateRuns)
+  const visibleRuns = showAllRuns ? gateRuns : latestRuns
+
   return (
     <div className="mt-4 grid gap-2">
       {status === "error" ? (
@@ -1808,21 +1938,34 @@ function GateRunRows({
       ) : gateRuns.length === 0 ? (
         <p className="text-sm text-muted-foreground">No persisted gate runs yet.</p>
       ) : (
-        gateRuns.map((run) => (
-          <div key={run.id} className="rounded-md border bg-card/70 p-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-2">
-                <ClockIcon className="size-4 text-muted-foreground" />
-                <span className="text-xs font-medium">{gateText(run.gate)}</span>
+        <>
+          {visibleRuns.map((run) => (
+            <div key={run.id} className="rounded-md border bg-card/70 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <ClockIcon className="size-4 text-muted-foreground" />
+                  <span className="text-xs font-medium">{gateText(run.gate)}</span>
+                </div>
+                <Badge variant="outline" className={cn("border", toneClass(statusTone("state",run.state)))}>
+                  {stateText(run.state)}
+                </Badge>
               </div>
-              <Badge variant="outline" className={cn("border", toneClass(statusTone("state",run.state)))}>
-                {stateText(run.state)}
-              </Badge>
+              <p className="mt-2 text-sm leading-5 text-muted-foreground">{run.hint}</p>
+              {run.createdAt ? <p className="mt-2 font-mono text-[11px] text-muted-foreground">{formatDateTime(run.createdAt)}</p> : null}
             </div>
-            <p className="mt-2 text-sm leading-5 text-muted-foreground">{run.hint}</p>
-            {run.createdAt ? <p className="mt-2 font-mono text-[11px] text-muted-foreground">{formatDateTime(run.createdAt)}</p> : null}
-          </div>
-        ))
+          ))}
+          {gateRuns.length > latestRuns.length ? (
+            <button
+              type="button"
+              aria-expanded={showAllRuns}
+              className="flex w-fit items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              onClick={() => setShowAllRuns((current) => !current)}
+            >
+              <ChevronRightIcon className={cn("size-3.5 transition-transform", showAllRuns && "rotate-90")} />
+              {showAllRuns ? "Show latest run per gate" : "Show all runs"}
+            </button>
+          ) : null}
+        </>
       )}
     </div>
   )

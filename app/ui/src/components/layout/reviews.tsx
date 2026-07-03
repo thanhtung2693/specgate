@@ -29,13 +29,15 @@ import { type WorkboardView } from "@/data/workboard"
 import { type WorkItem } from "@/data/workspace"
 import { formatDateTime, formatRelativeTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { readableKey, reviewTone, statusTone, toneClass } from "./shared"
+import { isDeliveredWorkItem, readableKey, reviewTone, statusTone, toneClass } from "./shared"
 import { ActionTooltip, MarkdownText, runGovernanceAgentPrompt } from "./shared-ui"
 
 type ReviewFilter = "all" | "needs_changes" | "ready" | "gate_failed"
 
 function reviewItems(workItems: WorkItem[]) {
-  return workItems.filter((item) => item.delivery !== "not_started" || item.gate === "fail")
+  // Delivered items already passed their latest delivery review; they are not
+  // review work and stay out of the queue and its count entirely.
+  return workItems.filter((item) => !isDeliveredWorkItem(item) && (item.delivery !== "not_started" || item.gate === "fail"))
 }
 
 function reviewFilterCount(workItems: WorkItem[], filter: ReviewFilter) {
@@ -79,7 +81,6 @@ function reviewSearchMatches(item: WorkItem, search: string) {
   return [
     item.key,
     item.title,
-    item.owner,
     item.agent,
     item.route,
     reviewLabel(item),
@@ -614,7 +615,9 @@ export function ReviewsPage({ workboard, reviewer }: { workboard: WorkboardView;
       <section className="grid gap-3.5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold">{reviewCount} items need review</h2>
+            <h2 className="text-sm font-semibold">
+              {reviewCount === 1 ? "1 item needs review" : `${reviewCount} items need review`}
+            </h2>
             <p className="mt-1 text-xs text-muted-foreground">Triage delivery verdicts, failed gates, and evidence gaps.</p>
           </div>
         </div>
@@ -635,7 +638,7 @@ export function ReviewsPage({ workboard, reviewer }: { workboard: WorkboardView;
                 aria-label="Search reviews"
                 value={reviewSearch}
                 onChange={(event) => setReviewSearch(event.target.value)}
-                placeholder="Search by work item, owner, reason, or Context Pack"
+                placeholder="Search by work item, reason, or Context Pack"
                 className="pl-8"
               />
             </div>
@@ -715,17 +718,15 @@ export function ReviewsPage({ workboard, reviewer }: { workboard: WorkboardView;
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] table-fixed text-left text-xs md:min-w-full">
               <colgroup>
-                <col className="w-[34%]" />
-                <col className="w-[30%]" />
-                <col className="w-[13%]" />
-                <col className="w-[13%]" />
-                <col className="w-[10%]" />
+                <col className="w-[40%]" />
+                <col className="w-[33%]" />
+                <col className="w-[15%]" />
+                <col className="w-[12%]" />
               </colgroup>
               <thead className="border-b bg-muted/40 text-xs text-muted-foreground">
                 <tr>
                   <th scope="col" className="px-3 py-2 font-medium">Item</th>
                   <th scope="col" className="px-3 py-2 font-medium">Reason</th>
-                  <th scope="col" className="px-3 py-2 font-medium">Owner</th>
                   <th scope="col" className="px-3 py-2 font-medium">Updated</th>
                   <th scope="col" className="px-3 py-2 text-right font-medium">Actions</th>
                 </tr>
@@ -777,7 +778,6 @@ export function ReviewsPage({ workboard, reviewer }: { workboard: WorkboardView;
                     <td className="px-3 py-2 leading-5 text-muted-foreground" title={reviewReason(item)}>
                       <span className="line-clamp-2">{reviewReason(item)}</span>
                     </td>
-                    <td className="truncate px-3 py-2">{item.owner}</td>
                     <td className="truncate px-3 py-2 text-muted-foreground" title={formatDateTime(item.updated)}>
                       {formatRelativeTime(item.updated)}
                     </td>

@@ -119,6 +119,33 @@ const registryWorkItems = [
   },
 ]
 
+// Server-derived delivered phase: latest delivery review passed. Kept out of
+// the default fixture so existing queue counts stay stable.
+const deliveredChangeRequest = {
+  id: "SG-160",
+  key: "SG-160",
+  work_type: "cleanup",
+  title: "Delivered settings polish",
+  intent_md: "Shipped through delivery review.",
+  phase: "delivered",
+  context_pack_artifact_id: "artifact-SG-160",
+  created_by: "Platform",
+  created_at: "2026-06-27T02:00:00Z",
+  updated_at: "2026-06-27T05:40:00Z",
+}
+
+function deliveredRegistryResponse(input: RequestInfo | URL, init?: RequestInit) {
+  const url = String(input)
+  if (url.includes("/workboard/change-requests") && init?.method !== "PATCH") {
+    return Promise.resolve(
+      new Response(JSON.stringify({ items: [...registryWorkItems, deliveredChangeRequest] }), {
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+  }
+  return defaultRegistryResponse(input, init)
+}
+
 function defaultRegistryResponse(input: RequestInfo | URL, init?: RequestInit) {
   const url = String(input)
   if (url.endsWith("/api/v1/workspaces")) {
@@ -1950,6 +1977,206 @@ describe("SpecGate UI shell", () => {
 
     vi.unstubAllGlobals()
     vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
+  })
+
+  it("renders the delivery verdict before gate summary and collapses gate detail in the verification tab", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith("/api/v1/work-items/SG-155/delivery-status?detail=true")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              change_request_id: "SG-155",
+              found: true,
+              verdict: "pass",
+              hint: "All acceptance criteria are satisfied.",
+              reviewed_at: "2026-06-27T05:30:00Z",
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/workboard/change-requests/SG-155/next-actions")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                { gate: "delivery_review", state: "pass", hint: "Delivery review passed." },
+                { gate: "spec_completeness", state: "not_applicable", hint: "Not required for quick work." },
+                { gate: "design_readiness", state: "not_applicable", hint: "Not required for quick work." },
+                { gate: "risk_review", state: "not_applicable", hint: "Not required for quick work." },
+                { gate: "delivery_pack", state: "not_applicable", hint: "Not required for quick work." },
+                { gate: "release_notes", state: "not_applicable", hint: "Not required for quick work." },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/workboard/change-requests/SG-155/gate-runs?limit=10")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                { id: "run-2", gate: "delivery_review", state: "pass", hint: "Latest delivery verdict.", created_at: "2026-06-27T05:30:00Z" },
+                { id: "run-1", gate: "delivery_review", state: "pending", hint: "Waiting on delivery evidence.", created_at: "2026-06-27T05:00:00Z" },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return defaultRegistryResponse(input, init)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/work/SG-155?tab=verification")
+    const user = userEvent.setup()
+
+    const deliveryHeading = await screen.findByText("Delivery review")
+    expect(await screen.findByText(/Current verdict is/)).toBeInTheDocument()
+    const gateHeading = screen.getByText("Gate state")
+    expect(deliveryHeading.compareDocumentPosition(gateHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    const gateSummaryToggle = screen.getByRole("button", { name: "6 gates · 1 passed · 5 not applicable" })
+    expect(gateSummaryToggle).toHaveAttribute("aria-expanded", "false")
+    expect(screen.queryByText("Not required for quick work.")).not.toBeInTheDocument()
+    await user.click(gateSummaryToggle)
+    expect(screen.getAllByText("Not required for quick work.")).toHaveLength(5)
+
+    expect(screen.getByText("Latest delivery verdict.")).toBeInTheDocument()
+    expect(screen.queryByText("Waiting on delivery evidence.")).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Show all runs" }))
+    expect(screen.getByText("Waiting on delivery evidence.")).toBeInTheDocument()
+    expect(screen.getByText("Latest delivery verdict.")).toBeInTheDocument()
+  })
+
+  it("derives acceptance criteria state from the delivery verdict when present", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith("/workboard/change-requests/SG-155/acceptance-criteria")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                { id: "ac-1", text: "Doc registry CI passes", done: false, source: "spec" },
+                { id: "ac-2", text: "Expected misses are quiet", done: false, source: "spec" },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      if (url.endsWith("/api/v1/work-items/SG-155/delivery-status?detail=true")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              change_request_id: "SG-155",
+              found: true,
+              verdict: "needs_changes",
+              per_criterion: [
+                { criterion_id: "ac-1", text: "Doc registry CI passes", verdict: "met", why: "CI evidence is green." },
+                { criterion_id: "ac-2", text: "Expected misses are quiet", verdict: "unmet", why: "Noise remains in logs." },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return defaultRegistryResponse(input, init)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/work/SG-155")
+
+    expect(await screen.findByText("Doc registry CI passes")).toBeInTheDocument()
+    expect(await screen.findByText("1/2")).toBeInTheDocument()
+    expect(screen.getByText("Met")).toBeInTheDocument()
+    expect(screen.getByText("Unmet")).toBeInTheDocument()
+    expect(screen.queryByText("0/2")).not.toBeInTheDocument()
+  })
+
+  it("surfaces delivered work in a dedicated queue chip instead of Needs attention", async () => {
+    vi.stubGlobal("fetch", vi.fn(deliveredRegistryResponse))
+    renderApp("/work")
+    const user = userEvent.setup()
+
+    const deliveredChip = await screen.findByRole("button", { name: /^Delivered1$/ })
+    const allWorkChip = screen.getByRole("button", { name: /^All work/ })
+    expect(deliveredChip.compareDocumentPosition(allWorkChip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByText("Delivered settings polish")).not.toBeInTheDocument()
+
+    await user.click(deliveredChip)
+
+    expect(screen.getAllByText("Delivered settings polish").length).toBeGreaterThan(0)
+    expect(screen.queryByText("Pre-release verification sweep")).not.toBeInTheDocument()
+  })
+
+  it("shows a View verdict action and review-summary prompt for delivered work", async () => {
+    vi.stubGlobal("fetch", vi.fn(deliveredRegistryResponse))
+    renderApp("/work/SG-160")
+    const user = userEvent.setup()
+
+    expect((await screen.findAllByRole("heading", { name: "Delivered settings polish" })).length).toBeGreaterThan(0)
+    expect(screen.queryByRole("button", { name: "View handoff" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Ask about handoff blockers" })).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Ask for review summary" })).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "View verdict" }))
+
+    expect(screen.getByRole("tab", { name: "Verification", selected: true })).toBeInTheDocument()
+    expect(await screen.findByText("Delivery review")).toBeInTheDocument()
+  })
+
+  it("excludes delivered work from the review queue count", async () => {
+    vi.stubGlobal("fetch", vi.fn(deliveredRegistryResponse))
+    renderApp("/reviews")
+
+    expect(await screen.findByText("4 items need review")).toBeInTheDocument()
+    expect(screen.queryByText("Delivered settings polish")).not.toBeInTheDocument()
+  })
+
+  it("pluralizes the review count heading for a single item", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes("/workboard/change-requests") && init?.method !== "PATCH") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ items: [registryWorkItems.find((item) => item.id === "SG-147")] }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return defaultRegistryResponse(input, init)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/reviews")
+
+    expect(await screen.findByText("1 item needs review")).toBeInTheDocument()
+    expect(screen.queryByText(/items need review/)).not.toBeInTheDocument()
+  })
+
+  it("drops the Owner column from the work queue table", async () => {
+    renderApp("/work")
+
+    expect(await screen.findByText("Work queue")).toBeInTheDocument()
+    expect(await screen.findByText("Blocker")).toBeInTheDocument()
+    expect(screen.queryByText("Owner")).not.toBeInTheDocument()
+  })
+
+  it("drops the Owner column from the review queue table", async () => {
+    renderApp("/reviews")
+
+    expect(await screen.findByText("Review queue")).toBeInTheDocument()
+    expect(await screen.findByText("Pre-release verification sweep")).toBeInTheDocument()
+    expect(screen.queryByText("Owner")).not.toBeInTheDocument()
+  })
+
+  it("drops Owner and Detail source from the work context panel", async () => {
+    renderApp("/work/SG-142")
+
+    expect(await screen.findByText("Work context")).toBeInTheDocument()
+    expect(screen.getByText("Blocker")).toBeInTheDocument()
+    expect(screen.queryByText("Owner")).not.toBeInTheDocument()
+    expect(screen.queryByText("Detail source")).not.toBeInTheDocument()
   })
 
   it("renders artifact list and selected artifact detail", async () => {
