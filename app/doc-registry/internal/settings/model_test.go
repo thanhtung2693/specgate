@@ -83,23 +83,6 @@ func TestGovernanceFilesTTLDays_DefaultAndValidation(t *testing.T) {
 	}
 }
 
-func TestValidateGovernanceAutoFeatureSummary(t *testing.T) {
-	t.Parallel()
-	if Defaults[KeyGovernanceAutoFeatureSummary] != "true" {
-		t.Fatalf("default = %q, want true", Defaults[KeyGovernanceAutoFeatureSummary])
-	}
-	for _, ok := range []string{"true", "false"} {
-		if err := validateValue(KeyGovernanceAutoFeatureSummary, ok); err != nil {
-			t.Fatalf("%q should be valid: %v", ok, err)
-		}
-	}
-	for _, bad := range []string{"1", "0", "yes", "TRUE", "", "maybe"} {
-		if err := validateValue(KeyGovernanceAutoFeatureSummary, bad); err == nil {
-			t.Fatalf("%q should be rejected", bad)
-		}
-	}
-}
-
 func TestValidateSpeechToTextSettings(t *testing.T) {
 	t.Parallel()
 	if err := validateValue(KeySpeechToTextProvider, "openai"); err != nil {
@@ -197,7 +180,7 @@ func TestValidatePolicyAndOperationalSettings(t *testing.T) {
 	}
 
 	// Confidence thresholds: float in [0,1].
-	for _, key := range []string{KeyGateConfidenceThreshold, KeyLifecycleConfidenceThreshold} {
+	for _, key := range []string{KeyGateConfidenceThreshold} {
 		for _, ok := range []string{"0", "0.7", "1"} {
 			if err := validateValue(key, ok); err != nil {
 				t.Fatalf("%s=%q should be valid: %v", key, ok, err)

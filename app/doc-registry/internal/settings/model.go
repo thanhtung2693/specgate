@@ -40,10 +40,9 @@ const (
 	KeyEmbeddingModel         = "embedding.model"
 	// Policy thresholds surfaced in the UI "General" tab. The agent reads the
 	// confidence thresholds; the UI reads the day-count thresholds.
-	KeyGateConfidenceThreshold      = "governance.gate_confidence_threshold"
-	KeyLifecycleConfidenceThreshold = "governance.lifecycle_confidence_threshold"
-	KeyFeatureFreshnessSLADays      = "governance.feature_freshness_sla_days"
-	KeyArtifactStaleDays            = "governance.artifact_stale_days"
+	KeyGateConfidenceThreshold = "governance.gate_confidence_threshold"
+	KeyFeatureFreshnessSLADays = "governance.feature_freshness_sla_days"
+	KeyArtifactStaleDays       = "governance.artifact_stale_days"
 	// KeyGovernanceFilesTTLDays controls how long idle ready governance_files rows are
 	// kept before the in-process purger deletes them and their S3 objects.
 	KeyGovernanceFilesTTLDays = "governancefiles.ttl_days"
@@ -51,10 +50,6 @@ const (
 	KeyPublishRetryAttempts    = "governance.publish_retry_attempts"
 	KeyPublishRetryBaseSeconds = "governance.publish_retry_base_seconds"
 	KeyRegistryTimeoutSeconds  = "governance.registry_timeout_seconds"
-	// KeyGovernanceAutoFeatureSummary controls whether the agent automatically
-	// regenerates the persisted feature Overview summary when the canonical
-	// artifact changes. "true" / "false".
-	KeyGovernanceAutoFeatureSummary = "governance.auto_feature_summary"
 	// KeyGovernanceAutoArchiveOnDeliveryPass controls whether a passing
 	// delivery_review gate run archives the ChangeRequest automatically.
 	KeyGovernanceAutoArchiveOnDeliveryPass = "governance.auto_archive_on_delivery_pass"
@@ -135,13 +130,11 @@ var AllKeys = []string{
 	KeyEmbeddingModelProvider,
 	KeyEmbeddingModel,
 	KeyGateConfidenceThreshold,
-	KeyLifecycleConfidenceThreshold,
 	KeyFeatureFreshnessSLADays,
 	KeyArtifactStaleDays,
 	KeyPublishRetryAttempts,
 	KeyPublishRetryBaseSeconds,
 	KeyRegistryTimeoutSeconds,
-	KeyGovernanceAutoFeatureSummary,
 	KeyGovernanceAutoArchiveOnDeliveryPass,
 	KeyGovernanceDefaultThinkingLevel,
 	KeyGovernanceFilesTTLDays,
@@ -168,13 +161,11 @@ var Defaults = map[string]string{
 	KeyEmbeddingModel:         "",
 	// Defaults mirror the in-code constants these settings replace.
 	KeyGateConfidenceThreshold:             "0.7",
-	KeyLifecycleConfidenceThreshold:        "0.7",
 	KeyFeatureFreshnessSLADays:             "7",
 	KeyArtifactStaleDays:                   "5",
 	KeyPublishRetryAttempts:                "3",
 	KeyPublishRetryBaseSeconds:             "0.5",
 	KeyRegistryTimeoutSeconds:              "30",
-	KeyGovernanceAutoFeatureSummary:        "true",
 	KeyGovernanceAutoArchiveOnDeliveryPass: "false",
 	KeyGovernanceDefaultThinkingLevel:      "low",
 	KeyGovernanceFilesTTLDays:              "90",
@@ -213,7 +204,7 @@ func validateValue(key, value string) error {
 		if _, err := strconv.ParseBool(value); err != nil {
 			return fmt.Errorf("must be true or false")
 		}
-	case KeyGovernanceAutoFeatureSummary, KeyGovernanceAutoArchiveOnDeliveryPass:
+	case KeyGovernanceAutoArchiveOnDeliveryPass:
 		if value != "true" && value != "false" {
 			return fmt.Errorf("must be true or false")
 		}
@@ -259,7 +250,7 @@ func validateValue(key, value string) error {
 		if _, ok := supportedSpeechToTextModels[value]; !ok {
 			return fmt.Errorf("must be a supported speech-to-text model")
 		}
-	case KeyGateConfidenceThreshold, KeyLifecycleConfidenceThreshold:
+	case KeyGateConfidenceThreshold:
 		f, err := strconv.ParseFloat(value, 64)
 		if err != nil || f < 0 || f > 1 {
 			return fmt.Errorf("must be a number between 0 and 1")
