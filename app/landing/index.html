@@ -178,9 +178,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
+      rel="preload"
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
+      as="style"
+      onload="this.onload=null;this.rel='stylesheet'"
     />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -221,7 +229,7 @@
         <a href="#faq">FAQ</a>
       </nav>
       <div class="nav-actions">
-        <button class="theme-toggle" type="button" aria-label="Switch color theme" aria-pressed="false">
+        <button class="theme-toggle" type="button" aria-label="Light theme" aria-pressed="false">
           <span class="theme-dot" aria-hidden="true"></span>
           <span class="theme-label">Light</span>
         </button>
@@ -347,7 +355,7 @@
               <span></span><span></span><span></span>
               <span class="term-title mono" data-cast-title>specgate / your shell</span>
             </div>
-            <pre class="term-body mono" data-cast-body role="tabpanel" aria-live="polite"></pre>
+            <pre class="term-body mono" id="cast-panel" data-cast-body role="tabpanel" aria-live="polite"></pre>
           </div>
           <ol class="cast-segments" role="tablist" aria-label="Feature demos" data-cast-segments></ol>
           <p class="cast-caption" data-cast-caption><b>Drive it from your shell.</b> <span>list ready work, pull the governed pack, report evidence, and read the verdict.</span></p>

@@ -13,7 +13,7 @@
   --ink: #f7f8f8;
   --ink-muted: #d0d6e0;
   --ink-subtle: #8a8f98;
-  --ink-faint: #62666d;
+  --ink-faint: #7d838d;
   --canvas: #010102;
   --surface-1: #0f1011;
   --surface-2: #141516;
@@ -47,7 +47,7 @@ html[data-theme="light"] {
   --ink: #111216;
   --ink-muted: #3f434b;
   --ink-subtle: #6b707b;
-  --ink-faint: #8e94a0;
+  --ink-faint: #5f6670;
   --canvas: #f7f8fb;
   --surface-1: #ffffff;
   --surface-2: #f1f3f8;
@@ -1480,7 +1480,7 @@ h3 {
   background: color-mix(in srgb, var(--surface-1) 74%, transparent);
 }
 .wm-group-muted {
-  opacity: 0.78;
+  border-color: var(--hairline);
 }
 .wm-group-title {
   margin: 0 0 0.9rem;

@@ -6,9 +6,11 @@ const themeToggle = document.querySelector(".theme-toggle");
 function paintToggle(theme) {
   if (!themeToggle) return;
   const isLight = theme === "light";
+  const nextLabel = isLight ? "Dark" : "Light";
   themeToggle.setAttribute("aria-pressed", String(isLight));
+  themeToggle.setAttribute("aria-label", `${nextLabel} theme`);
   const label = themeToggle.querySelector(".theme-label");
-  if (label) label.textContent = isLight ? "Dark" : "Light";
+  if (label) label.textContent = nextLabel;
 }
 
 paintToggle(document.documentElement.dataset.theme || "dark");
@@ -236,11 +238,14 @@ if (spyTargets.length) {
       const item = document.createElement("li");
       const button = document.createElement("button");
       const fill = document.createElement("span");
+      item.setAttribute("role", "presentation");
+      button.id = `cast-tab-${i}`;
       button.type = "button";
       button.role = "tab";
       button.dataset.i = String(i);
       button.setAttribute("aria-selected", String(i === 0));
       button.setAttribute("aria-label", segmentLabels[i] || `Demo ${i + 1}`);
+      button.setAttribute("aria-controls", "cast-panel");
       fill.className = "seg-fill";
       button.appendChild(fill);
       item.appendChild(button);
@@ -253,6 +258,8 @@ if (spyTargets.length) {
   const body = root.querySelector("[data-cast-body]");
   const capEl = root.querySelector("[data-cast-caption]");
   const N = CASTS.length;
+  body.setAttribute("aria-labelledby", "cast-tab-0");
+  segs.forEach((b, i) => b.setAttribute("tabindex", i === 0 ? "0" : "-1"));
 
   let timers = [];
   let raf = 0;
@@ -289,6 +296,7 @@ if (spyTargets.length) {
   function setActive(idx) {
     const cap = CASTS[idx].cap;
     titleEl.textContent = CASTS[idx].title;
+    body.setAttribute("aria-labelledby", `cast-tab-${idx}`);
     capEl.style.opacity = "0";
     timers.push(
       setTimeout(() => {
@@ -302,6 +310,7 @@ if (spyTargets.length) {
     );
     segs.forEach((b, i) => {
       b.setAttribute("aria-selected", String(i === idx));
+      b.setAttribute("tabindex", i === idx ? "0" : "-1");
       b.dataset.done = i < idx ? "1" : "0";
       const f = b.querySelector(".seg-fill");
       f.style.transition = "none";

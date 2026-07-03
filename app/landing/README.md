@@ -46,6 +46,13 @@ profile, and handed off as a pinned Context Pack. Avoid copy that implies
 SpecGate magically understands every document or replaces the IDE, tracker, or
 repository.
 
+Keep Lighthouse fixes grounded in the public page instead of browser extension
+noise. Accessibility-critical controls should keep visible labels aligned with
+accessible names, generated carousel tabs should preserve valid tablist roles,
+and muted microcopy colors should maintain at least 4.5:1 contrast in both
+themes. The remote font stylesheet is loaded with `preload` plus a `noscript`
+fallback so custom fonts do not block first render.
+
 ## Checks
 
 From the repository root:

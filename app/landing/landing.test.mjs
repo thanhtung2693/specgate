@@ -8,6 +8,28 @@ const css = readFileSync(new URL("styles.css", here), "utf8");
 const js = readFileSync(new URL("script.js", here), "utf8");
 const sitemap = readFileSync(new URL("sitemap.xml", here), "utf8");
 
+function cssBlock(selector) {
+  return css.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{(?<body>[\\s\\S]*?)\\n\\}`))?.groups?.body ?? "";
+}
+
+function cssVar(block, name) {
+  return block.match(new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})`))?.[1] ?? "";
+}
+
+function relativeLuminance(hex) {
+  const [r, g, b] = hex.match(/\w\w/g).map((part) => {
+    const channel = Number.parseInt(part, 16) / 255;
+    return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function contrastRatio(foreground, background) {
+  const lighter = Math.max(relativeLuminance(foreground), relativeLuminance(background));
+  const darker = Math.min(relativeLuminance(foreground), relativeLuminance(background));
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 test("navigation order matches the visible section order", () => {
   const navHtml = html.match(/<nav class="nav-links"[\s\S]*?<\/nav>/)?.[0] ?? "";
   const navOrder = [...navHtml.matchAll(/<a href="#([^"]+)">/g)]
@@ -37,6 +59,37 @@ test("carousel builds one segment per demo and keeps autoplay running", () => {
   assert.match(carouselScript, /"Stats"/);
   assert.doesNotMatch(carouselScript, /mouseenter/);
   assert.doesNotMatch(carouselScript, /mouseleave/);
+});
+
+test("interactive landing controls keep accessible names and roles valid", () => {
+  assert.match(html, /<button class="theme-toggle" type="button" aria-label="Light theme" aria-pressed="false">/);
+  assert.match(html, /<pre class="term-body mono" id="cast-panel" data-cast-body role="tabpanel"/);
+  assert.match(js, /themeToggle\.setAttribute\("aria-label", `\$\{nextLabel\} theme`\)/);
+  assert.match(js, /item\.setAttribute\("role", "presentation"\)/);
+  assert.match(js, /button\.id = `cast-tab-\$\{i\}`/);
+  assert.match(js, /button\.setAttribute\("aria-controls", "cast-panel"\)/);
+  assert.match(js, /body\.setAttribute\("aria-labelledby", "cast-tab-0"\)/);
+  assert.match(js, /body\.setAttribute\("aria-labelledby", `cast-tab-\$\{idx\}`\)/);
+});
+
+test("small muted text colors meet contrast requirements in both themes", () => {
+  const root = cssBlock(":root");
+  const light = cssBlock('html[data-theme="light"]');
+  const darkCanvas = cssVar(root, "--canvas");
+  const darkSurface = "#090a0b";
+  const lightCanvas = cssVar(light, "--canvas");
+
+  assert.ok(contrastRatio(cssVar(root, "--ink-faint"), darkCanvas) >= 4.5);
+  assert.ok(contrastRatio(cssVar(root, "--ink-faint"), darkSurface) >= 4.5);
+  assert.ok(contrastRatio(cssVar(light, "--ink-faint"), lightCanvas) >= 4.5);
+  assert.doesNotMatch(css, /\.wm-group-muted\s*\{[^}]*opacity:/s);
+});
+
+test("remote font stylesheet is deferred to avoid blocking first render", () => {
+  assert.match(html, /<link\s+rel="preload"\s+href="https:\/\/fonts\.googleapis\.com\/css2\?/);
+  assert.match(html, /as="style"/);
+  assert.match(html, /onload="this\.onload=null;this\.rel='stylesheet'"/);
+  assert.match(html, /<noscript>\s*<link[\s\S]*href="https:\/\/fonts\.googleapis\.com\/css2\?[\s\S]*rel="stylesheet"\s*\/>\s*<\/noscript>/);
 });
 
 test("navbar GitHub action includes a recognizable icon", () => {
