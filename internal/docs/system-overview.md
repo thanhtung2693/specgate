@@ -28,8 +28,8 @@ It does not generate specs or execute code. IDE agents own creation and executio
 6. The IDE agent pulls the approved Context Pack via the `specgate` CLI and begins building.
 7. During implementation the agent reports ambiguities, deviations, and completion evidence via the `specgate` CLI.
 8. Git webhooks (PR/MR merged, CI results) and tracker webhooks arrive independently.
-9. SpecGate compares delivery evidence against the approved spec and drafts artifact-update proposals.
-10. A human reviews and approves the proposals — keeping the canonical spec current.
+9. SpecGate's delivery review judges the reported evidence against each acceptance criterion and records a verdict; failed criteria carry into the next Context Pack.
+10. When the canonical spec needs updating, someone opens an artifact-update proposal (a reviewer requesting changes, a manual edit, or an agent via `draft_artifact_update`); a human approves it, and approval materializes the new version.
 
 ## What is fixed vs flexible
 
@@ -56,8 +56,8 @@ Profiles are keyed by change-type, not by authoring tool. The `source` field (Op
 **Generative model (governance compute — in agents):**
 - Readiness gates — 6 judges + completeness check (locate the minimum executable contract)
 - Delivery review — verify acceptance criteria against implementation evidence
-- Reconciliation — draft artifact-update proposals from delivery feedback
-- Intake classifier — route full vs. quick ceremony
+- Route classifier — route full vs. quick ceremony
+- Context Pack and quick work-item compilation
 
 **Embeddings model (in doc-registry):**
 - Knowledge search — surface relevant documents during review and handoff

@@ -95,13 +95,10 @@ specgate plugins doctor --project-local
 
 The focused skills are:
 
-- `using-specgate`
-- `setting-up-specgate-project`
-- `checking-spec-readiness`
-- `shaping-work`
-- `picking-up-work`
-- `implementing-work`
-- `completing-delivery`
+- `using-specgate` — the router that points at the right phase skill
+- `setting-up-specgate-project` — discover a repo's governance conventions
+- `preparing-work` — shape and publish work, then check readiness for handoff
+- `delivering-work` — pick up an approved pack, implement, and report delivery evidence
 
 ## Refresh an existing install
 
