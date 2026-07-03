@@ -244,11 +244,13 @@ func (r *Repository) ListReadinessRuns(ctx context.Context, artifactID string, l
 	if limit > 500 {
 		limit = 500
 	}
+	// History shows every executor with its origin (transparency); the
+	// approval aggregate stays platform-only in latestReadinessAggregate.
 	var runs []workboard.GateRun
 	err := r.db.WithContext(ctx).
 		Where(
-			"subject_kind = ? AND subject_id = ? AND executor = ?",
-			workboard.GateRunSubjectArtifact, artifactID, workboard.GateRunExecutorPlatform,
+			"subject_kind = ? AND subject_id = ?",
+			workboard.GateRunSubjectArtifact, artifactID,
 		).
 		Order("created_at DESC").
 		Limit(limit).
@@ -264,6 +266,7 @@ func (r *Repository) ListReadinessRuns(ctx context.Context, artifactID string, l
 			Gate:         run.Gate,
 			State:        artifact.ReadinessState(run.State),
 			Hint:         run.Hint,
+			Executor:     run.Executor,
 			EvidenceJSON: run.EvidenceJSON,
 			CreatedAt:    run.CreatedAt,
 		}

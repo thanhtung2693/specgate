@@ -105,9 +105,12 @@ distinguished in the stored record. Delivery review falls back to mapping the
 agent's own per-criterion claims, and the stored review names its origin as
 agent-attested rather than an LLM judge.
 
-One caveat: the trust marking is currently per-path — an explicit trust field
-on gate-task results, the judge name on delivery reviews — not yet a single
-uniform field across every surface.
+Gate runs and artifact readiness history expose the evaluator as a
+first-class `executor` field (`platform` or `ide_agent`), and agent-attested
+runs appear in the history labeled as such; the platform-only filter applies
+to the approval aggregate, not to what you can see. One remaining caveat:
+delivery reviews mark their origin through the judge name rather than the
+same field.
 
 ## Profiles decide which gates run
 

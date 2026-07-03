@@ -146,18 +146,28 @@ func TestGateRunsFoldFromLegacyTables(t *testing.T) {
 			t.Fatalf("folded workboard run mismatch: %+v", crRuns)
 		}
 
-		// Readiness row: artifact subject, platform executor; the ide_agent
-		// result row for the same artifact must not leak into the readiness list.
+		// Readiness history shows every executor with its origin: the folded
+		// platform row AND the ide_agent gate-task result, each labeled. (The
+		// approval aggregate stays platform-only in latestReadinessAggregate.)
 		artRepo := NewRepository(gdb)
 		readiness, err := artRepo.ListReadinessRuns(ctx, artID, 10)
 		if err != nil {
 			t.Fatalf("ListReadinessRuns: %v", err)
 		}
-		if len(readiness) != 1 || readiness[0].ID != "arr-1" {
+		executorByID := map[string]string{}
+		for _, row := range readiness {
+			executorByID[row.ID] = row.Executor
+		}
+		if len(readiness) != 2 || executorByID["arr-1"] != "platform" {
 			t.Fatalf("folded readiness rows mismatch: %+v", readiness)
 		}
-		if readiness[0].EvidenceJSON != "free text evidence" {
-			t.Fatalf("readiness evidence_json = %q, want free text preserved", readiness[0].EvidenceJSON)
+		if executorByID[task.ID] != "ide_agent" {
+			t.Fatalf("agent-attested run missing executor label: %+v", readiness)
+		}
+		for _, row := range readiness {
+			if row.ID == "arr-1" && row.EvidenceJSON != "free text evidence" {
+				t.Fatalf("readiness evidence_json = %q, want free text preserved", row.EvidenceJSON)
+			}
 		}
 
 		// Gate result row: keyed by task id so the task no longer lists as pending.

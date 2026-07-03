@@ -206,13 +206,16 @@ type ReadinessEvaluation struct {
 // table (subject_kind = "artifact"; see internal/workboard.GateRun and the
 // storage repository conversion, per spec §3.2).
 type ReadinessRun struct {
-	ID           string         `json:"id"`
-	ArtifactID   string         `json:"artifact_id"`
-	Gate         string         `json:"gate"`
-	State        ReadinessState `json:"state"`
-	Hint         string         `json:"hint"`
-	EvidenceJSON string         `json:"evidence_json,omitempty"`
-	CreatedAt    time.Time      `json:"created_at"`
+	ID         string         `json:"id"`
+	ArtifactID string         `json:"artifact_id"`
+	Gate       string         `json:"gate"`
+	State      ReadinessState `json:"state"`
+	Hint       string         `json:"hint"`
+	// Executor records who evaluated the run: "platform" or "ide_agent"
+	// (agent-attested). First-class so history can show trust origin.
+	Executor     string    `json:"executor,omitempty"`
+	EvidenceJSON string    `json:"evidence_json,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // FixedKeyToRole maps a fixed file key string to a document Role. Used by the

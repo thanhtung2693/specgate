@@ -278,7 +278,7 @@ type GateRun struct {
 	Gate         string          `gorm:"column:gate;not null" json:"gate"`
 	State        NextActionState `gorm:"column:state;not null" json:"state"`
 	Hint         string          `gorm:"column:hint;not null" json:"hint"`
-	Executor     string          `gorm:"column:executor;not null" json:"-"`
+	Executor     string          `gorm:"column:executor;not null" json:"executor"`
 	ProposalRef  string          `gorm:"column:proposal_ref" json:"proposal_ref,omitempty"`
 	EvidenceJSON string          `gorm:"column:evidence_json;not null;default:'{}'" json:"evidence_json,omitempty"`
 	CreatedAt    time.Time       `gorm:"column:created_at;not null;index:idx_gate_runs_subject_created,sort:desc" json:"created_at"`
