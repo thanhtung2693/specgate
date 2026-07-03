@@ -7,7 +7,7 @@ SpecGate is a monorepo with three modules brought up together by Docker Compose.
 | Module | Stack | Role |
 |---|---|---|
 | `app/doc-registry/` | Go, Postgres | Artifact storage, versioning, lifecycle, MCP + REST API |
-| `app/agents/` | Python, LangGraph | Governance compute — gates, delivery review, reconciliation |
+| `app/agents/` | Python, LangGraph | Governance compute — gates, delivery review, governance chat |
 | `app/ui/` | Vite + React + TypeScript | Operator console |
 
 ### app/doc-registry
@@ -16,11 +16,11 @@ The governance gateway and durable store. Handles artifact versioning and lifecy
 
 ### app/agents
 
-Headless HTTP service and LangGraph graph. Exposes a single governance-chat graph (one node, system model, governance ops as tools) plus FastAPI routes for: readiness gates (6 LLM judges + completeness check), delivery review, reconciliation / artifact-patch proposals, intent classifier, lifecycle suggestions, feature summaries. No sub-agents, no HITL, no drafting.
+Headless HTTP service and LangGraph graph. Exposes a single governance-chat graph (one node, system model, governance ops as tools) plus FastAPI routes for: readiness gates (LLM judges + completeness check, honoring the artifact's profile snapshot), delivery review, route classification, Context Pack generation, quick work-item creation, and thread-title classification. No sub-agents, no HITL, no drafting.
 
 ### app/ui
 
-Operator console (experimental, source-build surface). Work board, reviews (delivery verdicts, gate failures, artifact-update proposals), artifact browser, advisory governance chat, and settings (server-side + embedding model, integrations, skills, governance profiles, knowledge). Authoring and implementation stay CLI-first.
+Operator console (experimental, source-build surface). Work board, reviews (delivery verdicts, gate failures, artifact-update proposals with approve/reject), artifact browser with gate transparency (catalog descriptions, evidence disclosure), advisory governance chat, and settings (general, models, governance skills + policy catalog, plugins, integrations). Authoring and implementation stay CLI-first.
 
 ## Boundaries
 
@@ -32,7 +32,7 @@ Operator console (experimental, source-build surface). Work board, reviews (deli
 ## Data flow
 
 ```
-IDE agent  ──CLI publish──►  doc-registry  ──version + gate trigger──►  agents
+IDE agent  ──CLI publish──►  doc-registry  ──readiness (on demand)──►  agents
                                    │
                          human review + approve
                                    │
@@ -40,10 +40,16 @@ IDE agent  ──CLI publish──►  doc-registry  ──version + gate trigge
                                    │
 IDE agent  ◄──CLI context──────────┘
 
-IDE agent  ──build──►  git/tracker  ──webhooks──►  doc-registry  ──reconcile──►  agents
-                                                                                      │
-                                                                         proposal ──► UI ──► human review
+IDE agent  ──CLI delivery report/submit──►  doc-registry  ──delivery review──►  agents
+                                                  │                               │
+git/tracker  ──webhooks: status mirror +──────────┘                    verdict ──►│
+              corroborating evidence                                              │
+                                              human reads verdict (UI/CLI) ◄──────┘
 ```
+
+Delivery review verdicts and gate runs persist with evaluator origin
+(`platform` or `ide_agent`); a failed verdict carries its outstanding criteria
+into the next Context Pack.
 
 ## Shared conventions
 
