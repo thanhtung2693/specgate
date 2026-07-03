@@ -36,6 +36,8 @@ specgate status
   approved documents become coding-agent context.
 - [Governance and gates](concepts/governance-and-gates.md) — policy,
   readiness, delivery review, and evidence.
+- [How verification works](concepts/verification.md) — what context the
+  checkers receive, how verdicts are derived, and the honest limits.
 
 ### Complete a task
 
@@ -43,6 +45,8 @@ specgate status
 - [Use the SpecGate CLI](guides/cli-workflow.md)
 - [Use SpecGate with a coding agent](guides/coding-agent-workflow.md)
 - [Configure models](guides/configure-models.md)
+- [Respond to gate failures](guides/respond-to-gate-failures.md)
+- [Customize governance](guides/customize-governance.md)
 - [Connect delivery integrations](guides/connect-integrations.md)
 - [Operate SpecGate](guides/operate-specgate.md)
 - [Contributor setup](guides/contributor-setup.md)
@@ -52,6 +56,7 @@ specgate status
 - [CLI reference](reference/cli.md)
 - [Configuration reference](reference/configuration.md)
 - [Governance reference](reference/governance.md)
+- [Gate catalog](reference/gates.md)
 - [Evidence reference](reference/evidence.md)
 - [Glossary](reference/glossary.md)
 - [Contracts](contracts.md)

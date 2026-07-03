@@ -181,31 +181,15 @@ Delivery-relevant ACs retain:
 Changing AC text or verification changes its digest. Older evidence becomes
 stale for the new content.
 
-## Corpus and outcomes
-
-Benchmark corpus entries pair a gate version and input snapshot with an expected
-verdict. They help evaluate gate changes.
-
-Outcome feedback records downstream signals such as:
-
-- human overrides;
-- rejected evidence;
-- post-merge rollbacks;
-- escaped defects.
-
-Policy health aggregates these signals for calibration. It does not
-automatically rewrite policy.
-
 ## Conformance fixtures
 
-Maintainers can use:
-
-- [policy resolution cases](../conformance/governance-policy-v1/resolution-cases.json);
-- [gate definition cases](../conformance/governance-policy-v1/gate-definition-cases.json);
-- [policy merge cases](../conformance/governance-policy-v1/policy-merge-cases.json);
-- [gate result cases](../conformance/governance-policy-v1/gate-result-validation-cases.json).
+Maintainers can use
+[policy resolution cases](../conformance/governance-policy-v1/resolution-cases.json),
+exercised by the profile-resolution tests.
 
 ## Related
 
+- [Gate catalog](gates.md)
 - [Governance and gates](../concepts/governance-and-gates.md)
+- [How verification works](../concepts/verification.md)
 - [Evidence reference](evidence.md)

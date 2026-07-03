@@ -80,6 +80,8 @@ evidence for that decision.
 
 ## Related
 
+- [How verification works](verification.md) - what context the checkers
+  receive and how verdicts are derived
 - [Governance reference](../reference/governance.md)
 - [Evidence reference](../reference/evidence.md)
 - [Artifacts and Context Packs](artifacts-and-context-packs.md)
