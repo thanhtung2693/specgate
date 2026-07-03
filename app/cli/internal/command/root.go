@@ -249,6 +249,7 @@ func assignRootCommandGroups(root *cobra.Command) {
 		"model":        commandGroupSetup,
 		"open":         commandGroupSetup,
 		"plugins":      commandGroupSetup,
+		"uninstall":    commandGroupSetup,
 		"skill":        commandGroupSetup,
 		"update":       commandGroupSetup,
 		"user":         commandGroupSetup,

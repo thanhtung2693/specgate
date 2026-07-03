@@ -18,6 +18,7 @@ import (
 	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/deploy"
+	"github.com/specgate/specgate/app/cli/internal/interactive"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
@@ -43,11 +44,13 @@ type progressEvent struct {
 }
 
 func registerSystemCommands(root *cobra.Command, deps *Deps) {
+	root.AddCommand(newVersionCmd(deps))
 	root.AddCommand(newStatusCmd(deps))
 	root.AddCommand(newDoctorCmd(deps))
 	root.AddCommand(newOpenCmd(deps))
 	root.AddCommand(newConfigCmd(deps))
 	root.AddCommand(newUpdateCmd(deps))
+	root.AddCommand(newUninstallCmd(deps))
 	root.AddCommand(newInitCmd(deps))
 	root.AddCommand(newUpCmd(deps))
 	root.AddCommand(newDownCmd(deps))
@@ -121,7 +124,7 @@ func shouldCheckCLIUpdate(cmd *cobra.Command) bool {
 		return false
 	}
 	switch args[0] {
-	case "config", "completion", "down", "help", "init", "local-status", "update", "up":
+	case "config", "completion", "down", "help", "init", "local-status", "uninstall", "update", "up", "version":
 		return false
 	default:
 		return true
@@ -143,6 +146,16 @@ func normalizeVersion(v string) string {
 	v = strings.TrimPrefix(v, "specgate ")
 	v = strings.TrimPrefix(v, "v")
 	return v
+}
+
+func newVersionCmd(deps *Deps) *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print the CLI version",
+		Run: func(*cobra.Command, []string) {
+			fmt.Fprintf(deps.Stdout, "specgate %s\n", buildinfo.Version)
+		},
+	}
 }
 
 // specgate status
@@ -621,6 +634,12 @@ func newInitCmd(deps *Deps) *cobra.Command {
 				}
 				installPlugins = confirmed
 			}
+			if installPlugins {
+				if err := resolvePluginAgentPrompt(cmd, deps, &pluginAgentList, "Select IDE plugins", "plugin-agent"); err != nil {
+					code := deps.Printer.Error("init", output.ErrorPayload{Code: "validation_failed", Message: err.Error()})
+					return &output.ExitError{Code: code, Err: err}
+				}
+			}
 
 			var pluginResult *pluginInstallResult
 			if installPlugins {
@@ -675,7 +694,7 @@ func newInitCmd(deps *Deps) *cobra.Command {
 	f.BoolVar(&noSeed, "no-seed", false, "Skip seeding demo data")
 	f.StringVar(&bundleVersion, "bundle-version", "", "Compose bundle release to download (default: this CLI's version)")
 	f.BoolVar(&installPlugins, "install-plugins", false, "Install Codex, Claude Code, and Cursor plugin files after startup")
-	f.StringVar(&pluginAgentList, "plugin-agent", "all", "IDE plugin target for --install-plugins: cursor, codex, claude, all, or comma-separated subset")
+	f.StringVar(&pluginAgentList, "plugin-agent", "", "IDE plugin target for --install-plugins: cursor, codex, claude, all, or comma-separated subset (prompts interactively if omitted)")
 	cmd.MarkFlagsMutuallyExclusive("seed", "no-seed")
 	return cmd
 }
@@ -809,6 +828,139 @@ func newDownCmd(deps *Deps) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&deployDir, "dir", "", "Deployment directory (overrides config)")
 	return cmd
+}
+
+type uninstallResult struct {
+	Dir            string   `json:"dir"`
+	StoppedStack   bool     `json:"stopped_stack"`
+	PurgedData     bool     `json:"purged_data"`
+	RemovedConfig  bool     `json:"removed_config"`
+	RemovedPlugins int      `json:"removed_plugins"`
+	RemovedPaths   []string `json:"removed_paths"`
+	KeptData       bool     `json:"kept_data"`
+}
+
+// specgate uninstall
+func newUninstallCmd(deps *Deps) *cobra.Command {
+	var (
+		deployDir     string
+		purgeData     bool
+		removePlugins = true
+	)
+	cmd := &cobra.Command{
+		Use:   "uninstall",
+		Short: "Remove local SpecGate setup from this user account",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			dir := deployDir
+			if dir == "" {
+				dir = resolveDeployDir(deps)
+			}
+			if !deps.NoInput && !cmd.Flags().Changed("purge-data") {
+				choices, err := deps.Prompter.MultiSelect("Remove SpecGate setup", []interactive.Option{
+					{Label: "IDE plugin files", Value: "plugins"},
+					{Label: "Local data (Docker volumes and deployment directory)", Value: "data"},
+				}, []string{"plugins"})
+				if err != nil {
+					return err
+				}
+				removePlugins = containsChoice(choices, "plugins")
+				purgeData = containsChoice(choices, "data")
+			}
+			if purgeData && !deps.Yes {
+				if deps.NoInput {
+					err := fmt.Errorf("--purge-data permanently removes the deployment directory; pass --yes to confirm")
+					code := deps.Printer.Error("uninstall", output.ErrorPayload{Code: "validation_failed", Message: err.Error()})
+					return &output.ExitError{Code: code, Err: err}
+				}
+			}
+
+			result := uninstallResult{Dir: dir, PurgedData: purgeData, KeptData: !purgeData, RemovedPaths: []string{}}
+			if _, err := os.Stat(filepath.Join(dir, "compose.yml")); err == nil {
+				svc := makeDeployService(deps, dir)
+				var downErr error
+				if purgeData {
+					downErr = svc.DownWithVolumes(cmd.Context())
+				} else {
+					downErr = svc.Down(cmd.Context())
+				}
+				if downErr != nil {
+					code := deps.Printer.Error("uninstall", output.ErrorPayload{Code: "unavailable", Message: downErr.Error()})
+					return &output.ExitError{Code: code, Err: downErr}
+				}
+				result.StoppedStack = true
+			}
+			if purgeData {
+				if removed, err := removePathIfExists(dir); err != nil {
+					code := deps.Printer.Error("uninstall", output.ErrorPayload{Code: "unavailable", Message: err.Error()})
+					return &output.ExitError{Code: code, Err: err}
+				} else if removed {
+					result.RemovedPaths = append(result.RemovedPaths, dir)
+				}
+			}
+			if removePlugins {
+				removed, paths, err := removeSpecGatePluginFiles()
+				if err != nil {
+					code := deps.Printer.Error("uninstall", output.ErrorPayload{Code: "unavailable", Message: err.Error()})
+					return &output.ExitError{Code: code, Err: err}
+				}
+				result.RemovedPlugins = removed
+				result.RemovedPaths = append(result.RemovedPaths, paths...)
+			}
+			configRemoved, err := removeConfigFile(deps)
+			if err != nil {
+				code := deps.Printer.Error("uninstall", output.ErrorPayload{Code: "unavailable", Message: err.Error()})
+				return &output.ExitError{Code: code, Err: err}
+			}
+			result.RemovedConfig = configRemoved
+			if configRemoved {
+				if path, err := configPathForDeps(deps); err == nil {
+					result.RemovedPaths = append(result.RemovedPaths, path)
+				}
+			}
+
+			if deps.Printer.Mode() == output.ModeJSON {
+				deps.Printer.Success("uninstall", result)
+				return nil
+			}
+			fmt.Fprintln(deps.Stdout, "SpecGate user setup removed.")
+			if result.StoppedStack {
+				fmt.Fprintln(deps.Stdout, "Stack stopped.")
+			}
+			if result.KeptData {
+				fmt.Fprintf(deps.Stdout, "Local data kept in %s. Re-run with --purge-data --yes to remove it.\n", dir)
+			} else {
+				fmt.Fprintf(deps.Stdout, "Local data removed from %s.\n", dir)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&deployDir, "dir", "", "Deployment directory (default: saved deployment dir or ~/.specgate)")
+	cmd.Flags().BoolVar(&purgeData, "purge-data", false, "Remove Docker volumes and the deployment directory")
+	return cmd
+}
+
+func containsChoice(values []string, needle string) bool {
+	for _, value := range values {
+		if value == needle {
+			return true
+		}
+	}
+	return false
+}
+
+func removeConfigFile(deps *Deps) (bool, error) {
+	path, err := configPathForDeps(deps)
+	if err != nil {
+		return false, err
+	}
+	return removePathIfExists(path)
+}
+
+func configPathForDeps(deps *Deps) (string, error) {
+	if deps.ConfigPath != "" {
+		return deps.ConfigPath, nil
+	}
+	return config.DefaultPath()
 }
 
 // specgate local-status

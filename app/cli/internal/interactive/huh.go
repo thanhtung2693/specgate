@@ -21,6 +21,24 @@ func (h *HuhPrompter) Select(title string, options []Option) (string, error) {
 	return h.selectFromOptions(title, "", options, false)
 }
 
+func (h *HuhPrompter) MultiSelect(title string, options []Option, defaults []string) ([]string, error) {
+	huhopts := make([]huh.Option[string], len(options))
+	for i, o := range options {
+		huhopts[i] = huh.NewOption(o.Label, o.Value)
+	}
+	selected := append([]string(nil), defaults...)
+	f := huh.NewForm(huh.NewGroup(
+		huh.NewMultiSelect[string]().
+			Title(title).
+			Options(huhopts...).
+			Value(&selected),
+	))
+	if h.accessible {
+		f = f.WithAccessible(true)
+	}
+	return selected, f.Run()
+}
+
 func (h *HuhPrompter) SearchSelect(title, description string, options []Option) (string, error) {
 	return h.selectFromOptions(title, description, options, true)
 }

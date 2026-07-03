@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/specgate/specgate/app/cli/internal/client"
+	"github.com/specgate/specgate/app/cli/internal/interactive"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
@@ -97,6 +98,10 @@ func newPluginsInstallCmd(deps *Deps) *cobra.Command {
 		Use:   "install",
 		Short: "Install SpecGate IDE plugin files",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := resolvePluginAgentPrompt(cmd, deps, &opts.Agent, "Select IDE plugins", "agent"); err != nil {
+				code := deps.Printer.Error("plugins.install", output.ErrorPayload{Code: "validation_failed", Message: err.Error()})
+				return &output.ExitError{Code: code, Err: err}
+			}
 			result, err := runPluginInstall(cmd.Context(), deps, opts)
 			if err != nil {
 				code := deps.Printer.Error("plugins.install", pluginInstallErrorPayload(err))
@@ -118,7 +123,7 @@ func newPluginsInstallCmd(deps *Deps) *cobra.Command {
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&opts.Agent, "agent", "all", "IDE target: cursor, codex, claude, all, or comma-separated subset")
+	f.StringVar(&opts.Agent, "agent", "", "IDE target: cursor, codex, claude, all, or comma-separated subset (prompts interactively if omitted)")
 	f.StringVar(&opts.Registry, "registry", "", "Plugin registry base URL (default: configured SpecGate server)")
 	f.BoolVar(&opts.ProjectLocal, "project-local", false, "Install IDE files into the current repository instead of user-global locations")
 	f.BoolVar(&opts.DryRun, "dry-run", false, "Print planned file operations without writing")
@@ -182,6 +187,11 @@ func newPluginsDoctorCmd(deps *Deps) *cobra.Command {
 		Use:   "doctor",
 		Short: "Check installed SpecGate IDE plugin files",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := resolvePluginAgentPrompt(cmd, deps, &opts.Agent, "Select IDE plugins to check", "agent"); err != nil {
+				payload := output.ErrorPayload{Code: "validation_failed", Message: err.Error()}
+				code := deps.Printer.Error("plugins.doctor", payload)
+				return &output.ExitError{Code: code, Err: err}
+			}
 			agents, err := normalizePluginAgents(opts.Agent)
 			if err != nil {
 				payload := output.ErrorPayload{Code: "validation_failed", Message: err.Error()}
@@ -253,10 +263,33 @@ func newPluginsDoctorCmd(deps *Deps) *cobra.Command {
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&opts.Agent, "agent", "all", "IDE target to inspect: cursor, codex, claude, all, or comma-separated subset")
+	f.StringVar(&opts.Agent, "agent", "", "IDE target to inspect: cursor, codex, claude, all, or comma-separated subset (prompts interactively if omitted)")
 	f.StringVar(&opts.Registry, "registry", "", "Plugin registry base URL (default: configured SpecGate server)")
 	f.BoolVar(&opts.ProjectLocal, "project-local", false, "Inspect project-local IDE files in the current repository")
 	return cmd
+}
+
+func resolvePluginAgentPrompt(cmd *cobra.Command, deps *Deps, agent *string, title, flagName string) error {
+	if deps.NoInput || cmd.Flags().Changed(flagName) {
+		return nil
+	}
+	values, err := deps.Prompter.MultiSelect(title, pluginAgentPromptOptions(), []string{"cursor", "codex", "claude"})
+	if err != nil {
+		return err
+	}
+	if len(values) == 0 {
+		return fmt.Errorf("select at least one IDE plugin")
+	}
+	*agent = strings.Join(values, ",")
+	return nil
+}
+
+func pluginAgentPromptOptions() []interactive.Option {
+	return []interactive.Option{
+		{Label: "Cursor", Value: "cursor"},
+		{Label: "Codex", Value: "codex"},
+		{Label: "Claude Code", Value: "claude"},
+	}
 }
 
 func pluginClientFor(deps *Deps, registry string) pluginPackageClient {
@@ -781,6 +814,143 @@ func codexConfigEnablesSpecGate(text string) bool {
 		}
 	}
 	return false
+}
+
+func removeSpecGatePluginFiles() (int, []string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return 0, nil, err
+	}
+	var removed int
+	var paths []string
+	remove := func(path string) error {
+		ok, err := removePathIfExists(path)
+		if err != nil {
+			return err
+		}
+		if ok {
+			removed++
+			paths = append(paths, path)
+		}
+		return nil
+	}
+	for _, path := range []string{
+		filepath.Join(home, ".cursor", "rules", "using-specgate.mdc"),
+		filepath.Join(home, ".codex", "skills", specgatePluginName),
+		filepath.Join(home, ".codex", "plugins", specgatePluginName),
+		filepath.Join(home, ".codex", "plugins", "cache", "personal", specgatePluginName),
+		filepath.Join(home, ".claude", "skills", specgatePluginName),
+	} {
+		if err := remove(path); err != nil {
+			return removed, paths, err
+		}
+	}
+	for _, skill := range focusedPluginSkills() {
+		if err := remove(filepath.Join(home, ".cursor", "skills", skill)); err != nil {
+			return removed, paths, err
+		}
+		if err := remove(filepath.Join(home, ".codex", "skills", skill)); err != nil {
+			return removed, paths, err
+		}
+	}
+	if changed, err := removeCodexConfigSection(filepath.Join(home, ".codex", "config.toml")); err != nil {
+		return removed, paths, err
+	} else if changed {
+		removed++
+		paths = append(paths, filepath.Join(home, ".codex", "config.toml"))
+	}
+	if changed, err := removeCodexMarketplaceEntry(filepath.Join(home, ".agents", "plugins", "marketplace.json")); err != nil {
+		return removed, paths, err
+	} else if changed {
+		removed++
+		paths = append(paths, filepath.Join(home, ".agents", "plugins", "marketplace.json"))
+	}
+	return removed, paths, nil
+}
+
+func removePathIfExists(path string) (bool, error) {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	if err := os.RemoveAll(path); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func removeCodexConfigSection(path string) (bool, error) {
+	body, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	lines := strings.Split(strings.ReplaceAll(string(body), "\r\n", "\n"), "\n")
+	var out []string
+	inSection := false
+	changed := false
+	for _, line := range lines {
+		stripped := strings.TrimSpace(line)
+		if stripped == codexConfigSection {
+			inSection = true
+			changed = true
+			continue
+		}
+		if inSection && strings.HasPrefix(stripped, "[") && strings.HasSuffix(stripped, "]") {
+			inSection = false
+		}
+		if inSection {
+			continue
+		}
+		out = append(out, line)
+	}
+	if !changed {
+		return false, nil
+	}
+	text := strings.TrimRight(strings.Join(out, "\n"), "\n")
+	if text != "" {
+		text += "\n"
+	}
+	return true, os.WriteFile(path, []byte(text), 0o644)
+}
+
+func removeCodexMarketplaceEntry(path string) (bool, error) {
+	body, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	var data struct {
+		Name      string           `json:"name"`
+		Interface map[string]any   `json:"interface,omitempty"`
+		Plugins   []map[string]any `json:"plugins"`
+	}
+	if err := json.Unmarshal(body, &data); err != nil {
+		return false, fmt.Errorf("parse %s: %w", path, err)
+	}
+	filtered := data.Plugins[:0]
+	changed := false
+	for _, plugin := range data.Plugins {
+		if name, _ := plugin["name"].(string); name == specgatePluginName {
+			changed = true
+			continue
+		}
+		filtered = append(filtered, plugin)
+	}
+	if !changed {
+		return false, nil
+	}
+	data.Plugins = filtered
+	out, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return false, err
+	}
+	return true, os.WriteFile(path, append(out, '\n'), 0o644)
 }
 
 func focusedPluginSkills() []string {

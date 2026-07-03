@@ -222,7 +222,9 @@ docker compose up -d --wait
 
 All persistent data lives in named Docker volumes (`postgres-data`,
 `doc-registry-data`). They survive container restarts
-and `docker compose down`. To wipe all data:
+and `docker compose down`. The doc-registry image prepares `/data/blobs` inside
+the `doc-registry-data` volume for the default local blob store. To wipe all
+data:
 
 ```bash
 docker compose down -v

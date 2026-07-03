@@ -45,7 +45,7 @@ internal/config/            config file (load, save, resolve server)
 internal/output/            JSON envelope, exit codes, ExitError
 internal/command/           cobra root command + Deps struct
   root.go                   NewRootCommand, ExecuteForCode, DefaultDeps
-  system.go                 system subcommands and CLI update warnings
+  system.go                 system subcommands, `version`, `uninstall`, and CLI update warnings
   stats.go                  `stats` governance-value readout (reviewed items, first-pass yield, catches, rework, ambiguity saves, cycle time, recent-catch ledger) from GET /api/v1/stats
   work.go                   work subcommands: `work create-quick` (positional title + repeatable --ac, interactive AC loop), `work archive` for retiring one or more work refs; `work policy` as the canonical user-facing policy explanation; `work list` renders the status board's attention section
   artifact.go               artifact subcommands; interactive impact_declaration collection on publish

@@ -34,8 +34,8 @@ CMD ["air", "-c", ".air.toml"]
 FROM alpine:3
 RUN apk add --no-cache ca-certificates sqlite-libs \
     && adduser -D -u 10001 app \
-    && mkdir -p /data \
-    && chown app:app /data
+    && mkdir -p /data/blobs \
+    && chown -R app:app /data
 USER app
 WORKDIR /app
 COPY --from=builder /out/doc-registry /usr/local/bin/doc-registry

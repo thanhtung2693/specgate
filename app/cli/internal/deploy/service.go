@@ -242,6 +242,12 @@ func (s *Service) Down(ctx context.Context) error {
 		"-f", s.composePath(), "down")
 }
 
+// DownWithVolumes stops the stack and removes compose-managed volumes.
+func (s *Service) DownWithVolumes(ctx context.Context) error {
+	return s.runner.Run(ctx, "docker", "compose",
+		"-f", s.composePath(), "down", "-v")
+}
+
 // LocalStatus returns the runtime status of each compose service.
 func (s *Service) LocalStatus(ctx context.Context) ([]ServiceStatus, error) {
 	out, err := s.runner.Output(ctx, "docker", "compose",

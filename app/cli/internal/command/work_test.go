@@ -463,8 +463,11 @@ func (f *fakeClient) GetWorkspace(_ context.Context, id string) (*client.Identit
 
 type fakePrompter struct {
 	selectedValue string
+	multiValues   []string
 	searchValue   string
 	selectOptions []interactive.Option
+	multiTitle    string
+	multiOptions  []interactive.Option
 	searchTitle   string
 	searchOptions []interactive.Option
 	inputValue    string
@@ -482,6 +485,15 @@ type fakePrompter struct {
 func (f *fakePrompter) Select(_ string, options []interactive.Option) (string, error) {
 	f.selectOptions = options
 	return f.selectedValue, nil
+}
+
+func (f *fakePrompter) MultiSelect(title string, options []interactive.Option, defaults []string) ([]string, error) {
+	f.multiTitle = title
+	f.multiOptions = options
+	if f.multiValues != nil {
+		return f.multiValues, nil
+	}
+	return defaults, nil
 }
 
 func (f *fakePrompter) SearchSelect(title, _ string, options []interactive.Option) (string, error) {
@@ -860,6 +872,9 @@ func TestWorkCreateQuickTitleArgWorksNoInput(t *testing.T) {
 	}
 	if fc.lastCreateBody["title"] != "Fix crash" {
 		t.Fatalf("title = %v", fc.lastCreateBody["title"])
+	}
+	if fc.lastCreateBody["description"] != "Fix crash" {
+		t.Fatalf("description = %v", fc.lastCreateBody["description"])
 	}
 }
 

@@ -92,6 +92,10 @@ specgate init
 files and secrets, starts the stack, asks for your local user/workspace, and
 lets you choose whether to seed demo data and install IDE plugins.
 
+Use `specgate uninstall` to stop the local stack and choose cleanup actions from
+an interactive checklist; add `--purge-data --yes` in scripts only after backing
+up data you want to keep.
+
 If you skipped IDE setup during init, run:
 
 ```bash

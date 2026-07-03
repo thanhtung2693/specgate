@@ -270,7 +270,7 @@ func newWorkCreateQuickCmd(deps *Deps) *cobra.Command {
 				}
 			case title != "":
 				// Title given via args: build the same JSON body without prompting.
-				body = map[string]any{"title": title}
+				body = map[string]any{"title": title, "description": title}
 				if description != "" {
 					body["description"] = description
 				}

@@ -95,6 +95,29 @@ func jsonMeta(apiVersion string, capabilities map[string]bool) http.HandlerFunc 
 	}
 }
 
+func TestVersionCommandPrintsBuildVersion(t *testing.T) {
+	t.Setenv("SPECGATE_NO_UPDATE_CHECK", "1")
+	oldVersion := buildinfo.Version
+	buildinfo.Version = "v9.9.9-test"
+	t.Cleanup(func() { buildinfo.Version = oldVersion })
+
+	var stdout, stderr bytes.Buffer
+	deps := command.DefaultDeps()
+	deps.Stdout = &stdout
+	deps.Stderr = &stderr
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "version")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, want %d; stderr=%q", code, output.ExitOK, stderr.String())
+	}
+	if got, want := stdout.String(), "specgate v9.9.9-test\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
 func jsonStatus(total, ready int) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -733,6 +756,171 @@ func TestDownCmdJSON(t *testing.T) {
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "down", "--dir", dir)
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+}
+
+func TestUninstallKeepsDataByDefaultAndRemovesUserFiles(t *testing.T) {
+	dir := t.TempDir()
+	setupTestBundle(t, dir)
+	if err := os.WriteFile(filepath.Join(dir, "data.txt"), []byte("keep me"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	writeTestFile(t, filepath.Join(home, ".cursor", "rules", "using-specgate.mdc"), "rule")
+	writeTestFile(t, filepath.Join(home, ".cursor", "skills", "using-specgate", "SKILL.md"), "skill")
+	writeTestFile(t, filepath.Join(home, ".codex", "plugins", "specgate", ".codex-plugin", "plugin.json"), "{}")
+	writeTestFile(t, filepath.Join(home, ".codex", "plugins", "cache", "personal", "specgate", "v0.1.0", ".codex-plugin", "plugin.json"), "{}")
+	writeTestFile(t, filepath.Join(home, ".codex", "skills", "specgate", "SKILL.md"), "legacy")
+	writeTestFile(t, filepath.Join(home, ".codex", "skills", "using-specgate", "SKILL.md"), "legacy")
+	writeTestFile(t, filepath.Join(home, ".claude", "skills", "specgate", ".claude-plugin", "plugin.json"), "{}")
+	writeTestFile(t, filepath.Join(home, ".codex", "config.toml"), "[plugins.\"specgate@personal\"]\nenabled = true\n\n[tools]\nkeep = true\n")
+	writeTestFile(t, filepath.Join(home, ".agents", "plugins", "marketplace.json"), `{
+  "name": "personal",
+  "plugins": [
+    {"name": "specgate"},
+    {"name": "other"}
+  ]
+}
+`)
+
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	if err := (config.Config{
+		Server:        "http://localhost:18080",
+		DeploymentDir: dir,
+		CurrentUser:   config.CurrentUser{Username: "alpha"},
+		Workspace:     config.CurrentWorkspace{Slug: "alpha"},
+	}).SaveTo(cfgPath); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := &fakeDeployRunner{}
+	deps, out := newTestDeps(t, "")
+	deps.ConfigPath = cfgPath
+	deps.DeployRunner = runner
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall", "--dir", dir)
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	gotCommands := strings.Join(runner.Commands, "\n")
+	if !strings.Contains(gotCommands, "docker compose -f "+filepath.Join(dir, "compose.yml")+" down") {
+		t.Fatalf("missing compose down command in:\n%s", gotCommands)
+	}
+	if strings.Contains(gotCommands, " down -v") {
+		t.Fatalf("default uninstall must not remove volumes:\n%s", gotCommands)
+	}
+	if _, err := os.Stat(cfgPath); !os.IsNotExist(err) {
+		t.Fatalf("config file should be removed; stat err=%v", err)
+	}
+	for _, path := range []string{
+		filepath.Join(home, ".cursor", "rules", "using-specgate.mdc"),
+		filepath.Join(home, ".cursor", "skills", "using-specgate"),
+		filepath.Join(home, ".codex", "plugins", "specgate"),
+		filepath.Join(home, ".codex", "plugins", "cache", "personal", "specgate"),
+		filepath.Join(home, ".codex", "skills", "specgate"),
+		filepath.Join(home, ".codex", "skills", "using-specgate"),
+		filepath.Join(home, ".claude", "skills", "specgate"),
+	} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("%s should be removed; stat err=%v", path, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "data.txt")); err != nil {
+		t.Fatalf("deployment data should be kept by default: %v", err)
+	}
+	configText, err := os.ReadFile(filepath.Join(home, ".codex", "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(configText), "specgate@personal") || !strings.Contains(string(configText), "[tools]") {
+		t.Fatalf("codex config not cleaned safely:\n%s", configText)
+	}
+	marketplace, err := os.ReadFile(filepath.Join(home, ".agents", "plugins", "marketplace.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(marketplace), `"name": "specgate"`) || !strings.Contains(string(marketplace), `"name": "other"`) {
+		t.Fatalf("marketplace not cleaned safely:\n%s", marketplace)
+	}
+}
+
+func TestUninstallPurgeDataRequiresConfirmation(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	setupTestBundle(t, dir)
+
+	deps, out := newTestDeps(t, "")
+	deps.DeployRunner = &fakeDeployRunner{}
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall", "--dir", dir, "--purge-data")
+	if code != output.ExitUsage {
+		t.Fatalf("exit = %d, want %d; output = %s", code, output.ExitUsage, out.String())
+	}
+}
+
+func TestUninstallPurgeDataRemovesDeploymentDir(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	setupTestBundle(t, dir)
+	if err := os.WriteFile(filepath.Join(dir, "data.txt"), []byte("delete me"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := &fakeDeployRunner{}
+	deps, out := newTestDeps(t, "")
+	deps.DeployRunner = runner
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "uninstall", "--dir", dir, "--purge-data")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	gotCommands := strings.Join(runner.Commands, "\n")
+	if !strings.Contains(gotCommands, "docker compose -f "+filepath.Join(dir, "compose.yml")+" down -v") {
+		t.Fatalf("missing compose down -v command in:\n%s", gotCommands)
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("deployment dir should be removed with --purge-data; stat err=%v", err)
+	}
+}
+
+func TestUninstallChecklistCanKeepPluginsAndPurgeData(t *testing.T) {
+	dir := t.TempDir()
+	setupTestBundle(t, dir)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	pluginPath := filepath.Join(home, ".cursor", "rules", "using-specgate.mdc")
+	writeTestFile(t, pluginPath, "rule")
+
+	runner := &fakeDeployRunner{}
+	deps, _, prompter, out := newFakeDeps(t)
+	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
+	deps.DeployRunner = runner
+	prompter.multiValues = []string{"data"}
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "uninstall", "--dir", dir)
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if prompter.multiTitle != "Remove SpecGate setup" {
+		t.Fatalf("multi-select title = %q", prompter.multiTitle)
+	}
+	if _, err := os.Stat(pluginPath); err != nil {
+		t.Fatalf("plugin file should be kept when unchecked: %v", err)
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("deployment dir should be removed when data checked; stat err=%v", err)
+	}
+	gotCommands := strings.Join(runner.Commands, "\n")
+	if !strings.Contains(gotCommands, "docker compose -f "+filepath.Join(dir, "compose.yml")+" down -v") {
+		t.Fatalf("missing compose down -v command in:\n%s", gotCommands)
+	}
+}
+
+func writeTestFile(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0644); err != nil {
+		t.Fatal(err)
 	}
 }
 

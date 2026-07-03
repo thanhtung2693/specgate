@@ -10,6 +10,7 @@ type Option struct {
 // Production code uses HuhPrompter; tests use a deterministic fake.
 type Prompter interface {
 	Select(title string, options []Option) (string, error)
+	MultiSelect(title string, options []Option, defaults []string) ([]string, error)
 	SearchSelect(title, description string, options []Option) (string, error)
 	Input(title, placeholder string, validate func(string) error) (string, error)
 	InputWithSuggestions(title, placeholder string, suggestions []string, validate func(string) error) (string, error)

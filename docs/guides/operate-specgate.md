@@ -29,10 +29,13 @@ See the [release Compose guide](../../deploy/README.md).
 specgate local-status
 specgate up
 specgate down
+specgate uninstall
 ```
 
 `down` stops the stack but preserves persistent data. `up` starts it again and
-waits for health checks.
+waits for health checks. `uninstall` stops a CLI-managed stack and shows an
+interactive cleanup checklist, while keeping deployment data unless local data
+removal is selected or `--purge-data --yes` is passed.
 
 Check CLI-to-service compatibility:
 
@@ -209,10 +212,13 @@ Removing Compose volumes or local blob data permanently deletes state.
 1. confirm the deployment directory;
 2. back up database and blobs;
 3. confirm no other deployment shares the volumes or bucket;
-4. stop the services;
-5. perform the destructive command manually.
+4. stop the services or use the uninstall command;
+5. pass the destructive flag only after backup is confirmed.
 
-The operator guide intentionally does not provide a one-line wipe command.
+```bash
+specgate uninstall                 # keep data
+specgate uninstall --purge-data --yes # remove Docker volumes and deployment dir
+```
 
 ## Troubleshooting
 

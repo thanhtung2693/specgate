@@ -33,6 +33,18 @@ specgate --help
 If the command is not found, add `~/.local/bin` to your `PATH` or use the
 install location printed by the installer.
 
+To remove the user-local setup later:
+
+```bash
+specgate uninstall
+```
+
+That stops the local stack when present, removes CLI config and SpecGate IDE
+plugin files, and keeps deployment data. In an interactive terminal it shows a
+checkbox list so you can keep IDE setup or select local data removal. To delete
+local data non-interactively, back it up first, then run
+`specgate uninstall --purge-data --yes`.
+
 ## 2. Start SpecGate
 
 ```bash
@@ -60,8 +72,9 @@ specgate init --seed --no-input    # with demo data
 specgate init --no-seed --no-input # empty workspace
 ```
 
-Use `--install-plugins --plugin-agent all` with `--no-input` when automation
-should install IDE plugins as part of setup.
+Interactive setup shows a checkbox list for Codex, Claude Code, and Cursor when
+installing IDE plugins. Use `--install-plugins --plugin-agent all` with
+`--no-input` when automation should install IDE plugins as part of setup.
 
 ## 3. Verify it is running
 

@@ -39,6 +39,7 @@ and `--no-input`.
 
 Other global flags:
 
+- `--version` — print the installed CLI version;
 - `--yes` — accept confirmations;
 - `--no-input` — fail instead of prompting;
 - `--timeout <duration>` — request timeout;
@@ -103,18 +104,23 @@ but new users should start with the core workflow lane.
 | `gates` | All quality-gate operations: work-item LLM gates (`run`, `status`, `history`), artifact readiness checks (`check`), and artifact gate tasks (`tasks`) |
 | `delivery` | Report implementation and run delivery review; `delivery report --init` scaffolds a completion.json from the work item's acceptance criteria, and `delivery submit` runs the whole tail (report → gates → review → status) in one command |
 
+`work create-quick <title>` uses the title as the description when
+`--description` is omitted, so the shortest quickstart form still satisfies the
+server contract.
+
 ### Setup and identity
 
 | Family | Purpose |
 |---|---|
 | `doctor` | Diagnose CLI/server compatibility and capability health |
 | `config` | Save CLI configuration |
+| `version` | Print the installed CLI version; equivalent to `specgate --version` |
 | `model` | Configure the local model provider, model, and API key (no UI) |
 | `user` | List local users and show the selected user |
 | `workspace` | List workspaces, show the selected workspace, and select a workspace |
 | `plugins` | Install and verify Codex, Claude Code, and Cursor IDE plugin files |
 | `skill` | Inspect user-defined Skills |
-| `open`, `update` | Open the configured server and refresh CLI/IDE setup |
+| `open`, `update`, `uninstall` | Open the configured server, refresh setup, or remove user-local setup |
 
 The selected local user and workspace are stored in CLI config. They are used
 for attribution and default workspace filtering, not authentication: quick work
@@ -127,6 +133,18 @@ workspace unless `--all-workspaces` is passed.
 | Family | Purpose |
 |---|---|
 | `init`, `up`, `down`, `local-status` | Manage a local SpecGate deployment |
+
+`specgate uninstall` removes the CLI config and SpecGate IDE plugin files, and
+stops the CLI-managed local stack when one is present. In an interactive
+terminal it shows a checkbox list so you can keep IDE plugin files or select
+local data removal without memorizing extra flags. It keeps deployment data by
+default. Pass `--purge-data --yes` only in non-interactive automation when you
+also want Docker volumes and the deployment directory removed:
+
+```bash
+specgate uninstall
+specgate uninstall --purge-data --yes
+```
 
 ### Advanced governance
 
@@ -205,8 +223,8 @@ disabled in `--json`, `CI=true`, `dev` builds, or when
 IDE plugin setup can also be managed directly:
 
 ```bash
-specgate plugins install --agent all
-specgate plugins doctor --agent all
+specgate plugins install
+specgate plugins doctor
 ```
 
 `plugins doctor` compares installed files against the configured plugin registry
@@ -214,8 +232,13 @@ specgate plugins doctor --agent all
 Missing files fail the check; stale versions or a stale Codex plugin cache warn
 with the reinstall/restart action to take.
 
-`specgate init` offers the same plugin install interactively. In non-interactive
-setup, pass `specgate init --install-plugins --plugin-agent all`.
+Interactive `plugins install` and `plugins doctor` show a checkbox list for
+Cursor, Codex, and Claude Code when `--agent` is omitted. Scripts can still pass
+`--agent all`, `--agent codex`, or a comma-separated subset.
+
+`specgate init` offers the same plugin install interactively, including the IDE
+target checkbox list. In non-interactive setup, pass
+`specgate init --install-plugins --plugin-agent all`.
 
 Use `--project-local` on those commands only when the current repository should
 vendor its IDE plugin files.

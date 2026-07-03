@@ -212,6 +212,37 @@ func TestPluginsInstallUsesRegistryFlag(t *testing.T) {
 	}
 }
 
+func TestPluginsInstallPromptsForAgentSelection(t *testing.T) {
+	srv := newPluginRegistry(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	deps, out := newPluginDeps()
+	prompter := &fakePrompter{multiValues: []string{"cursor", "codex"}}
+	deps.Prompter = prompter
+	code := command.ExecuteForCode(command.NewRootCommand(deps),
+		"--plain", "--server", srv.URL,
+		"plugins", "install",
+	)
+	if code != output.ExitOK {
+		t.Fatalf("install exit = %d, output = %s", code, out.String())
+	}
+	if prompter.multiTitle != "Select IDE plugins" {
+		t.Fatalf("multi-select title = %q", prompter.multiTitle)
+	}
+	for _, path := range []string{
+		filepath.Join(home, ".cursor", "rules", "using-specgate.mdc"),
+		filepath.Join(home, ".codex", "plugins", "specgate", ".codex-plugin", "plugin.json"),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("%s missing after prompted install: %v", path, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "specgate")); !os.IsNotExist(err) {
+		t.Fatalf("claude should not be installed when unchecked; stat err=%v", err)
+	}
+}
+
 func newPluginDeps() (*command.Deps, *bytes.Buffer) {
 	var out bytes.Buffer
 	return &command.Deps{

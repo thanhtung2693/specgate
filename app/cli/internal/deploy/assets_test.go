@@ -43,3 +43,15 @@ func TestReleaseComposeUsesPublishedImages(t *testing.T) {
 		t.Fatal("release compose must not build source images")
 	}
 }
+
+func TestDocRegistryImagePreparesLocalBlobRoot(t *testing.T) {
+	raw := readRepoFile(t, "../../../../docker/Dockerfile.doc-registry")
+	for _, want := range []string{
+		"mkdir -p /data/blobs",
+		"chown -R app:app /data",
+	} {
+		if !strings.Contains(raw, want) {
+			t.Fatalf("doc-registry Dockerfile missing %q", want)
+		}
+	}
+}
