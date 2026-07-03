@@ -335,33 +335,6 @@ class DocRegistryClient:
             raw = r.json()
             return _unwrap_huma_body(raw) if isinstance(raw, dict) else raw
 
-    async def aset_feature_summary(
-        self,
-        feature_id: str,
-        summary_md: str,
-        source_version: str = "",
-    ) -> dict[str, Any]:
-        """Async PUT /workboard/features/{id}/summary.
-
-        Persists the generated Overview narrative plus the canonical artifact
-        ``source_version`` it was generated from. The registry fires a
-        ``feature_summary_outdated`` warning when the stored ``source_version``
-        drifts behind the current canonical artifact version, so always send it.
-        """
-        async with httpx.AsyncClient(
-            base_url=self._base,
-            headers=self._headers,
-            timeout=self._timeout,
-            transport=self._transport,
-        ) as client:
-            r = await client.put(
-                f"/workboard/features/{feature_id}/summary",
-                json={"summary_md": summary_md, "source_version": source_version},
-            )
-            r.raise_for_status()
-            raw = r.json()
-            return _unwrap_huma_body(raw) if isinstance(raw, dict) else raw
-
     def presign_governance_file(
         self,
         *,
