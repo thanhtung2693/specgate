@@ -278,11 +278,19 @@ async def run_llm_gates_for_change_request(change_request_id: str) -> dict[str, 
                     lead_artifact = {}
                     attachments = []
                 gate_rubrics = await _load_gate_rubrics(client, lead_artifact)
+                # Same profile discipline as the artifact-level path: the lead
+                # artifact's snapshot decides which gates run and which topics
+                # are required (per spec: profiles select gates on every path).
+                snapshot = _parse_artifact_snapshot(lead_artifact) if lead_artifact else None
+                enabled_gates = snapshot.enabled_gates or None if snapshot is not None else None
+                required_topics = snapshot.required_topics or None if snapshot is not None else None
                 evaluations = await evaluate_all_gates(
                     bundle,
                     model=model,
                     work_type=work_type,
                     attachments=attachments,
+                    enabled_gates=enabled_gates,
+                    required_topics=required_topics,
                     gate_rubrics=gate_rubrics,
                 )
             except Exception:

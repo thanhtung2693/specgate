@@ -10,6 +10,7 @@ from specgate_agents.governance.board.quality_gates import (
     _required_roles_evaluation,
     resolve_gate_rubrics,
     run_llm_gates_for_artifact,
+    run_llm_gates_for_change_request,
 )
 from specgate_agents.governance.quality_gates.judge import GateEvaluation
 
@@ -283,3 +284,84 @@ async def test_run_llm_gates_dispatches_to_ide_agent_when_no_model(
     assert captured["dispatched_artifact"] == "art-1"
     assert "evaluate_called" not in captured
     assert result["evaluations_posted"] == 0
+
+
+@pytest.mark.asyncio
+async def test_run_llm_gates_for_change_request_uses_snapshot_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The CR-level gate path must honor the lead artifact's profile snapshot
+    exactly like the artifact-level path: enabled_gates and required_topics
+    thread into evaluate_all_gates instead of running every gate."""
+    captured: dict[str, object] = {}
+
+    class FakeClient:
+        def __init__(self, base_url: str) -> None:
+            assert base_url == "http://registry.test"
+
+        def get_change_request(self, change_request_id: str) -> dict[str, object]:
+            assert change_request_id == "cr-1"
+            return {
+                "id": change_request_id,
+                "lead_artifact_id": "art-9",
+                "work_type": "bug_fix",
+            }
+
+        async def aget_artifact(self, artifact_id: str) -> dict[str, object]:
+            assert artifact_id == "art-9"
+            return {
+                "id": artifact_id,
+                "feature_id": "feat-checkout",
+                "gates_profile_snapshot_json": json.dumps(
+                    {
+                        "enabled_gates": ["scope_clear"],
+                        "required_topics": ["outcomes"],
+                    }
+                ),
+            }
+
+        async def aload_artifact_bundle_by_role(self, artifact_id: str) -> dict[str, str]:
+            return {"spec": "# Spec"}
+
+        async def alist_feature_attachments(self, feature_id: str) -> list[dict[str, str]]:
+            return []
+
+        async def aget_skills(self) -> list[dict[str, str]]:
+            return []
+
+        def refresh_change_request_gate_runs(
+            self, change_request_id: str, evaluations: list[dict[str, object]] | None = None
+        ) -> list[dict[str, object]]:
+            captured["gate_runs_posted"] = evaluations
+            return [{"gate": "scope_clear", "state": "pass"}]
+
+    async def fake_evaluate_all_gates(
+        artifact_bundle: dict[str, str],
+        *,
+        model,
+        judge_model: str = "governance-gate-judge",
+        work_type: str = "",
+        config=None,
+        attachments=None,
+        enabled_gates=None,
+        required_topics=None,
+        gate_rubrics=None,
+    ) -> list[GateEvaluation]:
+        captured["enabled_gates"] = list(enabled_gates or [])
+        captured["required_topics"] = list(required_topics or [])
+        return [GateEvaluation(gate="scope_clear", state="pass", confidence=0.9)]
+
+    monkeypatch.setattr(f"{QUALITY_GATES_MODULE}.DocRegistryClient", FakeClient)
+    monkeypatch.setattr(
+        f"{QUALITY_GATES_MODULE}.doc_registry_base_url", lambda: "http://registry.test"
+    )
+    monkeypatch.setattr(f"{QUALITY_GATES_MODULE}._hydrate_model_settings", _AsyncNoop())
+    monkeypatch.setattr(f"{QUALITY_GATES_MODULE}.ensure_llm_env", lambda: True)
+    monkeypatch.setattr(f"{QUALITY_GATES_MODULE}.build_model", lambda: object())
+    monkeypatch.setattr(f"{QUALITY_GATES_MODULE}.evaluate_all_gates", fake_evaluate_all_gates)
+
+    result = await run_llm_gates_for_change_request("cr-1")
+
+    assert result["change_request_id"] == "cr-1"
+    assert captured["enabled_gates"] == ["scope_clear"]
+    assert captured["required_topics"] == ["outcomes"]
