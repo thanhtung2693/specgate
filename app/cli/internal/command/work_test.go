@@ -22,6 +22,7 @@ import (
 type fakeClient struct {
 	// preset return values
 	statusResult         *client.GovernanceStatus
+	metaResult           *client.Meta
 	statusErr            error
 	resolvedWork         *client.ResolvedWork
 	contextPack          *client.ContextPackResult
@@ -114,7 +115,10 @@ type fakeClient struct {
 }
 
 func (f *fakeClient) Meta(_ context.Context) (*client.Meta, error) {
-	return &client.Meta{APIVersion: "specgate.api/v1", Capabilities: map[string]bool{"agents": true}}, nil
+	if f.metaResult != nil {
+		return f.metaResult, nil
+	}
+	return &client.Meta{APIVersion: "specgate.api/v1", WebURL: "http://web.test", Capabilities: map[string]bool{"agents": true}}, nil
 }
 
 func (f *fakeClient) Status(_ context.Context, workspaceID string) (*client.GovernanceStatus, error) {

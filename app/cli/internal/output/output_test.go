@@ -116,3 +116,46 @@ func TestErrorKeepsEnvelopeInJSONMode(t *testing.T) {
 		t.Fatalf("json mode missing envelope: %q", stdout.String())
 	}
 }
+
+func TestErrorPrintsValidationDetailsInHumanMode(t *testing.T) {
+	t.Parallel()
+	var stdout, stderr bytes.Buffer
+	p := output.New(&stdout, &stderr, output.ModeHuman)
+
+	p.Error("artifact.publish", output.ErrorPayload{
+		Code:    "incompatible",
+		Message: "Unprocessable Entity: validation failed",
+		Details: map[string]any{
+			"errors": []any{
+				map[string]any{"location": "body.created_by", "message": "unexpected property"},
+				map[string]any{"location": "body.impact_declaration.migration", "message": "unexpected property"},
+			},
+		},
+	})
+
+	got := stderr.String()
+	if !strings.Contains(got, "body.created_by: unexpected property") {
+		t.Fatalf("stderr missing detail line: %q", got)
+	}
+	if !strings.Contains(got, "body.impact_declaration.migration: unexpected property") {
+		t.Fatalf("stderr missing second detail line: %q", got)
+	}
+}
+
+func TestErrorPrintsTypedDetailSliceInHumanMode(t *testing.T) {
+	t.Parallel()
+	var stdout, stderr bytes.Buffer
+	p := output.New(&stdout, &stderr, output.ModeHuman)
+
+	p.Error("artifact.publish", output.ErrorPayload{
+		Code:    "incompatible",
+		Message: "validation failed",
+		Details: map[string]any{
+			"errors": []map[string]any{{"location": "body.created_by", "message": "unexpected property"}},
+		},
+	})
+
+	if !strings.Contains(stderr.String(), "body.created_by: unexpected property") {
+		t.Fatalf("typed slice details not rendered: %q", stderr.String())
+	}
+}

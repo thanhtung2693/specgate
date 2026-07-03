@@ -668,3 +668,22 @@ func TestArtifactShowUnknownPrefixSuggestsList(t *testing.T) {
 		t.Fatalf("output = %q, want `specgate artifact list` hint", out.String())
 	}
 }
+
+func TestArtifactPublishSkipsImpactPromptWhenNotTTY(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	dir := t.TempDir()
+	path := dir + "/artifact.json"
+	if err := os.WriteFile(path, []byte(`{"feature_key":"k","documents":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Fake deps have a non-TTY stdin and no --no-input flag: the impact prompt
+	// must be skipped, not block the session.
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "artifact", "publish", "--file", path)
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if _, ok := fc.lastProposalBody["impact_declaration"]; ok {
+		t.Fatalf("impact_declaration should not be synthesized without a prompt: %v", fc.lastProposalBody)
+	}
+}

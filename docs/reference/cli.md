@@ -126,7 +126,9 @@ The selected local user and workspace are stored in CLI config. They are used
 for attribution and default workspace filtering, not authentication: quick work
 items receive `created_by` and `workspace_id`, archive actions use the selected
 username as the actor, and `status` / `work list` filter to the selected
-workspace unless `--all-workspaces` is passed.
+workspace unless `--all-workspaces` is passed. Artifact publish bodies do not
+carry `created_by` — the server attributes CLI-published packages itself, and
+a body that includes the field is rejected.
 
 ### Local stack
 

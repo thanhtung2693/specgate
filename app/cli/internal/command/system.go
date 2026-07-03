@@ -438,8 +438,21 @@ func newOpenCmd(deps *Deps) *cobra.Command {
 			}
 			meta, err := deps.Client.Meta(cmd.Context())
 			webURL := deps.ServerURL
-			if err == nil && meta.WebURL != "" {
+			hasWebURL := err == nil && meta.WebURL != ""
+			if hasWebURL {
 				webURL = meta.WebURL
+			}
+			// Deep links point at web UI pages; without an advertised web_url
+			// the fallback is the API server, where those routes don't exist.
+			// Bare `open` keeps the legacy fallback. A future cloud deployment
+			// advertises its own web_url and deep links follow it unchanged.
+			if !hasWebURL && (artifactID != "" || len(args) > 0) {
+				payload := output.ErrorPayload{
+					Code:    "unavailable",
+					Message: "this server does not advertise a web UI URL — set WEB_URL on Doc Registry (deep links need the web app, not the API)",
+				}
+				code := deps.Printer.Error("open", payload)
+				return &output.ExitError{Code: code}
 			}
 			base := strings.TrimRight(webURL, "/")
 			target := webURL

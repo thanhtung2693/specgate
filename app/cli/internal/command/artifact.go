@@ -293,9 +293,11 @@ func newArtifactPublishCmd(deps *Deps) *cobra.Command {
 				code := deps.Printer.Error("artifact.publish", payload)
 				return &output.ExitError{Code: code, Err: err}
 			}
-			// Collect impact_declaration interactively when interactive mode is
-			// enabled and the field is absent from the JSON file.
-			if !deps.NoInput {
+			// Collect impact_declaration interactively when the session is a
+			// real TTY and the field is absent from the JSON file. Non-TTY
+			// sessions proceed without a declaration (same as --no-input)
+			// instead of blocking on a prompt nobody can answer.
+			if sessionInteractive(deps) {
 				if _, ok := body["impact_declaration"]; !ok {
 					answers, err := interactive.CollectImpactDeclaration(deps.Stdin, deps.Stdout, interactive.ImpactAnswers{})
 					if err != nil {

@@ -110,6 +110,7 @@ func (p *Printer) Error(command string, payload ErrorPayload) int {
 		// Human and plain sessions get a readable line on stderr, not a JSON
 		// envelope. The envelope is the --json contract only.
 		fmt.Fprintf(p.stderr, "Error (%s): %s\n", payload.Code, payload.Message)
+		printHumanErrorDetails(p.stderr, payload.Details)
 		if code, ok := errorCodeToExit[payload.Code]; ok {
 			return code
 		}
@@ -171,4 +172,48 @@ func ExitCodeFromError(err error) int {
 		return exitErr.Code
 	}
 	return ExitUnavailable
+}
+
+// printHumanErrorDetails surfaces server validation details (the huma
+// errors[] list) as indented lines so human sessions see the same field-level
+// hints --json carries. Caps at a handful of lines to stay readable.
+func printHumanErrorDetails(w io.Writer, details map[string]any) {
+	// The errors list arrives as []map[string]any straight from the client and
+	// as []any after a JSON round-trip; accept both.
+	var items []any
+	switch v := details["errors"].(type) {
+	case []any:
+		items = v
+	case []map[string]any:
+		items = make([]any, len(v))
+		for i, entry := range v {
+			items[i] = entry
+		}
+	default:
+		return
+	}
+	const maxLines = 6
+	shown := 0
+	for _, item := range items {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		location, _ := entry["location"].(string)
+		message, _ := entry["message"].(string)
+		if location == "" && message == "" {
+			continue
+		}
+		if shown == maxLines {
+			fmt.Fprintf(w, "  … and %d more\n", len(items)-shown)
+			return
+		}
+		switch {
+		case location == "":
+			fmt.Fprintf(w, "  - %s\n", message)
+		default:
+			fmt.Fprintf(w, "  - %s: %s\n", location, message)
+		}
+		shown++
+	}
 }
