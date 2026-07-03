@@ -105,6 +105,12 @@ const (
 	BoardPhaseReview  BoardPhase = "Review"
 	BoardPhaseReady   BoardPhase = "Ready"
 	BoardPhaseHandoff BoardPhase = "Handoff"
+	// BoardPhaseDelivered is derived when the CR's latest delivery_review gate
+	// run passed. It is the not-yet-archived intermediate truth between handoff
+	// and archive; auto-archive-on-delivery-pass stays optional and unchanged.
+	// Only the DB-backed read path can derive it (it needs gate_runs), so the
+	// pointer-only DerivePhase fallback never returns it.
+	BoardPhaseDelivered BoardPhase = "Delivered"
 )
 
 type AcceptanceCriterionSource string
@@ -204,6 +210,13 @@ func (cr ChangeRequest) DerivePhase() BoardPhase {
 		return BoardPhaseReady
 	}
 	return BoardPhaseIntake
+}
+
+// IsQuickRoute reports whether the change request is quick-route work: no
+// lead artifact and no feature. Quick-route items never grow a working spec,
+// so the full-artifact-flow gates do not apply to them (see NextActions).
+func (cr ChangeRequest) IsQuickRoute() bool {
+	return cr.LeadArtifactID == "" && cr.FeatureID == ""
 }
 
 type AcceptanceCriterion struct {

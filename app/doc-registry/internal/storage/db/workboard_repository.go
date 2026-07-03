@@ -323,8 +323,16 @@ func (r *WorkBoardRepository) ListChangeRequests(ctx context.Context, includeArc
 	if err := q.Find(&out).Error; err != nil {
 		return nil, err
 	}
+	ids := make([]string, 0, len(out))
 	for i := range out {
-		if err := r.deriveChangeRequestReadFields(ctx, &out[i]); err != nil {
+		ids = append(ids, out[i].ID)
+	}
+	delivered, err := r.deliveredChangeRequestIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		if err := r.deriveChangeRequestReadFields(ctx, &out[i], delivered[out[i].ID]); err != nil {
 			return nil, err
 		}
 	}
@@ -339,7 +347,11 @@ func (r *WorkBoardRepository) GetChangeRequest(
 	if err := r.db.WithContext(ctx).First(&out, "id = ?", id).Error; err != nil {
 		return nil, mapWorkBoardNotFound(err)
 	}
-	if err := r.deriveChangeRequestReadFields(ctx, &out); err != nil {
+	delivered, err := r.deliveredChangeRequestIDs(ctx, []string{out.ID})
+	if err != nil {
+		return nil, err
+	}
+	if err := r.deriveChangeRequestReadFields(ctx, &out, delivered[out.ID]); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -372,15 +384,22 @@ func (r *WorkBoardRepository) SetChangeRequestAttribution(
 }
 
 // deriveChangeRequestReadFields fills the read-only derived fields on a change
-// request: the board phase (from artifact pointers) and the latest inbound
-// tracker status. Neither is persisted; both are computed per read.
+// request: the board phase (from artifact pointers, overridden to Delivered
+// when the latest delivery_review gate run passed) and the latest inbound
+// tracker status. Neither is persisted; both are computed per read. The
+// delivered flag is batch-loaded by the caller (deliveredChangeRequestIDs) to
+// avoid an N+1 gate-run query on the list path.
 func (r *WorkBoardRepository) deriveChangeRequestReadFields(
 	ctx context.Context,
 	cr *workboard.ChangeRequest,
+	delivered bool,
 ) error {
 	phase, err := r.derivedChangeRequestPhase(ctx, *cr)
 	if err != nil {
 		return err
+	}
+	if delivered {
+		phase = workboard.BoardPhaseDelivered
 	}
 	cr.Phase = phase
 	tracker, err := r.latestTrackerStatus(ctx, *cr)
@@ -415,6 +434,39 @@ func (r *WorkBoardRepository) derivedChangeRequestPhase(
 		return workboard.BoardPhaseDraft, nil
 	}
 	return workboard.BoardPhaseIntake, nil
+}
+
+// deliveredChangeRequestIDs returns the set of change-request ids whose LATEST
+// delivery_review gate run passed — the Delivered phase override. One query
+// for the whole id set (DISTINCT ON keeps the newest run per subject) so the
+// list path stays free of N+1 gate-run lookups.
+func (r *WorkBoardRepository) deliveredChangeRequestIDs(
+	ctx context.Context,
+	ids []string,
+) (map[string]bool, error) {
+	delivered := make(map[string]bool, len(ids))
+	if len(ids) == 0 {
+		return delivered, nil
+	}
+	var rows []struct {
+		SubjectID string
+		State     string
+	}
+	if err := r.db.WithContext(ctx).Raw(
+		`SELECT DISTINCT ON (subject_id) subject_id, state
+		 FROM gate_runs
+		 WHERE subject_kind = ? AND gate = ? AND subject_id IN ?
+		 ORDER BY subject_id, created_at DESC`,
+		workboard.GateRunSubjectChangeRequest, governanceprofile.DeliveryReviewGateKey, ids,
+	).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		if row.State == string(workboard.NextActionStatePass) {
+			delivered[row.SubjectID] = true
+		}
+	}
+	return delivered, nil
 }
 
 // latestTrackerFeedback returns the provider and raw tracker state of the most
@@ -857,7 +909,7 @@ func (r *WorkBoardRepository) NextActions(
 	isApproved := lead != nil && lead.Status == artifact.StatusApproved
 	isCanonical := cr.LeadArtifactID != "" && feature.CanonicalArtifactID == cr.LeadArtifactID
 	canonicalDrifted := feature.CanonicalArtifactID != "" && cr.LeadArtifactID != "" && feature.CanonicalArtifactID != cr.LeadArtifactID
-	return []workboard.NextAction{
+	actions := []workboard.NextAction{
 		{
 			Gate:  "spec_drafted",
 			State: stateIf(cr.LeadArtifactID != "", workboard.NextActionStatePass, workboard.NextActionStatePending),
@@ -891,7 +943,20 @@ func (r *WorkBoardRepository) NextActions(
 			State: stateForDeliveryPackGate(cr.ContextPackArtifactID, cr.LeadArtifactID),
 			Hint:  hintForDeliveryPackGate(cr.ContextPackArtifactID, cr.LeadArtifactID),
 		},
-	}, nil
+	}
+	// Quick-route CRs never grow a working spec, so the full-artifact-flow
+	// gates are persisted as not_applicable for audit instead of pending
+	// forever. delivery_pack (and the eval-only delivery_review) still apply.
+	if cr.IsQuickRoute() {
+		for i := range actions {
+			if actions[i].Gate == "delivery_pack" {
+				continue
+			}
+			actions[i].State = workboard.NextActionStateNotApplicable
+			actions[i].Hint = "Not required for quick-route work"
+		}
+	}
+	return actions, nil
 }
 
 func (r *WorkBoardRepository) RefreshGateRuns(
@@ -1104,6 +1169,8 @@ func gateVerdictFromState(state workboard.NextActionState) string {
 		return "pass"
 	case workboard.NextActionStateWarn:
 		return "warn"
+	case workboard.NextActionStateNotApplicable:
+		return "not_applicable"
 	default:
 		return "pending"
 	}

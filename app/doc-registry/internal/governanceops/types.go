@@ -28,12 +28,13 @@ type ResolvedWork struct {
 
 // GovernanceStatusCounts is the phase breakdown in GovernanceStatusResult.
 type GovernanceStatusCounts struct {
-	Intake  int `json:"intake"`
-	Draft   int `json:"draft"`
-	Review  int `json:"review"`
-	Ready   int `json:"ready"`
-	Handoff int `json:"handoff"`
-	Total   int `json:"total"`
+	Intake    int `json:"intake"`
+	Draft     int `json:"draft"`
+	Review    int `json:"review"`
+	Ready     int `json:"ready"`
+	Handoff   int `json:"handoff"`
+	Delivered int `json:"delivered"`
+	Total     int `json:"total"`
 }
 
 // GovernanceStatusAttentionItem is one work item that has stale warnings.

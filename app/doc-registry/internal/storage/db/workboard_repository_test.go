@@ -2128,3 +2128,197 @@ func TestWorkBoardRepository_TrackerConflictWarning_UsesProviderName(t *testing.
 		}
 	})
 }
+
+// Delivered phase: the latest delivery_review gate run decides whether a CR
+// surfaces as Delivered instead of its pointer-derived phase (per spec §15).
+func TestWorkBoardRepository_DeliveredPhaseFromLatestDeliveryReview(t *testing.T) {
+	t.Parallel()
+	forEachDriver(t, func(t *testing.T, _ string, gdb *gorm.DB) {
+		repo := NewWorkBoardRepository(gdb)
+		ctx := context.Background()
+		now := time.Now().UTC().Truncate(time.Second)
+
+		mkCR := func(t *testing.T, id string) *workboard.ChangeRequest {
+			t.Helper()
+			cr, err := repo.CreateChangeRequest(ctx, workboard.ChangeRequest{
+				ID:                    id,
+				Key:                   strings.ToUpper(id),
+				WorkType:              workboard.WorkTypeBugFix,
+				Title:                 "Delivered phase " + id,
+				ContextPackArtifactID: "art-pack-" + id,
+				CreatedAt:             now,
+				UpdatedAt:             now,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return cr
+		}
+		addReview := func(t *testing.T, crID string, state workboard.NextActionState, at time.Time) {
+			t.Helper()
+			if err := gdb.Create(&workboard.GateRun{
+				ID:           fmt.Sprintf("run-%s-%d", crID, at.UnixNano()),
+				SubjectKind:  workboard.GateRunSubjectChangeRequest,
+				SubjectID:    crID,
+				Executor:     workboard.GateRunExecutorPlatform,
+				Gate:         "delivery_review",
+				State:        state,
+				Hint:         "review " + string(state),
+				EvidenceJSON: "{}",
+				CreatedAt:    at,
+			}).Error; err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		passCR := mkCR(t, "cr-delivered-pass")
+		failCR := mkCR(t, "cr-delivered-fail")
+		noneCR := mkCR(t, "cr-delivered-none")
+		flipToFailCR := mkCR(t, "cr-delivered-flip-fail")
+		flipToPassCR := mkCR(t, "cr-delivered-flip-pass")
+
+		addReview(t, passCR.ID, workboard.NextActionStatePass, now)
+		addReview(t, failCR.ID, workboard.NextActionStateFail, now)
+		addReview(t, flipToFailCR.ID, workboard.NextActionStatePass, now.Add(-time.Hour))
+		addReview(t, flipToFailCR.ID, workboard.NextActionStateFail, now)
+		addReview(t, flipToPassCR.ID, workboard.NextActionStateFail, now.Add(-time.Hour))
+		addReview(t, flipToPassCR.ID, workboard.NextActionStatePass, now)
+
+		want := map[string]workboard.BoardPhase{
+			passCR.ID:       workboard.BoardPhaseDelivered,
+			failCR.ID:       workboard.BoardPhaseHandoff,
+			noneCR.ID:       workboard.BoardPhaseHandoff,
+			flipToFailCR.ID: workboard.BoardPhaseHandoff,
+			flipToPassCR.ID: workboard.BoardPhaseDelivered,
+		}
+
+		// Single-read path.
+		for id, phase := range want {
+			got, err := repo.GetChangeRequest(ctx, id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Phase != phase {
+				t.Fatalf("GetChangeRequest(%s): phase = %q, want %q", id, got.Phase, phase)
+			}
+		}
+
+		// List path — the delivered override is batch-loaded across many CRs.
+		items, err := repo.ListChangeRequests(ctx, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		seen := 0
+		for _, item := range items {
+			phase, ok := want[item.ID]
+			if !ok {
+				continue
+			}
+			seen++
+			if item.Phase != phase {
+				t.Fatalf("ListChangeRequests(%s): phase = %q, want %q", item.ID, item.Phase, phase)
+			}
+		}
+		if seen != len(want) {
+			t.Fatalf("ListChangeRequests returned %d of %d expected CRs", seen, len(want))
+		}
+	})
+}
+
+// Quick-route CRs (no lead artifact and no feature) never grow a working spec,
+// so the full-artifact-flow gates persist as not_applicable for audit instead
+// of pending forever (per spec §15).
+func TestWorkBoardRepository_NextActionsQuickRouteMarksArtifactGatesNotApplicable(t *testing.T) {
+	t.Parallel()
+	forEachDriver(t, func(t *testing.T, _ string, gdb *gorm.DB) {
+		repo := NewWorkBoardRepository(gdb)
+		ctx := context.Background()
+
+		quickGates := []string{"spec_drafted", "spec_approved", "no_conflicts", "knowledge_fresh", "canonical_spec"}
+
+		cr, err := repo.CreateChangeRequest(ctx, workboard.ChangeRequest{
+			ID:       "cr-quick-gates",
+			Key:      "CR-QUICK-GATES",
+			WorkType: workboard.WorkTypeBugFix,
+			Title:    "Quick-route gates",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		actions, err := repo.NextActions(ctx, cr.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		byGate := map[string]workboard.NextAction{}
+		for _, action := range actions {
+			byGate[action.Gate] = action
+		}
+		for _, gate := range quickGates {
+			if byGate[gate].State != workboard.NextActionStateNotApplicable {
+				t.Fatalf("%s state = %q, want not_applicable", gate, byGate[gate].State)
+			}
+			if byGate[gate].Hint != "Not required for quick-route work" {
+				t.Fatalf("%s hint = %q", gate, byGate[gate].Hint)
+			}
+		}
+		// delivery_pack stays deterministic: pending until a pack is attached.
+		if byGate["delivery_pack"].State != workboard.NextActionStatePending {
+			t.Fatalf("delivery_pack state = %q, want pending", byGate["delivery_pack"].State)
+		}
+
+		// RefreshGateRuns persists the not_applicable rows for audit.
+		rows, err := repo.RefreshGateRuns(ctx, workboard.RefreshGateRunsInput{ChangeRequestID: cr.ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rowByGate := map[string]workboard.GateRun{}
+		for _, row := range rows {
+			rowByGate[row.Gate] = row
+		}
+		for _, gate := range quickGates {
+			if rowByGate[gate].State != workboard.NextActionStateNotApplicable {
+				t.Fatalf("persisted %s state = %q, want not_applicable", gate, rowByGate[gate].State)
+			}
+		}
+		persisted, err := repo.ListGateRuns(ctx, cr.ID, 50)
+		if err != nil {
+			t.Fatal(err)
+		}
+		persistedNA := 0
+		for _, row := range persisted {
+			if row.State == workboard.NextActionStateNotApplicable && row.Gate != "delivery_pack" {
+				persistedNA++
+			}
+		}
+		if persistedNA != len(quickGates) {
+			t.Fatalf("persisted not_applicable rows = %d, want %d", persistedNA, len(quickGates))
+		}
+
+		// A featureless CR with a lead artifact is NOT quick-route: gates stay
+		// deterministic. (Feature-backed CRs are covered by the existing
+		// NextActions tests.)
+		fullCR, err := repo.CreateChangeRequest(ctx, workboard.ChangeRequest{
+			ID:             "cr-quick-gates-full",
+			Key:            "CR-QUICK-GATES-FULL",
+			WorkType:       workboard.WorkTypeBugFix,
+			Title:          "Not quick: lead attached",
+			LeadArtifactID: "art-missing-lead",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		fullActions, err := repo.NextActions(ctx, fullCR.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, action := range fullActions {
+			if action.Gate == "spec_drafted" && action.State != workboard.NextActionStatePass {
+				t.Fatalf("full-route spec_drafted state = %q, want pass", action.State)
+			}
+			if action.Gate == "spec_approved" && action.State == workboard.NextActionStateNotApplicable {
+				t.Fatalf("full-route spec_approved must not be not_applicable")
+			}
+		}
+	})
+}

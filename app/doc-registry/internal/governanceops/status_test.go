@@ -3,6 +3,9 @@ package governanceops
 import (
 	"context"
 	"errors"
+	"slices"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,7 +15,8 @@ import (
 
 // fakeWorkBoardReader is a minimal in-memory WorkBoardReader for tests.
 type fakeWorkBoardReader struct {
-	crs []workboard.ChangeRequest
+	crs      []workboard.ChangeRequest
+	warnings []workboard.StaleWarning
 }
 
 func (f *fakeWorkBoardReader) ListChangeRequests(_ context.Context, _ bool) ([]workboard.ChangeRequest, error) {
@@ -41,7 +45,7 @@ func (f *fakeWorkBoardReader) ListGateRuns(_ context.Context, _ string, _ int) (
 }
 
 func (f *fakeWorkBoardReader) ListStaleWarnings(_ context.Context, _ workboard.StaleWarningFilter) ([]workboard.StaleWarning, error) {
-	return nil, nil
+	return f.warnings, nil
 }
 
 // fakeTrackerReader returns one GitHub integration and one tracker link for cr-1.
@@ -139,5 +143,74 @@ func TestResolveWorkRefBareIssueKeyRequiresProvider(t *testing.T) {
 	_, err := svc.ResolveWorkRef(context.Background(), ResolveWorkRefInput{Ref: "SHOP-42"})
 	if !errors.Is(err, ErrProviderRequired) {
 		t.Fatalf("error = %v, want ErrProviderRequired", err)
+	}
+}
+
+func TestGovernanceStatusCountsDeliveredAndExcludesItFromAttention(t *testing.T) {
+	t.Parallel()
+	svc := &Service{WorkBoard: &fakeWorkBoardReader{
+		crs: []workboard.ChangeRequest{
+			{ID: "cr-delivered", Key: "CR-DELIVERED", Title: "Delivered work", Phase: workboard.BoardPhaseDelivered},
+			{ID: "cr-handoff", Key: "CR-HANDOFF", Title: "Handoff work", Phase: workboard.BoardPhaseHandoff},
+		},
+		warnings: []workboard.StaleWarning{
+			// A delivered CR with a stale warning must NOT appear in attention.
+			{Code: workboard.WarningDeliveryStale, ChangeRequestID: "cr-delivered", Severity: "warning"},
+			{Code: workboard.WarningContextPackStale, ChangeRequestID: "cr-handoff", Severity: "warning"},
+		},
+	}}
+
+	got, err := svc.GovernanceStatus(context.Background(), GovernanceStatusInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Counts.Delivered != 1 {
+		t.Fatalf("counts.delivered = %d, want 1", got.Counts.Delivered)
+	}
+	if got.Counts.Handoff != 1 {
+		t.Fatalf("counts.handoff = %d, want 1 (delivered must not count as handoff)", got.Counts.Handoff)
+	}
+	if got.Counts.Total != 2 {
+		t.Fatalf("counts.total = %d, want 2", got.Counts.Total)
+	}
+	if len(got.Attention) != 1 || got.Attention[0].ChangeRequestID != "cr-handoff" {
+		t.Fatalf("attention = %+v, want only cr-handoff", got.Attention)
+	}
+	if !strings.Contains(got.Summary, "1 delivered") {
+		t.Fatalf("summary = %q, want it to mention delivered", got.Summary)
+	}
+}
+
+func TestListWorkItemsExcludesDeliveredByDefault(t *testing.T) {
+	t.Parallel()
+	svc := &Service{WorkBoard: &fakeWorkBoardReader{
+		crs: []workboard.ChangeRequest{
+			{ID: "cr-delivered", Key: "CR-DELIVERED", Title: "Delivered work", Phase: workboard.BoardPhaseDelivered},
+			{ID: "cr-handoff", Key: "CR-HANDOFF", Title: "Handoff work", Phase: workboard.BoardPhaseHandoff},
+			{ID: "cr-ready", Key: "CR-READY", Title: "Ready work", Phase: workboard.BoardPhaseReady},
+		},
+	}}
+
+	for _, tc := range []struct {
+		name  string
+		input ListWorkItemsInput
+		want  []string
+	}{
+		{name: "default", input: ListWorkItemsInput{}, want: []string{"cr-handoff", "cr-ready"}},
+		{name: "ready", input: ListWorkItemsInput{Ready: true}, want: []string{"cr-ready"}},
+		{name: "handed_off", input: ListWorkItemsInput{HandedOff: true}, want: []string{"cr-handoff"}},
+	} {
+		got, err := svc.ListWorkItems(context.Background(), tc.input)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		ids := make([]string, 0, len(got.Items))
+		for _, item := range got.Items {
+			ids = append(ids, item.ChangeRequestID)
+		}
+		sort.Strings(ids)
+		if !slices.Equal(ids, tc.want) {
+			t.Fatalf("%s: items = %v, want %v", tc.name, ids, tc.want)
+		}
 	}
 }

@@ -253,11 +253,18 @@ func (s *Service) GovernanceStatus(ctx context.Context, in GovernanceStatusInput
 			result.Counts.Ready++
 		case workboard.BoardPhaseHandoff:
 			result.Counts.Handoff++
+		case workboard.BoardPhaseDelivered:
+			result.Counts.Delivered++
 		default:
 			result.Counts.Intake++
 		}
 		result.Counts.Total++
 
+		// Delivered items passed their latest delivery review — nothing left to
+		// act on, so they never surface in attention even with stale warnings.
+		if phase == workboard.BoardPhaseDelivered {
+			continue
+		}
 		if issues, ok := warnByCR[cr.ID]; ok {
 			result.Attention = append(result.Attention, GovernanceStatusAttentionItem{
 				ChangeRequestID: cr.ID,
@@ -559,7 +566,7 @@ func buildSummary(counts GovernanceStatusCounts, attention int) string {
 	if counts.Total == 0 {
 		return "No active work items."
 	}
-	parts := make([]string, 0, 5)
+	parts := make([]string, 0, 6)
 	if counts.Intake > 0 {
 		parts = append(parts, fmt.Sprintf("%d in intake", counts.Intake))
 	}
@@ -574,6 +581,9 @@ func buildSummary(counts GovernanceStatusCounts, attention int) string {
 	}
 	if counts.Handoff > 0 {
 		parts = append(parts, fmt.Sprintf("%d in handoff", counts.Handoff))
+	}
+	if counts.Delivered > 0 {
+		parts = append(parts, fmt.Sprintf("%d delivered", counts.Delivered))
 	}
 	noun := "work items"
 	if counts.Total == 1 {
