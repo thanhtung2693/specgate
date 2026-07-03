@@ -372,7 +372,7 @@ func (s *RegistryService) RefreshReadinessRuns(ctx context.Context, artifactID s
 			Gate:         gate,
 			State:        eval.State,
 			Hint:         strings.TrimSpace(eval.Hint),
-			EvidenceJSON: strings.TrimSpace(eval.Evidence),
+			EvidenceJSON: readinessEvidenceJSON(eval, gate),
 			CreatedAt:    now,
 		})
 	}
@@ -383,6 +383,37 @@ func (s *RegistryService) RefreshReadinessRuns(ctx context.Context, artifactID s
 		return nil, err
 	}
 	return rows, nil
+}
+
+// readinessEvidenceJSON preserves the judge metadata the caller supplied by
+// wrapping it into the same gate-run-v1 envelope the workboard path persists
+// (per spec: a stored run must say who judged it and with what confidence).
+// Evidence that is already an envelope, and evaluations with no judge
+// metadata, pass through unchanged.
+func readinessEvidenceJSON(eval ReadinessEvaluation, gate string) string {
+	evidence := strings.TrimSpace(eval.Evidence)
+	if strings.TrimSpace(eval.JudgeModel) == "" && eval.Confidence == 0 {
+		return evidence
+	}
+	if strings.Contains(evidence, "evidence_contract_version") {
+		return evidence
+	}
+	payload, err := json.Marshal(map[string]any{
+		"evidence_contract_version": "gate-run-v1",
+		"gate":                      gate,
+		"evaluator": map[string]any{
+			"type":               "platform_llm",
+			"judge_model":        strings.TrimSpace(eval.JudgeModel),
+			"eval_suite_version": strings.TrimSpace(eval.EvalSuiteVersion),
+		},
+		"verdict":    string(eval.State),
+		"confidence": eval.Confidence,
+		"evidence":   evidence,
+	})
+	if err != nil {
+		return evidence
+	}
+	return string(payload)
 }
 
 func (s *RegistryService) ListReadinessRuns(ctx context.Context, artifactID string, limit int) ([]ReadinessRun, error) {
