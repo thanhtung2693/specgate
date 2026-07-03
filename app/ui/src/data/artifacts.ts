@@ -474,15 +474,23 @@ export function mapArtifactFeature(item: FeatureDTO): ArtifactFeatureSummary | n
   }
 }
 
+// The registry's gate-preview note is a fixed "preview — not persisted"
+// placeholder (structural API text, not user content); replace it with
+// reviewer-facing language. Real notes pass through unchanged.
+function isGatePreviewPlaceholderNote(note: string): boolean {
+  return /^preview\s*[-—–]\s*not persisted$/i.test(note)
+}
+
 export function mapArtifactGatePreview(item: ArtifactGatePreviewDTO): ArtifactGatePreviewSummary | null {
   const gateKey = item.gate_key?.trim()
   if (!gateKey) return null
 
+  const note = item.note?.trim()
   return {
     gateKey,
     gateVersion: item.gate_version,
     executor: item.executor,
-    note: item.note || "preview - not persisted",
+    note: !note || isGatePreviewPlaceholderNote(note) ? "Expected for this artifact's profile. Not run yet." : note,
   }
 }
 

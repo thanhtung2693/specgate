@@ -89,7 +89,7 @@ import {
 } from "@/data/skills"
 import { formatDateTime, formatRelativeTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { readableKey, statusTone, toneClass, type WorkspaceProfile } from "./shared"
+import { gateCatalog, gateText, readableKey, statusTone, toneClass, type WorkspaceProfile } from "./shared"
 import { ActionTooltip, copyText, MarkdownText } from "./shared-ui"
 
 const pluginCliCommands = [
@@ -888,9 +888,35 @@ function GovernanceCatalogRow({
         </div>
       </div>
       <div className="mt-3 grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
-        <GovernanceTokenList label="Gates" items={enabledGates} />
+        <GovernanceGateList items={enabledGates} />
         <GovernanceTokenList label="Evidence" items={requiredEvidence} />
       </div>
+    </div>
+  )
+}
+
+function GovernanceGateList({ items }: { items: string[] }) {
+  return (
+    <div className="min-w-0">
+      <p className="font-medium text-foreground/80">Gates</p>
+      {items.length === 0 ? (
+        <p className="mt-1">None recorded.</p>
+      ) : (
+        <div className="mt-1 grid gap-1.5">
+          {items.map((gate) => {
+            const entry = gateCatalog[gate]
+            return (
+              <div key={gate} className="min-w-0">
+                <p className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+                  <span className="text-foreground/80">{entry?.name ?? gateText(gate)}</span>
+                  <span className="rounded-md border bg-card/70 px-1.5 py-0.5 font-mono text-[11px]">{gate}</span>
+                </p>
+                {entry ? <p className="mt-0.5 text-[11px] leading-4">{entry.checks}</p> : null}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

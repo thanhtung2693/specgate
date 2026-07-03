@@ -100,6 +100,7 @@ import { formatDateTime, formatRelativeTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import {
   deliveryText,
+  gateChecks,
   gateText,
   isDeliveredWorkItem,
   readableKey,
@@ -110,7 +111,7 @@ import {
   type Tone,
   type WorkspaceProfile,
 } from "./shared"
-import { ActionTooltip, copyText, MarkdownText, openGovernanceAgentModal, PolicyExplanationSection, runGovernanceAgentPrompt } from "./shared-ui"
+import { ActionTooltip, copyText, GateEvidenceWhy, MarkdownText, openGovernanceAgentModal, PolicyExplanationSection, runGovernanceAgentPrompt } from "./shared-ui"
 import { ArtifactsPage } from "./artifacts"
 import { ReviewsPage } from "./reviews"
 import { SettingsModal, settingsSectionFromParam, type SettingsSectionId } from "./settings"
@@ -1893,6 +1894,9 @@ function GateActionRows({
                       {stateText(action.state)}
                     </Badge>
                   </div>
+                  {gateChecks(action.gate) ? (
+                    <p className="mt-1 text-xs text-muted-foreground">{gateChecks(action.gate)}</p>
+                  ) : null}
                   <p className="mt-2 text-sm leading-5 text-muted-foreground">{action.hint}</p>
                 </div>
               ))
@@ -1950,7 +1954,11 @@ function GateRunRows({
                   {stateText(run.state)}
                 </Badge>
               </div>
+              {gateChecks(run.gate) ? (
+                <p className="mt-1 text-xs text-muted-foreground">{gateChecks(run.gate)}</p>
+              ) : null}
               <p className="mt-2 text-sm leading-5 text-muted-foreground">{run.hint}</p>
+              <GateEvidenceWhy evidence={run.evidence} />
               {run.createdAt ? <p className="mt-2 font-mono text-[11px] text-muted-foreground">{formatDateTime(run.createdAt)}</p> : null}
             </div>
           ))}
@@ -1978,7 +1986,7 @@ function GateSummary({ item, detail }: { item: WorkItem; detail: WorkItemDetailD
         <div className="flex items-center justify-between gap-3">
           <div>
             <h3 className="text-sm font-semibold">Gate state</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Readiness and quality outcomes stay in item context.</p>
+            <p className="mt-1 text-xs text-muted-foreground">What each gate checked and why, per run.</p>
           </div>
           <Badge variant="outline" className={cn("border", toneClass(statusTone("gate", item.gate)))}>
             {gateText(item.gate)}

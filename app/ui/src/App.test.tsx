@@ -2036,18 +2036,107 @@ describe("SpecGate UI shell", () => {
     expect(await screen.findByText(/Current verdict is/)).toBeInTheDocument()
     const gateHeading = screen.getByText("Gate state")
     expect(deliveryHeading.compareDocumentPosition(gateHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByText("What each gate checked and why, per run.")).toBeInTheDocument()
+    expect(screen.queryByText("Readiness and quality outcomes stay in item context.")).not.toBeInTheDocument()
 
     const gateSummaryToggle = screen.getByRole("button", { name: "6 gates · 1 passed · 5 not applicable" })
     expect(gateSummaryToggle).toHaveAttribute("aria-expanded", "false")
     expect(screen.queryByText("Not required for quick work.")).not.toBeInTheDocument()
     await user.click(gateSummaryToggle)
     expect(screen.getAllByText("Not required for quick work.")).toHaveLength(5)
+    expect(
+      screen.getByText("Checks the package covers its required topics (outcomes, criteria, risks…). Reads every document in the package."),
+    ).toBeInTheDocument()
+    expect(screen.getAllByText("Judges the delivery evidence against every acceptance criterion.").length).toBeGreaterThan(1)
 
     expect(screen.getByText("Latest delivery verdict.")).toBeInTheDocument()
     expect(screen.queryByText("Waiting on delivery evidence.")).not.toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: "Show all runs" }))
     expect(screen.getByText("Waiting on delivery evidence.")).toBeInTheDocument()
     expect(screen.getByText("Latest delivery verdict.")).toBeInTheDocument()
+  })
+
+  it("discloses gate-run evidence with judge origin, confidence, and content", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith("/workboard/change-requests/SG-155/gate-runs?limit=10")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "run-judged",
+                  gate: "canonical_spec",
+                  state: "warn",
+                  hint: "Judge confidence below threshold",
+                  evidence_json: JSON.stringify({
+                    evidence_contract_version: "gate-run-v1",
+                    gate: "canonical_spec",
+                    evaluator: { type: "agent_judge", judge_model: "gpt-5-mini" },
+                    verdict: "warn",
+                    confidence: 0.85,
+                    evidence: "The working spec has not been promoted to canonical.",
+                  }),
+                  created_at: "2026-06-27T05:30:00Z",
+                },
+                {
+                  id: "run-attested",
+                  gate: "delivery_review",
+                  state: "pass",
+                  hint: "Verdict derived from the coding agent's acceptance-criteria claims.",
+                  evidence_json: JSON.stringify({
+                    evidence_contract_version: "gate-run-v1",
+                    gate: "delivery_review",
+                    evaluator: { type: "agent_judge", judge_model: "agent_attested" },
+                    verdict: "pass",
+                    confidence: 1,
+                    evidence: JSON.stringify({
+                      criteria: [{ criterion_id: "ac-1", text: "Doc registry CI passes", verdict: "met", why: "coding-agent claim: satisfied" }],
+                      checks: [],
+                    }),
+                  }),
+                  created_at: "2026-06-27T05:20:00Z",
+                },
+                {
+                  id: "run-deterministic",
+                  gate: "spec_drafted",
+                  state: "pass",
+                  hint: "artifact-SG-155",
+                  evidence_json: JSON.stringify({
+                    evidence_contract_version: "gate-run-v1",
+                    gate: "spec_drafted",
+                    evaluator: { type: "deterministic", judge_model: "deterministic-v1" },
+                    verdict: "pass",
+                    confidence: 1,
+                    evidence: "",
+                  }),
+                  created_at: "2026-06-27T05:10:00Z",
+                },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return defaultRegistryResponse(input, init)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/work/SG-155?tab=verification")
+    const user = userEvent.setup()
+
+    expect(await screen.findByText("Gate run history")).toBeInTheDocument()
+    // The deterministic run carries no judgment or evidence content, so it gets no disclosure.
+    const whyButtons = await screen.findAllByRole("button", { name: "Why" })
+    expect(whyButtons).toHaveLength(2)
+
+    await user.click(whyButtons[0])
+    expect(screen.getByText("Evaluated by platform model (gpt-5-mini) · confidence 0.85")).toBeInTheDocument()
+    expect(screen.getByText("The working spec has not been promoted to canonical.")).toBeInTheDocument()
+
+    await user.click(whyButtons[1])
+    expect(screen.getByText("Agent-attested · confidence 1")).toBeInTheDocument()
+    expect(screen.getByText("Doc registry CI passes")).toBeInTheDocument()
+    expect(screen.getByText("coding-agent claim: satisfied")).toBeInTheDocument()
   })
 
   it("derives acceptance criteria state from the delivery verdict when present", async () => {
@@ -3180,6 +3269,7 @@ describe("SpecGate UI shell", () => {
                   gate: "acceptance_criteria_verifiable",
                   state: "pass",
                   hint: "acceptance criteria are checkable",
+                  evidence_json: "Each criterion names an observable outcome.",
                   created_at: "2026-06-28T10:00:00Z",
                 },
               ],
@@ -3274,11 +3364,17 @@ describe("SpecGate UI shell", () => {
     const detailDialog = await screen.findByRole("dialog", { name: "Large artifact bundle" })
     expect(await within(detailDialog).findByRole("button", { name: /doc-3\.md/ })).toBeInTheDocument()
     expect(await within(detailDialog).findByText("Readiness history")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("Each run records what the checker read and why it decided.")).toBeInTheDocument()
     expect(within(detailDialog).getByText("Scope Clear")).toBeInTheDocument()
-    expect(within(detailDialog).getByText("preview - not persisted")).toBeInTheDocument()
+    expect(within(detailDialog).getByText("Checks the change is bounded with explicit non-goals. Reads the spec.")).toBeInTheDocument()
+    expect(within(detailDialog).queryByText(/preview\s*[-—]\s*not persisted/)).not.toBeInTheDocument()
+    expect(within(detailDialog).getByText("Expected for this artifact's profile. Not run yet.")).toBeInTheDocument()
     expect(within(detailDialog).getByText("ide_agent")).toBeInTheDocument()
     expect(within(detailDialog).getByText("Acceptance Criteria Verifiable")).toBeInTheDocument()
     expect(within(detailDialog).getByText("acceptance criteria are checkable")).toBeInTheDocument()
+    expect(within(detailDialog).queryByText("Each criterion names an observable outcome.")).not.toBeInTheDocument()
+    await user.click(within(detailDialog).getByRole("button", { name: "Why" }))
+    expect(within(detailDialog).getByText("Each criterion names an observable outcome.")).toBeInTheDocument()
     expect(within(detailDialog).getByText("Saved revisions")).toBeInTheDocument()
     expect(within(detailDialog).getByText("rev-live-1")).toBeInTheDocument()
     expect(within(detailDialog).getByText("draft artifact-many-draft")).toBeInTheDocument()
@@ -4044,6 +4140,14 @@ describe("SpecGate UI shell", () => {
     expect(within(settingsDialog).getAllByText("human_required").length).toBeGreaterThan(0)
     expect(within(settingsDialog).getAllByText("corroborated_required").length).toBeGreaterThan(0)
     expect(within(settingsDialog).getAllByText("delivery_review").length).toBeGreaterThan(0)
+    expect(within(settingsDialog).getByText("Spec completeness")).toBeInTheDocument()
+    expect(within(settingsDialog).getAllByText("spec_completeness").length).toBeGreaterThan(0)
+    expect(
+      within(settingsDialog).getByText(
+        "Checks the package covers its required topics (outcomes, criteria, risks…). Reads every document in the package.",
+      ),
+    ).toBeInTheDocument()
+    expect(within(settingsDialog).getAllByText("Judges the delivery evidence against every acceptance criterion.").length).toBe(2)
     expect(within(settingsDialog).queryByRole("button", { name: /Import profile|Activate policy|Accept exception|Resolve policy|Record feedback/i })).not.toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith("http://registry.test/governance-profiles", expect.any(Object))
     expect(fetchMock).toHaveBeenCalledWith("http://registry.test/api/v1/policies/levels", expect.any(Object))

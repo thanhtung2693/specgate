@@ -1,5 +1,5 @@
-import { CodeIcon } from "lucide-react"
-import { useEffect, useId, useState, type ReactNode } from "react"
+import { ChevronRightIcon, CodeIcon } from "lucide-react"
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { GovernancePolicySummary } from "@/data/workboard"
 import { cn } from "@/lib/utils"
-import { readableKey, statusTone, toneClass } from "./shared"
+import { parseGateEvidence, readableKey, stateText, statusTone, toneClass, type GateEvidenceDetails } from "./shared"
 
 export function openGovernanceAgentModal() {
   document.querySelector<HTMLButtonElement>('[aria-label="Open governance agent"]:not([disabled])')?.click()
@@ -197,6 +197,60 @@ export function MarkdownText({ content, compact = false }: { content: string; co
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {content}
       </ReactMarkdown>
+    </div>
+  )
+}
+
+function gateEvidenceOriginLabel(details: GateEvidenceDetails): string | undefined {
+  if (details.evaluator === "agent") return "Agent-attested"
+  if (details.evaluator === "platform_model") {
+    return details.judgeModel ? `Evaluated by platform model (${details.judgeModel})` : "Evaluated by platform model"
+  }
+  return undefined
+}
+
+// "Why" disclosure for a persisted gate/readiness run: who evaluated it, how
+// confident, and the evidence the checker recorded. Renders nothing when the
+// run carries no parseable evidence — never a raw JSON dump.
+export function GateEvidenceWhy({ evidence }: { evidence?: string }) {
+  const details = useMemo(() => parseGateEvidence(evidence), [evidence])
+  const [open, setOpen] = useState(false)
+  if (!details) return null
+
+  const origin = gateEvidenceOriginLabel(details)
+  const confidence = details.confidence !== undefined ? `confidence ${details.confidence}` : undefined
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        aria-expanded={open}
+        className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <ChevronRightIcon className={cn("size-3.5 transition-transform", open && "rotate-90")} />
+        Why
+      </button>
+      {open ? (
+        <div className="mt-2 grid gap-1.5 rounded-md border bg-card/50 p-2.5 text-xs">
+          {origin || confidence ? (
+            <p className="text-muted-foreground">{[origin, confidence].filter(Boolean).join(" · ")}</p>
+          ) : null}
+          {details.quote ? (
+            <blockquote className="border-l-2 pl-2 leading-5 text-muted-foreground">{details.quote}</blockquote>
+          ) : null}
+          {details.rows.map((row, index) => (
+            <div key={`${row.label}-${index}`} className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+              <span className="min-w-0 font-medium text-foreground">{row.label}</span>
+              {row.state ? (
+                <Badge variant="outline" className={cn("h-4 border px-1 text-[10px]", toneClass(statusTone("state", row.state)))}>
+                  {stateText(row.state)}
+                </Badge>
+              ) : null}
+              {row.why ? <span className="text-muted-foreground">{row.why}</span> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }

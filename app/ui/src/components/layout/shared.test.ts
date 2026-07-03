@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import type { WorkItem } from "@/data/workspace"
 
-import { reviewTone, statusTone } from "./shared"
+import { gateCatalog, gateChecks, parseGateEvidence, reviewTone, statusTone } from "./shared"
 
 describe("statusTone", () => {
   it("maps gate statuses", () => {
@@ -78,6 +78,103 @@ describe("statusTone", () => {
     expect(statusTone("gate", "pending")).toBe("warning")
     expect(statusTone("plugin", "pending")).toBe("neutral")
     expect(statusTone("artifact", "pending")).toBe("neutral")
+  })
+})
+
+describe("gateCatalog", () => {
+  it("explains what each catalog gate checks and reads in one sentence", () => {
+    for (const [gate, entry] of Object.entries(gateCatalog)) {
+      expect(entry.name.trim().length, gate).toBeGreaterThan(0)
+      expect(entry.checks, gate).toMatch(/^(Checks|Judges) /)
+    }
+    expect(gateChecks("spec_completeness")).toBe(
+      "Checks the package covers its required topics (outcomes, criteria, risks…). Reads every document in the package.",
+    )
+    expect(gateChecks("delivery_review")).toBe("Judges the delivery evidence against every acceptance criterion.")
+    expect(gateChecks("unknown_gate")).toBeUndefined()
+  })
+})
+
+describe("parseGateEvidence", () => {
+  it("returns nothing for empty or content-free evidence", () => {
+    expect(parseGateEvidence(undefined)).toBeUndefined()
+    expect(parseGateEvidence("")).toBeUndefined()
+    expect(parseGateEvidence("{}")).toBeUndefined()
+    expect(parseGateEvidence('""')).toBeUndefined()
+    expect(parseGateEvidence('{"unrelated": true}')).toBeUndefined()
+  })
+
+  it("treats non-JSON evidence as a plain supporting quote", () => {
+    expect(parseGateEvidence("Section 3 names explicit non-goals.")).toEqual({
+      quote: "Section 3 names explicit non-goals.",
+      rows: [],
+    })
+  })
+
+  it("reads the gate-run envelope: platform judge, confidence, and inner quote", () => {
+    const details = parseGateEvidence(
+      JSON.stringify({
+        evidence_contract_version: "gate-run-v1",
+        evaluator: { type: "agent_judge", judge_model: "gpt-5-mini" },
+        confidence: 0.42,
+        evidence: "Judge confidence below threshold",
+      }),
+    )
+    expect(details).toMatchObject({
+      evaluator: "platform_model",
+      judgeModel: "gpt-5-mini",
+      confidence: 0.42,
+      quote: "Judge confidence below threshold",
+    })
+  })
+
+  it("omits judge and confidence for deterministic runs with no evidence", () => {
+    const details = parseGateEvidence(
+      JSON.stringify({
+        evidence_contract_version: "gate-run-v1",
+        evaluator: { type: "deterministic", judge_model: "deterministic-v1" },
+        confidence: 1,
+        evidence: "",
+      }),
+    )
+    expect(details).toBeUndefined()
+  })
+
+  it("labels agent-attested runs and unpacks delivery-review criteria and checks", () => {
+    const details = parseGateEvidence(
+      JSON.stringify({
+        evaluator: { type: "agent_judge", judge_model: "agent_attested" },
+        confidence: 1,
+        evidence: JSON.stringify({
+          criteria: [{ criterion_id: "ac-1", text: "CI passes", verdict: "met", why: "coding-agent claim: satisfied" }],
+          checks: [{ name: "tests", status: "pass", detail: "146 passed" }],
+        }),
+      }),
+    )
+    expect(details?.evaluator).toBe("agent")
+    expect(details?.rows).toEqual([
+      { label: "CI passes", state: "met", why: "coding-agent claim: satisfied" },
+      { label: "tests", state: "pass", why: "146 passed" },
+    ])
+  })
+
+  it("unpacks per-topic completeness evidence with the summary as quote", () => {
+    const details = parseGateEvidence(
+      JSON.stringify({
+        topics: [{ topic: "risks", status: "missing", why: "No risk section found." }],
+        summary: "Spec is missing risk coverage.",
+      }),
+    )
+    expect(details?.quote).toBe("Spec is missing risk coverage.")
+    expect(details?.rows).toEqual([{ label: "risks", state: "missing", why: "No risk section found." }])
+  })
+
+  it("labels ide_agent executor evidence as agent-attested and keeps string findings", () => {
+    const details = parseGateEvidence(
+      JSON.stringify({ executor: "ide_agent", findings: ["Scope bounded in spec §2", { raw: "dropped" }] }),
+    )
+    expect(details?.evaluator).toBe("agent")
+    expect(details?.rows).toEqual([{ label: "Scope bounded in spec §2" }])
   })
 })
 

@@ -36,4 +36,19 @@ describe("artifact data adapter", () => {
     })
     expect(mapArtifactGatePreview({ note: "Missing gate key" })).toBeNull()
   })
+
+  it("replaces the registry gate-preview placeholder note with run-state language", () => {
+    expect(mapArtifactGatePreview({ gate_key: "scope_clear", note: "preview — not persisted" })?.note).toBe(
+      "Expected for this artifact's profile. Not run yet.",
+    )
+    expect(mapArtifactGatePreview({ gate_key: "scope_clear", note: "preview - not persisted" })?.note).toBe(
+      "Expected for this artifact's profile. Not run yet.",
+    )
+    expect(mapArtifactGatePreview({ gate_key: "scope_clear" })?.note).toBe(
+      "Expected for this artifact's profile. Not run yet.",
+    )
+    expect(mapArtifactGatePreview({ gate_key: "scope_clear", note: "Expected gate from artifact snapshot." })?.note).toBe(
+      "Expected gate from artifact snapshot.",
+    )
+  })
 })
