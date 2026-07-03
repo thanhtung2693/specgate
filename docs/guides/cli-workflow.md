@@ -43,7 +43,10 @@ Server selection order:
 Open the web UI:
 
 ```bash
-specgate open
+specgate open                    # base URL
+specgate open <work-ref>         # work item page
+specgate open reviews            # section page: reviews, artifacts, or work
+specgate open --artifact <id>    # artifact inspector
 ```
 
 ## Select user and workspace
@@ -183,6 +186,37 @@ specgate gates check <artifact-id>
 ```
 
 Readiness is not approval. Approval is a separate governed action.
+
+## Review and approve from the CLI
+
+Approve an artifact version, or send it back with a note:
+
+```bash
+specgate artifact approve <artifact-id> --note "LGTM"
+specgate artifact request-changes <artifact-id> --note "Tighten the error copy"
+```
+
+Both record the selected user as the deciding actor. Interactive terminals ask
+for confirmation first; `--json` and non-interactive runs proceed directly.
+
+Review pending artifact-update proposals (agent-drafted edit sessions awaiting
+a human decision):
+
+```bash
+specgate artifact proposals
+specgate artifact proposals approve <session-id>
+specgate artifact proposals reject <session-id>
+```
+
+`approve` saves the proposal as a draft revision; `reject` discards it —
+interactive terminals confirm the discard, `--yes` skips the prompt.
+
+`artifact show` also accepts a unique id prefix from the `artifact list` table:
+
+```bash
+specgate artifact list
+specgate artifact show <id-prefix>
+```
 
 ## Run gates for work
 

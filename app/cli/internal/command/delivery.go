@@ -111,7 +111,7 @@ func newDeliveryReportCmd(deps *Deps) *cobra.Command {
 
 			work, err := deps.Client.ResolveWorkRef(cmd.Context(), ref)
 			if err != nil {
-				code := deps.Printer.Error("delivery.report", mapAPIError("delivery.report", err))
+				code := deps.Printer.Error("delivery.report", mapWorkRefError("delivery.report", ref, err))
 				return &output.ExitError{Code: code, Err: err}
 			}
 
@@ -183,7 +183,7 @@ func runDeliveryReportInit(cmd *cobra.Command, args []string, deps *Deps, path s
 	}
 	work, err := deps.Client.ResolveWorkRef(cmd.Context(), ref)
 	if err != nil {
-		code := deps.Printer.Error("delivery.report", mapAPIError("delivery.report", err))
+		code := deps.Printer.Error("delivery.report", mapWorkRefError("delivery.report", ref, err))
 		return &output.ExitError{Code: code, Err: err}
 	}
 	criteria, err := deps.Client.ListAcceptanceCriteria(cmd.Context(), work.ChangeRequestID)
@@ -267,7 +267,7 @@ func newDeliverySubmitCmd(deps *Deps) *cobra.Command {
 			}
 			work, err := deps.Client.ResolveWorkRef(cmd.Context(), ref)
 			if err != nil {
-				code := deps.Printer.Error("delivery.submit", mapAPIError("delivery.submit", err))
+				code := deps.Printer.Error("delivery.submit", mapWorkRefError("delivery.submit", ref, err))
 				return &output.ExitError{Code: code, Err: err}
 			}
 
@@ -348,7 +348,7 @@ func newDeliveryReviewCmd(deps *Deps) *cobra.Command {
 
 			work, err := deps.Client.ResolveWorkRef(cmd.Context(), ref)
 			if err != nil {
-				code := deps.Printer.Error("delivery.review", mapAPIError("delivery.review", err))
+				code := deps.Printer.Error("delivery.review", mapWorkRefError("delivery.review", ref, err))
 				return &output.ExitError{Code: code, Err: err}
 			}
 
@@ -398,7 +398,7 @@ func newDeliveryStatusCmd(deps *Deps) *cobra.Command {
 
 			work, err := deps.Client.ResolveWorkRef(cmd.Context(), ref)
 			if err != nil {
-				code := deps.Printer.Error("delivery.status", mapAPIError("delivery.status", err))
+				code := deps.Printer.Error("delivery.status", mapWorkRefError("delivery.status", ref, err))
 				return &output.ExitError{Code: code, Err: err}
 			}
 

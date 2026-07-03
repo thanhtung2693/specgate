@@ -45,10 +45,10 @@ internal/config/            config file (load, save, resolve server)
 internal/output/            JSON envelope, exit codes, ExitError
 internal/command/           cobra root command + Deps struct
   root.go                   NewRootCommand, ExecuteForCode, DefaultDeps
-  system.go                 system subcommands, `version`, `uninstall`, and CLI update warnings
+  system.go                 system subcommands, `version`, `uninstall`, CLI update warnings, and `open` with deep links (`open <work-ref>`, `open reviews|artifacts|work`, `open --artifact <id>`); central error mapping (mapAPIError, mapWorkRefError, unreachable-server message)
   stats.go                  `stats` governance-value readout (reviewed items, first-pass yield, catches, rework, ambiguity saves, cycle time, recent-catch ledger) from GET /api/v1/stats
   work.go                   work subcommands: `work create-quick` (positional title + repeatable --ac, interactive AC loop), `work archive` for retiring one or more work refs; `work policy` as the canonical user-facing policy explanation; `work list` renders the status board's attention section
-  artifact.go               artifact subcommands; interactive impact_declaration collection on publish
+  artifact.go               artifact subcommands; interactive impact_declaration collection on publish; human decision verbs `artifact approve` / `artifact request-changes`; `artifact proposals [approve|reject]` review queue; `artifact show` unique-id-prefix resolution
   gates.go                  unified gates family: work-item LLM gates (`gates run|status|history`), artifact readiness (`gates check`), and artifact gate tasks (`gates tasks list|show|submit-result|preview|dispatch`)
   delivery.go               delivery subcommands: report (plus --init completion.json scaffold), submit (report → gates → review → status chain), review, status
   confirm.go                requireConfirm — confirmation prompts are TTY-only; non-interactive runs proceed (--yes accepted for compatibility)

@@ -100,7 +100,7 @@ but new users should start with the core workflow lane.
 | `stats` | Show a governance-value readout — reviewed items, first-pass yield, pre/post-build catches, rework, ambiguity saves, cycle time, and a recent-catches ledger; `--days N` sets the window, `--all-workspaces` clears the workspace filter |
 | `work` | List the attention queue, resolve, create, inspect, archive, read context, and explain work policy |
 | `feature` | List and inspect governed features — look up an existing feature's key before publishing so a new artifact links to it instead of creating a duplicate |
-| `artifact` | Publish, inspect, read, and propose artifacts |
+| `artifact` | Publish, inspect, read, and propose artifacts; decide as a human reviewer with `artifact approve` / `artifact request-changes` (optional `--note`), and work the proposal review queue with `artifact proposals [approve\|reject <session-id>]`; `artifact show` accepts a unique id prefix from `artifact list` |
 | `gates` | All quality-gate operations: work-item LLM gates (`run`, `status`, `history`), artifact readiness checks (`check`), and artifact gate tasks (`tasks`) |
 | `delivery` | Report implementation and run delivery review; `delivery report --init` scaffolds a completion.json from the work item's acceptance criteria, and `delivery submit` runs the whole tail (report → gates → review → status) in one command |
 
@@ -120,7 +120,7 @@ server contract.
 | `workspace` | List workspaces, show the selected workspace, and select a workspace |
 | `plugins` | Install and verify Codex, Claude Code, and Cursor IDE plugin files |
 | `skill` | Inspect user-defined Skills |
-| `open`, `update`, `uninstall` | Open the configured server, refresh setup, or remove user-local setup |
+| `open`, `update`, `uninstall` | Open the web UI — `open` alone opens the base URL; `open <work-ref>`, `open reviews\|artifacts\|work`, and `open --artifact <id>` deep-link to the matching page — refresh setup, or remove user-local setup |
 
 The selected local user and workspace are stored in CLI config. They are used
 for attribution and default workspace filtering, not authentication: quick work

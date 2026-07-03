@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -300,7 +301,7 @@ func printAttentionSection(deps *Deps, items []client.NeedsAttentionItem) {
 }
 
 func phaseBreakdown(counts client.PhaseCounts) string {
-	parts := make([]string, 0, 5)
+	parts := make([]string, 0, 6)
 	for _, phase := range []struct {
 		name  string
 		count int
@@ -310,6 +311,7 @@ func phaseBreakdown(counts client.PhaseCounts) string {
 		{name: "review", count: counts.Review},
 		{name: "ready", count: counts.Ready},
 		{name: "handoff", count: counts.Handoff},
+		{name: "delivered", count: counts.Delivered},
 	} {
 		if phase.count > 0 {
 			parts = append(parts, fmt.Sprintf("%s %d", phase.name, phase.count))
@@ -417,31 +419,64 @@ func printDoctorLocalStack(ctx context.Context, deps *Deps) {
 	}
 }
 
-// specgate open
+// specgate open [work-ref|reviews|artifacts|work] [--artifact <id>]
+//
+// Without a target it opens the configured web URL. A bare argument matching a
+// section name opens that section page; anything else is treated as a work ref
+// and opens the work item page.
 func newOpenCmd(deps *Deps) *cobra.Command {
-	return &cobra.Command{
-		Use:   "open",
-		Short: "Open the configured SpecGate URL in the default browser",
-		RunE: func(cmd *cobra.Command, _ []string) error {
+	var artifactID string
+	cmd := &cobra.Command{
+		Use:   "open [work-ref|reviews|artifacts|work]",
+		Short: "Open the SpecGate web UI, optionally deep-linked to a work item, section, or artifact",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if artifactID != "" && len(args) > 0 {
+				payload := output.ErrorPayload{Code: "validation_failed", Message: "pass a target argument or --artifact, not both"}
+				code := deps.Printer.Error("open", payload)
+				return &output.ExitError{Code: code}
+			}
 			meta, err := deps.Client.Meta(cmd.Context())
 			webURL := deps.ServerURL
 			if err == nil && meta.WebURL != "" {
 				webURL = meta.WebURL
 			}
+			base := strings.TrimRight(webURL, "/")
+			target := webURL
+			switch {
+			case artifactID != "":
+				target = base + "/artifacts?artifact=" + url.QueryEscape(artifactID)
+			case len(args) == 1:
+				switch args[0] {
+				case "reviews", "artifacts", "work":
+					target = base + "/" + args[0]
+				default:
+					work, err := deps.Client.ResolveWorkRef(cmd.Context(), args[0])
+					if err != nil {
+						code := deps.Printer.Error("open", mapWorkRefError("open", args[0], err))
+						return &output.ExitError{Code: code, Err: err}
+					}
+					target = base + "/work/" + url.PathEscape(work.ChangeRequestKey)
+				}
+			}
 			if deps.Opener == nil {
 				return fmt.Errorf("no opener configured")
 			}
-			if err := deps.Opener(webURL); err != nil {
+			if err := deps.Opener(target); err != nil {
 				payload := output.ErrorPayload{Code: "unavailable", Message: err.Error()}
 				code := deps.Printer.Error("open", payload)
 				return &output.ExitError{Code: code, Err: err}
 			}
-			if deps.Printer.Mode() != output.ModeJSON {
-				fmt.Fprintf(deps.Stdout, "Opening %s\n", webURL)
+			if deps.Printer.Mode() == output.ModeJSON {
+				deps.Printer.Success("open", map[string]string{"url": target})
+				return nil
 			}
+			fmt.Fprintf(deps.Stdout, "Opening %s\n", target)
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&artifactID, "artifact", "", "Open a specific artifact in the Artifacts page")
+	return cmd
 }
 
 // specgate config
@@ -1294,5 +1329,34 @@ func mapAPIError(command string, err error) output.ErrorPayload {
 			return output.ErrorPayload{Code: "validation_failed", Message: apiErr.Error(), Details: details}
 		}
 	}
+	// An *url.Error means the HTTP round trip itself failed (connection
+	// refused, EOF, DNS, timeout) — the server never answered.
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return output.ErrorPayload{
+			Code:    "unavailable",
+			Message: fmt.Sprintf("SpecGate server unreachable at %s — is the stack running? Try `specgate doctor` or `specgate up`.", serverBaseURL(urlErr.URL)),
+		}
+	}
 	return output.ErrorPayload{Code: "unavailable", Message: err.Error()}
+}
+
+// serverBaseURL reduces a full request URL to scheme://host for error messages.
+func serverBaseURL(raw string) string {
+	if u, err := url.Parse(raw); err == nil && u.Host != "" {
+		return u.Scheme + "://" + u.Host
+	}
+	return raw
+}
+
+// mapWorkRefError converts a work-item resolution failure into a human-facing
+// message that names the ref and the next step instead of the internal
+// operation name. Used by every command that resolves a work ref.
+func mapWorkRefError(command, ref string, err error) output.ErrorPayload {
+	payload := mapAPIError(command, err)
+	var apiErr *client.APIError
+	if errors.As(err, &apiErr) && (apiErr.Kind == client.ErrorNotFound || apiErr.Kind == client.ErrorUsage) {
+		payload.Message = fmt.Sprintf("work item %q not found — try `specgate work list`", ref)
+	}
+	return payload
 }

@@ -96,7 +96,7 @@ func newWorkShowCmd(deps *Deps) *cobra.Command {
 
 			work, err := deps.Client.ResolveWorkRef(cmd.Context(), ref)
 			if err != nil {
-				code := deps.Printer.Error("work.show", mapAPIError("work.show", err))
+				code := deps.Printer.Error("work.show", mapWorkRefError("work.show", ref, err))
 				return &output.ExitError{Code: code, Err: err}
 			}
 
@@ -144,7 +144,7 @@ func newWorkContextCmd(deps *Deps) *cobra.Command {
 			// Resolve ref → change_request_id
 			work, err := deps.Client.ResolveWorkRef(cmd.Context(), ref)
 			if err != nil {
-				code := deps.Printer.Error("work.context", mapAPIError("work.context", err))
+				code := deps.Printer.Error("work.context", mapWorkRefError("work.context", ref, err))
 				return &output.ExitError{Code: code, Err: err}
 			}
 
@@ -187,6 +187,7 @@ func newWorkArchiveCmd(deps *Deps) *cobra.Command {
 					return &output.ExitError{Code: output.ExitUsage, Err: err}
 				}
 				if !confirmed {
+					fmt.Fprintln(deps.Stdout, "Cancelled.")
 					return nil
 				}
 			}
@@ -195,7 +196,7 @@ func newWorkArchiveCmd(deps *Deps) *cobra.Command {
 			for _, ref := range args {
 				work, err := deps.Client.ResolveWorkRef(cmd.Context(), ref)
 				if err != nil {
-					code := deps.Printer.Error("work.archive", mapAPIError("work.archive", err))
+					code := deps.Printer.Error("work.archive", mapWorkRefError("work.archive", ref, err))
 					return &output.ExitError{Code: code, Err: err}
 				}
 				result, err := deps.Client.ArchiveWorkItem(cmd.Context(), work.ChangeRequestID, reason, currentActor(deps))
@@ -363,7 +364,7 @@ func newWorkPolicyCmd(deps *Deps) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			work, err := deps.Client.ResolveWorkRef(cmd.Context(), args[0])
 			if err != nil {
-				code := deps.Printer.Error("work.policy", mapAPIError("work.policy", err))
+				code := deps.Printer.Error("work.policy", mapWorkRefError("work.policy", args[0], err))
 				return &output.ExitError{Code: code, Err: err}
 			}
 			exp, err := deps.Client.WorkPolicy(cmd.Context(), work.ChangeRequestID)

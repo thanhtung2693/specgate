@@ -17,12 +17,13 @@ type Meta struct {
 // PhaseCounts holds work item counts broken down by phase. Field names + tags
 // match the doc-registry GovernanceStatusCounts response.
 type PhaseCounts struct {
-	Intake  int `json:"intake"`
-	Draft   int `json:"draft"`
-	Review  int `json:"review"`
-	Ready   int `json:"ready"`
-	Handoff int `json:"handoff"`
-	Total   int `json:"total"`
+	Intake    int `json:"intake"`
+	Draft     int `json:"draft"`
+	Review    int `json:"review"`
+	Ready     int `json:"ready"`
+	Handoff   int `json:"handoff"`
+	Delivered int `json:"delivered"`
+	Total     int `json:"total"`
 }
 
 // NeedsAttentionItem is a work item that requires human or agent action. Matches
@@ -182,6 +183,42 @@ type ArtifactFileContent struct {
 	SignedURL string `json:"signed_url"`
 	SizeBytes int64  `json:"size_bytes"`
 	Content   string `json:"content,omitempty"`
+}
+
+// UpdateArtifactStatusInput is the request body for PATCH /artifacts/{id}/status —
+// the same human-decision endpoint the web UI uses. Field names + tags match the
+// doc-registry UpdateStatusInput body.
+type UpdateArtifactStatusInput struct {
+	Status     string `json:"status"`
+	ApprovedBy string `json:"approved_by,omitempty"`
+	Note       string `json:"note,omitempty"`
+	ActorKind  string `json:"actor_kind,omitempty"`
+}
+
+// ProposalSession is one pending artifact-update proposal from
+// GET /artifact-edit/proposals. Matches the doc-registry ArtifactEditSessionDTO.
+type ProposalSession struct {
+	ID              string `json:"id"`
+	BaseArtifactID  string `json:"base_artifact_id"`
+	BaseVersion     string `json:"base_version,omitempty"`
+	State           string `json:"state"`
+	SavedRevisionID string `json:"saved_revision_id,omitempty"`
+	LastDiffSummary string `json:"last_diff_summary,omitempty"`
+	SourceKind      string `json:"source_kind,omitempty"`
+	SourceID        string `json:"source_id,omitempty"`
+	CreatedAt       string `json:"created_at,omitempty"`
+	UpdatedAt       string `json:"updated_at,omitempty"`
+}
+
+// SavedRevision is the response from POST /artifact-edit/sessions/{id}/save.
+type SavedRevision struct {
+	RevisionID             string `json:"revision_id"`
+	BaseArtifactID         string `json:"base_artifact_id"`
+	ArtifactID             string `json:"artifact_id,omitempty"`
+	MaterializedArtifactID string `json:"materialized_artifact_id,omitempty"`
+	State                  string `json:"state"`
+	SessionID              string `json:"session_id,omitempty"`
+	CreatedAt              string `json:"created_at,omitempty"`
 }
 
 // ProposalResult is the response from POST /api/v1/artifacts/{id}/proposals.

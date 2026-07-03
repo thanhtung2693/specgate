@@ -209,3 +209,120 @@ func TestClientListAcceptanceCriteria(t *testing.T) {
 		t.Fatalf("criteria = %+v", got)
 	}
 }
+
+func TestClientUpdateArtifactStatusPatchesStatus(t *testing.T) {
+	t.Parallel()
+	var gotMethod, gotPath string
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id": "art-1", "version": "v2", "status": "approved",
+		})
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL, time.Second)
+	got, err := c.UpdateArtifactStatus(context.Background(), "art-1", client.UpdateArtifactStatusInput{
+		Status:     "approved",
+		ApprovedBy: "lead",
+		Note:       "ship it",
+		ActorKind:  "human",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotMethod != http.MethodPatch || gotPath != "/artifacts/art-1/status" {
+		t.Fatalf("request = %s %s, want PATCH /artifacts/art-1/status", gotMethod, gotPath)
+	}
+	if gotBody["status"] != "approved" || gotBody["approved_by"] != "lead" ||
+		gotBody["note"] != "ship it" || gotBody["actor_kind"] != "human" {
+		t.Fatalf("body = %v", gotBody)
+	}
+	if got.Status != "approved" || got.Version != "v2" {
+		t.Fatalf("artifact = %+v", got)
+	}
+}
+
+func TestClientListArtifactProposals(t *testing.T) {
+	t.Parallel()
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"items": []map[string]any{{
+				"id":                "aes_1",
+				"base_artifact_id":  "art-1",
+				"base_version":      "v3",
+				"state":             "active",
+				"source_kind":       "feedback_event",
+				"last_diff_summary": "1 file changed",
+			}},
+		})
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL, time.Second)
+	got, err := c.ListArtifactProposals(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/artifact-edit/proposals" {
+		t.Fatalf("path = %q", gotPath)
+	}
+	if len(got) != 1 || got[0].ID != "aes_1" || got[0].BaseArtifactID != "art-1" ||
+		got[0].SourceKind != "feedback_event" || got[0].LastDiffSummary != "1 file changed" {
+		t.Fatalf("proposals = %+v", got)
+	}
+}
+
+func TestClientSaveArtifactProposalPostsRequestedBy(t *testing.T) {
+	t.Parallel()
+	var gotMethod, gotPath string
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"revision_id": "rev-1", "base_artifact_id": "art-1", "state": "saved",
+		})
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL, time.Second)
+	got, err := c.SaveArtifactProposal(context.Background(), "aes_1", "lead")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotMethod != http.MethodPost || gotPath != "/artifact-edit/sessions/aes_1/save" {
+		t.Fatalf("request = %s %s, want POST /artifact-edit/sessions/aes_1/save", gotMethod, gotPath)
+	}
+	if gotBody["requested_by"] != "lead" {
+		t.Fatalf("body = %v", gotBody)
+	}
+	if got.RevisionID != "rev-1" || got.State != "saved" {
+		t.Fatalf("revision = %+v", got)
+	}
+}
+
+func TestClientRejectArtifactProposalDeletesSession(t *testing.T) {
+	t.Parallel()
+	var gotMethod, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL, time.Second)
+	if err := c.RejectArtifactProposal(context.Background(), "aes_1"); err != nil {
+		t.Fatal(err)
+	}
+	if gotMethod != http.MethodDelete || gotPath != "/artifact-edit/sessions/aes_1" {
+		t.Fatalf("request = %s %s, want DELETE /artifact-edit/sessions/aes_1", gotMethod, gotPath)
+	}
+}

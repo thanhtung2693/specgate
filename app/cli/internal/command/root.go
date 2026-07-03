@@ -42,6 +42,10 @@ type APIClient interface {
 	ListArtifactFiles(ctx context.Context, id string) ([]client.ArtifactFile, error)
 	GetArtifactFile(ctx context.Context, id, filePath string) (*client.ArtifactFileContent, error)
 	DraftProposal(ctx context.Context, artifactID string, body map[string]any) (*client.ProposalResult, error)
+	UpdateArtifactStatus(ctx context.Context, id string, in client.UpdateArtifactStatusInput) (*client.Artifact, error)
+	ListArtifactProposals(ctx context.Context) ([]client.ProposalSession, error)
+	SaveArtifactProposal(ctx context.Context, sessionID, requestedBy string) (*client.SavedRevision, error)
+	RejectArtifactProposal(ctx context.Context, sessionID string) error
 	// Skill commands
 	ListSkills(ctx context.Context, nameFilter string) ([]client.Skill, error)
 	GetSkill(ctx context.Context, id string) (*client.Skill, error)

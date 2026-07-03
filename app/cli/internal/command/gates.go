@@ -38,7 +38,7 @@ func newGatesRunCmd(deps *Deps) *cobra.Command {
 
 			work, err := deps.Client.ResolveWorkRef(cmd.Context(), ref)
 			if err != nil {
-				code := deps.Printer.Error("gates.run", mapAPIError("gates.run", err))
+				code := deps.Printer.Error("gates.run", mapWorkRefError("gates.run", ref, err))
 				return &output.ExitError{Code: code, Err: err}
 			}
 
@@ -86,7 +86,7 @@ func newGatesStatusCmd(deps *Deps) *cobra.Command {
 
 			work, err := deps.Client.ResolveWorkRef(cmd.Context(), ref)
 			if err != nil {
-				code := deps.Printer.Error("gates.status", mapAPIError("gates.status", err))
+				code := deps.Printer.Error("gates.status", mapWorkRefError("gates.status", ref, err))
 				return &output.ExitError{Code: code, Err: err}
 			}
 
@@ -138,7 +138,7 @@ func newGatesHistoryCmd(deps *Deps) *cobra.Command {
 
 			work, err := deps.Client.ResolveWorkRef(cmd.Context(), ref)
 			if err != nil {
-				code := deps.Printer.Error("gates.history", mapAPIError("gates.history", err))
+				code := deps.Printer.Error("gates.history", mapWorkRefError("gates.history", ref, err))
 				return &output.ExitError{Code: code, Err: err}
 			}
 

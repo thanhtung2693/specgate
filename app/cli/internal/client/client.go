@@ -206,6 +206,48 @@ func (c *Client) DraftProposal(ctx context.Context, artifactID string, body map[
 	return &r, nil
 }
 
+// UpdateArtifactStatus calls PATCH /artifacts/{id}/status — the human-decision
+// endpoint the web UI uses to approve or request changes on an artifact.
+func (c *Client) UpdateArtifactStatus(ctx context.Context, id string, in UpdateArtifactStatusInput) (*Artifact, error) {
+	var r Artifact
+	if err := c.do(ctx, http.MethodPatch, "/artifacts/"+url.PathEscape(id)+"/status", in, &r); err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// ListArtifactProposals calls GET /artifact-edit/proposals — the review queue
+// of pending artifact-update proposals awaiting a human approve/reject.
+func (c *Client) ListArtifactProposals(ctx context.Context) ([]ProposalSession, error) {
+	var r struct {
+		Items []ProposalSession `json:"items"`
+	}
+	if err := c.get(ctx, "/artifact-edit/proposals", &r); err != nil {
+		return nil, err
+	}
+	return r.Items, nil
+}
+
+// SaveArtifactProposal calls POST /artifact-edit/sessions/{id}/save — approves
+// a pending proposal by saving it as a draft revision.
+func (c *Client) SaveArtifactProposal(ctx context.Context, sessionID, requestedBy string) (*SavedRevision, error) {
+	body := map[string]string{}
+	if requestedBy != "" {
+		body["requested_by"] = requestedBy
+	}
+	var r SavedRevision
+	if err := c.post(ctx, "/artifact-edit/sessions/"+url.PathEscape(sessionID)+"/save", body, &r); err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// RejectArtifactProposal calls DELETE /artifact-edit/sessions/{id} — discards a
+// pending proposal.
+func (c *Client) RejectArtifactProposal(ctx context.Context, sessionID string) error {
+	return c.do(ctx, http.MethodDelete, "/artifact-edit/sessions/"+url.PathEscape(sessionID), nil, nil)
+}
+
 // ListSkills calls GET /api/v1/skills with an optional name prefix filter.
 func (c *Client) ListSkills(ctx context.Context, nameFilter string) ([]Skill, error) {
 	path := "/api/v1/skills"

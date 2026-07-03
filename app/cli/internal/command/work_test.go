@@ -46,6 +46,21 @@ type fakeClient struct {
 
 	// injected errors
 	gatesRunErr error
+	resolveErr  error
+
+	// artifactsByID, when non-nil, makes GetArtifact a strict lookup: unknown
+	// ids return a not-found APIError (for id-prefix resolution tests).
+	artifactsByID map[string]*client.Artifact
+
+	updateStatusResult *client.Artifact
+	lastStatusID       string
+	lastStatusInput    client.UpdateArtifactStatusInput
+
+	proposalsResult     []client.ProposalSession
+	saveProposalResult  *client.SavedRevision
+	lastSaveSessionID   string
+	lastSaveRequestedBy string
+	lastRejectSessionID string
 
 	// calls counts HTTP-equivalent method invocations (for pre-validation tests)
 	calls int
@@ -126,6 +141,9 @@ func (f *fakeClient) Healthz(_ context.Context) error { return nil }
 
 func (f *fakeClient) ResolveWorkRef(_ context.Context, ref string) (*client.ResolvedWork, error) {
 	f.lastWorkRef = ref
+	if f.resolveErr != nil {
+		return nil, f.resolveErr
+	}
 	if f.resolvedWork != nil {
 		return f.resolvedWork, nil
 	}
@@ -175,10 +193,47 @@ func (f *fakeClient) ListArtifacts(_ context.Context, filter client.ArtifactFilt
 func (f *fakeClient) GetArtifact(_ context.Context, id string) (*client.Artifact, error) {
 	f.calls++
 	f.lastArtifactID = id
+	if f.artifactsByID != nil {
+		if a, ok := f.artifactsByID[id]; ok {
+			return a, nil
+		}
+		return nil, &client.APIError{Kind: client.ErrorNotFound, Status: 404, Message: "artifact not found"}
+	}
 	if f.artifactResult != nil {
 		return f.artifactResult, nil
 	}
 	return &client.Artifact{ID: id, Status: "draft", Version: "v0.1"}, nil
+}
+
+func (f *fakeClient) UpdateArtifactStatus(_ context.Context, id string, in client.UpdateArtifactStatusInput) (*client.Artifact, error) {
+	f.calls++
+	f.lastStatusID = id
+	f.lastStatusInput = in
+	if f.updateStatusResult != nil {
+		return f.updateStatusResult, nil
+	}
+	return &client.Artifact{ID: id, Version: "v1", Status: in.Status}, nil
+}
+
+func (f *fakeClient) ListArtifactProposals(_ context.Context) ([]client.ProposalSession, error) {
+	f.calls++
+	return f.proposalsResult, nil
+}
+
+func (f *fakeClient) SaveArtifactProposal(_ context.Context, sessionID, requestedBy string) (*client.SavedRevision, error) {
+	f.calls++
+	f.lastSaveSessionID = sessionID
+	f.lastSaveRequestedBy = requestedBy
+	if f.saveProposalResult != nil {
+		return f.saveProposalResult, nil
+	}
+	return &client.SavedRevision{RevisionID: "rev-1", BaseArtifactID: "art-1", State: "saved", SessionID: sessionID}, nil
+}
+
+func (f *fakeClient) RejectArtifactProposal(_ context.Context, sessionID string) error {
+	f.calls++
+	f.lastRejectSessionID = sessionID
+	return nil
 }
 
 func (f *fakeClient) ListArtifactFiles(_ context.Context, id string) ([]client.ArtifactFile, error) {
@@ -994,5 +1049,21 @@ func TestWorkShowListsAcceptanceCriteria(t *testing.T) {
 		!strings.Contains(got, "The env example documents the chat key.") ||
 		!strings.Contains(got, "The README explains the chat panel.") {
 		t.Fatalf("output missing acceptance criteria:\n%s", got)
+	}
+}
+
+func TestWorkArchiveDeclinePrintsCancelled(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t) // fakePrompter confirmValue defaults to false
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "work", "archive", "CR-101")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if fc.calls != 0 {
+		t.Fatalf("calls = %d, want 0 (declined confirm must not archive)", fc.calls)
+	}
+	if !strings.Contains(out.String(), "Cancelled.") {
+		t.Fatalf("output = %q, want Cancelled.", out.String())
 	}
 }

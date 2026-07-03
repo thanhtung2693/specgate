@@ -9,6 +9,7 @@ import (
 
 	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/command"
+	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
@@ -386,5 +387,284 @@ func TestArtifactHelpHasNoQualityCommand(t *testing.T) {
 	}
 	if strings.Contains(joined, "readiness") {
 		t.Fatalf("readiness moved to `gates check`; should not be an artifact subcommand: %v", subcommands)
+	}
+}
+
+// --- artifact approve / request-changes ---
+
+func writeIdentityConfig(t *testing.T, deps *command.Deps, username string) {
+	t.Helper()
+	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
+	err := (config.Config{CurrentUser: config.CurrentUser{Username: username}}).SaveTo(deps.ConfigPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestArtifactApprovePatchesStatus(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	writeIdentityConfig(t, deps, "thanhtung2693")
+	fc.updateStatusResult = &client.Artifact{ID: "art-1", Version: "v2", Status: "approved"}
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain",
+		"artifact", "approve", "art-1", "--note", "lgtm")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if fc.lastStatusID != "art-1" {
+		t.Fatalf("lastStatusID = %q, want art-1", fc.lastStatusID)
+	}
+	in := fc.lastStatusInput
+	if in.Status != "approved" || in.ApprovedBy != "thanhtung2693" || in.Note != "lgtm" || in.ActorKind != "human" {
+		t.Fatalf("status input = %+v", in)
+	}
+	if !strings.Contains(out.String(), "Approved art-1 (v2)") {
+		t.Fatalf("output = %q, want approval confirmation", out.String())
+	}
+}
+
+func TestArtifactApproveInteractiveDeclineCancels(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	deps.StdinIsTTY = func() bool { return true } // prompter confirmValue defaults to false
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "artifact", "approve", "art-1")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if fc.calls != 0 {
+		t.Fatalf("calls = %d, want 0 (declined confirm must not hit the server)", fc.calls)
+	}
+	if !strings.Contains(out.String(), "Cancelled.") {
+		t.Fatalf("output = %q, want Cancelled.", out.String())
+	}
+}
+
+func TestArtifactRequestChangesPatchesStatus(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	writeIdentityConfig(t, deps, "thanhtung2693")
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain",
+		"artifact", "request-changes", "art-1", "--note", "tighten copy")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	in := fc.lastStatusInput
+	if in.Status != "needs_changes" || in.ApprovedBy != "thanhtung2693" || in.Note != "tighten copy" || in.ActorKind != "human" {
+		t.Fatalf("status input = %+v", in)
+	}
+	if !strings.Contains(out.String(), "Requested changes on art-1") {
+		t.Fatalf("output = %q, want request-changes confirmation", out.String())
+	}
+}
+
+func TestArtifactApproveJSONEnvelope(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	fc.updateStatusResult = &client.Artifact{ID: "art-1", Version: "v2", Status: "approved"}
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "approve", "art-1")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	var env struct {
+		OK   bool            `json:"ok"`
+		Data client.Artifact `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal: %v, output: %s", err, out.String())
+	}
+	if !env.OK || env.Data.Status != "approved" {
+		t.Fatalf("unexpected envelope: %s", out.String())
+	}
+}
+
+// --- artifact proposals ---
+
+func TestArtifactProposalsListPlain(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	fc.proposalsResult = []client.ProposalSession{{
+		ID:              "aes_1",
+		BaseArtifactID:  "0123456789abcdef-0000",
+		BaseVersion:     "v3",
+		State:           "active",
+		SourceKind:      "feedback_event",
+		LastDiffSummary: "1 file changed",
+		UpdatedAt:       "2026-07-01T10:00:00Z",
+	}}
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "artifact", "proposals")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	got := out.String()
+	for _, want := range []string{"SESSION", "ARTIFACT", "VERSION", "SOURCE", "DIFF", "UPDATED",
+		"aes_1", "0123456789", "v3", "feedback_event", "1 file changed"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("output missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "0123456789a") {
+		t.Fatalf("base artifact id not shortened to 10 chars:\n%s", got)
+	}
+}
+
+func TestArtifactProposalsListEmpty(t *testing.T) {
+	t.Parallel()
+	deps, _, _, out := newFakeDeps(t)
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "artifact", "proposals")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "No pending artifact-update proposals.") {
+		t.Fatalf("output = %q, want empty state", out.String())
+	}
+}
+
+func TestArtifactProposalsApproveSavesSession(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	writeIdentityConfig(t, deps, "thanhtung2693")
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain",
+		"artifact", "proposals", "approve", "aes_1")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if fc.lastSaveSessionID != "aes_1" {
+		t.Fatalf("lastSaveSessionID = %q, want aes_1", fc.lastSaveSessionID)
+	}
+	if fc.lastSaveRequestedBy != "thanhtung2693" {
+		t.Fatalf("lastSaveRequestedBy = %q, want thanhtung2693", fc.lastSaveRequestedBy)
+	}
+	if !strings.Contains(out.String(), "Approved proposal aes_1") {
+		t.Fatalf("output = %q, want approval confirmation", out.String())
+	}
+}
+
+func TestArtifactProposalsRejectInteractiveDeclineCancels(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	deps.StdinIsTTY = func() bool { return true }
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "artifact", "proposals", "reject", "aes_1")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if fc.lastRejectSessionID != "" {
+		t.Fatalf("lastRejectSessionID = %q, want empty (declined)", fc.lastRejectSessionID)
+	}
+	if !strings.Contains(out.String(), "Cancelled.") {
+		t.Fatalf("output = %q, want Cancelled.", out.String())
+	}
+}
+
+func TestArtifactProposalsRejectDeletesSession(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--yes",
+		"artifact", "proposals", "reject", "aes_1")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if fc.lastRejectSessionID != "aes_1" {
+		t.Fatalf("lastRejectSessionID = %q, want aes_1", fc.lastRejectSessionID)
+	}
+	if !strings.Contains(out.String(), "Rejected proposal aes_1") {
+		t.Fatalf("output = %q, want rejection confirmation", out.String())
+	}
+}
+
+// --- artifact list columns + show prefix ---
+
+func TestArtifactListRendersColumns(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	fc.artifactListResult = &client.ArtifactList{
+		Items: []client.Artifact{{
+			ID:          "0123456789abcdef-0000",
+			Version:     "v1.2",
+			Status:      "approved",
+			FeatureName: "Checkout redesign",
+			UpdatedAt:   "2026-06-30T10:12:00Z",
+		}},
+		Total: 1,
+	}
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "artifact", "list")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	got := out.String()
+	for _, want := range []string{"ID", "VERSION", "STATUS", "FEATURE", "UPDATED",
+		"0123456789", "v1.2", "approved", "Checkout redesign"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("output missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "0123456789a") {
+		t.Fatalf("artifact id not shortened to 10 chars:\n%s", got)
+	}
+}
+
+func TestArtifactShowResolvesUniqueIDPrefix(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	full := "11111111-2222-3333-4444-555555555555"
+	fc.artifactsByID = map[string]*client.Artifact{
+		full: {ID: full, Version: "v2", Status: "approved"},
+	}
+	fc.artifactListResult = &client.ArtifactList{
+		Items: []client.Artifact{{ID: full, Version: "v2", Status: "approved"}},
+		Total: 1,
+	}
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "artifact", "show", "11111111-2")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if fc.lastArtifactID != full {
+		t.Fatalf("lastArtifactID = %q, want %q", fc.lastArtifactID, full)
+	}
+	if !strings.Contains(out.String(), full) {
+		t.Fatalf("output missing full artifact id:\n%s", out.String())
+	}
+}
+
+func TestArtifactShowAmbiguousPrefixListsCandidates(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	idA := "11111111-2222-3333-4444-555555555555"
+	idB := "11111111-9999-8888-7777-666666666666"
+	fc.artifactsByID = map[string]*client.Artifact{}
+	fc.artifactListResult = &client.ArtifactList{
+		Items: []client.Artifact{{ID: idA}, {ID: idB}},
+		Total: 2,
+	}
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "artifact", "show", "11111111")
+	if code != output.ExitUsage {
+		t.Fatalf("exit = %d, want %d, output = %s", code, output.ExitUsage, out.String())
+	}
+	if !strings.Contains(out.String(), idA) || !strings.Contains(out.String(), idB) {
+		t.Fatalf("output must list ambiguous candidates:\n%s", out.String())
+	}
+}
+
+func TestArtifactShowUnknownPrefixSuggestsList(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	fc.artifactsByID = map[string]*client.Artifact{}
+	fc.artifactListResult = &client.ArtifactList{}
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "artifact", "show", "deadbeef")
+	if code != output.ExitNotFound {
+		t.Fatalf("exit = %d, want %d, output = %s", code, output.ExitNotFound, out.String())
+	}
+	if !strings.Contains(out.String(), "specgate artifact list") {
+		t.Fatalf("output = %q, want `specgate artifact list` hint", out.String())
 	}
 }
