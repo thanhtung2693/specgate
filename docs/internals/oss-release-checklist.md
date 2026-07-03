@@ -156,6 +156,22 @@ Expected result after purge: no SpecGate-managed containers, volumes, networks,
 or service images remain. Shared base images should remain unless they carry
 SpecGate labels.
 
+## Deferred / backlog
+
+Ideas kept off the public roadmap until real user pull justifies them. Not
+commitments; recorded here so the context is not lost.
+
+- **Feature Overview auto-generation.** A generator that writes a Feature's
+  `## Overview` narrative from its canonical spec (grounded, no fabrication,
+  human-editable) and refreshes it on canonical change. Prototyped as
+  `board/feature_summary.py` and removed in the alpha simplification
+  (`157f45c7`). The store endpoint (`PUT /workboard/features/{id}/summary`)
+  and the `feature_summary_outdated` staleness warning remain live, so a
+  rebuild only needs the generator, a canonical-change trigger, a real setting
+  behind it, and tests. Deprioritized: it is retention/depth for larger teams,
+  not core-loop acquisition, and an auto-written narrative must not undercut
+  the "verdicts mean something" honesty of the governed loop.
+
 ## Blocker handling
 
 If validation finds a release blocker:
