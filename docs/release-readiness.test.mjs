@@ -168,6 +168,16 @@ test("release images use production-safe runtime defaults", () => {
   assert.match(uiDockerfile, /ARG VITE_LANGGRAPH_API_URL=\/api\/agents/);
 });
 
+test("release workflow smoke-tests doctor repair from published assets", () => {
+  assert.match(releaseWorkflow, /release-doctor-fix-smoke:/);
+  assert.match(releaseWorkflow, /needs: release-image-manifests/);
+  assert.match(releaseWorkflow, /install-cli\.sh/);
+  assert.match(releaseWorkflow, /specgate init --dir "\$DEPLOY_DIR" --bundle-version "\$VERSION" --no-seed --no-input/);
+  assert.match(releaseWorkflow, /specgate down --dir "\$DEPLOY_DIR"/);
+  assert.match(releaseWorkflow, /specgate doctor --fix --yes/);
+  assert.match(releaseWorkflow, /DOC_REGISTRY_PORT=18080/);
+});
+
 test("release compose defaults to file storage without Redis", () => {
   assert.doesNotMatch(releaseCompose, /^\s{2}redis:/m);
   assert.doesNotMatch(releaseCompose, /REDIS_URL:/);

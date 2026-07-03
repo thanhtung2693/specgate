@@ -181,3 +181,51 @@ jobs:
             --tag "${image}:${{ github.ref_name }}" \
             --tag "${image}:latest" \
             "${refs[@]}"
+
+  release-doctor-fix-smoke:
+    runs-on: ubuntu-latest
+    needs: release-image-manifests
+    timeout-minutes: 30
+    env:
+      VERSION: ${{ github.ref_name }}
+      SPECGATE_NO_UPDATE_CHECK: "1"
+    steps:
+      - name: Install released CLI and validate doctor repair
+        run: |
+          set -euxo pipefail
+
+          export HOME="$RUNNER_TEMP/specgate-home"
+          export PATH="$HOME/.local/bin:$PATH"
+          DEPLOY_DIR="$RUNNER_TEMP/specgate-deploy"
+          mkdir -p "$HOME/.local/bin" "$DEPLOY_DIR"
+
+          cat > "$DEPLOY_DIR/.env" <<EOF
+          SPECGATE_COMPOSE_PROJECT=specgate-release-${GITHUB_RUN_ID}
+          POSTGRES_PORT=15432
+          DOC_REGISTRY_PORT=18080
+          AGENTS_PORT=12024
+          UI_PORT=13000
+          EOF
+
+          cleanup() {
+            set +e
+            if command -v specgate >/dev/null 2>&1; then
+              specgate uninstall --dir "$DEPLOY_DIR" --purge-data --yes >/dev/null 2>&1
+            elif [ -f "$DEPLOY_DIR/compose.yml" ]; then
+              docker compose -f "$DEPLOY_DIR/compose.yml" down -v >/dev/null 2>&1
+            fi
+          }
+          trap cleanup EXIT
+
+          curl -fsSL "https://github.com/thanhtung2693/specgate/releases/download/${VERSION}/install-cli.sh" \
+            -o "$RUNNER_TEMP/install-cli.sh"
+          sh "$RUNNER_TEMP/install-cli.sh" --version "$VERSION" --install-dir "$HOME/.local/bin" --no-config
+
+          specgate --version
+          specgate init --dir "$DEPLOY_DIR" --bundle-version "$VERSION" --no-seed --no-input
+          specgate doctor
+
+          specgate down --dir "$DEPLOY_DIR"
+          specgate doctor --fix --yes
+          specgate doctor
+          specgate local-status --dir "$DEPLOY_DIR"

@@ -125,6 +125,8 @@ specgate skill list
 Then verify:
 
 - UI loads at the configured UI port;
+- release automation has exercised `specgate doctor --fix --yes` after stopping a
+  fresh CLI-managed stack;
 - onboarding/user/workspace selection works;
 - optional model setup accepts a provider, model, and key without printing the
   key;
