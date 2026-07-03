@@ -23,6 +23,9 @@ name: ${SPECGATE_COMPOSE_PROJECT:-specgate}
 services:
   postgres:
     image: pgvector/pgvector:0.8.3-pg18
+    labels:
+      org.specgate.managed: "true"
+      org.specgate.component: postgres
     environment:
       POSTGRES_USER: docreg
       # Local-dev credentials. The port is bound to loopback only (below), so the
@@ -44,6 +47,9 @@ services:
 
   doc-registry:
     image: ghcr.io/thanhtung2693/doc-registry:${SPECGATE_VERSION}
+    labels:
+      org.specgate.managed: "true"
+      org.specgate.component: doc-registry
     env_file:
       - ./doc-registry.env
     environment:
@@ -72,6 +78,9 @@ services:
 
   agents:
     image: ghcr.io/thanhtung2693/agents:${SPECGATE_VERSION}
+    labels:
+      org.specgate.managed: "true"
+      org.specgate.component: agents
     # Serve the FastAPI webapp via uvicorn.
     command: ["uvicorn", "specgate_agents.governance.webapp:app", "--host", "0.0.0.0", "--port", "8000"]
     env_file:
@@ -87,6 +96,9 @@ services:
 
   ui:
     image: ghcr.io/thanhtung2693/ui:${SPECGATE_VERSION}
+    labels:
+      org.specgate.managed: "true"
+      org.specgate.component: ui
     ports:
       - "${UI_PORT:-3000}:80"
     healthcheck:
@@ -104,4 +116,16 @@ services:
 
 volumes:
   doc-registry-data:
+    labels:
+      org.specgate.managed: "true"
+      org.specgate.component: doc-registry
   postgres-data:
+    labels:
+      org.specgate.managed: "true"
+      org.specgate.component: postgres
+
+networks:
+  default:
+    labels:
+      org.specgate.managed: "true"
+      org.specgate.component: network

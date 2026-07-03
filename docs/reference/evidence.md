@@ -1,58 +1,95 @@
 # Evidence reference
 
-Delivery evidence flows through the completion report: the JSON body submitted
-by `specgate delivery report --file completion.json` (or as the first stage of
-`specgate delivery submit`). Delivery review judges each acceptance criterion
-against the claims and evidence in this report and persists a per-criterion
-verdict.
+Delivery evidence tells SpecGate what changed and why the acceptance criteria
+should be considered satisfied.
 
-Scaffold a correctly-shaped report instead of hand-authoring it:
+## Completion report
+
+Create a scaffold:
 
 ```bash
-specgate delivery report "$WORK_REF" --init
+specgate delivery report <work-ref> --init
 ```
 
-The scaffold prefills `event_type` and one `criteria[]` entry per acceptance
-criterion, using the same `criterion_id` values delivery review correlates
-against.
+The scaffold includes one `criteria[]` entry per acceptance criterion.
 
-## Completion report shape
+Typical shape:
 
 ```json
 {
+  "change_request_id": "CR-123",
   "event_type": "coding_agent.completed",
-  "summary": "What was implemented and how it was verified.",
-  "affected_files": ["app/example/file.go"],
+  "severity": "info",
+  "summary": "Implemented the healthcheck endpoint.",
   "checks": [
-    { "name": "tests", "status": "pass", "detail": "go test ./... (42 passed)" }
+    {
+      "name": "tests",
+      "status": "pass",
+      "detail": "go test ./internal/health -count=1"
+    }
   ],
   "criteria": [
     {
-      "criterion_id": "ac-0",
-      "text": "The issue described is resolved and verified.",
+      "criterion_id": "ac-1",
+      "text": "GET /healthz returns 200 when the service is up",
       "claim": "satisfied",
-      "evidence": { "kind": "file", "path": "app/example/file.go" }
+      "evidence": "Added handler and passing test TestHealthz."
     }
+  ],
+  "affected_files": [
+    "internal/health/handler.go",
+    "internal/health/handler_test.go"
   ]
 }
 ```
 
 ## Field notes
 
-| Field | Notes |
+| Field | Purpose |
 |---|---|
-| `event_type` | `coding_agent.completed` for a completion report. Use `coding_agent.blocked_ambiguity` (with a `summary` naming the decision needed) when blocked instead of guessing. |
-| `summary` | Concrete description of what changed and how it was verified. The reviewer reads this — vague summaries earn `needs_human_review`. |
-| `checks` | One entry per verification command. `status` is `pass`, `fail`, or `skipped` (with the reason in `detail`). |
-| `criteria[].criterion_id` | Must match the work item's acceptance-criterion ids (e.g. `ac-0`). `--init` prefills them; delivery review's `outstanding_md` reuses them on rework. |
-| `criteria[].claim` | `satisfied`, `partial`, or `not_done`. Claim honestly — the reviewer cross-checks claims against checks and summary. |
-| `criteria[].evidence` | One object, not an array: `{kind, path?, line?, file_key?, heading?, url?}`. No free-form fields; put short command or file references in `path` or `url`. |
+| `summary` | concise delivery summary |
+| `checks[]` | tests, builds, lint, type checks, manual checks |
+| `criteria[]` | per-acceptance-criterion claim and evidence |
+| `affected_files[]` | files changed by the implementation |
+| `severity` | signal severity for feedback events |
+
+`claim` values are:
+
+- `satisfied`
+- `partial`
+- `not_done`
+
+## Evidence quality
+
+Good evidence is concrete:
+
+- command output;
+- test names;
+- API response details;
+- UI behavior;
+- file paths;
+- PR, commit, or CI links;
+- screenshot or recording references when visual behavior matters.
+
+Weak evidence is vague:
+
+- "done";
+- "looks good";
+- "tests pass" without naming the command;
+- a summary that does not mention acceptance criteria.
 
 ## Rework loop
 
-If the review verdict fails, `specgate delivery status --detail` returns
-`outstanding_md` naming the unmet criteria. Fix those, update the same
-`criterion_id` entries, and re-run `specgate delivery submit`.
+If delivery review fails:
 
-See [Use SpecGate with a coding agent](../guides/coding-agent-workflow.md) for
-the full delivery flow.
+1. read the failed criterion or gate hint;
+2. fix the smallest named gap;
+3. rerun relevant checks;
+4. update the completion report;
+5. run `specgate delivery submit` again.
+
+## Related
+
+- [Use SpecGate with a coding agent](../guides/coding-agent-workflow.md)
+- [Governance and gates](../concepts/governance-and-gates.md)
+- [CLI reference](cli.md)

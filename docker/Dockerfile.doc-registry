@@ -32,9 +32,20 @@ EXPOSE 8080
 CMD ["air", "-c", ".air.toml"]
 
 FROM alpine:3
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_DATE=unknown
+LABEL org.opencontainers.image.title="SpecGate Doc Registry" \
+      org.opencontainers.image.source="https://github.com/thanhtung2693/specgate" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${COMMIT}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.specgate.managed="true" \
+      org.specgate.component="doc-registry"
 RUN apk add --no-cache ca-certificates sqlite-libs \
     && adduser -D -u 10001 app \
     && mkdir -p /data/blobs \
+    && chown app:app /data \
     && chown -R app:app /data
 USER app
 WORKDIR /app

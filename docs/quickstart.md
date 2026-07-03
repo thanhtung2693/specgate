@@ -1,22 +1,20 @@
 # Quickstart
 
-By the end of this guide, SpecGate will be running locally, your current user
-and workspace will be selected, and your coding IDE will know how to use the
-`specgate` CLI. Configuring a model is optional — the deterministic governance
-core runs without one, and your coding agent can handle semantic gate work.
+This tutorial starts SpecGate locally and runs one governed work item. By the
+end, you will have a running stack, a selected local user and workspace, an IDE
+plugin install, and one delivery review flow.
 
 ## What you need
 
-- macOS, Linux, or Windows (run the steps below inside WSL2)
-- Docker with Docker Compose v2 — Docker Desktop on macOS/Windows, Docker Engine on Linux
-- network access to download the CLI and container images
+- macOS, Linux, or Windows with WSL2.
+- Docker with Docker Compose v2.
+- Network access to download the CLI and container images.
 
-You do not need a source checkout, Go, Node.js, or Python. A model API key is
-optional to get started — see [step 4](#4-configure-a-model-optional).
+You do not need a source checkout, Go, Node.js, Python, or a model API key.
+Server-side model features are optional.
 
-> **Windows:** the install script and the `specgate` CLI run in a WSL2 shell. The
-> CLI also ships a native Windows binary on the [releases page](https://github.com/thanhtung2693/specgate/releases)
-> if you prefer not to use WSL.
+> **Windows:** run the install script and CLI from WSL2. Native Windows binaries
+> are also published on the GitHub releases page.
 
 ## 1. Install the CLI
 
@@ -24,26 +22,15 @@ optional to get started — see [step 4](#4-configure-a-model-optional).
 curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/scripts/install-cli.sh | sh
 ```
 
-Confirm that your shell can find it:
+Check that your shell can find it:
 
 ```bash
 specgate --help
+specgate --version
 ```
 
-If the command is not found, add `~/.local/bin` to your `PATH` or use the
-install location printed by the installer.
-
-To remove the user-local setup later:
-
-```bash
-specgate uninstall
-```
-
-That stops the local stack when present, removes CLI config and SpecGate IDE
-plugin files, and keeps deployment data. In an interactive terminal it shows a
-checkbox list so you can keep IDE setup or select local data removal. To delete
-local data non-interactively, back it up first, then run
-`specgate uninstall --purge-data --yes`.
+If the command is missing, add the install directory printed by the installer to
+your `PATH`. The default is usually `~/.local/bin`.
 
 ## 2. Start SpecGate
 
@@ -51,40 +38,33 @@ local data non-interactively, back it up first, then run
 specgate init
 ```
 
-The interactive setup:
+Follow the prompts. The interactive setup:
 
-- chooses a deployment directory (`~/.specgate` by default);
-- downloads the Compose bundle;
-- creates required environment files and secrets;
+- chooses a deployment directory, `~/.specgate` by default;
+- downloads the release Compose bundle;
+- creates environment files and a settings encryption key;
 - starts the services;
-- asks for your workspace, display name, username, and optional email for local
-  attribution;
-- asks whether you want to seed demo data and install IDE plugins.
+- asks for your local workspace, display name, username, and optional email;
+- asks whether to seed demo data;
+- asks whether to install IDE plugins for Codex, Claude Code, and Cursor.
 
-When you seed from interactive `specgate init`, the demo work items are attached
-to the workspace and username you just selected, so `specgate work list` shows
-them immediately.
-
-For an explicit, non-interactive run:
+For a seeded non-interactive install without extra choices:
 
 ```bash
-specgate init --seed --no-input    # with demo data
-specgate init --no-seed --no-input # empty workspace
+specgate init --seed --no-input
 ```
 
-Interactive setup shows a checkbox list for Codex, Claude Code, and Cursor when
-installing IDE plugins. Use `--install-plugins --plugin-agent all` with
-`--no-input` when automation should install IDE plugins as part of setup.
+For normal local setup, prefer interactive mode: it uses checkbox prompts for
+demo data and IDE plugin choices.
 
-## 3. Verify it is running
+## 3. Verify the stack
 
 ```bash
 specgate local-status
 specgate doctor
 ```
 
-`local-status` shows each service's health. `doctor` checks CLI/server
-compatibility and capability health. Default local endpoints:
+Default local endpoints:
 
 | Service | URL |
 |---|---|
@@ -92,78 +72,54 @@ compatibility and capability health. Default local endpoints:
 | Doc Registry and Swagger | `http://localhost:8080` |
 | Governance-ops | `http://localhost:2024` |
 
-If you preconfigure custom ports in the deployment `.env` before `specgate init`,
-the CLI saves the matching Doc Registry URL and `local-status` reports the
-running service bindings.
+`doctor` checks CLI/server compatibility and required capabilities. If you set
+custom ports in the deployment `.env` before startup, `init` saves the matching
+Doc Registry URL in CLI config.
 
-> **Alpha UI note:** the web UI is available in the release stack for review,
-> artifact inspection, settings, governance chat, and workflow scanning. The
-> supported authoring and coding-agent handoff path remains CLI-first.
+## 4. Connect your IDE
 
-## 4. Configure a model (optional)
+If you skipped plugin install during `init`, run:
 
-The deterministic governance core — policy resolution, version snapshots,
-evidence validation, and trust stamping — runs with **no model configured**.
+```bash
+specgate plugins install
+specgate plugins doctor
+```
 
-A model adds the assistive layer: route suggestion, acceptance-criteria
-drafting, delivery-review judgment, and summaries. Configure it from the CLI —
-no UI required:
+Interactive mode shows a checkbox list for Cursor, Codex, and Claude Code. For
+automation:
+
+```bash
+specgate plugins install --agent all --no-input
+```
+
+Restart selected IDEs after installing plugins so the new skills, hooks, and
+rules load.
+
+## 5. Optional: configure a model
+
+SpecGate can run without a server-side model. The deterministic core still
+stores artifacts, resolves policy, creates Context Packs, and records delivery
+evidence.
+
+Configure a model when you want server-side summaries, route suggestions,
+semantic readiness gates, or model-backed delivery review:
+
+```bash
+specgate model set
+```
+
+The guided setup asks for provider, model, and API key. For a non-interactive
+OpenAI setup:
 
 ```bash
 specgate model set --provider openai --api-key <your-key>
 ```
 
-Run `specgate model set` with no flags for the guided setup: choose a provider,
-enter a model id, and paste the API key into a masked prompt. For OpenRouter,
-the terminal opens a searchable picker from OpenRouter's public model catalog
-and filters it to text-output models; choose **Manual entry** if you want to
-paste an exact model id.
+See [Configure models](guides/configure-models.md) for provider details.
 
-The server-side model powers every server-side workload, including the LLM
-readiness quality gates. To choose a different provider or model, see
-[Configure models](guides/configure-models.md).
+## 6. Run one governed work item
 
-**Prefer not to configure a model at all?** Your coding agent can drive scoping,
-acceptance-criteria drafting, and completion reporting through SpecGate skills —
-see [Use SpecGate with a coding agent](guides/coding-agent-workflow.md). The
-human stays in the loop; the agent does the drafting.
-
-## 5. Connect your IDE
-
-Install the SpecGate integration for your coding agent:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/plugins/install.sh | sh -s -- --agent claude
-```
-
-Use `--agent cursor`, `--agent codex`, or `--agent all` to select one or several
-IDEs. The installer sets up:
-
-- the `specgate` CLI configuration for this deployment;
-- focused SpecGate Skills;
-- IDE hooks and project rules.
-
-Coding IDE agents use the CLI for SpecGate work. They do not need local MCP
-configuration for the handoff loop.
-
-## 6. Verify the connection
-
-```bash
-specgate doctor
-specgate status
-specgate work list
-```
-
-`status` shows the governance board overview and work needing attention.
-`status` and `work list` use the selected workspace by default; pass
-`--all-workspaces` when you intentionally want the global view.
-
-## 7. Run your first governed work item
-
-The core loop is: create work with acceptance criteria, hand the approved
-context to your coding agent, then return evidence for review.
-
-Create a quick work item with explicit acceptance criteria:
+Create a quick work item with acceptance criteria:
 
 ```bash
 specgate work create-quick "Add healthcheck endpoint" \
@@ -171,45 +127,75 @@ specgate work create-quick "Add healthcheck endpoint" \
   --ac "Healthcheck is covered by an automated test"
 ```
 
-Note the work-item key in the output, then read its Context Pack — the
-implementation brief your coding agent works from:
+Read the Context Pack:
 
 ```bash
 specgate work context <work-ref>
 ```
 
-Implement the change in your repository (or let your IDE agent do it — the
-installed SpecGate skills drive these same commands). Then scaffold the
-completion report; it prefills one entry per acceptance criterion:
+Coding IDE agents use the CLI through the installed SpecGate skills. Implement
+the change yourself or ask your IDE agent to pick up the Context Pack.
+
+Scaffold completion evidence:
 
 ```bash
 specgate delivery report <work-ref> --init
 ```
 
-Edit `completion.json` — fill in the summary, checks you ran, affected files,
-and evidence for each criterion — then submit the whole delivery tail (report →
-gates → review → verdict) in one command:
+Edit `completion.json`. Fill in:
+
+- summary;
+- affected files;
+- checks you ran;
+- per-criterion evidence.
+
+Submit report, gates, delivery review, and status in one command:
 
 ```bash
 specgate delivery submit <work-ref> --file completion.json
 specgate delivery status <work-ref> --detail
 ```
 
-If the review verdict fails, fix the named gap, update `completion.json`, and
-run `delivery submit` again.
+If review fails, fix the named gap, update evidence, and run `delivery submit`
+again.
 
-## What to explore next
+## 7. Remove a trial install
 
-- [Use SpecGate with a coding agent](guides/coding-agent-workflow.md)
-- [Artifacts and Context Packs](concepts/artifacts-and-context-packs.md)
-- [Governance and gates](concepts/governance-and-gates.md)
+Safe default:
 
-## If something goes wrong
+```bash
+specgate uninstall
+```
+
+Interactive mode shows a checklist. Leave local data unchecked to keep
+artifacts, specs, work items, settings, and evidence.
+
+Default local data locations:
+
+| Docker volume | Contents |
+|---|---|
+| `postgres-data` | artifact metadata, work items, features, settings, evidence, gate history |
+| `doc-registry-data` | artifact/spec document contents under `/data/blobs` |
+
+To purge local data in automation, back up first, then run:
+
+```bash
+specgate uninstall --purge-data --yes
+```
+
+This removes the deployment directory, SpecGate-managed containers, volumes,
+networks, and service images.
+
+## Troubleshooting
 
 ### Docker is unavailable
 
-Start Docker, verify `docker compose version`, then run `specgate init` again.
-Setup is safe to repeat.
+Start Docker, verify Compose, then run init again:
+
+```bash
+docker compose version
+specgate init
+```
 
 ### A service is unhealthy
 
@@ -218,13 +204,12 @@ specgate local-status
 specgate doctor
 ```
 
-For container details, continue with
-[Operate SpecGate](guides/operate-specgate.md).
+For container logs, see [Operate SpecGate](guides/operate-specgate.md).
 
 ### Your IDE runs on another machine
 
-`localhost` refers to the machine running the IDE agent. Put Doc Registry on a
-host reachable from that machine and configure:
+`localhost` refers to the IDE-agent machine. Put Doc Registry on a reachable
+host and configure:
 
 ```bash
 specgate config set server http://<reachable-registry>
@@ -233,13 +218,12 @@ specgate doctor
 
 ### Model-backed actions fail
 
-The stack runs without a model, but assistive and LLM-gate features cannot. Check
-that the provider key is configured with `specgate model set`, the value is
-current, and the provider has quota. See
-[Configure models](guides/configure-models.md).
+The stack still works without a model, but LLM-backed gates and assistive
+actions cannot run. Check the provider key, model id, and provider quota.
 
-## Source checkout?
+## Next steps
 
-If you plan to modify SpecGate itself, use
-[Contributor setup](guides/contributor-setup.md). The repository’s `make setup`
-workflow is for contributors, not the normal product quickstart.
+- [Use SpecGate with a coding agent](guides/coding-agent-workflow.md)
+- [Use the SpecGate CLI](guides/cli-workflow.md)
+- [Operate SpecGate](guides/operate-specgate.md)
+- [Artifacts and Context Packs](concepts/artifacts-and-context-packs.md)

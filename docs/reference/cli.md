@@ -134,17 +134,40 @@ workspace unless `--all-workspaces` is passed.
 |---|---|
 | `init`, `up`, `down`, `local-status` | Manage a local SpecGate deployment |
 
-`specgate uninstall` removes the CLI config and SpecGate IDE plugin files, and
-stops the CLI-managed local stack when one is present. In an interactive
-terminal it shows a checkbox list so you can keep IDE plugin files or select
-local data removal without memorizing extra flags. It keeps deployment data by
-default. Pass `--purge-data --yes` only in non-interactive automation when you
-also want Docker volumes and the deployment directory removed:
+`specgate uninstall` removes user-local SpecGate setup. In an interactive
+terminal it shows a checkbox list:
+
+| Choice | Effect |
+|---|---|
+| IDE plugin files | Remove SpecGate files from Cursor, Codex, and Claude Code user plugin locations |
+| Local data | Remove Docker volumes and the deployment directory |
+| Docker images | Remove SpecGate service images |
+
+By default, the command removes CLI config and IDE plugin files, stops a
+CLI-managed local stack when present, and keeps artifact/spec data. Artifact
+metadata, work items, evidence, settings, and gate history live in Postgres.
+Artifact/spec file contents live in the Doc Registry blob volume.
+
+For automation, pass `--purge-data --yes` only after backing up data you want to
+keep:
 
 ```bash
 specgate uninstall
 specgate uninstall --purge-data --yes
 ```
+
+`--purge-data --yes` removes:
+
+- SpecGate-managed containers;
+- SpecGate-managed Docker volumes;
+- SpecGate-managed Docker networks;
+- the deployment directory;
+- SpecGate service images.
+
+Release Docker resources are labelled with `org.specgate.managed=true`, and
+uninstall uses those labels for cleanup. Image cleanup removes SpecGate service
+images, not shared base images such as Postgres or Redis unless they carry the
+SpecGate label.
 
 ### Advanced governance
 
@@ -237,8 +260,8 @@ Cursor, Codex, and Claude Code when `--agent` is omitted. Scripts can still pass
 `--agent all`, `--agent codex`, or a comma-separated subset.
 
 `specgate init` offers the same plugin install interactively, including the IDE
-target checkbox list. In non-interactive setup, pass
-`specgate init --install-plugins --plugin-agent all`.
+target checkbox list. For automation, install plugins after init with
+`specgate plugins install --agent all --no-input`.
 
 Use `--project-local` on those commands only when the current repository should
 vendor its IDE plugin files.

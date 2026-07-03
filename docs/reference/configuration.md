@@ -1,7 +1,11 @@
-# Configuration reference
+# Configuration
 
-This page maps user and operator configuration. Module environment examples
-remain canonical for exhaustive variable lists.
+Use this reference to find where a SpecGate setting lives and how it is applied.
+It is organized by operator surface. Module `.env.example` files remain
+canonical for exhaustive environment variable lists.
+
+For task steps, use [Configure models](../guides/configure-models.md) or
+[Operate SpecGate](../guides/operate-specgate.md).
 
 ## CLI
 
@@ -59,7 +63,7 @@ Optional bundled services:
 Changing API ports may require rebuilding the Vite UI because public API URLs
 are compiled into the static bundle.
 
-## Core Doc Registry
+## Doc Registry
 
 | Variable | Purpose |
 |---|---|
@@ -138,7 +142,7 @@ proxy makes request-derived origin incorrect.
 
 Webhook secrets are stored per integration where supported.
 
-## MCP and governance-ops
+## MCP and governance-ops service boundary
 
 Relevant values:
 

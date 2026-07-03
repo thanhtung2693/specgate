@@ -1,34 +1,32 @@
 # Use the SpecGate CLI
 
-The CLI is the fastest way to operate SpecGate, inspect governed work, and give
-coding agents a stable machine-readable interface.
+Use this guide when you need to inspect governed work, publish artifacts, hand
+context to a coding agent, or submit delivery evidence from a terminal.
 
-## Human mode and interactive prompts
+For exact flags and JSON shapes, see the [CLI reference](../reference/cli.md).
 
-Commands use human-friendly output by default, including terminal color,
-status symbols, progress summaries, and checkbox-style delivery criteria where
-that helps people scan the governed loop. When a required value is
-missing, the CLI may prompt you to:
+## Choose an output mode
 
-- select a work item;
-- confirm a gate or delivery action (interactive terminals only — piped or
-  scripted runs proceed without prompting);
-- enter quick-work details, including an acceptance-criteria loop;
-- declare change impact;
-- enter local user and workspace details during initialization;
-- choose whether to seed a local deployment.
+Default output is for humans: color, compact summaries, and prompts.
 
-Useful global flags:
+Use plain text for predictable terminal logs:
 
-| Flag | Behavior |
-|---|---|
-| `--yes` | Accept confirmations |
-| `--no-input` | Disable prompts and fail when input is missing |
-| `--plain` | Disable color, Unicode symbols, progress styling, and interactive presentation |
-| `--json` | Emit one JSON envelope; implies `--plain --no-input` |
-| `--timeout` | Override the default three-minute request timeout |
+```bash
+specgate --plain status
+```
 
-## Connect to a SpecGate deployment
+Use JSON for automation and IDE tools:
+
+```bash
+specgate --json status
+```
+
+`--json` implies `--plain --no-input`. Automation should pass every required
+value explicitly.
+
+## Connect to a deployment
+
+Set the saved server URL:
 
 ```bash
 specgate config set server http://localhost:8080
@@ -37,89 +35,77 @@ specgate doctor
 
 Server selection order:
 
-1. `--server`
+1. `--server <url>`
 2. `SPECGATE_SERVER`
-3. saved CLI configuration
+3. saved CLI config
 4. `http://localhost:8080`
 
-Open the human UI:
+Open the web UI:
 
 ```bash
 specgate open
 ```
 
-## Choose user and workspace
+## Select user and workspace
 
-Interactive `specgate init` creates or reuses a local user and workspace, then
-stores the current selection in CLI config. For day-to-day use:
+Interactive `specgate init` creates or reuses a local user and workspace. Check
+the current selection:
 
 ```bash
 specgate user current
-specgate user list
 specgate workspace current
+```
+
+Select a different workspace:
+
+```bash
 specgate workspace list
 specgate workspace select
 specgate workspace select <slug>
 ```
 
-This is an attribution and selection surface. It does not add login, sessions,
-or authorization checks.
+User/workspace selection is attribution and filtering, not authentication. New
+quick work items receive the selected `created_by` and `workspace_id`.
 
-`workspace select` opens a picker when input is enabled. Use the workspace slug
-for non-interactive scripts; internal workspace IDs are not part of the human CLI
-surface.
-
-The selected user/workspace is attached to new quick work items as
-`created_by` and `workspace_id`. Archive operations use the selected username as
-the archive actor. Artifact package publication is lower-level: the package JSON
-must still carry its own `created_by` value because packages may be published by
-governance services, IDE agents, or other authoring tools.
-
-## Find work
-
-Start with the board overview:
+## Find work that needs attention
 
 ```bash
 specgate status
 specgate work list
 ```
 
-Both commands use the selected workspace by default. Use
-`specgate status --all-workspaces` or `specgate work list --all-workspaces` when
-you intentionally want the global view.
-
-`status` is the board overview: it shows the selected scope, phase counts, how
-many items are ready, how many need attention, and a suggested next command.
-`work list` is the action queue: it prints exactly the board's needs-attention
-section, listing only items that currently need human or agent attention. When
-the queue is empty but other work exists, it says which phases still contain
-work so you know the board is not empty.
-
-Resolve a change-request ID, SpecGate key, tracker key, or supported issue URL:
+Both commands use the selected workspace by default. Use the global view only
+when you mean it:
 
 ```bash
-specgate work show "$WORK_REF"
+specgate status --all-workspaces
+specgate work list --all-workspaces
 ```
 
-Many commands accept no reference in interactive mode and let you choose from
-work needing attention.
+Inspect one work item:
+
+```bash
+specgate work show <work-ref>
+specgate work policy <work-ref>
+```
+
+`<work-ref>` can be a change-request ID, SpecGate key, tracker key, or supported
+issue URL.
 
 ## Create a quick work item
 
-For a small, understood change, pass the title and criteria directly:
+Use the quick route for small, understood work:
 
 ```bash
 specgate work create-quick "Fix Redis-free quickstart wording" \
-  --description "Redis should be optional when QUEUE_DRIVER=sync." \
-  --ac "The release compose starts without a redis service." \
-  --ac "Docs state Redis is optional for the sync queue path."
+  --ac "The release compose starts without Redis when QUEUE_DRIVER=sync" \
+  --ac "Docs state Redis is optional for the sync queue path"
 ```
 
-Or run it without arguments: the CLI asks for a title, an optional
-description, and acceptance criteria one at a time (empty input finishes the
-list). Automation can also provide a JSON body. Include `acceptance_criteria`
-when the agent or human already has testable criteria; otherwise SpecGate
-drafts or falls back to a generic one.
+If you omit `--description`, the title is used as the description. Run the
+command without arguments for interactive prompts.
+
+Automation can send a JSON body:
 
 ```bash
 specgate work create-quick --file work-item.json --json
@@ -128,47 +114,40 @@ specgate work create-quick --file work-item.json --json
 ```json
 {
   "title": "Fix Redis-free quickstart wording",
-  "description": "The quickstart should make Redis optional when QUEUE_DRIVER=sync.",
+  "description": "Redis should be optional when QUEUE_DRIVER=sync.",
   "acceptance_criteria": [
-    "The release compose starts without a redis service.",
+    "The release compose starts without Redis when QUEUE_DRIVER=sync.",
     "Docs state Redis is optional for the sync queue path."
   ]
 }
 ```
 
-The quick route reduces planning ceremony. It does not skip governed context or
+The quick route reduces planning ceremony. It still creates governed context and
 delivery review.
 
-## Inspect approved context
+## Read approved context
+
+Before implementation:
 
 ```bash
-specgate work policy "$WORK_REF"
-specgate gates status "$WORK_REF"
-specgate work context "$WORK_REF"
+specgate work policy <work-ref>
+specgate gates status <work-ref>
+specgate work context <work-ref>
 ```
 
-Fetch selected artifact files when the Context Pack summary is not enough:
+Fetch artifact files only when the Context Pack is not enough:
 
 ```bash
-specgate artifact show "$ARTIFACT_ID"
-specgate artifact files "$ARTIFACT_ID" spec.md tasks_fe.md
+specgate artifact show <artifact-id>
+specgate artifact files <artifact-id> spec.md verification.md
+specgate artifact files <artifact-id> spec.md --content
 ```
 
-`artifact files` returns file references by default. Add `--content` only for the
-specific file body you need.
+Use `--content` sparingly. It prints file bodies.
 
-## Publish and check an artifact
+## Publish an artifact package
 
-Artifact publication accepts a JSON package:
-
-```bash
-specgate artifact publish --file artifact.json
-```
-
-The package file (`artifact.json` above) uses the IDE/CLI publish shape, not
-the lower-level registry `feature_id` + `version` shape. The simplest form points at local files; the
-CLI reads them and uploads raw UTF-8 text, so IDE agents do not need to inline
-or base64-encode document bodies:
+Create a package JSON that points at local files:
 
 ```json
 {
@@ -178,179 +157,115 @@ or base64-encode document bodies:
       "path": "spec.md",
       "role": "spec",
       "source_file": "spec.md"
+    },
+    {
+      "path": "verification.md",
+      "role": "verification",
+      "source_file": "verification.md"
     }
   ]
 }
 ```
 
-`source_file` is resolved relative to the package file. Absolute local
-`file://` URLs are also accepted as `file_url`, but Doc Registry never stores or
-dereferences local file URLs; the CLI converts them to raw content before
-upload.
-
-In interactive mode, the CLI collects an impact declaration when the package
-does not include one.
-
-Run artifact-scoped quality/readiness checks:
+Publish it:
 
 ```bash
-specgate gates check "$ARTIFACT_ID"
+specgate artifact publish --file artifact.json
 ```
 
-Readiness is not approval. Review and approval remain separate governed actions.
+The CLI reads `source_file` content and uploads raw UTF-8 text. Doc Registry
+does not dereference local file URLs itself.
 
-## Run quality gates
+Run readiness checks:
 
 ```bash
-specgate gates run "$WORK_REF"
-specgate gates status "$WORK_REF"
-specgate gates history "$WORK_REF"
+specgate gates check <artifact-id>
 ```
 
-`gates run` confirms only in interactive terminals; non-interactive runs
-(`--json`, piped stdin) proceed without prompting, so `--yes` is optional
-there:
+Readiness is not approval. Approval is a separate governed action.
+
+## Run gates for work
 
 ```bash
-specgate gates run "$WORK_REF" --json
+specgate gates run <work-ref>
+specgate gates status <work-ref>
+specgate gates history <work-ref>
 ```
 
-## Report and review delivery
-
-The primary path is two commands. Scaffold a completion report with one
-`criteria[]` entry per acceptance criterion:
+Interactive terminals ask before running gates. JSON and non-interactive runs
+proceed without prompting:
 
 ```bash
-specgate delivery report "$WORK_REF" --init
+specgate gates run <work-ref> --json
 ```
 
-Fill in the summary, affected files, checks, and per-criterion claims, then
-submit the whole delivery tail — report, gates, delivery review, and the
-per-criterion verdict — in one command:
+## Submit delivery evidence
+
+Scaffold the completion report:
 
 ```bash
-specgate delivery submit "$WORK_REF" --file completion.json
+specgate delivery report <work-ref> --init
 ```
 
-The individual commands remain available when you need one stage at a time:
+Fill `completion.json` with:
+
+- summary;
+- affected files;
+- checks;
+- per-criterion claims and evidence.
+
+Submit the whole delivery tail:
 
 ```bash
-specgate delivery report "$WORK_REF" --file completion.json --json
-specgate delivery review "$WORK_REF"
-specgate delivery status "$WORK_REF" --detail
+specgate delivery submit <work-ref> --file completion.json
+specgate delivery status <work-ref> --detail
 ```
 
-`delivery report` without `--file` records a minimal interactive completion
-event. If review fails, use the outstanding findings to make a focused
-correction, report completion again, and repeat review (or rerun
-`delivery submit`).
+`delivery submit` reports completion, runs gates, triggers delivery review, and
+prints the resulting status. If review fails, fix the named gap, update
+evidence, and submit again.
 
-## See whether governance is helping
-
-`specgate stats` projects a governance-value readout from existing gate runs
-and feedback events — reviewed items, first-pass yield, catches before and
-after the build, rework, ambiguity saves, cycle time, and a ledger of recent
-catches:
+## Measure governance value
 
 ```bash
-specgate stats                    # selected workspace, last 30 days
+specgate stats
 specgate stats --days 90 --all-workspaces
 ```
 
-Until a few governed work items have been through delivery review, it prints
-an honest "not enough data yet" line instead of empty percentages.
-
-## Advanced policy and gate-task tools
-
-For a work item, use the core workflow policy command:
-
-```bash
-specgate work policy "$WORK_REF"
-```
-
-Inspect built-in governance levels:
-
-```bash
-specgate policy list
-```
-
-Inspect pending IDE-agent gate tasks:
-
-```bash
-specgate gates tasks list "$ARTIFACT_ID"
-specgate gates tasks show "$TASK_ID"
-```
+`stats` reports reviewed items, first-pass yield, catches before and after
+implementation, rework, ambiguity saves, cycle time, and recent catches. It is
+most useful after several work items have completed delivery review.
 
 ## Use the CLI in automation
 
-`--json` emits one stable envelope:
+Rules for scripts:
 
-```json
-{
-  "schema_version": "specgate.cli/v1",
-  "command": "status",
-  "ok": true,
-  "data": {}
-}
-```
-
-Errors use:
-
-```json
-{
-  "schema_version": "specgate.cli/v1",
-  "command": "doctor",
-  "ok": false,
-  "error": {
-    "code": "unavailable",
-    "message": "connection failed",
-    "details": {}
-  }
-}
-```
+- use `--json --no-input`;
+- pass all required values explicitly;
+- set `--server` or `SPECGATE_SERVER`;
+- store command output as evidence when useful;
+- do not parse human output.
 
 Example:
 
 ```bash
-specgate --json status
+specgate --json --no-input --server "$SPECGATE_SERVER" \
+  delivery submit "$WORK_REF" --file completion.json
 ```
 
-Use `--json-progress` for compact progress events before a long command’s final
-JSON envelope:
+## Update or diagnose the CLI
 
 ```bash
-specgate --json --json-progress update
-```
-
-## Update and diagnose the CLI
-
-```bash
-specgate update
+specgate version
 specgate doctor
+specgate update
 ```
 
-`update` refreshes the CLI from GitHub, refreshes installed IDE setup for Codex,
-Claude Code, and Cursor from the public plugin registry, then updates the local
-Compose bundle and images when a CLI-managed deployment exists. That Compose
-step pulls whatever services the release bundle ships, including Doc Registry,
-agents, and the web UI. Restart any running IDEs after an update.
+`update` refreshes the CLI, IDE plugin files, and a CLI-managed local stack when
+one exists.
 
-Released CLI builds also check GitHub releases for public freshness during
-human/plain server-backed commands. The check is cached for 24 hours and only
-prints a warning; use `SPECGATE_NO_UPDATE_CHECK=1` to disable it in local
-automation that is not already using `--json` or `CI=true`.
+## Related
 
-Use `specgate doctor` after updating to confirm the CLI is connected to the
-intended deployment; when a CLI-managed deployment exists, `doctor` also shows
-a "Local stack" section with the running compose services (`local-status`
-serves the same data for scripts). If your local stack is on a non-default port,
-run `specgate config set server http://localhost:<port>` so future
-server-backed workflow commands target the right stack.
-
-For current command arguments:
-
-```bash
-specgate <command> --help
-```
-
-See [CLI reference](../reference/cli.md) for command families and exit codes.
+- [Quickstart](../quickstart.md)
+- [CLI reference](../reference/cli.md)
+- [Use SpecGate with a coding agent](coding-agent-workflow.md)

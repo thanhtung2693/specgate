@@ -1,36 +1,40 @@
 # SpecGate feature status
 
-SpecGate runs the full governed delivery loop with no LLM key required. All
-product capabilities in this repository are available in the product. Some
-capabilities are still experimental and opt-in because their interfaces, setup,
-and operational defaults are evolving.
+This page summarizes what is stable enough to try in the alpha release and what
+is still experimental.
 
-## Stable
+## Stable alpha paths
 
-These capabilities are the supported alpha core:
+- CLI install and local stack initialization with `specgate init`.
+- Local user and workspace selection for attribution and filtering.
+- Quick work item creation with acceptance criteria.
+- Artifact publication, versioning, status, and Context Pack handoff.
+- Governance policy resolution and built-in gate profiles.
+- Delivery report scaffolding and `delivery submit`.
+- IDE plugin install for Codex, Claude Code, and Cursor.
+- Safe uninstall that keeps data by default.
 
-- artifacts, governance levels, the policy and gate framework;
-- evidence, gate tasks, and trust stamping;
-- deterministic gates and LLM readiness gates, run either on a configured
-  server-side model or by your IDE coding agent;
-- stale-handoff warnings;
-- the full `specgate` CLI and plugins / skills;
-- delivery review from coding-agent acceptance-criteria claims, with optional
-  LLM judgment when a server-side model is configured.
+## Experimental surfaces
 
-## Experimental
+- Web UI review and workflow scanning.
+- Governance chat.
+- Delivery integrations and tracker handoff.
+- Knowledge search and embeddings.
+- Model-backed route suggestions, summaries, readiness checks, and delivery
+  review.
+- Artifact edit proposal workflows.
 
-These features are available today. Turn them on when you need them and expect
-rough edges while the contracts mature:
+Experimental surfaces may change during alpha releases.
 
-| Feature | Enable it | Notes |
-|---|---|---|
-| Integrations (GitHub / GitLab / Linear) + inbound webhooks | configure an integration (OAuth/credentials) | tracker handoff, PR/MR/CI evidence signals |
-| Knowledge search + vector DB + embeddings | `KNOWLEDGE_DRIVER=pgvector` + an embedding provider | semantic search over governed knowledge |
-| Governance-ops chat agent | run the agents service via LangGraph (`langgraph.json`) instead of the uvicorn webapp | needs a server-side model; see [`../app/agents/README.md`](../app/agents/README.md) |
+## Not goals for alpha
 
-Feedback on experimental features is especially welcome as they mature.
+- Public multi-tenant hosting.
+- Full end-user authentication and authorization.
+- Replacement for CI, PR review, trackers, or authoring tools.
+- Guaranteed model judgment without human review.
 
-## Licensing
+## Related
 
-The repository is Apache-2.0. See [`../LICENSING.md`](../LICENSING.md).
+- [Quickstart](quickstart.md)
+- [Trust and security](concepts/trust-and-security.md)
+- [CLI reference](reference/cli.md)

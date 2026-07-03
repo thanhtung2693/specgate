@@ -1,180 +1,103 @@
 # Artifacts and Context Packs
 
-Artifacts preserve intent. Context Packs give coding agents the approved slice
-needed for one delivery.
+Artifacts are versioned document bundles. Context Packs are the governed
+implementation briefs created from approved work and artifacts.
 
 ## Artifact packages are flexible
 
-An artifact is a versioned document bundle. Its files may follow any useful
-structure:
+SpecGate does not require one spec format. An artifact package can contain a
+PRD, design, implementation plan, verification notes, research, or framework
+specific documents.
 
-- PRD, spec, frontend/backend/QA plans;
-- OpenSpec proposals, designs, specs, and tasks;
-- Spec Kit plans, research, data models, and tasks;
-- architecture decisions;
-- a single Markdown change description;
-- a team-specific format.
+Each document has:
 
-SpecGate does not infer authority from a filename. Publishers declare document
-roles, and readiness checks look for required topics wherever those topics live.
+- `path`: its identity inside the package, such as `spec.md`;
+- `role`: its governance purpose, such as `spec`, `design`, `plan`,
+  `verification`, `research`, or `custom:*`;
+- content supplied by the CLI, API, or authoring tool.
+
+The role matters more than the filename. A file named `notes.md` can still be
+the authoritative spec if it is published with role `spec`.
 
 ## The governance envelope is fixed
 
-Documents are flexible, but every artifact follows the same governance
-principles:
+Documents are flexible, but the artifact envelope is stable. It records:
 
-- stable artifact identity;
-- immutable versions;
-- source and source revision;
-- declared document roles;
-- policy snapshot and digest;
-- status and approval history;
-- provenance for gate verdicts and evidence;
-- lineage between revisions.
+- feature linkage;
+- source kind and source revision;
+- author or service metadata;
+- impact and requested governance level;
+- gates profile snapshot;
+- artifact status;
+- version and lineage.
 
-Teams can customize what must be checked. They cannot redefine what versioned
-approval, evidence provenance, or verdicts mean.
+This envelope lets SpecGate compare artifacts from different authoring tools.
 
-## Versions, source revisions, and lineage
+## Versions are immutable
 
-Every publication creates a new immutable artifact version. A revision records:
+Every publication creates an artifact version. Approved artifacts are not edited
+in place. Changes create a new draft or proposal, then another reviewed version.
 
-- which prior version it follows;
-- which authoring tool or source produced it;
-- the source revision when available;
-- which governance policy was resolved at publication time.
-
-Policy changes later do not rewrite history. An old artifact remains explainable
-using the policy snapshot stored with it.
-
-## Approval belongs to one version
-
-Approval never means “this feature in general looks fine.” It means a specific
-artifact version was reviewed under a specific policy.
-
-If content changes after approval, the new version needs its own readiness and
-review. The old approval is not copied forward.
+This protects the handoff: a coding agent can prove it used the exact version a
+human approved.
 
 ## Canonical artifacts
 
-A Feature may have several linked artifacts. Its canonical artifact is the
-current source of truth for product intent.
-
-Making an artifact canonical is a reviewed action. Draft or incomplete content
-must not silently replace the approved source of truth.
+A feature can have several artifacts. The canonical artifact is the current
+source of truth for that feature. Making an artifact canonical is a reviewed
+action; draft or incomplete content should not become canonical.
 
 ## Context Packs
 
-A Context Pack packages the implementation contract for one work item. It may
-contain:
+A Context Pack is the implementation contract for a coding agent. It can include:
 
-- approved intent and scope;
+- work title and description;
 - acceptance criteria;
-- required artifact documents;
-- domain vocabulary from glossary or language-reference files;
-- design references and governed knowledge;
-- governance level and gate results;
-- risks, constraints, rollout, or verification requirements;
-- unresolved warnings the coding agent must see.
+- approved artifact summary and file references;
+- scope limits and blast radius;
+- risks and assumptions;
+- applicable skills;
+- unresolved gates or review feedback;
+- route-specific notes.
 
-The coding agent reads the Context Pack before editing code:
-
-```bash
-specgate work context "$WORK_REF"
-```
-
-If more detail is needed:
-
-```bash
-specgate artifact files "$ARTIFACT_ID" spec.md tasks_fe.md
-```
-
-This returns file references by default; add `--content` only when the file body
-is required.
-
-The approved Context Pack outranks chat history, tracker comments, and stale
-repository copies.
-
-## Reference attachments
-
-Attachments are governed supplemental references for a Feature: screenshots,
-logs, mockups, external docs, customer examples, or repro evidence that should
-help a future gate, review, or coding-agent handoff. They are not a replacement
-for artifact documents.
-
-Adding a random image or document to an IDE-agent chat does **not**
-automatically create a SpecGate attachment. That file stays local/session
-context unless a user or agent explicitly pins it to SpecGate with an audience:
-
-- `gate` — used by quality/readiness gates;
-- `coding_agent` — rendered into future Context Packs;
-- `both` — used by gates and future coding-agent handoffs.
-
-If the material changes intent, scope, acceptance criteria, rollout, or design
-contract, it should become an artifact document through a reviewed proposal
-instead of a loose attachment.
+Agents should implement from the Context Pack, not from memory or chat history.
 
 ## Quick route and full route
 
-### Quick route
+The quick route creates a lightweight work item and Context Pack from title,
+description, and acceptance criteria. It is useful for small changes and
+bugfixes.
 
-Quick work uses a narrow Context Pack focused on the issue, intended change,
-acceptance criteria, and constraints. It is useful for low-risk bugs and small,
-well-understood changes.
+The full route starts from an artifact package. It is useful when work needs an
+approved spec, design, plan, or verification document before implementation.
 
-### Full route
+Both routes produce delivery evidence and review.
 
-Full work uses the approved artifact bundle and may require richer roles and
-topics: product intent, technical contract, implementation plan, QA, rollout,
-risks, and design references.
+## Where artifact data lives
 
-Quick does not mean ungoverned. Full does not mean every team must use identical
-files.
+In the default local stack:
 
-## Domain vocabulary
+| Storage | Contents |
+|---|---|
+| Postgres | artifact metadata, file index, status, lineage, gates, events |
+| `doc-registry-data` volume | artifact/spec document contents under `/data/blobs` |
 
-Context Packs include a derived `Domain Vocabulary` section when the approved
-artifact carries vocabulary material. Teams can provide this as files named
-`glossary.md`, `vocabulary.md`, `domain-vocabulary.md`, `domain-language.md`,
-`ubiquitous-language.md`, or `CONTEXT.md`, or as custom roles such as
-`custom:glossary` or `custom:domain-language`.
+Purging local data deletes both metadata and document contents. Back up both
+stores before running destructive cleanup.
 
-Use this for terms whose meaning affects implementation: status names, policy
-names, workflow phrases, product nouns, or domain-specific verbs. The section is
-assembled from existing artifact files; it does not require separate storage or
-change the Context Pack schema.
+## Proposing updates
 
-## Stale handoffs
-
-Context Packs are tied to their source versions.
-
-```text
-Artifact v7 approved
-→ Context Pack generated from v7
-→ artifact changes to v8
-→ old Context Pack becomes stale
-→ new review and handoff required
-```
-
-This prevents a coding agent from implementing an older approved idea after the
-source of truth changes.
-
-## Proposing a governed update
-
-A coding agent may discover ambiguity or a necessary contract change. It must
-not mutate approved content directly.
-
-Instead:
+When implementation reveals a spec gap, do not mutate the approved artifact
+directly. Open a governed proposal:
 
 ```bash
-specgate artifact propose "$ARTIFACT_ID" --file proposal.json
+specgate artifact propose <artifact-id> --file proposal.json
 ```
 
-The proposal enters human review. Once accepted, SpecGate materializes a new
-artifact version with preserved lineage.
+The proposal can be reviewed and materialized as a new artifact version.
 
-## Continue
+## Related
 
+- [How SpecGate works](how-specgate-works.md)
 - [Governance and gates](governance-and-gates.md)
-- [Use SpecGate with a coding agent](../guides/coding-agent-workflow.md)
-- [Glossary](../reference/glossary.md)
+- [CLI workflow](../guides/cli-workflow.md)

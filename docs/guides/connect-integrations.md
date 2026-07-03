@@ -1,141 +1,112 @@
 # Connect delivery integrations
 
-> **Experimental — in development.** Integrations are available today.
-> They are opt-in while the setup flow, provider coverage, and event contracts
-> mature. See [Feature status](../features.md).
+Use this guide when you want SpecGate to correlate external delivery signals
+with governed work. Integrations are experimental in the alpha release.
 
-Integrations bring tracker and delivery signals into SpecGate. They add
-corroboration; they do not replace acceptance-criteria evidence.
+## What integrations add
 
-## What integrations contribute
+Integrations can contribute:
 
-Depending on provider, SpecGate can:
+- tracker links and issue metadata;
+- repository or pull-request events;
+- corroborated delivery evidence;
+- outbound handoff links back to tracker systems.
 
-- link issues, pull requests, or merge requests to work items;
-- record opened, merged, closed, or completed delivery signals;
-- receive successful GitHub workflow-run evidence;
-- detect scope-drift comments;
-- hand a SpecGate work item to a tracker;
-- update linked issue state after successful delivery review.
+The core SpecGate loop still works without integrations. You can create work,
+publish artifacts, read Context Packs, and submit delivery evidence through the
+CLI.
 
-## Connect an integration
+## Before you start
 
-Choose a provider (GitHub, GitLab, or Linear), authenticate with that provider,
-then select the repositories, projects, teams, or other resources SpecGate
-should observe.
+Confirm the stack is healthy:
 
-SpecGate supports one connection per provider, with multiple resources under
-that connection where applicable.
+```bash
+specgate doctor
+```
 
-## Connect GitHub
+Confirm the deployment is reachable from the integration provider if webhooks
+are involved. Localhost-only deployments cannot receive public webhook calls
+without a tunnel or reverse proxy.
 
-GitHub supports:
+## Connect a provider
 
-- repository selection;
-- pull-request delivery events;
-- issue-comment scope signals;
-- successful `workflow_run` evidence;
-- outbound issue handoff;
-- closing linked issues after a passing delivery review.
+Use the web UI settings surface when available:
 
-Use OAuth where configured, or a token with only the repository permissions your
-workflow needs.
+```bash
+specgate open
+```
 
-GitHub webhook requests are verified using `X-Hub-Signature-256`.
+Then open Settings and choose Integrations.
 
-## Connect GitLab
+Provider support is alpha and may vary by release. Common setup steps are:
 
-GitLab supports:
+1. create an OAuth application or provider token;
+2. configure callback or webhook URLs;
+3. store provider credentials in deployment settings;
+4. select repositories, projects, or teams;
+5. send a test webhook or event;
+6. verify SpecGate links the event to a work item.
 
-- project selection;
-- merge-request delivery events;
-- outbound issue handoff;
-- closing linked issues after a passing delivery review.
+## Configure webhooks
 
-OAuth and access-token paths are supported by deployment configuration.
+Use a stable public URL for callbacks and webhooks. If the public URL differs
+from the request host seen by SpecGate, configure the deployment’s public
+callback origin. See [Configuration reference](../reference/configuration.md).
 
-GitLab webhook requests are checked against the configured signing token and
-timestamp.
+Webhook secrets should be unique per provider. Do not reuse model API keys,
+MCP keys, or database credentials.
 
-## Connect Linear
+## Link events to work
 
-Linear supports:
+SpecGate correlates external events through identifiers such as:
 
-- team and optional project selection;
-- issue-state synchronization;
-- outbound issue handoff;
-- moving linked issues to a completed state after passing delivery review.
+- change-request ID;
+- tracker key;
+- issue URL;
+- branch, PR, or commit metadata when available.
 
-Linear is useful as a planning/tracker layer. Git provider evidence may still
-provide stronger delivery corroboration.
+For reliable matching, include a SpecGate work reference in branch names, PR
+titles, commit messages, or tracker links where your workflow permits.
 
-## Select repositories, projects, or teams
+## Use corroborated evidence
 
-Provider connection grants access. Resource selection determines which external
-work SpecGate should observe.
+Delivery review can distinguish self-reported agent evidence from corroborated
+external evidence. For example, a merged PR or CI webhook can strengthen a
+completion claim.
 
-Use the smallest useful scope:
-
-- select only repositories participating in governed delivery;
-- choose the Linear team owning the work;
-- avoid broad organization tokens when a narrower credential works.
-
-## Webhooks and secrets
-
-SpecGate stores or derives a per-integration webhook secret. Provider events are
-authenticated before processing.
-
-Do not place webhook secrets in repository files. Rotate a secret when it may
-have been exposed, then update both provider and SpecGate configuration.
-
-Provider retries are deduplicated. A repeated delivery ID does not create a
-second evidence event.
-
-## How SpecGate links events to work
-
-SpecGate uses work references, branch/URL information, tracker links, and
-provider metadata to match an external event to a work item.
-
-Unmatched events remain visible for diagnosis rather than being attached to a
-random item.
-
-For reliable matching:
-
-- preserve the SpecGate work key in tracker and branch context;
-- use generated tracker handoff where possible;
-- avoid removing correlation data from issue or PR descriptions.
-
-## Outbound tracker handoff
-
-A human initiates the handoff for a ready work item. SpecGate creates the
-external issue and preserves the link.
-
-The tracker remains a coordination surface. The approved Context Pack remains
-the implementation contract.
+When a governance profile requires corroborated evidence, a passing
+self-reported completion may be downgraded until matching external evidence is
+received.
 
 ## Troubleshooting
 
 ### Provider connection fails
 
-Check OAuth client configuration, redirect origin, token scope, and provider
-account permissions.
+- check OAuth client ID and secret;
+- check callback URL;
+- confirm the provider allows the callback origin;
+- inspect Doc Registry logs.
 
 ### Webhooks return unauthorized
 
-Confirm provider and SpecGate hold the same secret, timestamp is current, and a
-proxy has not rewritten the raw request body.
+- verify the webhook secret;
+- confirm the provider is signing requests as expected;
+- check reverse-proxy header forwarding.
 
 ### Event is accepted but unmatched
 
-Check work key, branch name, issue URL, selected repository/project, and tracker
-link.
+- include the work reference in the PR, branch, commit, or tracker item;
+- run `specgate work show <ref>` to confirm the work item exists;
+- check whether the selected workspace filters your view.
 
 ### Delivery review lacks corroboration
 
-Confirm the relevant repository is selected and provider sent the expected
-merge or workflow event. A builder’s own report remains agent-attested until an
-independent channel adds evidence.
+- confirm CI or provider events are reaching SpecGate;
+- confirm they include a work reference or linkable tracker/PR metadata;
+- rerun `specgate delivery status <work-ref> --detail`.
 
-## Continue
+## Related
 
+- [Evidence reference](../reference/evidence.md)
 - [Trust and security](../concepts/trust-and-security.md)
+- [Configuration reference](../reference/configuration.md)

@@ -1,190 +1,165 @@
 # Use SpecGate with a coding agent
 
-This workflow keeps implementation tied to approved context and returns
-criterion-level evidence after the code changes.
-
-Install the IDE integration first:
-[Install SpecGate in your coding IDE](install-ide-plugins.md).
+Use this guide when a coding agent is ready to implement a SpecGate work item.
+The goal is to keep implementation scoped to approved context and return
+evidence that delivery review can verify.
 
 ## Before the agent edits code
 
-A work item is ready for implementation only when its required governance
-conditions are satisfied:
+Confirm:
 
-- the intended artifact or quick Context Pack exists;
-- required readiness gates have acceptable results;
-- required human approval exists;
-- acceptance criteria and scope are available;
-- the Context Pack is not stale.
+- the `specgate` CLI is installed;
+- `specgate doctor` passes;
+- the correct local user and workspace are selected;
+- IDE plugins are installed, or the agent has access to this workflow.
 
-Readiness is not approval. A green deterministic check alone does not authorize
-implementation.
+```bash
+specgate doctor
+specgate user current
+specgate workspace current
+specgate plugins doctor
+```
 
 ## 1. Resolve the work item
 
 ```bash
-specgate status --json
-specgate work show "$WORK_REF" --json
+specgate work show <work-ref>
 ```
 
-`$WORK_REF` may be a SpecGate change-request ID, work-item key, tracker key, or
-supported issue URL.
+Use a change-request ID, SpecGate key, tracker key, or supported issue URL.
+If the work item is ambiguous, stop and ask for the correct reference.
 
-## 2. Check governance state
+## 2. Check policy and gate state
 
 ```bash
-specgate gates status "$WORK_REF" --json
-specgate work policy "$WORK_REF" --json
+specgate work policy <work-ref>
+specgate gates status <work-ref>
 ```
 
-Stop before editing when required approval is missing. Surface failed,
-unresolved, and not-run gates instead of treating them as passed.
+Policy tells the agent what governance level applies and what must be true
+before implementation or delivery. Gate status shows unresolved quality checks.
 
 ## 3. Read the Context Pack
 
 ```bash
-specgate work context "$WORK_REF" --json
+specgate work context <work-ref>
 ```
 
-Read:
+The Context Pack is the implementation contract. It contains the approved
+intent, acceptance criteria, scope limits, risks, design references, and
+applicable skills.
 
-- approved scope and non-goals;
-- acceptance criteria;
-- risks and constraints;
-- design references;
-- verification requirements;
-- governance warnings;
-- source artifact and version.
+Do not implement from memory, tracker text, or chat summary when the Context
+Pack disagrees.
 
-Treat approved Context Pack content as stronger than chat history, tracker
-comments, or stale repository documents.
+## 4. Fetch extra artifact files only when needed
 
-## 4. Fetch additional artifact files
-
-When the pack points to a richer artifact:
+Use the Context Pack first. Fetch file bodies only when implementation needs the
+exact source artifact text:
 
 ```bash
-specgate artifact show "$ARTIFACT_ID" --json
-specgate artifact files "$ARTIFACT_ID" spec.md tasks_fe.md --json
+specgate artifact files <artifact-id> spec.md verification.md --content
 ```
 
-The file command returns path, size, and URL references by default. Fetch only
-the files needed for the task, and add `--content` only when the file body is
-required. Preserve explicit non-goals and blast-radius limits.
+Without `--content`, the command prints file references and metadata.
 
 ## 5. Implement within scope
 
-The coding agent:
+Follow the repository’s own agent rules. In this repo, that means:
 
-- changes code and tests in the repository;
-- uses the repository’s development rules;
-- runs verification proportional to the change;
-- keeps repository-owned docs aligned with behavior;
-- does not silently expand approved product scope.
+- keep docs updated with code changes;
+- write or update relevant tests;
+- avoid unrelated refactors;
+- do not commit secrets;
+- do not bypass hooks.
 
-SpecGate does not need general Git read access. Repository work stays with the
-coding agent.
+If required context is missing or contradictory, record the blocker instead of
+guessing.
 
 ## 6. Report documentation updates or ambiguity
 
-When implementation changes repository-owned system documentation, report the
-signal with a JSON feedback body:
+When code changes include docs, report that signal:
 
 ```bash
-specgate delivery report "$WORK_REF" --file docs-updated.json --json
+cat > /tmp/specgate-docs-updated.json <<JSON
+{
+  "change_request_id": "<work-ref>",
+  "event_type": "coding_agent.docs_updated",
+  "severity": "info",
+  "summary": "Updated repository documentation to match shipped behavior."
+}
+JSON
+
+specgate delivery report <work-ref> --file /tmp/specgate-docs-updated.json --json
 ```
 
-When approved intent is ambiguous or contradictory:
-
-1. report `coding_agent.blocked_ambiguity`;
-2. ask the human for the missing decision;
-3. propose a governed artifact revision if the source of truth must change.
+When scope is blocked:
 
 ```bash
-specgate delivery report "$WORK_REF" --file ambiguity.json --json
-specgate artifact propose "$ARTIFACT_ID" --file proposal.json --json
+cat > /tmp/specgate-blocked.json <<JSON
+{
+  "change_request_id": "<work-ref>",
+  "event_type": "coding_agent.blocked_ambiguity",
+  "severity": "blocking",
+  "summary": "Implementation contract needs clarification."
+}
+JSON
+
+specgate delivery report <work-ref> --file /tmp/specgate-blocked.json --json
 ```
 
-Do not edit approved artifact state directly.
+## 7. Prepare completion evidence
 
-## 7. Report completion and AC evidence
-
-Scaffold the completion report — it prefills `event_type`, and one `criteria[]`
-entry per acceptance criterion with the correct `criterion_id` and text:
+Scaffold a completion report:
 
 ```bash
-specgate delivery report "$WORK_REF" --init --json
+specgate delivery report <work-ref> --init
 ```
 
-Fill in:
+Fill `completion.json` with:
 
-- summary;
+- summary of what changed;
 - affected files;
-- automated checks and skipped-check reasons;
-- one claim per acceptance criterion;
-- specific evidence (`{kind, path, ...}`).
+- checks run and their results;
+- evidence for each acceptance criterion.
 
-Criterion claims are:
+Evidence should be concrete: command output, test names, file paths, UI behavior,
+API responses, PR links, or screenshots when relevant.
 
-- `satisfied`;
-- `partial`;
-- `not_done`.
-
-Do not claim `satisfied` when the check was not run or evidence is unclear.
-
-## 8. Submit the delivery tail
-
-One command reports completion, runs gates, triggers delivery review, and
-returns the per-criterion verdict in a single
-`{report, gates, review, status}` envelope:
+## 8. Submit delivery
 
 ```bash
-specgate delivery submit "$WORK_REF" --file completion.json --json
+specgate delivery submit <work-ref> --file completion.json
+specgate delivery status <work-ref> --detail
 ```
 
-If a stage fails, the command stops and the error envelope names the failing
-stage in `error.details.stage`.
+`delivery submit` runs the complete tail:
 
-The individual commands are available when you need one stage at a time
-(none of them require `--yes` in non-interactive runs):
+1. report completion evidence;
+2. run gates;
+3. trigger delivery review;
+4. return status.
 
-```bash
-specgate delivery report "$WORK_REF" --file completion.json --json
-specgate gates run "$WORK_REF" --json
-specgate delivery review "$WORK_REF" --json
-specgate delivery status "$WORK_REF" --detail --json
-```
+## 9. Rework failed review
 
-The delivery reviewer compares ACs with the latest completion report and
-available corroboration. Stronger governance may require evidence beyond the
-builder’s own claim.
+If review fails:
 
-## 9. Repeat when review fails
+1. read the failed criterion or gate hint;
+2. make the smallest focused fix;
+3. update tests and docs if needed;
+4. update evidence;
+5. run `delivery submit` again.
 
-When `delivery submit` (or `delivery status`) returns a failed or unclear
-verdict:
+Do not mark work complete while delivery review still names unresolved gaps.
 
-1. read `outstanding_md` and per-criterion findings;
-2. fix only the identified gap;
-3. rerun relevant repository verification;
-4. update completion.json and run `delivery submit` again.
+## MCP boundary
 
-Finish when review passes or a genuine external blocker is recorded clearly.
+Doc Registry exposes MCP tools for embedded IDE integrations. For the normal
+coding-agent workflow, prefer the CLI commands in this guide. The CLI gives
+stable output modes, workspace selection, and delivery-report scaffolding.
 
-## Governance-ops MCP boundary
+## Related
 
-Coding agents use the CLI. SpecGate’s governance-ops agent retains an internal
-MCP boundary for its bounded tool calls and governance-ops.
-
-The separation keeps IDE setup simple:
-
-| Consumer | Interface |
-|---|---|
-| Claude Code, Cursor, Codex, scripts | `specgate` CLI |
-| Governance-ops service | internal MCP and service APIs |
-| PM, QC, tech lead, operator | SpecGate and CLI |
-
-## Continue
-
+- [Use the SpecGate CLI](cli-workflow.md)
+- [Evidence reference](../reference/evidence.md)
 - [Artifacts and Context Packs](../concepts/artifacts-and-context-packs.md)
-- [CLI reference](../reference/cli.md)

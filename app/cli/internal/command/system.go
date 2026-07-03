@@ -834,6 +834,8 @@ type uninstallResult struct {
 	Dir            string   `json:"dir"`
 	StoppedStack   bool     `json:"stopped_stack"`
 	PurgedData     bool     `json:"purged_data"`
+	PurgedImages   bool     `json:"purged_images"`
+	RemovedImages  []string `json:"removed_images"`
 	RemovedConfig  bool     `json:"removed_config"`
 	RemovedPlugins int      `json:"removed_plugins"`
 	RemovedPaths   []string `json:"removed_paths"`
@@ -845,6 +847,7 @@ func newUninstallCmd(deps *Deps) *cobra.Command {
 	var (
 		deployDir     string
 		purgeData     bool
+		purgeImages   bool
 		removePlugins = true
 	)
 	cmd := &cobra.Command{
@@ -859,12 +862,17 @@ func newUninstallCmd(deps *Deps) *cobra.Command {
 				choices, err := deps.Prompter.MultiSelect("Remove SpecGate setup", []interactive.Option{
 					{Label: "IDE plugin files", Value: "plugins"},
 					{Label: "Local data (Docker volumes and deployment directory)", Value: "data"},
+					{Label: "Docker images for SpecGate services", Value: "images"},
 				}, []string{"plugins"})
 				if err != nil {
 					return err
 				}
 				removePlugins = containsChoice(choices, "plugins")
 				purgeData = containsChoice(choices, "data")
+				purgeImages = containsChoice(choices, "images")
+			}
+			if purgeData && cmd.Flags().Changed("purge-data") {
+				purgeImages = true
 			}
 			if purgeData && !deps.Yes {
 				if deps.NoInput {
@@ -874,9 +882,18 @@ func newUninstallCmd(deps *Deps) *cobra.Command {
 				}
 			}
 
-			result := uninstallResult{Dir: dir, PurgedData: purgeData, KeptData: !purgeData, RemovedPaths: []string{}}
+			result := uninstallResult{Dir: dir, PurgedData: purgeData, PurgedImages: purgeImages, KeptData: !purgeData, RemovedImages: []string{}, RemovedPaths: []string{}}
+			svc := makeDeployService(deps, dir)
 			if _, err := os.Stat(filepath.Join(dir, "compose.yml")); err == nil {
-				svc := makeDeployService(deps, dir)
+				var removableImages []string
+				if purgeImages {
+					images, err := svc.Images(cmd.Context())
+					if err != nil {
+						code := deps.Printer.Error("uninstall", output.ErrorPayload{Code: "unavailable", Message: err.Error()})
+						return &output.ExitError{Code: code, Err: err}
+					}
+					removableImages = specGateServiceImages(images)
+				}
 				var downErr error
 				if purgeData {
 					downErr = svc.DownWithVolumes(cmd.Context())
@@ -888,6 +905,19 @@ func newUninstallCmd(deps *Deps) *cobra.Command {
 					return &output.ExitError{Code: code, Err: downErr}
 				}
 				result.StoppedStack = true
+				if purgeImages {
+					if err := svc.RemoveImages(cmd.Context(), removableImages); err != nil {
+						code := deps.Printer.Error("uninstall", output.ErrorPayload{Code: "unavailable", Message: err.Error()})
+						return &output.ExitError{Code: code, Err: err}
+					}
+					result.RemovedImages = removableImages
+				}
+			}
+			if purgeData || purgeImages {
+				if err := svc.RemoveLabeledResources(cmd.Context(), purgeImages); err != nil {
+					code := deps.Printer.Error("uninstall", output.ErrorPayload{Code: "unavailable", Message: err.Error()})
+					return &output.ExitError{Code: code, Err: err}
+				}
 			}
 			if purgeData {
 				if removed, err := removePathIfExists(dir); err != nil {
@@ -946,6 +976,16 @@ func containsChoice(values []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+func specGateServiceImages(images []string) []string {
+	var filtered []string
+	for _, image := range images {
+		if strings.Contains(image, "thanhtung2693/") || strings.HasPrefix(image, "specgate-") {
+			filtered = append(filtered, image)
+		}
+	}
+	return filtered
 }
 
 func removeConfigFile(deps *Deps) (bool, error) {

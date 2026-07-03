@@ -6,6 +6,16 @@
 # LANGSMITH_API_KEY for optional tracing.
 
 FROM python:3.13-slim
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_DATE=unknown
+LABEL org.opencontainers.image.title="SpecGate Agents" \
+      org.opencontainers.image.source="https://github.com/thanhtung2693/specgate" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${COMMIT}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.specgate.managed="true" \
+      org.specgate.component="agents"
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install uv

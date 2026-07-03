@@ -865,6 +865,18 @@ func removeSpecGatePluginFiles() (int, []string, error) {
 		removed++
 		paths = append(paths, filepath.Join(home, ".agents", "plugins", "marketplace.json"))
 	}
+	for _, dir := range []string{
+		filepath.Join(home, ".codex", "plugins"),
+		filepath.Join(home, ".agents", "plugins"),
+		filepath.Join(home, ".cursor", "skills"),
+	} {
+		if ok, err := removeDirIfEmpty(dir); err != nil {
+			return removed, paths, err
+		} else if ok {
+			removed++
+			paths = append(paths, dir)
+		}
+	}
 	return removed, paths, nil
 }
 
@@ -887,6 +899,9 @@ func removeCodexConfigSection(path string) (bool, error) {
 	}
 	if err != nil {
 		return false, err
+	}
+	if strings.TrimSpace(string(body)) == "" {
+		return true, os.Remove(path)
 	}
 	lines := strings.Split(strings.ReplaceAll(string(body), "\r\n", "\n"), "\n")
 	var out []string
@@ -913,8 +928,9 @@ func removeCodexConfigSection(path string) (bool, error) {
 	text := strings.TrimRight(strings.Join(out, "\n"), "\n")
 	if text != "" {
 		text += "\n"
+		return true, os.WriteFile(path, []byte(text), 0o644)
 	}
-	return true, os.WriteFile(path, []byte(text), 0o644)
+	return true, os.Remove(path)
 }
 
 func removeCodexMarketplaceEntry(path string) (bool, error) {
@@ -933,6 +949,9 @@ func removeCodexMarketplaceEntry(path string) (bool, error) {
 	if err := json.Unmarshal(body, &data); err != nil {
 		return false, fmt.Errorf("parse %s: %w", path, err)
 	}
+	if len(data.Plugins) == 0 {
+		return true, os.Remove(path)
+	}
 	filtered := data.Plugins[:0]
 	changed := false
 	for _, plugin := range data.Plugins {
@@ -946,11 +965,31 @@ func removeCodexMarketplaceEntry(path string) (bool, error) {
 		return false, nil
 	}
 	data.Plugins = filtered
+	if len(data.Plugins) == 0 {
+		return true, os.Remove(path)
+	}
 	out, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return false, err
 	}
 	return true, os.WriteFile(path, append(out, '\n'), 0o644)
+}
+
+func removeDirIfEmpty(path string) (bool, error) {
+	entries, err := os.ReadDir(path)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if len(entries) > 0 {
+		return false, nil
+	}
+	if err := os.Remove(path); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func focusedPluginSkills() []string {

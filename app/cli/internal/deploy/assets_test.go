@@ -34,6 +34,8 @@ func TestReleaseComposeUsesPublishedImages(t *testing.T) {
 		"${DOC_REGISTRY_PORT:-8080}:8080",
 		"${AGENTS_PORT:-2024}:8000",
 		"${UI_PORT:-3000}:80",
+		"org.specgate.managed: \"true\"",
+		"org.specgate.component: network",
 	} {
 		if !strings.Contains(raw, want) {
 			t.Fatalf("compose missing %q", want)
@@ -49,9 +51,31 @@ func TestDocRegistryImagePreparesLocalBlobRoot(t *testing.T) {
 	for _, want := range []string{
 		"mkdir -p /data/blobs",
 		"chown -R app:app /data",
+		"org.specgate.managed=\"true\"",
+		"org.specgate.component=\"doc-registry\"",
 	} {
 		if !strings.Contains(raw, want) {
 			t.Fatalf("doc-registry Dockerfile missing %q", want)
+		}
+	}
+}
+
+func TestRuntimeImagesCarrySpecGateLabels(t *testing.T) {
+	for _, item := range []struct {
+		path      string
+		component string
+	}{
+		{"../../../../docker/Dockerfile.agents", "agents"},
+		{"../../../../docker/Dockerfile.ui", "ui"},
+	} {
+		raw := readRepoFile(t, item.path)
+		for _, want := range []string{
+			"org.specgate.managed=\"true\"",
+			"org.specgate.component=\"" + item.component + "\"",
+		} {
+			if !strings.Contains(raw, want) {
+				t.Fatalf("%s missing %q", item.path, want)
+			}
 		}
 	}
 }

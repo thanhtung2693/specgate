@@ -52,6 +52,8 @@ type ServiceStatus struct {
 	Status string `json:"Status"`
 }
 
+const managedLabelFilter = "label=org.specgate.managed=true"
+
 // bundleFetcher downloads + extracts the compose bundle into destDir.
 type bundleFetcher func(ctx context.Context, baseURL, version, destDir string) error
 
@@ -248,6 +250,67 @@ func (s *Service) DownWithVolumes(ctx context.Context) error {
 		"-f", s.composePath(), "down", "-v")
 }
 
+// Images returns images referenced by the compose bundle.
+func (s *Service) Images(ctx context.Context) ([]string, error) {
+	out, err := s.runner.Output(ctx, "docker", "compose",
+		"-f", s.composePath(), "config", "--images")
+	if err != nil {
+		return nil, err
+	}
+	return parseLines(out), nil
+}
+
+// RemoveImages removes the provided Docker images.
+func (s *Service) RemoveImages(ctx context.Context, images []string) error {
+	if len(images) == 0 {
+		return nil
+	}
+	args := append([]string{"image", "rm"}, images...)
+	return s.runner.Run(ctx, "docker", args...)
+}
+
+// RemoveLabeledResources removes Docker resources marked as managed by
+// SpecGate. It is intentionally label-based so cleanup does not rely on compose
+// project names or user-chosen deployment directories.
+func (s *Service) RemoveLabeledResources(ctx context.Context, includeImages bool) error {
+	steps := []struct {
+		kind string
+		args []string
+	}{
+		{kind: "container", args: []string{"container", "rm", "-f"}},
+		{kind: "volume", args: []string{"volume", "rm"}},
+		{kind: "network", args: []string{"network", "rm"}},
+	}
+	if includeImages {
+		steps = append(steps, struct {
+			kind string
+			args []string
+		}{kind: "image", args: []string{"image", "rm"}})
+	}
+	for _, step := range steps {
+		ids, err := s.labeledResourceIDs(ctx, step.kind)
+		if err != nil {
+			return err
+		}
+		if len(ids) == 0 {
+			continue
+		}
+		args := append(append([]string{}, step.args...), ids...)
+		if err := s.runner.Run(ctx, "docker", args...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) labeledResourceIDs(ctx context.Context, kind string) ([]string, error) {
+	out, err := s.runner.Output(ctx, "docker", kind, "ls", "-q", "--filter", managedLabelFilter)
+	if err != nil {
+		return nil, err
+	}
+	return parseLines(out), nil
+}
+
 // LocalStatus returns the runtime status of each compose service.
 func (s *Service) LocalStatus(ctx context.Context) ([]ServiceStatus, error) {
 	out, err := s.runner.Output(ctx, "docker", "compose",
@@ -256,6 +319,20 @@ func (s *Service) LocalStatus(ctx context.Context) ([]ServiceStatus, error) {
 		return nil, err
 	}
 	return parseComposePS(out)
+}
+
+func parseLines(data []byte) []string {
+	seen := map[string]bool{}
+	var lines []string
+	for _, line := range strings.Split(string(data), "\n") {
+		value := strings.TrimSpace(line)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		lines = append(lines, value)
+	}
+	return lines
 }
 
 func (s *Service) composePath() string {

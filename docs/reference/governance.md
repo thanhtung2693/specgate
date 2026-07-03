@@ -1,9 +1,11 @@
-# Governance reference
+# Governance
 
-This page summarizes SpecGate’s governance vocabulary. The
-[cross-module contracts](../contracts.md) and
-[Doc Registry specification](../../app/doc-registry/docs/spec.md) remain
-canonical for wire behavior.
+Use this reference to look up governance vocabulary, levels, policy resolution,
+gate results, and conformance fixtures.
+
+The [cross-module contracts](../contracts.md) and
+[Doc Registry specification](../../app/doc-registry/docs/spec.md) are canonical
+for wire behavior.
 
 ## Governance levels
 

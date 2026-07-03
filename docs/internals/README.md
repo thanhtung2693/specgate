@@ -1,14 +1,16 @@
 # Maintainer internals
 
-These documents support SpecGate contributors and maintainers. Product users
-normally do not need them.
+These documents help contributors maintain the repository, release artifacts,
+and cross-module contracts. Product users normally start from
+[docs home](../README.md) instead.
 
 ## Cross-module contracts
 
 - [Contracts](../contracts.md) — shared statuses, payloads, governance, evidence, and integration contracts
 - [Data model](../data-model.md) — logical entities and relationships
 - [Testing strategy](../testing.md) — repository-wide test and debugging guidance
-- [Machine-readable contracts](../contracts/) — evidence schema and fixtures
+- [Release-readiness gate](../release-readiness.test.mjs) — executable release
+  contract checks
 - [Governance conformance fixtures](../conformance/) — policy and gate compatibility cases
 
 ## Module documentation
@@ -20,9 +22,9 @@ normally do not need them.
 
 ## Design history
 
-Historical design documents are not currently checked into this docs tree.
-Shipped behavior remains canonical in current contracts, module specs, code,
-tests, and user documentation.
+Historical design documents are not part of this docs tree. Shipped behavior is
+canonical in current contracts, module specs, code, tests, and user
+documentation.
 
 ## Document layers
 

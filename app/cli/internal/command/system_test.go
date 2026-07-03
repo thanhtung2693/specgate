@@ -30,7 +30,8 @@ type fakeDeployRunner struct {
 	Commands []string
 	Err      error
 	// OutputData, when non-nil, is returned by Output instead of "[]".
-	OutputData []byte
+	OutputData      []byte
+	OutputByCommand map[string][]byte
 }
 
 func (f *fakeDeployRunner) Run(_ context.Context, name string, args ...string) error {
@@ -41,7 +42,13 @@ func (f *fakeDeployRunner) Run(_ context.Context, name string, args ...string) e
 
 func (f *fakeDeployRunner) Output(_ context.Context, name string, args ...string) ([]byte, error) {
 	all := append([]string{name}, args...)
-	f.Commands = append(f.Commands, strings.Join(all, " "))
+	cmd := strings.Join(all, " ")
+	f.Commands = append(f.Commands, cmd)
+	if f.OutputByCommand != nil {
+		if data, ok := f.OutputByCommand[cmd]; ok {
+			return data, f.Err
+		}
+	}
 	if f.OutputData != nil {
 		return f.OutputData, f.Err
 	}
@@ -845,6 +852,60 @@ func TestUninstallKeepsDataByDefaultAndRemovesUserFiles(t *testing.T) {
 	}
 }
 
+func TestUninstallRemovesSpecGateOnlyPluginConfigFiles(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	configPath := filepath.Join(home, ".codex", "config.toml")
+	marketplacePath := filepath.Join(home, ".agents", "plugins", "marketplace.json")
+	writeTestFile(t, configPath, "[plugins.\"specgate@personal\"]\nenabled = true\n")
+	writeTestFile(t, marketplacePath, `{
+  "name": "personal",
+  "plugins": [
+    {"name": "specgate"}
+  ]
+}
+`)
+	writeTestFile(t, filepath.Join(home, ".codex", "plugins", "specgate", ".codex-plugin", "plugin.json"), "{}")
+
+	deps, out := newTestDeps(t, "")
+	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall", "--dir", filepath.Join(t.TempDir(), "deploy"))
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	for _, path := range []string{
+		configPath,
+		marketplacePath,
+		filepath.Join(home, ".codex", "plugins"),
+		filepath.Join(home, ".agents", "plugins"),
+	} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("%s should be removed; stat err=%v", path, err)
+		}
+	}
+}
+
+func TestUninstallRemovesEmptyPluginConfigFiles(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	configPath := filepath.Join(home, ".codex", "config.toml")
+	marketplacePath := filepath.Join(home, ".agents", "plugins", "marketplace.json")
+	writeTestFile(t, configPath, "")
+	writeTestFile(t, marketplacePath, `{"name":"personal","plugins":[]}`)
+
+	deps, out := newTestDeps(t, "")
+	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall", "--dir", filepath.Join(t.TempDir(), "deploy"))
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	for _, path := range []string{configPath, marketplacePath} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("%s should be removed; stat err=%v", path, err)
+		}
+	}
+}
+
 func TestUninstallPurgeDataRequiresConfirmation(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -866,7 +927,9 @@ func TestUninstallPurgeDataRemovesDeploymentDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runner := &fakeDeployRunner{}
+	runner := &fakeDeployRunner{OutputByCommand: map[string][]byte{
+		"docker compose -f " + filepath.Join(dir, "compose.yml") + " config --images": []byte("ghcr.io/thanhtung2693/doc-registry:v0.1.0-alpha.1\npgvector/pgvector:0.8.3-pg18\nghcr.io/thanhtung2693/ui:v0.1.0-alpha.1\n"),
+	}}
 	deps, out := newTestDeps(t, "")
 	deps.DeployRunner = runner
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "uninstall", "--dir", dir, "--purge-data")
@@ -877,8 +940,47 @@ func TestUninstallPurgeDataRemovesDeploymentDir(t *testing.T) {
 	if !strings.Contains(gotCommands, "docker compose -f "+filepath.Join(dir, "compose.yml")+" down -v") {
 		t.Fatalf("missing compose down -v command in:\n%s", gotCommands)
 	}
+	if !strings.Contains(gotCommands, "docker compose -f "+filepath.Join(dir, "compose.yml")+" config --images") {
+		t.Fatalf("missing compose image discovery command in:\n%s", gotCommands)
+	}
+	if !strings.Contains(gotCommands, "docker image rm ghcr.io/thanhtung2693/doc-registry:v0.1.0-alpha.1 ghcr.io/thanhtung2693/ui:v0.1.0-alpha.1") {
+		t.Fatalf("missing filtered image rm command in:\n%s", gotCommands)
+	}
+	for _, want := range []string{
+		"docker container ls -q --filter label=org.specgate.managed=true",
+		"docker volume ls -q --filter label=org.specgate.managed=true",
+		"docker network ls -q --filter label=org.specgate.managed=true",
+		"docker image ls -q --filter label=org.specgate.managed=true",
+	} {
+		if !strings.Contains(gotCommands, want) {
+			t.Fatalf("missing labeled cleanup command %q in:\n%s", want, gotCommands)
+		}
+	}
+	if strings.Contains(gotCommands, "pgvector/pgvector") {
+		t.Fatalf("shared base image should not be removed:\n%s", gotCommands)
+	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Fatalf("deployment dir should be removed with --purge-data; stat err=%v", err)
+	}
+}
+
+func TestUninstallPlainPurgeDataAlsoRemovesImages(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	setupTestBundle(t, dir)
+
+	runner := &fakeDeployRunner{OutputByCommand: map[string][]byte{
+		"docker compose -f " + filepath.Join(dir, "compose.yml") + " config --images": []byte("ghcr.io/thanhtung2693/agents:v0.1.0-alpha.1\n"),
+	}}
+	deps, out := newTestDeps(t, "")
+	deps.DeployRunner = runner
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--yes", "uninstall", "--dir", dir, "--purge-data")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	gotCommands := strings.Join(runner.Commands, "\n")
+	if !strings.Contains(gotCommands, "docker image rm ghcr.io/thanhtung2693/agents:v0.1.0-alpha.1") {
+		t.Fatalf("missing image rm command in:\n%s", gotCommands)
 	}
 }
 
@@ -894,7 +996,10 @@ func TestUninstallChecklistCanKeepPluginsAndPurgeData(t *testing.T) {
 	deps, _, prompter, out := newFakeDeps(t)
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	deps.DeployRunner = runner
-	prompter.multiValues = []string{"data"}
+	runner.OutputByCommand = map[string][]byte{
+		"docker compose -f " + filepath.Join(dir, "compose.yml") + " config --images": []byte("ghcr.io/thanhtung2693/agents:v0.1.0-alpha.1\nredis:8-alpine\n"),
+	}
+	prompter.multiValues = []string{"data", "images"}
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "uninstall", "--dir", dir)
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
@@ -911,6 +1016,9 @@ func TestUninstallChecklistCanKeepPluginsAndPurgeData(t *testing.T) {
 	gotCommands := strings.Join(runner.Commands, "\n")
 	if !strings.Contains(gotCommands, "docker compose -f "+filepath.Join(dir, "compose.yml")+" down -v") {
 		t.Fatalf("missing compose down -v command in:\n%s", gotCommands)
+	}
+	if !strings.Contains(gotCommands, "docker image rm ghcr.io/thanhtung2693/agents:v0.1.0-alpha.1") {
+		t.Fatalf("missing image rm command in:\n%s", gotCommands)
 	}
 }
 

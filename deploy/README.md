@@ -39,6 +39,9 @@ specgate up
 
 `specgate init` downloads the Compose bundle, generates a random encryption key,
 copies the `.env.example` files, and starts the stack with `docker compose up --wait`.
+The release bundle labels SpecGate-managed containers, volumes, networks, and
+runtime images with `org.specgate.managed=true`, so `specgate uninstall` can
+clean them up without relying on project-name guessing.
 
 Use `--dir <path>` to choose a non-default directory:
 
@@ -223,11 +226,39 @@ docker compose up -d --wait
 All persistent data lives in named Docker volumes (`postgres-data`,
 `doc-registry-data`). They survive container restarts
 and `docker compose down`. The doc-registry image prepares `/data/blobs` inside
-the `doc-registry-data` volume for the default local blob store. To wipe all
-data:
+the `doc-registry-data` volume for the default local blob store.
+
+| Volume | Contents |
+|---|---|
+| `postgres-data` | artifact metadata, features, work items, settings, evidence, gate history |
+| `doc-registry-data` | artifact/spec document contents stored by the local blob store |
+
+Back up both volumes before deleting data. To wipe all data from a manual
+Compose deployment:
 
 ```bash
 docker compose down -v
+```
+
+## Docker resource labels
+
+The release Compose bundle labels SpecGate-managed containers, volumes,
+networks, and runtime images:
+
+| Label | Purpose |
+|---|---|
+| `org.specgate.managed=true` | Marks resources that belong to SpecGate |
+| `org.specgate.component=<name>` | Identifies the component, such as `doc-registry`, `agents`, `ui`, `postgres`, or `network` |
+
+The CLI uses these labels during `specgate uninstall --purge-data --yes` so it
+can remove SpecGate resources without depending on a particular Compose project
+name. Manual operators can inspect the same resources:
+
+```bash
+docker ps -a --filter label=org.specgate.managed=true
+docker volume ls --filter label=org.specgate.managed=true
+docker network ls --filter label=org.specgate.managed=true
+docker image ls --filter label=org.specgate.managed=true
 ```
 
 ## Troubleshooting

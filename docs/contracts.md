@@ -1,6 +1,11 @@
 # Contracts
 
-Shared contracts that matter across the monorepo.
+This is the cross-module reference for shared SpecGate contracts. Use it when a
+change affects more than one module, when a CLI/UI/governance-ops payload must
+stay stable, or when release validation needs a canonical behavior statement.
+
+For concepts, start with [How SpecGate works](concepts/how-specgate-works.md).
+For command usage, use the [CLI reference](reference/cli.md).
 
 ## HTTP API dialects
 

@@ -1,206 +1,137 @@
-# Testing Strategy
+# Testing strategy
 
-Single entry point for verifying SpecGate across all four modules. If you're an
-AI agent or a teammate asked to "run the tests" or "verify", start here.
+Use this reference when you need to choose the right verification for a
+SpecGate change. Run the cheapest check that can fail for the behavior you
+touched, then broaden only when the change crosses module or contract
+boundaries.
 
-## Architecture context (what shapes the test surface)
+## Test layers
 
-The agents module is a **headless governance-ops service**: one LangGraph graph
-`governance` → [`governance_chat.py`](../app/agents/src/specgate_agents/governance/governance_chat.py)
-— a single deep-agent node exposing governance read/run tools, with **no drafting
-sub-agents and no HITL interrupts**. The broader governance operations (readiness
-gates, reconciliation, classification, summarization) are deterministic Python
-services invoked by `webapp.py` HTTP routes, not graph nodes.
+| Layer | Use for | Command |
+|---|---|---|
+| Module unit and harness tests | Normal code changes, CLI output, Go handlers, UI components, governance-op logic | See module commands below |
+| Release readiness gate | Packaging, public docs, release images, terminology, static release contracts | `node --test docs/release-readiness.test.mjs` |
+| Browser or API walkthrough | UI behavior, onboarding, Context Pack handoff, delivery review flows | Manual or Playwright, plus API readback |
+| Live smoke | LangSmith tracing boundary | `GOVERNANCE_LIVE_SMOKE=1 uv run pytest -m live_smoke -q` |
+| Eval run | LLM-backed gate quality on fixed datasets | `uv run python -m evals.run --target <target>` |
 
-That means the test surface is **unit + harness over deterministic services**,
-CLI command/client tests, UI component tests, and the Doc Registry Go suite —
-there is no sub-agent streaming, trace-replay, or live-scenario layer.
+Layer 1 runs in CI. Live smoke and evals are opt-in because they need network
+access, provider credentials, or LangSmith credentials.
 
-## How we test
-
-Run cheapest first; stop at the layer that proves the contract you care about.
-
-| Layer | Cost | What it proves | How to run |
-|-------|------|----------------|------------|
-| **1. Unit + harness** | seconds, no LLM | Governance-op logic (gates, reconciliation, classification), CLI commands and JSON envelopes, MCP tool contracts, DTO / wire shapes, UI components, status-transition + event atomicity | `agents`: `uv run pytest` · `cli`: `make test` · `ui`: `npm run test -- --run` · `doc-registry`: `make test` |
-| **2. Opt-in live smoke** | network | The LangSmith tracing boundary still accepts + reads back a run | `GOVERNANCE_LIVE_SMOKE=1 uv run pytest -m live_smoke` |
-| **3. Opt-in eval** | LLM tokens | Governance judgments (quality gates, reconciliation, lifecycle) score above threshold on fixed datasets | `cd app/agents && uv run python -m evals.run --target <t> --dry-run` — see [`agents/evals/README.md`](../app/agents/evals/README.md) |
-
-## CI enforcement
-
-Layer 1 runs in CI via per-module GitHub Actions workflows in
-[`.github/workflows/`](../.github/workflows), each path-filtered to its module so
-only affected suites run:
-
-| Workflow | Runs |
-|----------|------|
-| `cli.yml` | `make test` (Go, race detector) |
-| `doc-registry.yml` | `go test -race` (testcontainers Postgres) |
-| `agents.yml` | `ruff check` + `uv run pytest` |
-| `ui.yml` | `npm ci` -> `lint` + `build` + `test` (Node 26) |
-| `plugins.yml` | `make check-plugins` |
-
-The opt-in live-smoke and eval layers (2 and 3) are **not** run in CI; they need
-network/LLM credentials and stay manual.
-
-A repo-wide **release-readiness gate** runs on every push and pull request via
-[`release-readiness.yml`](../.github/workflows/release-readiness.yml):
-`node --test docs/release-readiness.test.mjs`. It scans all tracked files for
-retired terminology and asserts release positioning, packaging/compose defaults,
-and cross-module contract docs, so terminology or packaging regressions fail the
-build. `release.yml` publishes the CLI with GoReleaser, uploads the compose
-bundle, and builds multi-platform `linux/amd64` + `linux/arm64` container images
-on release tags.
-
-## How we observe
-
-| Surface | Where to look |
-|---------|---------------|
-| LangSmith traces | Each governance-op route (`webapp.py`) is wrapped with `_traced`, so it surfaces as a root `chain` run tagged `governance` / `agent-api` that nests the LLM/MCP work it triggers. Correlate across modules by `custom_metadata.thread_id`. Set `LANGSMITH_API_KEY` + `LANGSMITH_PROJECT` in `app/agents/.env`. |
-| LangGraph thread state | `curl -s http://localhost:2024/threads/<id>/state` — `values.messages` is the transcript channel (projected to typed UI entries by `/governance/threads/<id>/transcript`); `values.thread_title` carries the title. |
-| Container source vs worktree | `docker exec specgate-agents-1 python -c "import inspect, specgate_agents.governance.governance_chat as m; print(inspect.getsourcefile(m))"` confirms the running container sees your code. |
-
-## What to test
-
-### Governance-chat node (`governance_chat.py`)
-- Binds exactly the four read/run governance tools (`get_artifact`,
-  `get_artifact_documents`, `list_artifact_readiness`, `run_artifact_readiness`)
-  — no drafting tools. (`tests/governance/test_governance_chat.py`)
-- System prompt keeps the node in governance scope (explain gate failures, compare
-  versions, surface conflicts, summarize deviations) and off artifact authoring.
-
-### Readiness + quality gates
-- `completeness` locates the minimum-executable-contract topics **by role** over any
-  spec format; a missing required topic is advisory (`warn`, never `fail`).
-  (`tests/governance/test_completeness.py`)
-- Profile-driven `enabled_gates` / `required_roles` / `required_topics` are read from
-  the artifact's snapshot. (`tests/governance/test_artifact_readiness.py`)
-- `delivery_review` clamps `pass → needs_human_review` when the profile is
-  `corroborated_required` and no `delivery.pr_merged` event exists for the change
-  request. (`tests/governance/test_delivery_review.py`, `test_board_delivery_review.py`)
-- Gate judge structured output; profile-bound Skills inject as a rubric.
-  (`tests/governance/test_quality_gate_judge.py`)
-
-### Reconciliation
-- `draft_artifact_update_proposal` targets the governed envelope by path + role,
-  opens a path-keyed edit session tagged `source_kind=feedback_event`, and dedups on
-  `(base_artifact_id, source_kind, source_id)`. (`tests/governance/test_reconciliation_proposal.py`)
-
-### Doc Registry contract
-- Status transition + `artifact_events` row in the same transaction.
-- Artifact DTO surfaces `expected_gates` derived from the snapshot.
-- Evidence provenance is **server-stamped**: the `report_implementation_feedback`
-  MCP handler blanks agent-supplied `source` so corroboration can't be self-claimed.
-- Run with `make test` (Postgres-only via testcontainers-go).
+## Module commands
 
 ### CLI
-- Command surfaces return stable JSON envelopes in `--json` mode and keep exit
-  codes aligned with `internal/output`.
-- Local user/workspace selection scopes work-listing and attribution without
-  becoming authentication.
-- Run with `make test` from `app/cli`.
 
-### UI
-- Governance-chat rendering (reasoning part, tool-disclosure), the expected-gates
-  Not-run rows in the readiness panel, the feedback inbox. (`npm run test`)
-- Dead-code guard: `npx knip --include files,dependencies` reports no unused
-  files or dependencies. Shared shadcn/UI primitive exports are intentionally
-  outside that guard.
+```bash
+cd app/cli
+make test
+make lint
+```
 
-## Layer 1 — Unit + harness
+The CLI suite covers command behavior, JSON envelopes, exit codes, local
+configuration, user/workspace selection, plugin installation, and uninstall
+cleanup.
 
-### agents
+### Doc Registry
+
+```bash
+cd app/doc-registry
+make test
+make lint
+```
+
+The Doc Registry suite covers API handlers, database behavior, artifact state,
+events, evidence, settings, and contract fixtures. Tests use testcontainers for
+Postgres where needed.
+
+### Governance-ops
+
 ```bash
 cd app/agents
-uv run pytest -q                    # no LLM by default (ScriptedChatModel)
-uv run pytest tests/governance -q   # governance subset
-uv run ruff check src tests      # lint (format + F-rules)
+uv run pytest -q
+uv run pytest tests/governance -q
+uv run ruff check src tests
 ```
-- The default run excludes the opt-in `live_smoke` test (1 deselected).
-- `LangGraphTestHarness` (`tests/governance/_harness/`) wires a real compiled graph with
-  scripted models; `FakeRegistryClient` / `InMemoryRegistry` stand in for Doc Registry.
 
-### ui
+Default tests use scripted models and do not require LLM keys. The governance
+chat graph is a single governance-ops node with read/run tools; readiness gates,
+delivery review, summaries, and classification run through deterministic Python
+services and HTTP routes.
+
+### UI
+
 ```bash
 cd app/ui
-npm run test -- --run            # vitest component tests
-npm run lint                     # oxlint
-npm run build                    # tsc -b (strict) + vite build
+npm run test -- --run
+npm run lint
+npm run build
 npx knip --include files,dependencies
 ```
 
-### doc-registry
-```bash
-cd app/doc-registry
-make test                        # go test -race -count=1 ./...
-make lint                        # go vet ./...
-```
+Use browser verification when layout, routing, streaming, onboarding, settings,
+or artifact/workflow readback changes.
 
-### cli
-```bash
-cd app/cli
-make test                        # go test -race -count=1 ./...
-make lint                        # go vet ./...
-```
+## Release readiness
 
-## Layer 2 — Live smoke (opt-in)
+Run the release gate after changes to public docs, installers, Compose files,
+Dockerfiles, workflows, release metadata, or cross-module contracts:
 
 ```bash
-cd app/agents
-GOVERNANCE_LIVE_SMOKE=1 uv run pytest -m live_smoke -q
+node --test docs/release-readiness.test.mjs
 ```
-- One test: `test_live_langsmith_trace_roundtrip` creates a LangSmith run and reads
-  it back, proving the tracing boundary is wired. Skips unless `GOVERNANCE_LIVE_SMOKE=1`
-  and a `LANGSMITH_API_KEY` / `LANGCHAIN_API_KEY` is set.
 
-## Layer 3 — Eval (opt-in, LLM)
+The gate checks alpha positioning, installer paths, Compose defaults, image
+runtime settings, Node workflow versions, static landing metadata, terminology,
+and contract references.
+
+## What to verify by change type
+
+| Change | Minimum useful proof |
+|---|---|
+| CLI command behavior | Targeted CLI tests, then `make test` in `app/cli` |
+| Plugin installer or uninstall cleanup | CLI tests plus a scratch HOME run when behavior touches real files |
+| Docker or Compose release files | `docker compose config --quiet`, release-readiness gate, affected CLI deploy tests |
+| Doc Registry API or schema | Targeted Go tests, then `make test` in `app/doc-registry` |
+| Governance-ops logic | Targeted `app/agents` pytest file, then governance subset |
+| UI behavior | Targeted Vitest file, browser/API readback for rendered behavior |
+| Cross-module contract | Affected module tests plus release-readiness gate |
+| Docs only | Release-readiness gate when release-facing docs are touched; otherwise link and command sanity |
+
+## Browser and API readback
+
+When a UI bug may be caused by backend state, verify both sides:
+
+1. Trigger the UI action.
+2. Read the relevant API or LangGraph state.
+3. Compare rendered content with stored content.
+
+Useful endpoints:
 
 ```bash
-cd app/agents
-uv run python -m evals.run --target quality_gate_contract --dry-run   # plan only, no LLM
-uv run python -m evals.run --target quality_gate_contract             # real run; needs provider keys
-```
-- Datasets at `app/agents/evals/datasets/*.jsonl`; thresholds at `app/agents/evals/thresholds.toml`.
-- Pushes results to LangSmith when `LANGSMITH_API_KEY` is set.
-- See [`agents/evals/README.md`](../app/agents/evals/README.md). The current governance
-  targets are `quality_gate_contract`, `ac_satisfaction_contract`, and
-  `reconciliation_contract`, plus the `quality_gates`, `lifecycle`, and
-  `reconciliation` gold-data suites.
-
-## LangGraph Streaming SSE Probe (`/runs/stream`)
-
-When a governance-chat streaming bug looks like "wait N seconds, response pops in at
-once", **probe the raw `/runs/stream` wire before touching UI code** — the browser
-hides whether the backend emits tokens at all and under which `stream_mode`.
-
-### Prerequisites
-- LangGraph API reachable at `http://localhost:2024` (Docker `specgate-agents-1` or
-  native `uv run langgraph dev`).
-- `curl`, `uuidgen`, `jq`.
-
-### Reloading the Docker LangGraph container
-
-The self-hosted server imports the graph once at startup and does not hot-reload
-Python — `docker compose watch agents` only **syncs** the file into the container.
-Confirm what's actually running before you trust a probe:
-
-```bash
-docker exec specgate-agents-1 python -c "
-import inspect, specgate_agents.governance.governance_chat as m
-print('source:', inspect.getsourcefile(m))
-"
+curl -s http://localhost:2024/threads/<thread-id>/state
+curl -s http://localhost:8080/api/v1/status
+curl -s http://localhost:8080/api/v1/work-items
 ```
 
-To load Python changes, `docker restart specgate-agents-1` (re-imports the synced
-editable install) or use native `uv run langgraph dev`. A bare restart of a baked
-`langgraph build` image ignores changes — see the container-reload note in the root
-`AGENTS.md` §9.
+If state is correct and the browser is wrong, test the UI path. If state is
+wrong, test the backend or governance-ops path.
 
-### Probe each `stream_mode`
+## LangGraph streaming probe
+
+Use this only when a governance-chat streaming bug looks like the browser waits
+and then renders the response all at once.
+
+Prerequisites:
+
+- LangGraph API reachable at `http://localhost:2024`;
+- `curl`, `uuidgen`, and `jq`.
+
+Probe raw stream modes:
 
 ```bash
 THREAD=$(uuidgen)
 PROMPT='Explain why the spec_completeness gate failed for an artifact.'
+
 for MODE in values messages-tuple updates; do
   echo "--- $MODE ---"
   curl -s -N -X POST "http://localhost:2024/threads/$THREAD/runs/stream" \
@@ -213,49 +144,62 @@ for MODE in values messages-tuple updates; do
 done
 ```
 
-`messages-tuple` should emit AIMessage chunks (including governance tool calls) as
-tokens stream; `values` / `updates` should emit state snapshots / partial writes. The
-single node has no sub-agent namespace fan-out. Empty output on `messages-tuple`
-means the backend isn't producing tokens — fix the agent before touching the UI.
+`messages-tuple` should emit message chunks. `values` and `updates` should emit
+state snapshots or partial writes. Empty `messages-tuple` output points to the
+backend stream path, not the browser renderer.
 
-## Browser walkthrough — state-API cross-check
+## Docker reload rule for agents
 
-The fastest way to localize a governance-chat rendering bug is to drive the UI in a
-real browser and, after each turn, diff what the user sees against what LangGraph
-thread state actually persisted.
+The self-hosted `specgate-agents-1` server imports Python modules once at
+startup. `docker compose watch agents` syncs files into the container but does
+not reload the running process.
 
-**Per UI turn:**
+After Python changes:
 
-1. Trigger the action (Chrome MCP or by hand); wait for the run to finish.
-2. `curl -s http://localhost:2024/threads/<id>/state` and read the last few
-   `values.messages` — check content shape (`string` vs block array
-   `[{type:"text", text:"…"}]`).
-3. Cross-check against the browser:
-   - **state has it, UI does not** → UI hydration / snapshot-rebuild bug. Hard-reload
-     (`cmd+shift+r`); if reload renders it, only the post-run rebuild is broken.
-   - **state is wrong / missing** → backend / stream-emitter bug. Pull the LangSmith
-     trace next.
-   - **UI shows partial content** (cuts off mid-word / mid-marker) → live-stream text
-     parser / markdown renderer bug.
+```bash
+docker restart specgate-agents-1
+docker inspect --format '{{.State.Health.Status}}' specgate-agents-1
+```
 
-**Why this beats "just look at the UI":** the LangSmith waterfall tells you the
-route/run sequence, but not always the exact *shape* of persisted content — a
-`content: [{type:"text"}]` block can render while streaming and vanish after the
-snapshot rebuild. You catch that only by reading the raw state.
+Do not treat `inspect.getsource` from a fresh `docker exec python -c ...`
+process as proof that the running server reloaded. Exercise the live API path or
+restart first.
 
-## Bug triage loop
+## Live smoke
 
-1. **Reproduce.** Re-run the prompt in the governance-ops.
-2. **Layer down.** Does a unit test catch it? If not, can you write one?
-3. **Trace inspect.** LangSmith waterfall — find the bad span; check the governance-op
-   route's inputs/outputs.
-4. **Browser inspect.** Compare the rendered transcript with the raw LangGraph
-   thread state. State right but render wrong → component bug. State wrong →
-   backend / stream-emitter.
-5. **Pin.** Add the unit test (agents/UI) closest to the cause.
+```bash
+cd app/agents
+GOVERNANCE_LIVE_SMOKE=1 uv run pytest -m live_smoke -q
+```
 
-## References
+This checks the LangSmith trace round trip. It skips unless
+`GOVERNANCE_LIVE_SMOKE=1` and `LANGSMITH_API_KEY` or `LANGCHAIN_API_KEY` is set.
 
-- Module specs: [`../app/agents/docs/spec.md`](../app/agents/docs/spec.md), [`../app/agents/docs/governance/docs/spec.md`](../app/agents/docs/governance/docs/spec.md)
-- Event contract: [`../app/agents/docs/governance/docs/event-contract.md`](../app/agents/docs/governance/docs/event-contract.md)
-- Eval harness: [`../app/agents/evals/README.md`](../app/agents/evals/README.md)
+## Evals
+
+```bash
+cd app/agents
+uv run python -m evals.run --target quality_gate_contract --dry-run
+uv run python -m evals.run --target quality_gate_contract
+```
+
+Datasets live under `app/agents/evals/datasets/`. Thresholds live in
+`app/agents/evals/thresholds.toml`. Use `--dry-run` before spending model
+tokens.
+
+## Debugging loop
+
+1. Reproduce the failure.
+2. Identify the owning layer: CLI, UI, Doc Registry, governance-ops, Compose, or
+   release packaging.
+3. Add or update the smallest test that fails.
+4. Fix the behavior.
+5. Re-run the targeted test.
+6. Run the broader module or release gate when the change crosses a contract.
+
+## Related
+
+- [Contracts](contracts.md)
+- [Governance reference](reference/governance.md)
+- [Operate SpecGate](guides/operate-specgate.md)
+- [Release checklist](internals/oss-release-checklist.md)

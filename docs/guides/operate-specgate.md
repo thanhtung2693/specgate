@@ -1,7 +1,7 @@
 # Operate SpecGate
 
-Use the CLI for a local or small-team deployment. Use the release Compose
-bundle directly when you need explicit infrastructure control.
+Use this guide when you need to start, stop, back up, upgrade, or remove a
+local or small-team SpecGate deployment.
 
 ## Choose CLI-managed or manual Compose
 
@@ -23,19 +23,16 @@ networks, volumes, and reverse proxies.
 
 See the [release Compose guide](../../deploy/README.md).
 
-## Start, inspect, stop, and restart
+## Start, inspect, stop, and restart a CLI-managed stack
 
 ```bash
 specgate local-status
 specgate up
 specgate down
-specgate uninstall
 ```
 
-`down` stops the stack but preserves persistent data. `up` starts it again and
-waits for health checks. `uninstall` stops a CLI-managed stack and shows an
-interactive cleanup checklist, while keeping deployment data unless local data
-removal is selected or `--purge-data --yes` is passed.
+`down` stops the stack and preserves persistent data. `up` starts it again and
+waits for health checks.
 
 Check CLI-to-service compatibility:
 
@@ -125,13 +122,23 @@ or the settings API (`PUT /settings`), not deployment environment files. See
 
 Back up:
 
-- PostgreSQL databases;
-- local blob directory or S3 bucket;
+- PostgreSQL data, including artifact metadata, work items, settings,
+  evidence, and gate history;
+- local blob directory or S3 bucket, including artifact/spec document contents;
 - deployment environment files;
 - `SETTINGS_ENCRYPTION_KEY`;
 - integration and OAuth configuration.
 
-Compose volumes survive `specgate down` and normal `docker compose down`.
+For the default CLI-managed Compose stack, persistent data is stored in these
+volumes:
+
+| Volume | Contents |
+|---|---|
+| `postgres-data` | artifact rows, work items, features, settings, evidence, gate history |
+| `doc-registry-data` | artifact/spec document blobs under `/data/blobs` |
+
+Compose volumes survive `specgate down` and normal `docker compose down`. They
+do not survive `specgate uninstall --purge-data --yes`.
 
 Before upgrades:
 
@@ -205,7 +212,8 @@ Stopping is non-destructive:
 specgate down
 ```
 
-Removing Compose volumes or local blob data permanently deletes state.
+Removing Compose volumes or local blob data permanently deletes artifact/spec
+state.
 
 **Before deleting data:**
 
@@ -215,10 +223,51 @@ Removing Compose volumes or local blob data permanently deletes state.
 4. stop the services or use the uninstall command;
 5. pass the destructive flag only after backup is confirmed.
 
+### Remove user-local setup but keep data
+
 ```bash
-specgate uninstall                 # keep data
-specgate uninstall --purge-data --yes # remove Docker volumes and deployment dir
+specgate uninstall
 ```
+
+Interactive mode shows a checklist for:
+
+- IDE plugin files;
+- local data, including Docker volumes and deployment files;
+- Docker images for SpecGate services.
+
+Leave local data unchecked when you want to preserve artifacts, specs, work
+items, settings, and evidence.
+
+### Purge everything in automation
+
+```bash
+specgate uninstall --purge-data --yes
+```
+
+This removes:
+
+- SpecGate-managed containers;
+- SpecGate-managed Docker volumes;
+- SpecGate-managed Docker networks;
+- the deployment directory;
+- SpecGate service images.
+
+Shared base images such as Postgres or Redis are not removed unless they carry
+SpecGate labels.
+
+### Verify cleanup
+
+```bash
+docker ps -a --filter label=org.specgate.managed=true
+docker volume ls --filter label=org.specgate.managed=true
+docker network ls --filter label=org.specgate.managed=true
+docker image ls --filter label=org.specgate.managed=true
+```
+
+These commands should show no SpecGate resources after a full purge. Release
+containers, volumes, networks, and service images carry
+`org.specgate.managed=true`, so cleanup is label-based rather than
+name-based.
 
 ## Troubleshooting
 

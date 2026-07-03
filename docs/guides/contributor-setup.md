@@ -1,68 +1,75 @@
 # Contributor setup
 
-Use this path when modifying SpecGate itself. If you only want to try the
-product, use the [CLI quickstart](../quickstart.md).
+Use this guide when you want to modify SpecGate itself. If you only want to run
+the product, use the [Quickstart](../quickstart.md).
 
 ## Prerequisites
 
 - Go 1.26+
 - Node.js 24+
 - Python 3.12+
-- [`uv`](https://docs.astral.sh/uv/)
+- `uv`
 - Docker with Docker Compose v2
 
-## Clone and start the development stack
+## Clone the repository
 
 ```bash
 git clone https://github.com/thanhtung2693/specgate.git
 cd specgate
+```
+
+Read the repository rules before editing:
+
+- [Agent rules](../../AGENTS.md)
+- [Contributing](../../CONTRIBUTING.md)
+
+## Start the development stack
+
+```bash
 make setup
 ```
 
 `make setup`:
 
-- checks common host ports;
+- checks common host-port conflicts;
 - asks for queue and storage drivers;
-- creates missing module environment files;
+- creates missing environment files;
 - generates local secrets;
 - starts the development Compose stack;
-- uses the keyless local LangGraph development runtime.
+- uses the local LangGraph development runtime.
 
-Configure the model later — see [Configure models](configure-models.md).
-
-## Seed demo data
+Seed representative data:
 
 ```bash
 make seed
 ```
 
-The seed is idempotent and creates representative features, artifacts, work
-items, readiness states, stale context, and delivery-review data.
+The seed is idempotent. It creates sample features, artifacts, work items,
+readiness states, stale context, and delivery-review data.
 
-## Repository layout
+## Understand the repository layout
 
-| Path | Module |
+| Path | Responsibility |
 |---|---|
-| `app/doc-registry` | Go artifact, governance, evidence, integration, REST, and MCP service |
+| `app/doc-registry` | Go service for artifacts, governance, evidence, integrations, REST, and MCP |
 | `app/agents` | Python/LangGraph governance-ops service |
-| `app/ui` | React Web UI |
+| `app/ui` | React web UI |
 | `app/cli` | Go CLI |
-| `plugins` | Canonical IDE Skills, rules, hooks, and manifests |
-| `docs` | Product docs and cross-module contracts |
+| `plugins` | Canonical IDE skills, rules, hooks, and manifests |
+| `docs` | Product docs, contracts, and maintainer references |
 
-## Work on one module
+Each module may have its own `AGENTS.md`. Read it before editing that module.
 
-Read root [AGENTS.md](../../AGENTS.md) and the module’s nested `AGENTS.md`
-before editing.
+## Work on a module
 
-### Doc Registry
+Doc Registry:
 
 ```bash
 cd app/doc-registry
 make test
 ```
 
-### Governance-ops
+Governance-ops:
 
 ```bash
 cd app/agents
@@ -70,7 +77,7 @@ uv sync --all-groups
 uv run pytest
 ```
 
-### Web UI
+Web UI:
 
 ```bash
 cd app/ui
@@ -78,60 +85,57 @@ npm install
 npm run test -- --run
 ```
 
-### CLI
+CLI:
 
 ```bash
 cd app/cli
 make test
 ```
 
-Use the narrowest relevant verification while iterating. Run the full module
-suite when a change affects shared state, routing, contracts, or build setup.
+Use narrow tests while iterating. Run a full module suite when a change touches
+shared state, contracts, routing, build setup, or user-facing workflow.
 
-## Refresh dependencies
+## Update plugins
 
-Use the module package manager and commit the lockfile or module checksum
-changes with the manifest change:
+Canonical plugin assets live under `plugins/`.
 
-```bash
-cd app/doc-registry && go get -u -t ./... && go mod tidy
-cd app/agents && uv lock --upgrade && uv sync --all-groups
-cd app/ui && npm install <package>@latest && npm install -D <dev-package>@latest
-```
-
-After dependency refreshes, run the touched module's test, lint, and build
-commands before opening a PR.
-
-## Plugin changes
-
-Canonical files live under `plugins/skills/` and `plugins/hooks/`.
-
-After editing:
+After editing skills, hooks, rules, or manifests:
 
 ```bash
 make sync-plugins
 make check-plugins
 ```
 
-Commit synchronized copies with the canonical source.
+Commit synchronized generated copies with the canonical source.
 
-## Spec-driven workflow
+## Refresh dependencies
 
-Behavior changes require the relevant spec or contract and user documentation
-in the same change.
+Use the module package manager and commit lockfile or checksum updates with the
+manifest change:
 
-Source-of-truth hierarchy:
+```bash
+cd app/doc-registry && go get -u -t ./... && go mod tidy
+cd app/agents && uv lock --upgrade && uv sync --all-groups
+cd app/ui && npm install <package>@latest
+```
 
-1. PRD for product intent;
-2. module specs and `docs/contracts.md` for behavior;
-3. user docs for supported workflows;
-4. code and tests for implementation and proof;
-5. design specs and plans for decision history.
+Run the touched module’s tests after dependency changes.
 
-## Read the contributor contracts
+## Follow the spec-driven workflow
 
-- [Contributing](../../CONTRIBUTING.md)
-- [Agent rules](../../AGENTS.md)
-- [Maintainer internals](../internals/README.md)
+Behavior changes need matching docs or specs in the same change.
+
+Use the narrowest document layer:
+
+| Change | Update |
+|---|---|
+| product intent | PRD |
+| API, status, event, policy, retention, contract | module spec or `docs/contracts.md` |
+| user workflow | user guide or reference |
+| architecture decision | ADR or maintainer docs |
+
+## Related
+
 - [Testing strategy](../testing.md)
-- [Cross-module contracts](../contracts.md)
+- [Contracts](../contracts.md)
+- [Maintainer internals](../internals/README.md)

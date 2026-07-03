@@ -1,101 +1,96 @@
 # SpecGate documentation
 
 SpecGate is the governance layer between approved intent and coding agents.
-These guides help you run the project, connect your IDE, and adapt its
-governance to your team.
+Use these docs to install it, understand the delivery loop, operate a local
+deployment, and inspect the command and policy contracts.
 
-> SpecGate is designed for a trusted network. Read
-> [Trust and security](concepts/trust-and-security.md) before exposing services.
+> SpecGate is designed for trusted networks. Read
+> [Trust and security](concepts/trust-and-security.md) before exposing any
+> service outside your machine or private network.
 
 ## Start here
 
-[Quickstart](quickstart.md) takes you from a clean machine to a running SpecGate
-deployment, optional model setup, and connected coding IDE.
+If this is your first run, follow the [Quickstart](quickstart.md). It installs
+the CLI, starts a local stack, creates your local user and workspace, connects
+an IDE agent, covers optional model setup, and walks through one governed work
+item.
 
-The shortest happy path is:
+The shortest path:
 
-1. install the CLI and run `specgate init`;
-2. choose a local user and workspace;
-3. install the IDE integration globally;
-4. create, review, hand off, and verify work through the `specgate` CLI.
+```bash
+curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/scripts/install-cli.sh | sh
+specgate init
+specgate doctor
+specgate plugins install
+specgate status
+```
 
-## Choose your path
+## Find the right document
 
-### Try SpecGate
+### Learn the product
 
-- [Quickstart](quickstart.md)
-- [How SpecGate works](concepts/how-specgate-works.md)
-- [Artifacts and Context Packs](concepts/artifacts-and-context-packs.md)
-- [SpecGate feature status](features.md)
+- [Quickstart](quickstart.md) — first successful local run.
+- [How SpecGate works](concepts/how-specgate-works.md) — the delivery loop and
+  product boundaries.
+- [Artifacts and Context Packs](concepts/artifacts-and-context-packs.md) — how
+  approved documents become coding-agent context.
+- [Governance and gates](concepts/governance-and-gates.md) — policy,
+  readiness, delivery review, and evidence.
 
-### Connect a coding agent
+### Complete a task
 
-- [Install SpecGate in your coding IDE](guides/install-ide-plugins.md)
-- [Use SpecGate with a coding agent](guides/coding-agent-workflow.md)
+- [Install IDE plugins](guides/install-ide-plugins.md)
 - [Use the SpecGate CLI](guides/cli-workflow.md)
-
-### Extend governance
-
-- [Governance and gates](concepts/governance-and-gates.md)
-
-### Operate a deployment
-
-- [Operate SpecGate](guides/operate-specgate.md)
+- [Use SpecGate with a coding agent](guides/coding-agent-workflow.md)
 - [Configure models](guides/configure-models.md)
 - [Connect delivery integrations](guides/connect-integrations.md)
-- [Trust and security](concepts/trust-and-security.md)
-
-### Contribute
-
+- [Operate SpecGate](guides/operate-specgate.md)
 - [Contributor setup](guides/contributor-setup.md)
-- [Repository contribution guide](../CONTRIBUTING.md)
-- [Maintainer internals](internals/README.md)
 
-## The delivery loop
+### Look up exact behavior
+
+- [CLI reference](reference/cli.md)
+- [Configuration reference](reference/configuration.md)
+- [Governance reference](reference/governance.md)
+- [Evidence reference](reference/evidence.md)
+- [Glossary](reference/glossary.md)
+- [Contracts](contracts.md)
+- [Data model](data-model.md)
+- [Testing strategy](testing.md)
+
+### Maintain or release SpecGate
+
+- [Maintainer internals](internals/README.md)
+- [OSS release checklist](internals/oss-release-checklist.md)
+
+## Delivery loop
 
 ```text
-Publish artifact
+publish artifact
 → resolve governance
-→ run readiness
-→ human review and approval
-→ generate Context Pack
-→ coding agent implements
+→ run readiness checks
+→ approve the exact artifact version
+→ hand a Context Pack to the coding agent
 → submit delivery evidence
-→ delivery review
+→ review delivery against acceptance criteria
 → reconcile or complete
 ```
 
-Read [How SpecGate works](concepts/how-specgate-works.md) for the complete
-picture.
+## Data and cleanup
 
-## Concepts
+Artifact/spec data is persistent. Default local deployments store:
 
-- [How SpecGate works](concepts/how-specgate-works.md)
-- [Artifacts and Context Packs](concepts/artifacts-and-context-packs.md)
-- [Governance and gates](concepts/governance-and-gates.md)
-- [Trust and security](concepts/trust-and-security.md)
+| Location | Contents |
+|---|---|
+| `postgres-data` Docker volume | artifact metadata, work items, features, settings, evidence, gate history |
+| `doc-registry-data` Docker volume | artifact/spec document contents under `/data/blobs` |
 
-## Guides
+`specgate uninstall` keeps this data unless you select local data removal in the
+interactive checklist or run:
 
-- [Use the SpecGate CLI](guides/cli-workflow.md)
-- [Use SpecGate with a coding agent](guides/coding-agent-workflow.md)
-- [Install IDE plugins](guides/install-ide-plugins.md)
-- [Configure models](guides/configure-models.md)
-- [Connect integrations](guides/connect-integrations.md)
-- [Operate SpecGate](guides/operate-specgate.md)
-- [Contributor setup](guides/contributor-setup.md)
+```bash
+specgate uninstall --purge-data --yes
+```
 
-## Reference
-
-- [CLI reference](reference/cli.md)
-- [Governance reference](reference/governance.md)
-- [Evidence reference](reference/evidence.md)
-- [Configuration reference](reference/configuration.md)
-- [Glossary](reference/glossary.md)
-
-## Maintainer internals
-
-Contracts, data models, module specifications, conformance fixtures, test
-strategy, and design history remain available under
-[Maintainer internals](internals/README.md). They are not required for normal
-product use.
+Back up both volumes before purging data you care about. See
+[Operate SpecGate](guides/operate-specgate.md#remove-a-deployment-safely).

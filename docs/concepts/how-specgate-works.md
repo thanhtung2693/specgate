@@ -1,177 +1,101 @@
 # How SpecGate works
 
-SpecGate keeps one approved version of intent between planning and
-implementation, then checks delivery evidence against that intent.
+SpecGate is a governance layer between approved intent and coding agents. It
+does not replace your spec tool, tracker, IDE, pull request process, or CI. It
+records which artifact version was approved, what context the coding agent
+received, and what evidence came back after implementation.
 
-## The problem SpecGate owns
+## The problem
 
-AI coding tools can write and execute detailed specs. The difficult part starts
-when several versions, conversations, reviewers, and delivery systems become
-involved:
+AI-assisted delivery can move faster than team memory. Work may start from a
+chat summary, stale tracker text, an old spec file, or an unreviewed prompt.
+SpecGate makes the handoff explicit:
 
-- Which spec version was approved?
-- Is this work ready for implementation?
-- What exactly should the coding agent read?
-- Did implementation satisfy each acceptance criterion?
-- Did the spec change after handoff?
-- Which evidence came from the builder, a verifier, or an external system?
+- which artifact version is authoritative;
+- which policy applies;
+- which readiness gates ran;
+- which Context Pack the agent used;
+- which evidence supports delivery;
+- which review verdict closed or reopened the loop.
 
-SpecGate makes those questions explicit and auditable.
+## Actors and tools
 
-## The people and tools in the loop
-
-| Participant | Typical responsibility |
+| Actor or tool | Role |
 |---|---|
-| PM, designer, tech lead, or authoring agent | Define intent and review artifacts |
-| SpecGate | Review, approve, inspect gates, manage handoff and settings |
-| `specgate` CLI | Connect users and coding agents to platform workflows |
-| Coding IDE agent | Read approved context, change repository code, run verification |
-| Verifier agent or human | Independently assess a gate or delivery claim |
-| GitHub, GitLab, or Linear | Provide delivery and tracker signals through webhooks |
-| Governance-ops service | Run bounded semantic reviews, reconciliation, summaries, and chat |
+| Authoring tool | creates specs, plans, designs, or other artifact documents |
+| SpecGate | stores artifacts, resolves policy, gates readiness, creates Context Packs, records evidence |
+| Human reviewer | approves the artifact version or requests changes |
+| Coding agent | implements only from the approved Context Pack |
+| CI / integrations | provide corroborating delivery evidence when connected |
 
-SpecGate does not replace OpenSpec, Spec Kit, Kiro, or custom authoring
-workflows. It accepts their outputs as flexible document bundles and adds
-versioning, policy, approval, handoff, evidence, and reconciliation.
-
-## Working without SpecGate
-
-Teams can build with AI coding agents without SpecGate. For small teams,
-low-risk work, or early exploration, a manual workflow may be enough:
+## Delivery loop
 
 ```text
-Spec Kit / OpenSpec / Markdown / design docs
-→ Linear, Jira, GitHub Issues, or GitLab Issues
-→ Claude Code, Cursor, or Codex reads the context
-→ pull request or merge request
-→ CI and tests
-→ human review
-→ Slack, meetings, or ticket comments for clarification
-→ manual spec or ticket updates
+artifact package
+→ governance policy
+→ readiness checks
+→ human approval
+→ Context Pack
+→ implementation
+→ delivery evidence
+→ delivery review
+→ reconciliation or completion
 ```
 
-That workflow is valid. The cost is that important governance questions stay
-manual:
+Each step leaves durable state. Later reviewers can see why a work item was
+ready, what the agent received, and whether delivery matched acceptance
+criteria.
 
-- Which spec version was approved?
-- Who approved it, and when?
-- Which source revision or Context Pack did the coding agent use?
-- Which acceptance criteria passed, failed, or stayed unclear?
-- Which evidence proves each acceptance criterion?
-- Was a failure caused by implementation drift or ambiguous requirements?
-- Did stale knowledge or conflicting context influence the handoff?
-- Was a reconciliation proposal reviewed before canonical intent changed?
+## Quick route and full route
 
-SpecGate should not be positioned as "without this, teams cannot ship." Teams
-can ship through discipline and convention. SpecGate becomes valuable when that
-convention needs to become durable:
+SpecGate supports two common routes.
 
-```text
-approved artifact version
-→ governed Context Pack
-→ coding-agent handoff
-→ evidence-backed verdict
-→ reviewed reconciliation
-→ audit trail
-```
+The **quick route** is for small, understood changes. A user creates a work item
+with a title and acceptance criteria. SpecGate creates a lightweight Context
+Pack and still requires delivery evidence.
 
-In short: SpecGate turns manual convention into a governed system of record for
-approved handoff, evidence, verdicts, reconciliation, and audit.
+The **full route** is for larger changes. A versioned artifact package is
+published, checked, reviewed, and approved. Work items then use the approved
+artifact as their source of truth.
 
-## The governed delivery loop
+Both routes end in delivery review.
 
-```text
-1. Publish
-   An authoring tool sends a versioned artifact and impact declaration.
+## What the CLI does
 
-2. Resolve
-   SpecGate chooses the effective governance level and freezes its policy snapshot.
+The CLI is the stable interface for users, automation, and coding agents. It:
 
-3. Check
-   Structural, semantic, evidence, or human gates assess readiness.
+- initializes local deployments;
+- stores selected user and workspace;
+- publishes and reads artifacts;
+- lists work needing attention;
+- returns Context Packs;
+- scaffolds completion reports;
+- submits delivery evidence;
+- diagnoses compatibility.
 
-4. Approve
-   A human approves the exact artifact version when policy requires it.
+The web UI is available for review, inspection, settings, governance chat, and
+workflow scanning, but the alpha path is CLI-first.
 
-5. Hand off
-   SpecGate builds a Context Pack for the coding agent.
+## Where MCP fits
 
-6. Implement
-   The coding agent changes code within approved scope and runs repository checks.
-
-7. Report
-   The agent reports checks and evidence for each acceptance criterion.
-
-8. Review
-   SpecGate evaluates delivery evidence and highlights unclear or failed criteria.
-
-9. Reconcile
-   Drift or new information becomes a reviewed artifact-update proposal.
-```
-
-## What the CLI is for
-
-The `specgate` CLI supports:
-
-- installing and operating a local deployment;
-- finding and resolving work items;
-- reading Context Packs and artifact files;
-- publishing artifacts and running quality checks;
-- reporting implementation feedback and delivery evidence;
-- triggering and reading delivery review;
-- authoring and activating governance packages;
-- machine-readable automation through `--json`.
-
-Coding IDE plugins call the CLI. They do not need direct access to SpecGate MCP
-tools.
-
-## Where MCP still fits
-
-SpecGate retains MCP for the internal governance-ops agent. That agent uses a
-bounded tool catalog to read artifacts, run governance operations, and answer
-domain questions.
-
-This is separate from the coding-agent interface:
-
-| Consumer | Primary interface |
-|---|---|
-| Coding agents and IDE plugins | `specgate` CLI |
-| Humans | SpecGate and CLI |
-| Governance-ops agent | Internal MCP and service APIs |
-
-## Quick and full routes
-
-SpecGate supports proportional ceremony:
-
-- **Quick route** — small, understood work such as a focused bug fix. The
-  Context Pack is narrow and does not require a full PRD/spec/implementation
-  bundle.
-- **Full route** — features or changes needing richer product, architecture,
-  implementation, QA, rollout, or risk context.
-
-An LLM may suggest a route, but a human confirms it. Low-confidence quick
-suggestions fall back to the safer full route.
-
-The route changes preparation depth, not the delivery loop. Both routes still
-require governed context, evidence, and delivery review.
+Doc Registry exposes MCP tools for embedded integrations. The normal
+human/agent workflow should still prefer the CLI because it handles output
+modes, config, workspace selection, and delivery scaffolding consistently.
 
 ## What SpecGate does not do
 
 SpecGate does not:
 
-- prescribe one spec file format;
-- replace the coding agent;
-- require platform access to a Git checkout;
-- rerun every repository check itself;
-- treat tracker status as proof of delivery;
-- allow arbitrary custom code inside the governance server;
-- provide full multi-user authentication or RBAC in the current release.
+- author every spec for you;
+- replace human approval;
+- replace pull request review or CI;
+- enforce production authorization in the alpha local stack;
+- guarantee quality without clear acceptance criteria and evidence.
 
-The coding agent works where the code already lives. SpecGate receives declared
-results, evidence manifests, and signed webhook events.
+It makes the governed handoff and delivery review observable.
 
-## Continue
+## Related
 
+- [Quickstart](../quickstart.md)
 - [Artifacts and Context Packs](artifacts-and-context-packs.md)
 - [Governance and gates](governance-and-gates.md)
-- [Use SpecGate with a coding agent](../guides/coding-agent-workflow.md)

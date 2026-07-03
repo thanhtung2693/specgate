@@ -80,8 +80,8 @@ across those systems.
 
 ## Quickstart
 
-**Prerequisite:** Docker with Docker Compose v2. You do not need Go, Node.js,
-Python, or a model API key to start the local stack.
+**Prerequisite:** Docker with Docker Compose v2. You do not need a source
+checkout, Go, Node.js, Python, or a model API key to start the local stack.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/scripts/install-cli.sh | sh
@@ -92,17 +92,39 @@ specgate init
 files and secrets, starts the stack, asks for your local user/workspace, and
 lets you choose whether to seed demo data and install IDE plugins.
 
-Use `specgate uninstall` to stop the local stack and choose cleanup actions from
-an interactive checklist; add `--purge-data --yes` in scripts only after backing
-up data you want to keep.
+To remove a trial install:
+
+```bash
+specgate uninstall
+```
+
+The default uninstall stops the stack and removes user-local SpecGate CLI config
+and IDE plugin files. It keeps artifact/spec data. In an interactive terminal,
+the command shows a checklist for plugin files, local data, and Docker images.
+Use the destructive form only after backing up any artifacts or specs you want
+to keep:
+
+```bash
+specgate uninstall --purge-data --yes
+```
+
+The destructive form removes the deployment directory, Docker volumes, and
+SpecGate service images. Artifact metadata, work items, and settings live in
+Postgres; artifact/spec file contents live in the Doc Registry data volume.
 
 If you skipped IDE setup during init, run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/plugins/install.sh | sh -s -- --agent all
+specgate plugins install
 specgate doctor
-specgate plugins doctor --agent all
+specgate plugins doctor
 specgate status
+```
+
+You can also run the public IDE installer directly:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/plugins/install.sh | sh
 ```
 
 Restart any selected IDE after installing or refreshing plugins so new skills,

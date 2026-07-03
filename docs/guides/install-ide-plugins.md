@@ -1,218 +1,174 @@
 # Install SpecGate in your coding IDE
 
-SpecGate’s IDE setup installs the CLI connection, focused Skills, hooks, and
-agent rules needed for the governed coding-agent loop. By default, setup is
-global to your user account so you install it once and use it across repos.
+Use this guide to install or refresh the SpecGate IDE files for Codex, Claude
+Code, and Cursor.
 
-## Recommended: run the public installer
+The plugins give coding agents focused SpecGate skills, hooks, and rules. They
+use the `specgate` CLI for all product operations.
 
-Run the installer from GitHub:
+## Before you start
+
+Install and configure the CLI:
+
+```bash
+specgate doctor
+```
+
+If `doctor` fails because no server is configured:
+
+```bash
+specgate config set server http://localhost:8080
+specgate doctor
+```
+
+## Install from the CLI
+
+Interactive install:
+
+```bash
+specgate plugins install
+```
+
+Choose one or more IDEs from the checkbox list. Restart the selected IDEs after
+installation.
+
+Non-interactive examples:
+
+```bash
+specgate plugins install --agent all --no-input
+specgate plugins install --agent codex --no-input
+specgate plugins install --agent cursor,codex --no-input
+```
+
+Verify:
+
+```bash
+specgate plugins doctor
+```
+
+`plugins doctor` also opens a checkbox list in interactive mode. Scripts can
+pass the same `--agent` values.
+
+## Install through the public shell installer
+
+Use the public installer when the `specgate` CLI is not installed yet or when
+you are piping setup into a fresh machine:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/plugins/install.sh | sh
 ```
 
-The installer asks which IDEs to configure, installs or locates the `specgate`
-CLI, and then delegates IDE file writes to `specgate plugins install`.
+The installer:
 
-Restart the selected IDEs after installation so their plugin, Skill, hook, and
-rule loaders pick up the new files.
+1. asks which IDEs to configure;
+2. installs or locates the `specgate` CLI;
+3. delegates IDE file writes to `specgate plugins install`.
 
-Re-running the installer is safe: it refreshes the installed SpecGate files in
-place.
-
-Use `--project-local` only when you intentionally want SpecGate files written
-into the current repository.
-
-## Choose one or several IDEs
-
-Install one:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/plugins/install.sh | sh -s -- --agent claude
-```
-
-Install several:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/plugins/install.sh | sh -s -- --agent cursor,codex
-```
-
-Install all supported IDEs:
+For automation:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/plugins/install.sh | sh -s -- --agent all
 ```
 
-Use `--dry-run` to inspect changes before writing files:
+## Choose global or project-local scope
+
+Default install is user-global. It writes files under your home directory and
+works across repositories.
+
+Use project-local scope only when a repository should vendor its SpecGate IDE
+files:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/plugins/install.sh | sh -s -- --dry-run
+specgate plugins install --project-local
+specgate plugins doctor --project-local
 ```
 
-Use `--skip-cli` when the CLI is already installed and you only want to refresh
-IDE Skills, hooks, and Cursor rules:
+## What is written
+
+| IDE | User-global location | Purpose |
+|---|---|---|
+| Codex | `~/.codex/plugins/specgate` | native plugin package, hooks, focused skills |
+| Codex | `~/.agents/plugins/marketplace.json` | personal marketplace entry for `specgate@personal` |
+| Codex | `~/.codex/config.toml` | enables the personal SpecGate plugin |
+| Claude Code | `~/.claude/skills/specgate` | native plugin package, hooks, focused skills |
+| Cursor | `~/.cursor/rules/using-specgate.mdc` and `~/.cursor/skills/*` | rule and focused skills |
+
+The focused skills are:
+
+- `using-specgate`
+- `setting-up-specgate-project`
+- `checking-spec-readiness`
+- `shaping-work`
+- `picking-up-work`
+- `implementing-work`
+- `completing-delivery`
+
+## Refresh an existing install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/plugins/install.sh | sh -s -- --agent cursor,codex --skip-cli
+specgate plugins install
+specgate plugins doctor
 ```
 
-After the CLI is installed, the equivalent direct command is:
-
-```bash
-specgate plugins install --agent cursor,codex \
-  --registry https://raw.githubusercontent.com/thanhtung2693/specgate/main
-```
-
-Use your deployment URL instead of GitHub only when you intentionally need the
-plugin package served by that deployment:
-
-```bash
-curl -fsSL http://<your-registry>/plugins/install.sh | sh
-specgate plugins install --agent all --registry http://<your-registry>
-```
-
-## Claude Code
-
-The instance-aware installer writes the SpecGate instructions, Skills, and hooks
-needed by Claude Code.
-
-Use the shell installer for Claude Code as well; it refreshes the focused
-Skills and hook settings without requiring a separate plugin command.
-
-The `using-specgate` Skill routes the agent to the smallest lifecycle Skill:
-`setting-up-specgate-project` for setup, `preparing-work` for shaping and
-readiness, or `delivering-work` for pickup through completion.
-
-For normal work, ask the agent to use `using-specgate` and let it choose the
-phase skill. Invoke `setting-up-specgate-project` explicitly when a repository is
-new to SpecGate, plugin files were refreshed, or the agent needs to map
-canonical docs, tracker mirrors, readiness rules, verification commands, and
-domain vocabulary before pickup.
-
-A marketplace plugin manifest is also published for Claude Code plugin
-compatibility, but the install script is the supported path for end-user setup.
-
-## Cursor
-
-By default, the installer writes:
-
-- `~/.cursor/rules/using-specgate.mdc`;
-- focused Skills under `~/.cursor/skills/`;
-- compatible hooks where supported.
-
-Cursor’s agent calls `specgate` commands. It does not need direct SpecGate MCP
-tool configuration for coding handoff.
-
-## Codex
-
-By default, the shell installer writes the native Codex plugin package under
-`~/.codex/plugins/specgate`, including focused Skills and bundled hooks. It also
-reconciles
-`~/.agents/plugins/marketplace.json`, and enables `specgate@personal` in
-`~/.codex/config.toml`.
-
-Codex reviews newly installed plugin hooks before running them. After restart,
-open Codex's hook review prompt/settings and trust the SpecGate SessionStart
-hook if you want automatic SpecGate context in new threads.
-
-Plugin marketplace alternative for repository developers:
-
-```bash
-codex plugin marketplace add --sparse plugins thanhtung2693/specgate
-```
-
-Restart Codex after installing so fresh threads load the plugin skills and
-bundled hooks.
-
-## What the installer writes
-
-Depending on the IDE, setup may include:
-
-- server URL in CLI configuration;
-- focused lifecycle Skills;
-- session-start context;
-- hooks that remind the agent to read governed context;
-- no general SpecGate MCP credential.
-
-With `--project-local`, the same files are written into the current repository
-instead (`.codex/plugins/specgate`, `.cursor/skills/`, `.cursor/rules/`, or
-`.claude/skills/specgate/` as applicable). Commit those only if the repo
-intentionally vendors its agent setup.
-
-Canonical Skills include:
-
-- `using-specgate`;
-- `setting-up-specgate-project`;
-- `preparing-work`;
-- `delivering-work`.
-
-Use `using-specgate` as the everyday router. The setup skill is an explicit
-onboarding command; `preparing-work` covers shaping and publishing artifacts to
-readiness, and `delivering-work` covers the implementation arc (pickup, scoped
-changes, verification, completion report, delivery review).
-
-## Update an existing installation
+Or refresh everything with the CLI updater:
 
 ```bash
 specgate update
 ```
 
-This updates the CLI and refreshes IDE setup for all supported agents
-(Codex, Claude Code, and Cursor) from the connected deployment. Restart any
-running IDEs after the update so plugin, Skill, hook, and rule loaders reload
-the files.
+Restart the IDE after refresh. Some IDEs cache plugin files until restart.
 
-Before updating, confirm the CLI points at the intended deployment:
+## Remove plugin files
 
-```bash
-specgate doctor
-specgate local-status
-```
-
-If your local stack uses a non-default port, set it explicitly, for example
-`specgate config set server http://localhost:18080`, before running
-`specgate update`.
-
-For machine-readable progress:
+Use the safe uninstall path:
 
 ```bash
-specgate --json --json-progress update
+specgate uninstall
 ```
 
-## Verify the setup
+Leave local data unchecked if you only want to remove CLI config and IDE plugin
+files. Artifact/spec data remains in Docker volumes unless you select local data
+removal or run `specgate uninstall --purge-data --yes`.
+
+## Troubleshooting
+
+### `plugins doctor` reports missing files
+
+Run the installer again:
 
 ```bash
-specgate doctor
-specgate plugins doctor --agent all
-specgate status
+specgate plugins install
+specgate plugins doctor
 ```
 
-`plugins doctor` checks the installed IDE files against the latest plugin
-package served by the connected SpecGate deployment. A missing file fails the
-check. A stale installed plugin or stale Codex plugin cache prints a warning
-with the next action, usually `specgate plugins install --agent <agent>` and an
-IDE restart.
+Then restart the IDE.
 
-Then ask the IDE agent to inspect a SpecGate work item. It should use:
+### Codex still sees old skills
+
+Restart Codex. If the warning mentions a stale Codex plugin cache, reinstall and
+restart:
 
 ```bash
-specgate work show "$WORK_REF" --json
-specgate work context "$WORK_REF" --json
+specgate plugins install --agent codex
 ```
 
-If it attempts SpecGate MCP tool calls instead of the CLI, reinstall or update
-the plugin files.
+### The installer targets the wrong server
 
-## Remove or reinstall
+Set the server URL before installing:
 
-The installer prints files it writes. Remove those global IDE-specific files
-manually, or rerun the installer to refresh them.
+```bash
+specgate config set server http://localhost:8080
+specgate plugins install
+```
 
-Before removing files created with `--project-local`, confirm they are not
-maintained by your team for other purposes.
+Or pass a registry URL explicitly:
 
-## Continue
+```bash
+specgate plugins install --registry http://localhost:8080
+```
 
+## Related
+
+- [Quickstart](../quickstart.md)
+- [Use the SpecGate CLI](cli-workflow.md)
 - [Use SpecGate with a coding agent](coding-agent-workflow.md)
-- [CLI reference](../reference/cli.md)
