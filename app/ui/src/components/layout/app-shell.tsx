@@ -1958,7 +1958,7 @@ function GateRunRows({
                 <p className="mt-1 text-xs text-muted-foreground">{gateChecks(run.gate)}</p>
               ) : null}
               <p className="mt-2 text-sm leading-5 text-muted-foreground">{run.hint}</p>
-              <GateEvidenceWhy evidence={run.evidence} />
+              <GateEvidenceWhy evidence={run.evidence} executor={run.executor} />
               {run.createdAt ? <p className="mt-2 font-mono text-[11px] text-muted-foreground">{formatDateTime(run.createdAt)}</p> : null}
             </div>
           ))}

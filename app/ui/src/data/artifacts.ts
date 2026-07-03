@@ -70,6 +70,7 @@ type ArtifactReadinessRunDTO = {
   gate?: string
   state?: string
   hint?: string
+  executor?: string
   evidence_json?: string
   created_at?: string
 }
@@ -230,6 +231,7 @@ export type ArtifactReadinessRunSummary = {
   gate: string
   state: string
   hint: string
+  executor?: string
   evidence?: string
   createdAt: string
 }
@@ -406,6 +408,7 @@ function mapArtifactReadinessRun(item: ArtifactReadinessRunDTO): ArtifactReadine
     gate: item.gate || "unknown",
     state: item.state || "not_run",
     hint: item.hint || "No readiness hint recorded.",
+    executor: item.executor,
     evidence: item.evidence_json,
     createdAt: item.created_at || "unknown",
   }

@@ -265,6 +265,19 @@ function evidenceRowsFromCriteria(criteria: unknown, checks: unknown): GateEvide
   return rows
 }
 
+// applyRunExecutor merges the run's first-class executor column into parsed
+// evidence details: an ide_agent run is agent-attested even when its evidence
+// carries no envelope. Platform (or absent) executors change nothing — the
+// envelope, when present, is the richer source.
+export function applyRunExecutor(
+  details: GateEvidenceDetails | undefined,
+  executor: string | undefined,
+): GateEvidenceDetails | undefined {
+  if (executor?.trim() !== "ide_agent") return details
+  if (!details) return { rows: [], evaluator: "agent" }
+  return { ...details, evaluator: "agent" }
+}
+
 export function parseGateEvidence(evidence: string | undefined): GateEvidenceDetails | undefined {
   const raw = evidence?.trim()
   if (!raw || raw === "{}") return undefined

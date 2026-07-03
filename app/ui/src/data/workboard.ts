@@ -53,6 +53,7 @@ type GateRunDTO = {
   gate?: string
   state?: string
   hint?: string
+  executor?: string
   action_endpoint?: string
   proposal_ref?: string
   evidence_json?: string
@@ -191,6 +192,7 @@ export type GateRunSummary = {
   gate: string
   state: string
   hint: string
+  executor?: string
   actionEndpoint?: string
   proposalRef?: string
   evidence?: string
@@ -481,6 +483,7 @@ export function mapGateRun(item: GateRunDTO): GateRunSummary | null {
     gate: item.gate || "unknown",
     state: item.state || "pending",
     hint: item.hint || "No gate-run hint recorded.",
+    executor: item.executor,
     actionEndpoint: item.action_endpoint,
     proposalRef: item.proposal_ref,
     evidence: item.evidence_json,

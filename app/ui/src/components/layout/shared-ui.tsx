@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { GovernancePolicySummary } from "@/data/workboard"
 import { cn } from "@/lib/utils"
-import { parseGateEvidence, readableKey, stateText, statusTone, toneClass, type GateEvidenceDetails } from "./shared"
+import { applyRunExecutor, parseGateEvidence, readableKey, stateText, statusTone, toneClass, type GateEvidenceDetails } from "./shared"
 
 export function openGovernanceAgentModal() {
   document.querySelector<HTMLButtonElement>('[aria-label="Open governance agent"]:not([disabled])')?.click()
@@ -212,8 +212,8 @@ function gateEvidenceOriginLabel(details: GateEvidenceDetails): string | undefin
 // "Why" disclosure for a persisted gate/readiness run: who evaluated it, how
 // confident, and the evidence the checker recorded. Renders nothing when the
 // run carries no parseable evidence — never a raw JSON dump.
-export function GateEvidenceWhy({ evidence }: { evidence?: string }) {
-  const details = useMemo(() => parseGateEvidence(evidence), [evidence])
+export function GateEvidenceWhy({ evidence, executor }: { evidence?: string; executor?: string }) {
+  const details = useMemo(() => applyRunExecutor(parseGateEvidence(evidence), executor), [evidence, executor])
   const [open, setOpen] = useState(false)
   if (!details) return null
 

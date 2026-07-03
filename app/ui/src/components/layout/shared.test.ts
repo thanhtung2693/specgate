@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import type { WorkItem } from "@/data/workspace"
 
-import { gateCatalog, gateChecks, parseGateEvidence, reviewTone, statusTone } from "./shared"
+import { applyRunExecutor, gateCatalog, gateChecks, parseGateEvidence, reviewTone, statusTone } from "./shared"
 
 describe("statusTone", () => {
   it("maps gate statuses", () => {
@@ -196,5 +196,24 @@ describe("reviewTone", () => {
 
   it("defaults to neutral", () => {
     expect(reviewTone(item({}) as WorkItem)).toBe("neutral")
+  })
+})
+
+describe("applyRunExecutor", () => {
+  it("labels an agent-attested run from the first-class executor even without evidence", () => {
+    const details = applyRunExecutor(undefined, "ide_agent")
+    expect(details?.evaluator).toBe("agent")
+  })
+
+  it("overrides envelope-less details with the ide_agent executor", () => {
+    const details = applyRunExecutor({ rows: [], quote: "spec names three exclusions" }, "ide_agent")
+    expect(details?.evaluator).toBe("agent")
+    expect(details?.quote).toBe("spec names three exclusions")
+  })
+
+  it("leaves platform and absent executors alone", () => {
+    expect(applyRunExecutor(undefined, "platform")).toBeUndefined()
+    const details = applyRunExecutor({ rows: [], evaluator: "platform_model" }, "platform")
+    expect(details?.evaluator).toBe("platform_model")
   })
 })

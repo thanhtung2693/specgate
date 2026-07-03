@@ -552,7 +552,7 @@ function ArtifactReadinessRunsSection({
             </Badge>
             <span className="truncate text-right text-muted-foreground">{formatDateTime(run.createdAt)}</span>
           </div>
-          <GateEvidenceWhy evidence={run.evidence} />
+          <GateEvidenceWhy evidence={run.evidence} executor={run.executor} />
         </div>
       ))}
       {runs.length > 5 ? (
