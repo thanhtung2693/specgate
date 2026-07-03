@@ -6,6 +6,7 @@ const here = new URL(".", import.meta.url);
 const html = readFileSync(new URL("index.html", here), "utf8");
 const css = readFileSync(new URL("styles.css", here), "utf8");
 const js = readFileSync(new URL("script.js", here), "utf8");
+const sitemap = readFileSync(new URL("sitemap.xml", here), "utf8");
 
 test("navigation order matches the visible section order", () => {
   const navHtml = html.match(/<nav class="nav-links"[\s\S]*?<\/nav>/)?.[0] ?? "";
@@ -126,6 +127,29 @@ test("landing keeps the public story compact", () => {
 test("social metadata uses the shipped logo asset", () => {
   assert.match(html, /property="og:image" content="https:\/\/thanhtung2693\.github\.io\/specgate\/logo\.svg"/);
   assert.match(html, /name="twitter:image" content="https:\/\/thanhtung2693\.github\.io\/specgate\/logo\.svg"/);
+  assert.match(html, /property="og:image:alt" content="SpecGate logo"/);
+  assert.match(html, /name="twitter:image:alt" content="SpecGate logo"/);
   assert.doesNotMatch(html, /\/images\/specgate-black\.svg/);
   assert.doesNotMatch(html, /specgate\.io/);
+});
+
+test("SEO metadata is canonical, crawlable, and structured", () => {
+  assert.match(html, /<meta name="robots" content="index, follow, max-image-preview:large"/);
+  assert.match(html, /<link rel="canonical" href="https:\/\/thanhtung2693\.github\.io\/specgate\/"/);
+  assert.match(html, /<link rel="sitemap" type="application\/xml" href="https:\/\/thanhtung2693\.github\.io\/specgate\/sitemap\.xml"/);
+  assert.match(html, /<main id="top" aria-labelledby="page-title" tabindex="-1">/);
+  assert.match(html, /<h1 id="page-title"/);
+  assert.match(css, /\.skip-link:focus/);
+  assert.match(sitemap, /<lastmod>2026-07-03<\/lastmod>/);
+
+  const jsonLd = html.match(/<script type="application\/ld\+json">\s*(?<json>[\s\S]*?)\s*<\/script>/)?.groups?.json;
+  assert.ok(jsonLd);
+  const graph = JSON.parse(jsonLd)["@graph"];
+  const types = graph.map((item) => item["@type"]);
+  assert.ok(types.includes("Organization"));
+  assert.ok(types.includes("WebSite"));
+  assert.ok(types.includes("WebPage"));
+  assert.ok(types.includes("SoftwareApplication"));
+  assert.ok(types.includes("FAQPage"));
+  assert.equal(graph.find((item) => item["@type"] === "WebPage").about["@id"], "https://thanhtung2693.github.io/specgate/#software");
 });
