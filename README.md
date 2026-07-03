@@ -100,6 +100,10 @@ Roughly in order; no dates.
       `executor` field gate runs already expose.
 - [ ] **Richer stats** - count artifact readiness catches in
       `specgate stats` pre-build numbers.
+- [ ] **Feature Overview auto-generation** - regenerate a Feature's Overview
+      narrative from its canonical spec when it changes (prototyped, then
+      removed in the alpha cut; the store endpoint and staleness warning
+      remain).
 
 Missing something?
 [Open an issue](https://github.com/thanhtung2693/specgate/issues).
