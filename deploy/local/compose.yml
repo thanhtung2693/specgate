@@ -1,0 +1,40 @@
+name: ${SPECGATE_COMPOSE_PROJECT:-specgate}
+
+services:
+  specgate:
+    image: ghcr.io/thanhtung2693/specgate:${SPECGATE_VERSION}
+    labels:
+      org.specgate.managed: "true"
+      org.specgate.project: ${SPECGATE_COMPOSE_PROJECT:-specgate}
+      org.specgate.component: appliance
+    env_file:
+      - ./specgate.env
+    environment:
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
+    ports:
+      - "127.0.0.1:${SPECGATE_PORT:-3000}:3000"
+    volumes:
+      - specgate-data:/data
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/specgate-healthcheck"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  specgate-data:
+    labels:
+      org.specgate.managed: "true"
+      org.specgate.project: ${SPECGATE_COMPOSE_PROJECT:-specgate}
+      org.specgate.component: data
+
+networks:
+  default:
+    labels:
+      org.specgate.managed: "true"
+      org.specgate.project: ${SPECGATE_COMPOSE_PROJECT:-specgate}
+      org.specgate.component: network

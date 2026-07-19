@@ -1,0 +1,61 @@
+version: 2
+
+# The Go module lives under app/cli; GoReleaser runs from the repo root.
+before:
+  hooks:
+    - sh -c "cd app/cli && go mod tidy"
+
+builds:
+  - id: specgate
+    dir: app/cli
+    main: ./cmd/specgate
+    binary: specgate
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    # windows/arm64 is uncommon; restrict to amd64 for windows.
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/specgate/specgate/app/cli/internal/buildinfo.Version={{.Tag}}
+      - -X github.com/specgate/specgate/app/cli/internal/buildinfo.Commit={{.Commit}}
+      - -X github.com/specgate/specgate/app/cli/internal/buildinfo.Date={{.Date}}
+    env:
+      - CGO_ENABLED=0
+
+dist: app/cli/dist
+
+archives:
+  - id: specgate
+    ids:
+      - specgate
+    name_template: "specgate_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+
+checksum:
+  name_template: "specgate_{{ .Version }}_checksums.txt"
+  algorithm: sha256
+
+release:
+  github:
+    owner: thanhtung2693
+    name: specgate
+  # Keep assets private until image manifests, scans, bundle, and smoke pass.
+  draft: true
+  name_template: "{{ .Tag }}"
+  # Publish the public installer alongside binary archives. The compose bundle
+  # (specgate-compose_<version>.tar.gz + checksums) is built and uploaded by
+  # `.github/workflows/release.yml` so `specgate init` can fetch + verify it.
+  extra_files:
+    - glob: scripts/install-cli.sh

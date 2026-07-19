@@ -1,0 +1,370 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: app/cli/go.mod
+          cache-dependency-path: |
+            app/cli/go.sum
+            app/doc-registry/go.sum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: app/ui/package-lock.json
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Verify Doc Registry
+        working-directory: app/doc-registry
+        run: |
+          go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...
+          go test -race -count=1 -p=1 ./...
+
+      - name: Verify CLI
+        working-directory: app/cli
+        run: |
+          go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...
+          make test
+
+      - name: Verify governance operations
+        working-directory: app/agents
+        run: |
+          uv sync --frozen
+          uv run ruff check ./src ./tests
+          uv run deptry src evals
+          uv run pytest -q
+
+      - name: Verify UI
+        working-directory: app/ui
+        run: |
+          npm ci
+          npm run api:check
+          npm run deadcode
+          npm run lint
+          npm run build
+          npm run test -- --run
+
+      - name: Verify release-facing contracts
+        run: node --test docs/release-readiness.test.mjs
+
+  release-cli:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: app/cli/go.mod
+          cache-dependency-path: app/cli/go.sum
+
+      - name: Install GoReleaser
+        run: |
+          GO_RELEASER_VERSION=v2.17.0
+          archive="goreleaser_Linux_x86_64.tar.gz"
+          base="https://github.com/goreleaser/goreleaser/releases/download/${GO_RELEASER_VERSION}"
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "${base}/${archive}"
+          curl -fsSLO "${base}/checksums.txt"
+          grep " ${archive}$" checksums.txt | sha256sum -c -
+          tar -xzf "${archive}"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - name: Run GoReleaser
+        run: goreleaser release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release-images:
+    name: release-images (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    needs: release-cli
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Verify plugin package freshness
+        run: make check-plugins
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push appliance digest
+        id: image
+        run: |
+          image="ghcr.io/thanhtung2693/specgate"
+          metadata="$RUNNER_TEMP/metadata.json"
+
+          args=(
+            --file docker/Dockerfile.local
+            --platform "${{ matrix.platform }}"
+            --cache-from "type=gha,scope=specgate-${{ matrix.arch }}"
+            --cache-to "type=gha,mode=max,scope=specgate-${{ matrix.arch }}"
+            --metadata-file "$metadata"
+            --output "type=image,name=${image},push-by-digest=true,name-canonical=true,push=true"
+            --provenance=mode=max
+            --sbom=true
+            --build-arg "VERSION=${{ github.ref_name }}"
+            --build-arg "COMMIT=${{ github.sha }}"
+            --build-arg "BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          )
+
+          docker buildx build "${args[@]}" .
+
+          digest="$(jq -r '."containerimage.digest"' "$metadata")"
+          test -n "$digest"
+          echo "ref=${image}@${digest}" >> "$GITHUB_OUTPUT"
+          mkdir -p "$RUNNER_TEMP/digests/specgate"
+          touch "$RUNNER_TEMP/digests/specgate/${digest#sha256:}"
+
+      - name: Scan appliance digest
+        uses: anchore/scan-action@v7.4.0
+        env:
+          GRYPE_CONFIG: .grype.yaml
+        with:
+          image: ${{ steps.image.outputs.ref }}
+          output-format: table
+          fail-build: true
+          severity-cutoff: high
+          only-fixed: true
+
+      - name: Upload image digest
+        uses: actions/upload-artifact@v7
+        with:
+          name: digests-specgate-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/specgate/*
+          if-no-files-found: error
+          retention-days: 1
+
+  release-image-manifests:
+    runs-on: ubuntu-latest
+    needs: release-images
+    permissions:
+      actions: read
+      packages: write
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Download image digests
+        uses: actions/download-artifact@v7
+        with:
+          pattern: digests-specgate-*
+          path: ${{ runner.temp }}/digests/specgate
+          merge-multiple: true
+
+      - name: Create appliance manifest
+        run: |
+          image="ghcr.io/thanhtung2693/specgate"
+          refs=()
+          while IFS= read -r digest_file; do
+            refs+=("${image}@sha256:$(basename "$digest_file")")
+          done < <(find "$RUNNER_TEMP/digests/specgate" -type f | sort)
+
+          test "${#refs[@]}" -eq 2
+          docker buildx imagetools create \
+            --tag "${image}:${{ github.ref_name }}" \
+            "${refs[@]}"
+
+  release-local-bundle:
+    runs-on: ubuntu-latest
+    needs: release-image-manifests
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      # `specgate init` downloads and SHA-256 verifies this bundle. Publish it
+      # only after the appliance manifest exists for both supported platforms.
+      - name: Build + upload local appliance bundle
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          TAR="specgate-compose_${VERSION}.tar.gz"
+          SUMS="specgate-compose_${VERSION}_checksums.txt"
+          tar -czf "$TAR" -C deploy/local .
+          sha256sum "$TAR" > "$SUMS"
+          gh release upload "$VERSION" "$TAR" "$SUMS" --clobber
+
+  release-doctor-fix-smoke:
+    runs-on: ubuntu-latest
+    needs: release-local-bundle
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ github.ref_name }}
+      SPECGATE_NO_UPDATE_CHECK: "1"
+    steps:
+      - name: Install draft CLI and validate appliance repair
+        run: |
+          set -euxo pipefail
+
+          export HOME="$RUNNER_TEMP/specgate-home"
+          export PATH="$HOME/.local/bin:$PATH"
+          ASSET_DIR="$RUNNER_TEMP/specgate-assets"
+          DEPLOY_DIR="$RUNNER_TEMP/specgate-deploy"
+          mkdir -p "$HOME/.local/bin" "$ASSET_DIR" "$DEPLOY_DIR"
+
+          release_id="$(
+            gh api --paginate --slurp "repos/${GH_REPO}/releases" |
+              jq -er --arg version "$VERSION" \
+                '[.[][] | select(.tag_name == $version and .draft == true)] |
+                 if length == 1 then .[0].id else error("expected exactly one draft release") end'
+          )"
+          download_draft_asset() {
+            name="$1"
+            asset_id="$(
+              gh api --paginate --slurp "repos/${GH_REPO}/releases/${release_id}/assets" |
+                jq -er --arg name "$name" \
+                  '[.[][] | select(.name == $name)] |
+                   if length == 1 then .[0].id else error("expected exactly one matching release asset") end'
+            )"
+            gh api -H "Accept: application/octet-stream" \
+              "repos/${GH_REPO}/releases/assets/${asset_id}" > "$ASSET_DIR/$name"
+          }
+
+          CLI_ARCHIVE="specgate_${VERSION#v}_linux_amd64.tar.gz"
+          COMPOSE_ARCHIVE="specgate-compose_${VERSION}.tar.gz"
+          COMPOSE_CHECKSUMS="specgate-compose_${VERSION}_checksums.txt"
+          download_draft_asset "$CLI_ARCHIVE"
+          download_draft_asset "$COMPOSE_ARCHIVE"
+          download_draft_asset "$COMPOSE_CHECKSUMS"
+
+          tar -xzf "$ASSET_DIR/$CLI_ARCHIVE" -C "$RUNNER_TEMP"
+          install -m 0755 "$RUNNER_TEMP/specgate" "$HOME/.local/bin/specgate"
+
+          (
+            cd "$ASSET_DIR"
+            sha256sum -c "$COMPOSE_CHECKSUMS"
+          )
+          tar -xzf "$ASSET_DIR/$COMPOSE_ARCHIVE" -C "$DEPLOY_DIR"
+          # The bundle was downloaded by release ID and checksum-verified above.
+          # Mark this isolated staging directory so hardened init may adopt it.
+          printf 'specgate-deployment-v1\n' > "$DEPLOY_DIR/.specgate-managed"
+          chmod 0600 "$DEPLOY_DIR/.specgate-managed"
+
+          cat > "$DEPLOY_DIR/.env" <<EOF
+          SPECGATE_COMPOSE_PROJECT=specgate-release-${GITHUB_RUN_ID}
+          SPECGATE_PORT=13000
+          EOF
+
+          cleanup() {
+            set +e
+            if command -v specgate >/dev/null 2>&1; then
+              specgate uninstall --dir "$DEPLOY_DIR" --purge-data --yes >/dev/null 2>&1
+            elif [ -f "$DEPLOY_DIR/compose.yml" ]; then
+              docker compose -f "$DEPLOY_DIR/compose.yml" down -v >/dev/null 2>&1
+            fi
+          }
+          trap cleanup EXIT
+
+          specgate --version
+          specgate init --mode full --dir "$DEPLOY_DIR" --bundle-version "$VERSION" --no-seed --no-input
+          specgate doctor
+
+          specgate user login \
+            --username release-smoke \
+            --display-name "Release Smoke" \
+            --email release-smoke@example.test \
+            --workspace "Release Smoke" \
+            --json >/dev/null
+          cat > "$RUNNER_TEMP/review-link-artifact.json" <<'JSON'
+          {
+            "feature_key": "release-review-link-smoke",
+            "feature_name": "Release Review Link Smoke",
+            "request_type": "bugfix",
+            "impact_level": "medium",
+            "source_kind": "codex",
+            "source_revision": "release-smoke",
+            "authority": "product_intent",
+            "documents": [
+              {"path": "prd.md", "role": "prd", "content": "# PRD\n\nGenerated review links use the local UI port."},
+              {"path": "spec.md", "role": "spec", "content": "# Spec\n\nThe local appliance generates review links from its single public origin."},
+              {"path": "plan.md", "role": "plan", "content": "# Plan\n\nPublish an artifact and inspect review_url."}
+            ]
+          }
+          JSON
+          review_url="$(specgate artifact publish --file "$RUNNER_TEMP/review-link-artifact.json" --json | jq -r '.data.review_url')"
+          case "$review_url" in
+            http://localhost:13000/artifacts/*) ;;
+            *) echo "unexpected review_url: $review_url" >&2; exit 1 ;;
+          esac
+
+          specgate down --dir "$DEPLOY_DIR"
+          specgate doctor --fix --yes
+          specgate doctor
+          specgate local-status --dir "$DEPLOY_DIR"
+
+  release-publish:
+    runs-on: ubuntu-latest
+    needs: release-doctor-fix-smoke
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Publish verified release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          if [[ "$VERSION" == *-* ]]; then
+            gh release edit "$VERSION" --draft=false --prerelease
+          else
+            image="ghcr.io/thanhtung2693/specgate"
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            docker buildx imagetools create \
+              --tag "${image}:latest" \
+              "${image}:$VERSION"
+            gh release edit "$VERSION" --draft=false
+          fi

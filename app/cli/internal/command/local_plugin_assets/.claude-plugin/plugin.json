@@ -1,0 +1,23 @@
+{
+  "name": "specgate",
+  "version": "0.2.0",
+  "description": "Focused SpecGate skills for project setup, work preparation, and delivery.",
+  "author": {
+    "name": "Thanh Tung"
+  },
+  "homepage": "https://github.com/thanhtung2693/specgate",
+  "repository": "https://github.com/thanhtung2693/specgate",
+  "license": "Apache-2.0",
+  "keywords": [
+    "specgate",
+    "sdlc",
+    "spec-driven",
+    "setup",
+    "readiness",
+    "handoff",
+    "coding-agent",
+    "delivery"
+  ],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks-claude.json"
+}

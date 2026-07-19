@@ -1,0 +1,5 @@
+#!/command/with-contenv bash
+set -euo pipefail
+
+printf 'starting\n' >/run/specgate/components/postgres
+exec /usr/local/bin/docker-entrypoint.sh postgres -c listen_addresses=127.0.0.1

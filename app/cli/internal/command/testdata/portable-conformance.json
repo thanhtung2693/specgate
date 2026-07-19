@@ -1,0 +1,149 @@
+{
+  "schema_version": "specgate.portable-conformance/v1",
+  "cases": [
+    {
+      "name": "exact selected-workspace relationships",
+      "valid": true,
+      "payload": {
+        "workspace": {
+          "id": "workspace-a",
+          "slug": "workspace-a",
+          "name": "Workspace A"
+        },
+        "features": [
+          {
+            "id": "feature-a",
+            "key": "FEATURE-A",
+            "canonical_artifact_id": "artifact-a",
+            "version": 1
+          }
+        ],
+        "artifacts": [
+          {
+            "id": "artifact-a",
+            "feature_key": "FEATURE-A",
+            "request_type": "new_feature",
+            "version": 1,
+            "status": "approved",
+            "snapshot_digest": "sha256:ae2e745aaba1b121050d541b740472977183aa397f9cd05dc5c66b2aaab19310",
+            "policy_digest": "sha256:policy-a",
+            "policy_snapshot": "{}",
+            "created_at": "2026-07-17T00:00:00Z",
+            "documents": [
+              {
+                "path": "spec.md",
+                "role": "spec",
+                "content": "# Spec\n",
+                "digest": "sha256:603c828a03383f98b82bf9c6787deeb5c40c02871a1b8d6ba14b0d538020a02b"
+              }
+            ]
+          }
+        ],
+        "work": [
+          {
+            "id": "work-a",
+            "key": "LOCAL-A",
+            "workspace_id": "workspace-a",
+            "feature_id": "feature-a",
+            "artifact_id": "artifact-a",
+            "title": "Deliver feature A",
+            "description": "",
+            "phase": "delivered",
+            "context_digest": "sha256:context-a",
+            "acceptance_criteria": [
+              "Criterion A"
+            ],
+            "created_at": "2026-07-17T00:00:00Z"
+          }
+        ],
+        "gates": [
+          {
+            "task_id": "task-a",
+            "artifact_id": "artifact-a",
+            "gate_key": "delivery_review",
+            "gate_version": "v1",
+            "gate_digest": "sha256:gate-a",
+            "artifact_digest": "sha256:ae2e745aaba1b121050d541b740472977183aa397f9cd05dc5c66b2aaab19310",
+            "policy_digest": "sha256:policy-a",
+            "executor": "ide_agent",
+            "result_id": "result-a",
+            "result_state": "pass"
+          }
+        ],
+        "delivery": [
+          {
+            "work_id": "work-a",
+            "report_id": "report-a",
+            "report": {
+              "event_type": "coding_agent.completed",
+              "criteria": [
+                {
+                  "criterion_id": "local-1",
+                  "claim": "satisfied"
+                }
+              ]
+            },
+            "human_decision": "approve"
+          }
+        ]
+      }
+    },
+    {
+      "name": "cross-workspace work is rejected",
+      "valid": false,
+      "error": "work LOCAL-A belongs to workspace workspace-b, want workspace-a",
+      "payload": {
+        "workspace": {
+          "id": "workspace-a",
+          "slug": "workspace-a",
+          "name": "Workspace A"
+        },
+        "features": [
+          {
+            "id": "feature-a",
+            "key": "FEATURE-A",
+            "canonical_artifact_id": "artifact-a",
+            "version": 1
+          }
+        ],
+        "artifacts": [
+          {
+            "id": "artifact-a",
+            "feature_key": "FEATURE-A",
+            "request_type": "new_feature",
+            "version": 1,
+            "status": "approved",
+            "snapshot_digest": "sha256:ae2e745aaba1b121050d541b740472977183aa397f9cd05dc5c66b2aaab19310",
+            "documents": [
+              {
+                "path": "spec.md",
+                "role": "spec",
+                "content": "# Spec\n",
+                "digest": "sha256:603c828a03383f98b82bf9c6787deeb5c40c02871a1b8d6ba14b0d538020a02b"
+              }
+            ]
+          }
+        ],
+        "work": [
+          {
+            "id": "work-a",
+            "key": "LOCAL-A",
+            "workspace_id": "workspace-b",
+            "feature_id": "feature-a",
+            "artifact_id": "artifact-a",
+            "title": "Deliver feature A",
+            "description": "",
+            "phase": "ready",
+            "context_digest": "sha256:context-a",
+            "acceptance_criteria": [
+              "Criterion A"
+            ],
+            "created_at": "2026-07-17T00:00:00Z"
+          }
+        ],
+        "gates": [],
+        "delivery": []
+      }
+    }
+  ]
+}

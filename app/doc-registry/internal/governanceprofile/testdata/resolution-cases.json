@@ -1,0 +1,110 @@
+{
+  "schema_version": "specgate.policy/v1",
+  "cases": [
+    {
+      "name": "low-risk bugfix is light",
+      "input": {
+        "request_type": "bugfix",
+        "impact_level": "low",
+        "impact_declaration": {
+          "protected_domains": [],
+          "protected_domains_status": "no",
+          "data_or_schema_change": "no",
+          "external_contract_change": "no",
+          "irreversible_or_complex_rollback": "no",
+          "broad_blast_radius": "no"
+        }
+      },
+      "want": {
+        "work_type": "bugfix",
+        "risk_level": "low",
+        "governance_level": "light",
+        "reason_codes": ["low_risk_bugfix"]
+      }
+    },
+    {
+      "name": "high-risk bugfix is enhanced",
+      "input": {
+        "request_type": "bugfix",
+        "impact_level": "high",
+        "impact_declaration": {
+          "protected_domains": [],
+          "protected_domains_status": "no",
+          "data_or_schema_change": "no",
+          "external_contract_change": "no",
+          "irreversible_or_complex_rollback": "yes",
+          "broad_blast_radius": "yes"
+        }
+      },
+      "want": {
+        "work_type": "bugfix",
+        "risk_level": "high",
+        "governance_level": "enhanced",
+        "reason_codes": ["high_impact", "complex_rollback", "broad_blast_radius"]
+      }
+    },
+    {
+      "name": "known payment domain fails safe",
+      "input": {
+        "request_type": "change_request",
+        "impact_level": "medium",
+        "impact_declaration": {
+          "protected_domains": ["payment"],
+          "protected_domains_status": "yes",
+          "data_or_schema_change": "unknown",
+          "external_contract_change": "unknown",
+          "irreversible_or_complex_rollback": "unknown",
+          "broad_blast_radius": "unknown"
+        }
+      },
+      "want": {
+        "work_type": "change_request",
+        "risk_level": "medium",
+        "governance_level": "enhanced",
+        "reason_codes": ["protected_domain"]
+      }
+    },
+    {
+      "name": "unknown protected domain status fails safe",
+      "input": {
+        "request_type": "change_request",
+        "impact_level": "medium",
+        "impact_declaration": {
+          "protected_domains": [],
+          "protected_domains_status": "unknown",
+          "data_or_schema_change": "no",
+          "external_contract_change": "no",
+          "irreversible_or_complex_rollback": "no",
+          "broad_blast_radius": "no"
+        }
+      },
+      "want": {
+        "work_type": "change_request",
+        "risk_level": "medium",
+        "governance_level": "enhanced",
+        "reason_codes": ["unknown_protected_domain"]
+      }
+    },
+    {
+      "name": "single non-domain unknown stays standard",
+      "input": {
+        "request_type": "change_request",
+        "impact_level": "medium",
+        "impact_declaration": {
+          "protected_domains": [],
+          "protected_domains_status": "no",
+          "data_or_schema_change": "unknown",
+          "external_contract_change": "no",
+          "irreversible_or_complex_rollback": "no",
+          "broad_blast_radius": "no"
+        }
+      },
+      "want": {
+        "work_type": "change_request",
+        "risk_level": "medium",
+        "governance_level": "standard",
+        "reason_codes": ["default_standard"]
+      }
+    }
+  ]
+}

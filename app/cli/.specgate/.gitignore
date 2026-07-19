@@ -1,0 +1,5 @@
+# SpecGate working dir: ignore transient delivery scaffolds,
+# keep the committed config and this file.
+*
+!.gitignore
+!config

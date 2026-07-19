@@ -1,0 +1,4 @@
+#!/command/execlineb -P
+with-contenv
+s6-setuidgid specgate
+/usr/local/bin/python3 /usr/local/lib/specgate/health_server.py

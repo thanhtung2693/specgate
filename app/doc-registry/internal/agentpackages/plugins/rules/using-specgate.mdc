@@ -1,0 +1,11 @@
+---
+description: Select focused SpecGate lifecycle skills
+alwaysApply: true
+---
+
+# Using SpecGate
+
+When a task involves a SpecGate artifact, readiness check, work item, change
+request, Context Pack, or delivery review, load `specgate-router` first and follow
+its routing to the narrow lifecycle skill. Use the `specgate` CLI for platform
+operations. Never treat readiness as approval or silently expand approved scope.

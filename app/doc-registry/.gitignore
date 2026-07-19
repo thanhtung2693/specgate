@@ -1,0 +1,35 @@
+# Binaries
+/bin/
+/dist/
+/doc-registry
+
+# Local SQLite databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Env files
+.env
+.env.local
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Test artifacts
+coverage.out
+coverage.html
+
+# Air (hot reload)
+tmp/
+build-errors.log
+
+# MinIO / Redis local data (docker-compose)
+.minio-data/
+.redis-data/

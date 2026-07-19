@@ -1,0 +1,34 @@
+{
+  "skills": [
+    {
+      "name": "rollout-risk",
+      "description": "Rollout evidence for the rollback_plan_present gate: evaluate deployment and recovery proof without designing a rollout.",
+      "prompt": "# Rollout evidence\n\nEvaluate only the artifact and attached evidence for `rollback_plan_present`; do not invent a rollout.\n\n- `pass`: deploy order, compatibility, recovery decision, owner, and observable rollback or forward-fix signal are explicit for the change's impact.\n- `warn`: the path is credible but a reviewable safeguard is missing, such as migration order, flag/alert owner, cleanup trigger, or residual-risk owner.\n- `fail`: a data, availability, public-contract, or external-consumer risk lacks a credible recovery path; destructive same-deploy changes and unobservable rollback are high severity.\n- `needs_human_review`: evidence is conflicting or too thin to distinguish `warn` from `fail`.\n- `not_applicable`: this change type genuinely has no deployment or recovery risk.\n\nCite the deciding section or evidence and name the smallest missing safeguard."
+    },
+    {
+      "name": "acceptance-criteria",
+      "description": "Acceptance evidence for the verifiable and edge-case gates: evaluate existing criteria without expanding scope.",
+      "prompt": "# Acceptance evidence\n\nEvaluate the existing acceptance criteria for `acceptance_criteria_verifiable` and `acceptance_criteria_edge_cases`; do not write new requirements.\n\n- `pass`: each material outcome has a trigger or starting state, observable result, and verification path; risk-relevant validation, failure, permission, empty-state, recovery, or audit behavior is covered.\n- `warn`: the primary outcome is testable but one bounded supporting case is missing.\n- `fail`: criteria are vague, contradict approved scope, cannot map to evidence, or replace outcomes with implementation tasks.\n- `needs_human_review`: the artifact leaves it ambiguous whether an omitted case is in scope.\n- `not_applicable`: this change type genuinely has no acceptance outcome to evaluate.\n\nCite each gap and ask only the smallest question needed to make it verifiable."
+    },
+    {
+      "name": "task-breakdown",
+      "description": "Traceability evidence for the implementation_plan_traceable gate: evaluate an existing handoff plan without creating one.",
+      "prompt": "# Traceability evidence\n\nEvaluate the existing implementation plan for `implementation_plan_traceable`; do not create or enlarge a plan.\n\n- `pass`: every material requirement and acceptance criterion maps to an owned task, dependency/order, completion condition, and verification; migration-before-use and required documentation are explicit when relevant.\n- `warn`: the plan is usable but has a bounded dependency, ownership, verification, or parallel-boundary gap.\n- `fail`: requirements or criteria have no implementation coverage, tasks have no traceable purpose, or ordering hides a migration, compatibility, or external dependency risk.\n- `needs_human_review`: evidence cannot establish whether a task is intentionally out of scope.\n- `not_applicable`: this change type genuinely has no implementation work.\n\nCite the affected task or requirement and name the smallest repair."
+    },
+    {
+      "name": "spec-review",
+      "description": "Readiness-topic evidence for spec_completeness: evaluate implementation readiness without rewriting the specification.",
+      "prompt": "# Readiness-topic evidence\n\nEvaluate each supplied `spec_completeness` topic without rewriting the specification or introducing product scope.\n\n- `covered`: the documents give enough concrete, internally consistent evidence to build and verify that topic.\n- `partial`: the topic is addressed but lacks a bounded contract detail, such as an interface/error shape, data invariant, security boundary, dependency limit, observability signal, or migration behavior.\n- `missing`: this change type needs the topic, but the documents do not address it.\n- `not_applicable`: this change type genuinely does not need the topic.\n\nFor every topic, cite the deciding document/heading and state the minimum missing evidence. Do not set an overall gate verdict; the evaluator derives it from the topic statuses."
+    },
+    {
+      "name": "prd-review",
+      "description": "Scope evidence for the scope_clear and success_metric_measurable gates: evaluate product intent without designing implementation.",
+      "prompt": "# Scope evidence\n\nEvaluate product intent for `scope_clear` and `success_metric_measurable`; do not design APIs, schemas, or implementation tasks.\n\n- `pass`: problem, target user, goal, non-goal, core scenario, and measurable success signal are explicit and consistent.\n- `warn`: direction is clear but one bounded scope, stakeholder, guardrail, scenario, non-goal, or metric detail is weak.\n- `fail`: the artifact is solution-first without user value, permits materially different scope, lacks measurable success, or leaves a material business/compliance risk unbounded.\n- `needs_human_review`: evidence conflicts on the intended user, scope, or success measure.\n- `not_applicable`: this change type genuinely has no product outcome or success measure to evaluate.\n\nCite the missing or conflicting evidence and ask the minimum product question."
+    },
+    {
+      "name": "review-impl",
+      "description": "Delivery evidence for the delivery_review gate: evaluate a coding-agent completion against canonical acceptance criteria and recorded checks.",
+      "prompt": "# Delivery evidence\n\nEvaluate only the completion report, canonical acceptance criteria, checks, changed-file references, and attached evidence; do not run code or invent proof.\n\nFor each unbound acceptance criterion: mark `met` only when the claim and evidence credibly satisfy every required clause; mark `unmet` when a required clause is contradicted or reported incomplete; otherwise mark `unclear`. A delivery with missing or unclear criterion evidence must remain `needs_human_review`, not pass.\n\nTreat deterministic check bindings as stronger than agent claims. Extra compatible fields do not violate a criterion; missing required fields do. Do not substitute generic file/test references for unproven visual, accessibility, manual, device, or behavioral clauses.\n\nCite the deciding evidence for every non-`met` result and name the next required action."
+    }
+  ]
+}

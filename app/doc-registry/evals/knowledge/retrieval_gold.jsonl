@@ -1,0 +1,4 @@
+{"id":"refund-en","mode":"offline","workspace_id":"ws-eval","query":"which refunds require reviewer approval?","expected_document_id":"doc-refunds","expected_chunk_contains":"refunds require reviewer approval"}
+{"id":"refund-vi","mode":"live","workspace_id":"ws-eval","query":"Hoàn tiền cần ai duyệt?","expected_document_id":"doc-refunds","expected_chunk_contains":"refunds require reviewer approval"}
+{"id":"loyalty-en","mode":"offline","workspace_id":"ws-eval","query":"which platinum tier needs manual review?","expected_document_id":"doc-loyalty","expected_chunk_contains":"platinum tier changes need manual review"}
+{"id":"loyalty-vi","mode":"live","workspace_id":"ws-eval","query":"Hạng platinum có cần kiểm tra thủ công không?","expected_document_id":"doc-loyalty","expected_chunk_contains":"platinum tier changes need manual review"}

@@ -1,0 +1,24 @@
+{
+  "action": "update",
+  "type": "Issue",
+  "createdAt": "2026-06-01T12:00:00.000Z",
+  "data": {
+    "id": "f7c1a2b4-3d5e-4a6b-8c9d-0e1f2a3b4c5d",
+    "identifier": "LOY-128",
+    "title": "Ship loyalty points v0.4",
+    "description": "Implement the loyalty ledger and expose the points endpoint.\n\n<!-- specgate-work-ref: CR-LOYALTY-V1 -->",
+    "url": "https://linear.app/acme/issue/LOY-128/ship-loyalty-points-v0-4",
+    "state": {
+      "id": "a1b2c3d4-0000-0000-0000-000000000001",
+      "name": "In Progress",
+      "type": "started"
+    }
+  },
+  "updatedFrom": {
+    "stateId": "a1b2c3d4-0000-0000-0000-000000000000"
+  },
+  "url": "https://linear.app/acme/issue/LOY-128/ship-loyalty-points-v0-4",
+  "webhookId": "9c8b7a65-4321-4abc-9def-0123456789ab",
+  "webhookTimestamp": 1780315200000,
+  "organizationId": "0a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d"
+}

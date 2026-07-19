@@ -1,0 +1,63 @@
+# syntax=docker/dockerfile:1.7
+
+# --- deps ---
+FROM node:24-alpine AS deps
+WORKDIR /app
+
+COPY app/ui/package.json app/ui/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --no-audit --no-fund
+
+# --- build ---
+FROM deps AS build
+
+# BUILD_MODE picks which .env.<mode> file Vite loads at build time. The CI
+# pipeline sets this from $CI_COMMIT_REF_NAME (see ui/README.md — branch name
+# == Vite mode == ui/.env.<mode> file). Defaults to production so untagged
+# manual builds get the production env.
+#
+# VITE_* values default to ui/.env.<mode>. Declare them here so docker-compose
+# (or CI) can override via build-arg — shell env takes priority over .env files
+# in Vite's resolution order. Add new VITE_* vars by: (1) ARG + ENV here,
+# (2) docker-compose build.args, (3) ui/.env.<mode> as fallback default.
+ARG BUILD_MODE=production
+ARG VITE_DOC_REGISTRY_URL=/api/doc-registry
+ARG VITE_LANGGRAPH_API_URL=/api/agents
+ENV VITE_DOC_REGISTRY_URL=$VITE_DOC_REGISTRY_URL
+ENV VITE_LANGGRAPH_API_URL=$VITE_LANGGRAPH_API_URL
+
+COPY app/ui/ .
+RUN npm run build -- --mode ${BUILD_MODE}
+
+# --- dev (Vite HMR dev server) ---
+# Used by docker-compose.dev.yml. Source is bind-mounted at runtime; the deps
+# stage provides node_modules (preserved by a named volume so the bind mount
+# doesn't shadow it). On startup, refresh the named node_modules volume only
+# when package.json or package-lock.json changed after the volume was created.
+# VITE_* env vars are supplied at runtime, not baked in.
+# Listens on port 80 so the same host:3000 mapping from docker-compose.yml works.
+FROM deps AS dev
+WORKDIR /app
+COPY app/ui/scripts/dev-entrypoint.sh /usr/local/bin/specgate-ui-dev-entrypoint
+RUN chmod +x /usr/local/bin/specgate-ui-dev-entrypoint
+EXPOSE 80
+CMD ["specgate-ui-dev-entrypoint"]
+
+# --- static SPA ---
+# Keep this as the final stage so plain `docker build -f docker/Dockerfile.ui .`
+# produces the production image. docker-compose.dev.yml explicitly targets `dev`.
+FROM nginx:1.27-alpine AS runtime
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_DATE=unknown
+LABEL org.opencontainers.image.title="SpecGate UI" \
+      org.opencontainers.image.source="https://github.com/thanhtung2693/specgate" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${COMMIT}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.specgate.managed="true" \
+      org.specgate.component="ui"
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY app/ui/docker/nginx-default.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

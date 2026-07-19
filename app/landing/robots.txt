@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://thanhtung2693.github.io/specgate/sitemap.xml

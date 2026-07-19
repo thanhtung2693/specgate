@@ -1,0 +1,2 @@
+{"id":"ac-contract-001","suite":"ac_satisfaction","input":{"artifact_md":"Acceptance criteria: user can retry payment and see clear errors.","knowledge_snippets":["bug report summary"],"feedback_events":["test:test_retry_payment_path"]},"expected":{"verdict":"pass","confidence_min":0.7}}
+{"id":"ac-contract-002","suite":"ac_satisfaction","input":{"artifact_md":"Draft behavior notes with no acceptance criteria section.","knowledge_snippets":[],"feedback_events":[]},"expected":{"verdict":"warn","confidence_min":0.3}}

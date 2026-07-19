@@ -1,0 +1,53 @@
+{
+  "schema": "specgate.plugin-package/v1",
+  "name": "specgate",
+  "display_name": "SpecGate",
+  "version": "0.2.0",
+  "description": "Focused SpecGate skills for project setup, work preparation, and delivery.",
+  "short_description": "Focused spec-to-delivery workflows",
+  "long_description": "Select focused SpecGate workflows for project setup, work preparation (shaping and artifact readiness), and delivery (pickup, scoped implementation, evidence, and review).",
+  "author_name": "Thanh Tung",
+  "developer_name": "Thanh Tung",
+  "homepage": "https://github.com/thanhtung2693/specgate",
+  "repository": "https://github.com/thanhtung2693/specgate",
+  "license": "Apache-2.0",
+  "category": "Productivity",
+  "keywords": [
+    "specgate",
+    "sdlc",
+    "spec-driven",
+    "setup",
+    "readiness",
+    "handoff",
+    "coding-agent",
+    "delivery"
+  ],
+  "skills": [
+    "specgate-router",
+    "specgate-project-setup",
+    "specgate-work-preparation",
+    "specgate-work-delivery"
+  ],
+  "served_files": [
+    "README.md",
+    "package.json",
+    ".agents/plugins/marketplace.json",
+    ".agents/plugins/personal-marketplace.json",
+    ".codex-plugin/plugin.json",
+    ".claude-plugin/plugin.json",
+    ".claude-plugin/marketplace.json",
+    ".cursor-plugin/plugin.json",
+    ".cursor-plugin/marketplace.json",
+    "assets/logo.svg",
+    "hooks/session-start",
+    "hooks/run-hook.cmd",
+    "hooks/hooks.json",
+    "hooks/hooks-claude.json",
+    "hooks/hooks-cursor.json",
+    "rules/using-specgate.mdc",
+    "skills/specgate-router/SKILL.md",
+    "skills/specgate-project-setup/SKILL.md",
+    "skills/specgate-work-preparation/SKILL.md",
+    "skills/specgate-work-delivery/SKILL.md"
+  ]
+}

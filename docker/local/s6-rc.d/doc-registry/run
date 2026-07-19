@@ -1,0 +1,12 @@
+#!/command/with-contenv bash
+set -euo pipefail
+
+exec > >(/command/s6-setuidgid specgate sed -u 's/^/[doc-registry] /') 2>&1
+printf 'waiting_for_postgres\n' >/run/specgate/components/doc-registry
+until pg_isready -h 127.0.0.1 -p 5432 -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" >/dev/null 2>&1; do
+  sleep 1
+done
+printf 'migrating\n' >/run/specgate/components/doc-registry
+/command/s6-setuidgid specgate doc-registry --migrate-only
+printf 'starting\n' >/run/specgate/components/doc-registry
+exec /command/s6-setuidgid specgate doc-registry

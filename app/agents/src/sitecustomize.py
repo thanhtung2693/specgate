@@ -1,0 +1,3 @@
+from specgate_agents.langgraph_config import configure_langgraph_env
+
+configure_langgraph_env()

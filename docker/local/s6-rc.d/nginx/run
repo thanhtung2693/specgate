@@ -1,0 +1,6 @@
+#!/command/with-contenv bash
+set -euo pipefail
+
+exec > >(/command/s6-setuidgid specgate sed -u 's/^/[nginx] /') 2>&1
+printf 'starting\n' >/run/specgate/components/nginx
+exec /command/s6-setuidgid specgate nginx -c /etc/specgate/nginx.conf -g 'daemon off;'

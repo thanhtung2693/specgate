@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# SpecGate session-start hook — injects only the short specgate-router skill so
+# the agent selects a focused lifecycle skill instead of loading every workflow.
+#
+# Reads the installed SKILL.md at runtime so context stays in sync with the
+# skill file without a separate update step.
+#
+# Platform can be passed explicitly by run-hook.cmd:
+#   session-start codex|cursor|claude
+# If omitted, fall back to environment-based detection.
+
+set -eu
+
+# Locate the specgate-router SKILL.md bundled next to this hook so repo-local
+# plugin installs cannot be shadowed by stale user-global skills.
+SKILL_FILE=""
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CANDIDATE="${SCRIPT_DIR}/../skills/specgate-router/SKILL.md"
+if [ -f "$CANDIDATE" ]; then
+  SKILL_FILE="$(cd "$(dirname "$CANDIDATE")" && pwd)/$(basename "$CANDIDATE")"
+fi
+
+if [ -z "$SKILL_FILE" ]; then
+  # Skill not installed — exit silently rather than injecting nothing useful.
+  exit 0
+fi
+
+SKILL_CONTENT="$(cat "$SKILL_FILE")"
+
+# Wrap in <EXTREMELY_IMPORTANT> with framing — mirrors the Superpowers pattern
+# so the model treats this context as high-priority from turn 1.
+CONTENT="<EXTREMELY_IMPORTANT>
+SpecGate is connected.
+
+**Below is the full content of the short 'specgate-router' skill. Follow it to select the focused SpecGate lifecycle skill required by the user's task before acting:**
+
+${SKILL_CONTENT}
+</EXTREMELY_IMPORTANT>"
+
+# JSON-escape the content. Bash parameter substitution is orders of magnitude
+# faster than a character-by-character loop.
+escape_for_json() {
+  local s="$1"
+  s="${s//\\/\\\\}"   # backslash first
+  s="${s//\"/\\\"}"   # double quote
+  s="${s//$'\n'/\\n}" # newline
+  s="${s//$'\r'/\\r}" # carriage return
+  s="${s//$'\t'/\\t}" # tab
+  printf '%s' "$s"
+}
+
+ESCAPED="$(escape_for_json "$CONTENT")"
+
+# Use printf, not heredoc — avoids a bash 5.3+ hang (see github.com/bash/bash issue references).
+PLATFORM="${1:-}"
+if [ -z "$PLATFORM" ]; then
+  if [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then
+    PLATFORM="cursor"
+  elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+    PLATFORM="claude"
+  else
+    PLATFORM="codex"
+  fi
+fi
+
+if [ "$PLATFORM" = "cursor" ]; then
+  printf '{"additional_context":"%s"}\n' "$ESCAPED"
+elif [ "$PLATFORM" = "claude" ]; then
+  printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$ESCAPED"
+else
+  # Codex / SDK standard
+  printf '{"additionalContext":"%s"}\n' "$ESCAPED"
+fi

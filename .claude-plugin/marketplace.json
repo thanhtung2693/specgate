@@ -1,0 +1,17 @@
+{
+  "name": "specgate",
+  "owner": {
+    "name": "Thanh Tung"
+  },
+  "metadata": {
+    "description": "SpecGate focused lifecycle skills for Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "specgate",
+      "source": "./plugins",
+      "description": "Focused SpecGate skills for project setup, work preparation, and delivery.",
+      "version": "0.2.0"
+    }
+  ]
+}

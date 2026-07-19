@@ -1,0 +1,46 @@
+name: ui
+on:
+  push:
+    branches: ["main"]
+    paths:
+      [
+        "app/ui/**",
+        "app/doc-registry/cmd/openapi/**",
+        "app/doc-registry/internal/api/**",
+        ".github/workflows/ui.yml",
+      ]
+  pull_request:
+    paths:
+      [
+        "app/ui/**",
+        "app/doc-registry/cmd/openapi/**",
+        "app/doc-registry/internal/api/**",
+        ".github/workflows/ui.yml",
+      ]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/ui
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: app/ui/package-lock.json
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: app/doc-registry/go.mod
+          cache-dependency-path: app/doc-registry/go.sum
+      - run: npm ci
+      - run: npm run api:check
+      - run: npm run deadcode
+      - run: npm run lint
+      - run: npm run build
+      - run: npm run test

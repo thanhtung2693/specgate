@@ -1,0 +1,9 @@
+# Per-target aggregate pass-rate gates.
+#
+# These are floors, not targets. The governance contract targets run a
+# deterministic fixture baseline in CI, so they gate at 1.00 — any drift
+# in the dataset, schemas, or scorer plumbing surfaces as a regression.
+
+[targets]
+quality_gate_contract = 1.00
+ac_satisfaction_contract = 1.00

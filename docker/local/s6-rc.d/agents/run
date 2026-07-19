@@ -1,0 +1,16 @@
+#!/command/with-contenv bash
+set -euo pipefail
+
+exec > >(/command/s6-setuidgid agents sed -u 's/^/[agents] /') 2>&1
+printf 'waiting_for_doc_registry\n' >/run/specgate/components/agents
+until curl --fail --silent --show-error --max-time 2 http://127.0.0.1:8080/readyz >/dev/null 2>&1; do
+  sleep 1
+done
+printf 'starting\n' >/run/specgate/components/agents
+cd /opt/specgate/agents
+exec /command/s6-setuidgid agents langgraph dev \
+  --config /opt/specgate/agents/langgraph.json \
+  --host 127.0.0.1 \
+  --port 2024 \
+  --no-reload \
+  --no-browser

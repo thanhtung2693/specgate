@@ -1,0 +1,12 @@
+.git
+.gitignore
+bin
+data
+docs
+scripts
+skills
+*.md
+.env
+.env.*
+!.env.example
+.DS_Store
