@@ -249,9 +249,9 @@ Use the expert families when you need their detailed or troubleshooting views:
 `delivery report` to scaffold or inspect the delivery tail, `delivery status
 --detail` for the raw review readback, `work context` for the implementation
 contract, `gates` and `artifact` for readiness and approval details, and
-`audit` or `verify` for history or closeout. This slice does not add `change
-prepare` or automatic work-item creation after artifact approval; continue to
-use the artifact and work commands for those preparation details.
+`audit` or `verify` for history or closeout. `change prepare` is not available;
+continue to use the artifact and gate commands for those detailed preparation
+steps.
 
 ## Create a quick work item
 
@@ -392,7 +392,8 @@ Approve an artifact version and make it canonical, or send it back with a note.
 The normal approval path is:
 
 ```bash
-specgate --yes change approve <artifact-id> --note "LGTM"
+specgate --yes change approve <artifact-id> --note "LGTM" \
+  --title "<work title>" --ac "<confirmed criterion>"
 specgate artifact request-changes <artifact-id> --note "Tighten the error copy"
 ```
 
@@ -401,11 +402,10 @@ request-changes` is Full-only. In Full mode, interactive terminals ask for
 confirmation first while plain, JSON, and non-interactive runs proceed
 directly. Local human approval always requires explicit `--yes`.
 
-After the decision, complete the feature-backed handoff:
+The normal decision creates the feature-backed handoff and returns its work
+reference. Read it before implementation:
 
 ```bash
-specgate artifact show <artifact-id> --json
-specgate work create --feature <feature-key> --title "<work title>" --ac "<criterion>" --json
 specgate work context <work-ref> --json
 ```
 
@@ -414,7 +414,8 @@ transitions separately available for diagnosis. The created work item's
 `lead_artifact_id` must equal the promoted artifact, and its Context Pack must
 contain the governed spec/design/plan/verification material or exact artifact
 references. Comparison, publication, approval, promotion, work linkage, and
-Context Pack assembly are different durable states.
+Context Pack assembly remain different durable states even though the normal
+approval command resumably coordinates the last four.
 
 `artifact show` also accepts a unique id prefix from the `artifact list` table:
 

@@ -242,6 +242,7 @@ func (f *fakeClient) AuditTrail(_ context.Context, ref string, _ bool) (*client.
 
 func (f *fakeClient) ContextPack(_ context.Context, id string) (*client.ContextPackResult, error) {
 	f.lastContextID = id
+	f.callOrder = append(f.callOrder, "context_pack")
 	if f.contextPack != nil {
 		return f.contextPack, nil
 	}
@@ -250,6 +251,7 @@ func (f *fakeClient) ContextPack(_ context.Context, id string) (*client.ContextP
 
 func (f *fakeClient) CreateWorkItem(_ context.Context, in map[string]any) (map[string]any, error) {
 	f.lastCreateWorkItem = in
+	f.callOrder = append(f.callOrder, "work_create")
 	if f.createWorkItemErr != nil {
 		return nil, f.createWorkItemErr
 	}

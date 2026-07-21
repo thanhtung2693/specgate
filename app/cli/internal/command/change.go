@@ -1,6 +1,7 @@
 package command
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -102,13 +103,19 @@ func newChangeCmd(deps *Deps) *cobra.Command {
 }
 
 func newChangeApproveCmd(deps *Deps) *cobra.Command {
-	var note string
+	var (
+		note        string
+		title       string
+		description string
+		criteria    []string
+	)
 	cmd := &cobra.Command{
 		Use:   "approve <artifact-id>",
-		Short: "Approve an exact artifact snapshot and make it canonical",
+		Short: "Approve an exact snapshot and create its implementation handoff",
 		Long: "Record one human approval for the exact artifact snapshot, then promote that\n" +
-			"approved version to the feature's canonical specification. The transition is\n" +
-			"resumable: rerunning an already-approved artifact retries promotion.",
+			"approved version, create its artifact-bound work item, and verify the derived\n" +
+			"Context Pack. Supply the human-reviewed title and acceptance criteria explicitly;\n" +
+			"SpecGate never infers them from document prose. Exact retries reuse existing work.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
@@ -116,6 +123,16 @@ func newChangeApproveCmd(deps *Deps) *cobra.Command {
 				payload := output.ErrorPayload{
 					Code:    "confirmation_required",
 					Message: "Local artifact approval requires an explicit human assertion; re-run with --yes.",
+				}
+				code := deps.Printer.Error("change.approve", payload)
+				return &output.ExitError{Code: code}
+			}
+			title = strings.TrimSpace(title)
+			criteria = normalizedChangeApprovalCriteria(criteria)
+			if title == "" || len(criteria) == 0 {
+				payload := output.ErrorPayload{
+					Code:    "usage",
+					Message: "change approve requires --title and at least one --ac so the approved snapshot has an explicit implementation handoff",
 				}
 				code := deps.Printer.Error("change.approve", payload)
 				return &output.ExitError{Code: code}
@@ -143,14 +160,23 @@ func newChangeApproveCmd(deps *Deps) *cobra.Command {
 				if err != nil {
 					return localExitError(deps, "change.approve", err)
 				}
-				return printChangeApproval(deps, id, "v"+strconv.Itoa(artifact.Version), artifact.SnapshotDigest, feature.Key, feature.Version)
+				handoff, err := ensureLocalApprovedWork(
+					cmd.Context(), store, selection.Workspace.ID, artifact.ID, feature.Key, title, description, criteria,
+				)
+				if err != nil {
+					return localExitError(deps, "change.approve", err)
+				}
+				return printChangeApproval(deps, id, "v"+strconv.Itoa(artifact.Version), artifact.SnapshotDigest, feature.Key, feature.Version, handoff)
 			}
 
 			artifact, err := deps.Client.GetArtifact(cmd.Context(), id)
 			if err != nil {
 				return apiExitError(deps, "change.approve", err)
 			}
-			prompt := fmt.Sprintf("Approve artifact %s (%s, digest %s) and make it canonical?", id, artifact.Version, artifact.SnapshotDigest)
+			prompt := fmt.Sprintf(
+				"Approve artifact %s (%s, digest %s) and hand off %q with %d acceptance criteria?",
+				id, artifact.Version, artifact.SnapshotDigest, title, len(criteria),
+			)
 			proceed, err := requireConfirm(deps, prompt)
 			if err != nil || !proceed {
 				return err
@@ -166,19 +192,203 @@ func newChangeApproveCmd(deps *Deps) *cobra.Command {
 			if err != nil {
 				return apiExitError(deps, "change.approve", err)
 			}
-			return printChangeApproval(deps, id, artifact.Version, artifact.SnapshotDigest, feature.Key, feature.Version)
+			handoff, err := ensureFullApprovedWork(cmd.Context(), deps, id, feature.Key, title, description, criteria)
+			if err != nil {
+				return apiExitError(deps, "change.approve", err)
+			}
+			return printChangeApproval(deps, id, artifact.Version, artifact.SnapshotDigest, feature.Key, feature.Version, handoff)
 		},
 	}
 	cmd.Flags().StringVar(&note, "note", "", "Optional reviewer note recorded with the approval")
+	cmd.Flags().StringVar(&title, "title", "", "Implementation work title (required)")
+	cmd.Flags().StringVar(&description, "description", "", "Implementation scope or description")
+	cmd.Flags().StringArrayVar(&criteria, "ac", nil, "Acceptance criterion (required and repeatable; append @check:<name> for a confirmed check binding)")
 	return cmd
 }
 
-func printChangeApproval(deps *Deps, artifactID, artifactVersion, snapshotDigest, featureKey string, featureVersion int) error {
-	next := "specgate artifact show " + artifactID + " --json"
+type changeApprovalHandoff struct {
+	WorkID        string
+	WorkRef       string
+	ContextState  string
+	ContextDigest string
+	WorkPhase     string
+	Created       bool
+}
+
+func normalizedChangeApprovalCriteria(input []string) []string {
+	seen := make(map[string]bool, len(input))
+	result := make([]string, 0, len(input))
+	for _, raw := range input {
+		text, binding := parseAcceptanceCriterionBinding(raw)
+		criterion := text
+		if binding != "" {
+			criterion += " @check:" + binding
+		}
+		if criterion == "" || seen[criterion] {
+			continue
+		}
+		seen[criterion] = true
+		result = append(result, criterion)
+	}
+	return result
+}
+
+func ensureLocalApprovedWork(
+	ctx context.Context,
+	store *local.Store,
+	workspaceID, artifactID, featureKey, title, description string,
+	criteria []string,
+) (changeApprovalHandoff, error) {
+	items, err := store.ListWork(ctx, workspaceID)
+	if err != nil {
+		return changeApprovalHandoff{}, err
+	}
+	for _, item := range items {
+		if item.ArtifactID != artifactID {
+			continue
+		}
+		if item.Title != title || strings.TrimSpace(item.Description) != strings.TrimSpace(description) ||
+			!sameStrings(item.AcceptanceCriteria, criteria) {
+			return changeApprovalHandoff{}, fmt.Errorf(
+				"artifact %s already has work %s with a different work contract; use that work or create a separate expert work item",
+				artifactID, item.Key,
+			)
+		}
+		pack, err := store.ContextPack(ctx, workspaceID, item.Key)
+		if err != nil {
+			return changeApprovalHandoff{}, err
+		}
+		return changeApprovalHandoff{
+			WorkID: item.ID, WorkRef: item.Key, ContextState: "assembled", ContextDigest: pack.Digest, WorkPhase: item.Phase,
+		}, nil
+	}
+	work, err := store.CreateWork(ctx, workspaceID, local.WorkInput{
+		FeatureRef: featureKey, Title: title, Description: description, AcceptanceCriteria: criteria,
+	})
+	if err != nil {
+		return changeApprovalHandoff{}, err
+	}
+	if work.ArtifactID != artifactID {
+		return changeApprovalHandoff{}, fmt.Errorf("created work %s is not bound to approved artifact %s", work.Key, artifactID)
+	}
+	pack, err := store.ContextPack(ctx, workspaceID, work.Key)
+	if err != nil {
+		return changeApprovalHandoff{}, err
+	}
+	return changeApprovalHandoff{
+		WorkID: work.ID, WorkRef: work.Key, ContextState: "assembled", ContextDigest: pack.Digest, WorkPhase: work.Phase, Created: true,
+	}, nil
+}
+
+func ensureFullApprovedWork(
+	ctx context.Context,
+	deps *Deps,
+	artifactID, featureKey, title, description string,
+	criteria []string,
+) (changeApprovalHandoff, error) {
+	body := map[string]any{
+		"feature": featureKey, "title": title, "acceptance_criteria": criteria,
+	}
+	if strings.TrimSpace(description) != "" {
+		body["description"] = strings.TrimSpace(description)
+	}
+	if err := annotateBodyWithCurrentSelection(ctx, deps, body); err != nil {
+		return changeApprovalHandoff{}, err
+	}
+	workspaceID, _ := body["workspace_id"].(string)
+	requestCtx := requestContextForBody(ctx, body)
+	items, err := deps.Client.ListWorkItemsIncludingArchived(requestCtx, workspaceID)
+	if err != nil {
+		return changeApprovalHandoff{}, err
+	}
+	for _, item := range items {
+		if item.LeadArtifactID != artifactID {
+			continue
+		}
+		storedCriteria, err := deps.Client.ListAcceptanceCriteria(requestCtx, item.ID)
+		if err != nil {
+			return changeApprovalHandoff{}, err
+		}
+		if item.Title != title || strings.TrimSpace(item.IntentMD) != strings.TrimSpace(description) ||
+			!sameStrings(fullCriterionArguments(storedCriteria), criteria) {
+			return changeApprovalHandoff{}, fmt.Errorf(
+				"artifact %s already has work %s with a different work contract; use that work or create a separate expert work item",
+				artifactID, item.Key,
+			)
+		}
+		pack, err := deps.Client.ContextPack(requestCtx, item.ID)
+		if err != nil {
+			return changeApprovalHandoff{}, err
+		}
+		if pack.State != "assembled" {
+			return changeApprovalHandoff{}, fmt.Errorf("context pack for %s is %s, want assembled", item.Key, pack.State)
+		}
+		return changeApprovalHandoff{WorkID: item.ID, WorkRef: item.Key, ContextState: pack.State, WorkPhase: item.Phase}, nil
+	}
+	created, err := deps.Client.CreateWorkItem(requestCtx, body)
+	if err != nil {
+		return changeApprovalHandoff{}, err
+	}
+	workID, _ := created["change_request_id"].(string)
+	workRef, _ := created["change_request_key"].(string)
+	leadArtifactID, _ := created["lead_artifact_id"].(string)
+	if strings.TrimSpace(workID) == "" || strings.TrimSpace(workRef) == "" || leadArtifactID != artifactID {
+		return changeApprovalHandoff{}, fmt.Errorf("created work did not return the expected approved artifact binding")
+	}
+	pack, err := deps.Client.ContextPack(requestCtx, workID)
+	if err != nil {
+		return changeApprovalHandoff{}, err
+	}
+	if pack.State != "assembled" {
+		return changeApprovalHandoff{}, fmt.Errorf("context pack for %s is %s, want assembled", workRef, pack.State)
+	}
+	return changeApprovalHandoff{WorkID: workID, WorkRef: workRef, ContextState: pack.State, WorkPhase: "ready", Created: true}, nil
+}
+
+func fullCriterionArguments(criteria []client.AcceptanceCriterion) []string {
+	result := make([]string, 0, len(criteria))
+	for _, criterion := range criteria {
+		value := strings.TrimSpace(criterion.Text)
+		if binding := strings.TrimSpace(criterion.VerificationBinding); binding != "" {
+			value += " @check:" + binding
+		}
+		result = append(result, value)
+	}
+	return result
+}
+
+func sameStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func printChangeApproval(
+	deps *Deps,
+	artifactID, artifactVersion, snapshotDigest, featureKey string,
+	featureVersion int,
+	handoff changeApprovalHandoff,
+) error {
+	next := "specgate work context " + handoff.WorkRef + " --json"
+	state := "ready_for_implementation"
+	if strings.EqualFold(strings.TrimSpace(handoff.WorkPhase), "delivered") {
+		state = "already_delivered"
+		next = "specgate change status " + handoff.WorkRef
+	}
 	result := map[string]any{
 		"artifact_id": artifactID, "artifact_version": artifactVersion, "snapshot_digest": snapshotDigest,
 		"feature_key": featureKey, "version": featureVersion,
-		"state": "approved_and_canonical", "next_command": next,
+		"work_id": handoff.WorkID, "work_ref": handoff.WorkRef, "work_created": handoff.Created, "work_phase": handoff.WorkPhase,
+		"context_state": handoff.ContextState, "state": state, "next_command": next,
+	}
+	if handoff.ContextDigest != "" {
+		result["context_digest"] = handoff.ContextDigest
 	}
 	if deps.Printer.Mode() == output.ModeJSON {
 		deps.Printer.Success("change.approve", result)
@@ -187,7 +397,8 @@ func printChangeApproval(deps *Deps, artifactID, artifactVersion, snapshotDigest
 	fmt.Fprintf(deps.Stdout, "%s %s (artifact %s, digest %s); canonical for feature %s (v%d)\n",
 		styled(deps, output.StyleSuccess, "Approved"), styled(deps, output.StyleBold, artifactID),
 		artifactVersion, snapshotDigest, featureKey, featureVersion)
-	fmt.Fprintln(deps.Stdout, nextStep(deps, "Read the approved snapshot before creating its implementation handoff with", next))
+	fmt.Fprintf(deps.Stdout, "%s %s; Context Pack %s.\n", label(deps, "Work:"), styled(deps, output.StyleBold, handoff.WorkRef), handoff.ContextState)
+	fmt.Fprintln(deps.Stdout, nextStep(deps, "Start implementation by reading the exact handoff with", next))
 	return nil
 }
 
@@ -313,7 +524,7 @@ func deriveLocalChangeStatus(work local.WorkItem, review *local.DeliveryReview, 
 		return implementationChangeStatus(result)
 	}
 	result.Evidence = deliveryEvidenceLabel(review.Verdict, "")
-	result.Assurance = localDeliveryAssuranceLabel(peer)
+	result.Assurance = localDeliveryAssuranceLabel(report.Body, peer)
 	result.Decision = localDeliveryDecisionLabel(review.HumanDecision)
 	result.Receipt = localDeliveryReceiptLabel(report.Body)
 	result.Freshness, result.Stale, result.StaleReason = changeFreshness(localDeliveryReceiptAvailable(report.Body), peer.State)

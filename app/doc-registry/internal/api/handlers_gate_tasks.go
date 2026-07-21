@@ -368,6 +368,7 @@ func (h *Handlers) submitGateResult(ctx context.Context, in *submitGateResultInp
 		state = v
 	}
 	evaluatorJSON, _ := json.Marshal(in.Body.Evaluator)
+	evidenceJSON, _ := json.Marshal(in.Body.Evidence)
 	findingsJSON, _ := json.Marshal(in.Body.Findings)
 	rec := policy.GateResultRecord{
 		GateDigest:    in.Body.GateDigest,
@@ -376,6 +377,7 @@ func (h *Handlers) submitGateResult(ctx context.Context, in *submitGateResultInp
 		State:         state,
 		Summary:       in.Body.Summary,
 		EvaluatorJSON: evaluatorJSON,
+		EvidenceJSON:  evidenceJSON,
 		FindingsJSON:  findingsJSON,
 	}
 	result, err := h.GateTaskStore.SubmitResult(ctx, in.TaskID, rec)

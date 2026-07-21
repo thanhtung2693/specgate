@@ -216,21 +216,19 @@ then run or explicitly authorize the single normal-path decision:
 
 ```bash
 specgate artifact show "$ARTIFACT_ID" --json
-specgate --yes change approve "$ARTIFACT_ID" --json
-```
-
-This records approval of the exact snapshot and makes that version canonical
-as one resumable transition. The expert `artifact approve` and
-`artifact promote` commands remain available for diagnosis. For new work, bind
-the exact canonical artifact through the feature-backed route:
-
-```bash
-specgate work create --feature "$FEATURE_KEY" --title "$TITLE" \
+specgate --yes change approve "$ARTIFACT_ID" \
+  --title "$TITLE" \
   --ac "$CONFIRMED_CRITERION_1" \
   --ac "$CONFIRMED_CRITERION_2" \
   --json
-specgate work context "$WORK_REF" --json
 ```
+
+This records approval of the exact snapshot, makes that version canonical,
+creates or reuses its artifact-bound work item, and verifies the Context Pack
+as one resumable transition. The expert `artifact approve`, `artifact promote`,
+and `work create` commands remain available for diagnosis or deliberate
+multi-slice work. Read the returned work reference with
+`specgate work context "$WORK_REF" --json`.
 
 Every `--ac` value must come from the agent's explicit review of the mapped
 source documents and the developer-approved preview.

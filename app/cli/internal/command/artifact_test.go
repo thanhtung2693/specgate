@@ -457,6 +457,32 @@ func TestArtifactPublishPreviewRejectsUnknownPackageField(t *testing.T) {
 	}
 }
 
+func TestArtifactPublishPreviewRejectsUnknownRequestType(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	packagePath := writeTempJSON(t, map[string]any{
+		"feature_key":  "feat-x",
+		"request_type": "feature",
+		"documents": []map[string]any{{
+			"path": "spec.md", "role": "spec", "content": "# Spec",
+		}},
+	})
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "publish", "--preview", "--file", packagePath)
+
+	if code != output.ExitUsage {
+		t.Fatalf("exit = %d, want usage; output = %s", code, out.String())
+	}
+	if fc.calls != 0 {
+		t.Fatalf("invalid preview made %d API calls", fc.calls)
+	}
+	for _, want := range []string{"request_type", "new_feature", "change_request", "bugfix", "unknown"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("missing allowed request type %q: %s", want, out.String())
+		}
+	}
+}
+
 func TestArtifactPublishCompareRequiresPreview(t *testing.T) {
 	t.Parallel()
 	deps, fc, _, out := newFakeDeps(t)

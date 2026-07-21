@@ -56,9 +56,10 @@ paths.
 
 ## Deferred from the Change facade
 
-`change prepare` and automatic work-item creation after artifact approval are
-not available. Use the existing artifact, work, gates, and delivery command
-families for those detailed preparation steps.
+`change prepare` is not available. Agents use the artifact and gate commands to
+prepare the exact snapshot and explicit work contract; `change approve` then
+coordinates approval, canonical promotion, work creation, and Context Pack
+verification.
 
 ## Not goals for v0.1
 

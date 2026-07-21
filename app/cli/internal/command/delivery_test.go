@@ -16,6 +16,7 @@ import (
 	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/command"
 	"github.com/specgate/specgate/app/cli/internal/config"
+	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
@@ -1032,7 +1033,8 @@ func TestDeliveryReportInitScaffoldsCompletionTemplate(t *testing.T) {
 	deps, fc, _, out := newFakeDeps(t)
 	fc.acceptanceCriteria = []client.AcceptanceCriterion{
 		{ID: "ac-1", Text: "Cannot over-redeem", VerificationBinding: "integration"},
-		{ID: "ac-2", Text: "Audit log exists"},
+		{ID: "ac-2", Text: "Audit log exists", VerificationBinding: "audit"},
+		{ID: "ac-3", Text: "Retry remains safe", VerificationBinding: "integration"},
 	}
 	path := filepath.Join(t.TempDir(), "completion.json")
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "delivery", "report", "CR-101", "--init="+path)
@@ -1075,7 +1077,7 @@ func TestDeliveryReportInitScaffoldsCompletionTemplate(t *testing.T) {
 	if tpl.Agent.Name != "" {
 		t.Fatalf("agent.name = %q, want blank scaffold value", tpl.Agent.Name)
 	}
-	if len(tpl.Criteria) != 2 || tpl.Criteria[0].CriterionID != "ac-1" ||
+	if len(tpl.Criteria) != 3 || tpl.Criteria[0].CriterionID != "ac-1" ||
 		tpl.Criteria[0].Text != "Cannot over-redeem" || tpl.Criteria[0].Claim != "not_done" {
 		t.Fatalf("criteria = %+v", tpl.Criteria)
 	}
@@ -1084,17 +1086,18 @@ func TestDeliveryReportInitScaffoldsCompletionTemplate(t *testing.T) {
 	if tpl.Criteria[0].VerificationBinding != "integration" {
 		t.Fatalf("criteria[0].verification_binding = %q, want integration", tpl.Criteria[0].VerificationBinding)
 	}
-	if tpl.Criteria[1].VerificationBinding != "" {
-		t.Fatalf("criteria[1].verification_binding = %q, want empty", tpl.Criteria[1].VerificationBinding)
+	if tpl.Criteria[1].VerificationBinding != "audit" {
+		t.Fatalf("criteria[1].verification_binding = %q, want audit", tpl.Criteria[1].VerificationBinding)
 	}
 	if tpl.Criteria[0].Evidence == nil {
 		t.Fatalf("criteria[0].evidence missing:\n%s", data)
 	}
-	if len(tpl.AffectedFiles) != 0 || len(tpl.Checks) != 1 {
-		t.Fatalf("expected empty affected_files and one check entry:\n%s", data)
+	if len(tpl.AffectedFiles) != 0 || len(tpl.Checks) != 2 {
+		t.Fatalf("expected empty affected_files and one check per unique binding:\n%s", data)
 	}
-	if tpl.Checks[0].Name != "integration" || tpl.Checks[0].Command != "" || tpl.Checks[0].Status != "skipped" {
-		t.Fatalf("check example = %+v, want integration with blank command and skipped status", tpl.Checks[0])
+	if tpl.Checks[0].Name != "integration" || tpl.Checks[1].Name != "audit" ||
+		tpl.Checks[0].Command != "" || tpl.Checks[0].Status != "skipped" {
+		t.Fatalf("check examples = %+v, want unique bindings with blank commands and skipped status", tpl.Checks)
 	}
 	if !strings.Contains(out.String(), path) {
 		t.Fatalf("output should mention where the template was written:\n%s", out.String())
@@ -1102,6 +1105,70 @@ func TestDeliveryReportInitScaffoldsCompletionTemplate(t *testing.T) {
 	// No feedback event must be posted in --init mode.
 	if fc.lastFeedbackBody != nil {
 		t.Fatalf("ReportFeedback was called in --init mode")
+	}
+}
+
+func TestLocalDeliveryReportInitCapturesGitReceiptAndAllCheckBindings(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	stateDir := t.TempDir()
+	store, err := local.Open(filepath.Join(stateDir, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection, err := store.Initialize(t.Context(), local.InitInput{
+		WorkspaceName: "Local", DisplayName: "Developer", Username: "developer",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	work, err := store.CreateQuickWork(t.Context(), selection.Workspace.ID, local.QuickWorkInput{
+		Title: "Bound local checks",
+		AcceptanceCriteria: []string{
+			"Unit behavior passes @check:unit",
+			"Integration behavior passes @check:integration",
+			"Unit behavior remains stable @check:unit",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: stateDir}}).SaveTo(deps.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	deps.WorkingDir = dir
+	deps.DeployRunner = deliveryGitRunner(dir, nil)
+	path := filepath.Join(t.TempDir(), "completion.json")
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "delivery", "report", work.Key, "--init="+path)
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if fc.calls != 0 {
+		t.Fatalf("Local scaffold made %d HTTP calls", fc.calls)
+	}
+	var scaffold struct {
+		GitReceipt map[string]any `json:"git_receipt"`
+		Checks     []struct {
+			Name string `json:"name"`
+		} `json:"checks"`
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &scaffold); err != nil {
+		t.Fatal(err)
+	}
+	if scaffold.GitReceipt["head_revision"] != "head-revision" {
+		t.Fatalf("git receipt = %#v", scaffold.GitReceipt)
+	}
+	if len(scaffold.Checks) != 2 || scaffold.Checks[0].Name != "unit" || scaffold.Checks[1].Name != "integration" {
+		t.Fatalf("checks = %#v, want unique declared bindings", scaffold.Checks)
 	}
 }
 
@@ -1625,6 +1692,9 @@ func TestDeliverySubmitRunChecksReplacesClaimedStatuses(t *testing.T) {
 	c0 := checks[0].(map[string]any)
 	if c0["status"] != "fail" || !strings.Contains(c0["detail"].(string), "exit 1") {
 		t.Fatalf("claimed pass must be corrected to observed fail: %#v", c0)
+	}
+	if c0["source"] != "specgate_cli" {
+		t.Fatalf("executed check must carry its observation source: %#v", c0)
 	}
 	c1 := checks[1].(map[string]any)
 	if c1["status"] != "fail" {

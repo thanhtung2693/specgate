@@ -57,6 +57,7 @@ type WorkItemSummary struct {
 	ID             string `json:"id"`
 	Key            string `json:"key"`
 	Title          string `json:"title"`
+	IntentMD       string `json:"intent_md,omitempty"`
 	Phase          string `json:"phase"`
 	WorkType       string `json:"work_type"`
 	LeadArtifactID string `json:"lead_artifact_id,omitempty"`

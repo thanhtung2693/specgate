@@ -344,6 +344,7 @@ func executeCompletionChecks(ctx context.Context, deps *Deps, body map[string]an
 		}
 		entry["status"] = observed
 		entry["detail"] = detail
+		entry["source"] = "specgate_cli"
 		if deps.Printer.Mode() != output.ModeJSON {
 			note := ""
 			if observed != claimed {
@@ -988,21 +989,30 @@ func runLocalDeliveryReportInit(cmd *cobra.Command, args []string, deps *Deps, p
 		_ = config.EnsureSpecgateDirGitignore(".specgate")
 		path = filepath.Join(".specgate", "completion-"+work.Key+".json")
 	}
+	receipt := collectGitReceipt(cmd.Context(), deps.DeployRunner, deliveryWorkingDir(deps), nil)
+	if deps.Printer != nil && deps.Printer.Mode() != output.ModeJSON {
+		for _, warning := range receipt.Warnings {
+			fmt.Fprintf(deps.Stderr, "Warning: %s\n", warning)
+		}
+	}
 	tpl := completionTemplate{
 		EventType:     "coding_agent.completed",
 		Agent:         map[string]string{"name": ""},
 		ContextDigest: work.ContextDigest,
 		AffectedFiles: []string{},
-		Checks:        []completionCheckTemplate{{Name: "tests", Command: "", Status: "skipped", Detail: ""}},
+		GitReceipt:    receipt,
 		Criteria:      make([]completionCriterionTemplate, 0, len(work.AcceptanceCriteria)),
 	}
+	bindings := make([]string, 0, len(work.AcceptanceCriteria))
 	for index, criterion := range work.AcceptanceCriteria {
 		text, binding := parseAcceptanceCriterionBinding(criterion)
+		bindings = append(bindings, binding)
 		tpl.Criteria = append(tpl.Criteria, completionCriterionTemplate{
 			CriterionID: fmt.Sprintf("local-%d", index+1), Text: text,
 			Claim: "not_done", VerificationBinding: binding,
 		})
 	}
+	tpl.Checks = completionTemplateChecks(bindings)
 	data, err := json.MarshalIndent(tpl, "", "  ")
 	if err != nil {
 		return localExitError(deps, "delivery.report", err)
@@ -1086,7 +1096,7 @@ func runDeliveryReportInit(cmd *cobra.Command, args []string, deps *Deps, path s
 		Summary:       "",
 		AffectedFiles: []string{},
 		GitReceipt:    receipt,
-		Checks:        []completionCheckTemplate{{Name: completionTemplateCheckName(criteria), Command: "", Status: "skipped", Detail: ""}},
+		Checks:        completionTemplateChecksFromCriteria(criteria),
 		Criteria:      make([]completionCriterionTemplate, 0, len(criteria)),
 	}
 	for _, c := range criteria {
@@ -1120,13 +1130,29 @@ func runDeliveryReportInit(cmd *cobra.Command, args []string, deps *Deps, path s
 	return nil
 }
 
-func completionTemplateCheckName(criteria []client.AcceptanceCriterion) string {
+func completionTemplateChecksFromCriteria(criteria []client.AcceptanceCriterion) []completionCheckTemplate {
+	bindings := make([]string, 0, len(criteria))
 	for _, c := range criteria {
-		if binding := strings.TrimSpace(c.VerificationBinding); binding != "" {
-			return binding
-		}
+		bindings = append(bindings, c.VerificationBinding)
 	}
-	return "tests"
+	return completionTemplateChecks(bindings)
+}
+
+func completionTemplateChecks(bindings []string) []completionCheckTemplate {
+	seen := make(map[string]bool, len(bindings))
+	checks := make([]completionCheckTemplate, 0, len(bindings))
+	for _, raw := range bindings {
+		binding := strings.TrimSpace(raw)
+		if binding == "" || seen[binding] {
+			continue
+		}
+		seen[binding] = true
+		checks = append(checks, completionCheckTemplate{Name: binding, Command: "", Status: "skipped", Detail: ""})
+	}
+	if len(checks) == 0 {
+		checks = append(checks, completionCheckTemplate{Name: "tests", Command: "", Status: "skipped", Detail: ""})
+	}
+	return checks
 }
 
 // specgate delivery submit [work-ref] --file <completion.json>
@@ -1599,14 +1625,14 @@ func printLocalDeliveryStatus(cmd *cobra.Command, deps *Deps, ref, commandName s
 		data := localDeliveryReviewView(review)
 		data["peer_review"] = peer
 		data["evidence_assessment"] = deliveryEvidenceLabel(review.Verdict, "")
-		data["assurance_source"] = localDeliveryAssuranceLabel(peer)
+		data["assurance_source"] = localDeliveryAssuranceLabel(report.Body, peer)
 		data["decision_state"] = localDeliveryDecisionLabel(review.HumanDecision)
 		data["receipt"] = receiptLabel
 		deps.Printer.Success(commandName, data)
 		return nil
 	}
 	fmt.Fprintf(deps.Stdout, "Evidence: %s\n", deliveryEvidenceLabel(review.Verdict, ""))
-	fmt.Fprintf(deps.Stdout, "Assurance: %s\n", localDeliveryAssuranceLabel(peer))
+	fmt.Fprintf(deps.Stdout, "Assurance: %s\n", localDeliveryAssuranceLabel(report.Body, peer))
 	fmt.Fprintf(deps.Stdout, "Decision: %s\n", localDeliveryDecisionLabel(review.HumanDecision))
 	fmt.Fprintf(deps.Stdout, "Receipt: %s\n", receiptLabel)
 	fmt.Fprintf(deps.Stdout, "Stored verdict: %s\n", review.Verdict)
@@ -1646,15 +1672,23 @@ func localDeliveryDecisionLabel(decision string) string {
 	}
 }
 
-func localDeliveryAssuranceLabel(peer local.PeerReviewStatus) string {
+func localDeliveryAssuranceLabel(body map[string]any, peer local.PeerReviewStatus) string {
+	labels := []string{"Agent-reported"}
+	checks, _ := body["checks"].([]any)
+	for _, raw := range checks {
+		entry, _ := raw.(map[string]any)
+		if strings.TrimSpace(fmt.Sprint(entry["source"])) == "specgate_cli" {
+			labels = append(labels, "locally reproduced")
+			break
+		}
+	}
 	switch strings.TrimSpace(peer.State) {
 	case "passed":
-		return "Agent-reported; second agent affirmed"
+		labels = append(labels, "second agent affirmed")
 	case "failed":
-		return "Agent-reported; peer review found gaps"
-	default:
-		return "Agent-reported"
+		labels = append(labels, "peer review found gaps")
 	}
+	return strings.Join(labels, "; ")
 }
 
 func localDeliveryReceiptLabel(body map[string]any) string {

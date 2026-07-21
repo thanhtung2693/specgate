@@ -58,6 +58,9 @@ func ValidateAndStampResult(task *GateTaskRecord, r GateResultRecord) (GateResul
 	if len(r.EvaluatorJSON) == 0 {
 		r.EvaluatorJSON = json.RawMessage(`{}`)
 	}
+	if len(r.EvidenceJSON) == 0 {
+		r.EvidenceJSON = json.RawMessage(`{}`)
+	}
 	if len(r.FindingsJSON) == 0 {
 		r.FindingsJSON = json.RawMessage(`[]`)
 	}

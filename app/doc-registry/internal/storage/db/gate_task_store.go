@@ -188,6 +188,7 @@ func (s *PGGateTaskStore) SubmitResult(ctx context.Context, taskID string, r pol
 			"input_digest": stamped.InputDigest,
 			"trust":        string(stamped.Trust),
 			"evaluator":    stamped.EvaluatorJSON,
+			"evidence":     stamped.EvidenceJSON,
 			"findings":     stamped.FindingsJSON,
 		})
 		if err != nil {

@@ -43,8 +43,7 @@ specgate gates tasks show <task-id> --json
 specgate gates tasks submit-result <task-id> \
   --file .specgate/work/gate-<task-id>.json --json
 specgate gates results <artifact-id> --json
-specgate --yes change approve <artifact-id>
-specgate work create --feature <feature-key> --title "Implement it" \
+specgate --yes change approve <artifact-id> --title "Implement it" \
   --ac "IDE-agent-confirmed criterion"
 specgate work context <work-ref> --json
 # IDE agent implements only the Context Pack, then submits evidence:

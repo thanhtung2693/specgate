@@ -53,11 +53,15 @@ specgate artifact files "$ARTIFACT_ID" "<exact-path-from-list>" --content --json
 
 Quick-route packs are authoritative without a canonical artifact. For
 feature-backed work, `No canonical spec content found` after approval means the
-artifact was not promoted. Retry the combined approval/promotion transition and
+artifact was not promoted. Retry the exact original combined approval command,
+including its title, description, and every acceptance criterion, then
 regenerate:
 
 ```bash
-specgate --yes change approve "$ARTIFACT_ID"
+specgate --yes change approve "$ARTIFACT_ID" \
+  --title "$WORK_TITLE" \
+  --ac "$CONFIRMED_CRITERION_1" \
+  --ac "$CONFIRMED_CRITERION_2"
 specgate work context "$WORK_REF" --json
 ```
 

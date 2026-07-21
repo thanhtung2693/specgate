@@ -395,6 +395,7 @@ test("Change facade docs describe the actionable post-handoff path without inven
     "specgate --yes change request-changes <ref>",
     "specgate change request-changes <ref>",
   ]) assert.match(reference, new RegExp(syntax.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(reference, /change approve <artifact-id> --title <title> --ac <criterion>/);
   assert.match(reference, /\.specgate\/completion-<safe-ref>\.json/);
   assert.match(reference, /letters, digits, `-`, and `_`/);
   assert.match(reference, /must pass `--file`/);
@@ -436,7 +437,6 @@ test("quickstart completes one Local CLI work item before linking to Full", () =
     "specgate gates check",
     "specgate gates results",
     "specgate --yes change approve",
-    "specgate work create --feature",
     "specgate work context",
     "specgate delivery report",
     "specgate change submit",
@@ -450,6 +450,7 @@ test("quickstart completes one Local CLI work item before linking to Full", () =
   }
   assert.match(docs.quickstart, /Your IDE agent prepares and\s+publishes/);
   assert.match(docs.quickstart, /You approve the exact artifact version/);
+  assert.match(docs.quickstart, /change approve <artifact-id>[\s\S]{0,220}--title[\s\S]{0,220}--ac/);
   assert.match(docs.quickstart, /You make the final delivery decision/);
   assert.doesNotMatch(docs.quickstart, /^## \d+\. Full appliance:/m);
   assert.match(docs.quickstart, /For the Full appliance workflow, see \[Operate SpecGate\]/);
@@ -475,13 +476,12 @@ test("work-preparation skill keeps comparison explicit and completes full-route 
 
   assert.match(skill, /artifact publish --file artifact\.json --preview --compare/);
   assert.match(skill, /artifact show/);
-  assert.match(skill, /specgate --yes change approve/);
-  assert.match(skill, /work create --feature/);
+  assert.match(skill, /specgate --yes change approve[\s\S]{0,180}--title[\s\S]{0,180}--ac/);
   assert.match(skill, /work context/);
   assert.match(skill, /does not detect frameworks or infer roles/i);
   assert.doesNotMatch(skill, /auto-detect|detected source kind/i);
-  assert.ok(skill.indexOf("change approve") < skill.indexOf("work create --feature"));
-  assert.ok(skill.indexOf("work create --feature") < skill.indexOf("work context"));
+  assert.doesNotMatch(skill, /specgate work create --feature/);
+  assert.ok(skill.indexOf("change approve") < skill.indexOf("work context"));
 });
 
 test("public gateways strip the internal governance settings header", () => {

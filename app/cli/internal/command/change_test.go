@@ -2,6 +2,7 @@ package command_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -21,15 +22,20 @@ func TestChangeApproveApprovesThenPromotesWithOneDecision(t *testing.T) {
 	fc.artifactResult = &client.Artifact{ID: "artifact-1", Version: "v1", Status: "draft", SnapshotDigest: "sha256:approved"}
 	fc.updateStatusResult = &client.Artifact{ID: "artifact-1", Version: "v1", Status: "approved"}
 	fc.promoteResult = &client.Feature{ID: "feature-1", Key: "LOGIN", Version: 1, CanonicalArtifactID: "artifact-1"}
+	fc.createWorkItemResult = map[string]any{
+		"change_request_id": "cr-1", "change_request_key": "CR-1", "feature_key": "LOGIN",
+		"lead_artifact_id": "artifact-1", "acceptance_criteria": []any{"Login succeeds"},
+	}
 
 	code := command.ExecuteForCode(
 		command.NewRootCommand(deps),
 		"--json", "--yes", "change", "approve", "artifact-1", "--note", "scope approved",
+		"--title", "Implement login", "--ac", "Login succeeds",
 	)
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
 	}
-	if strings.Join(fc.callOrder, ",") != "artifact_status,artifact_promote" {
+	if strings.Join(fc.callOrder, ",") != "artifact_status,artifact_promote,work_create,context_pack" {
 		t.Fatalf("call order = %v", fc.callOrder)
 	}
 	if fc.lastStatusInput.Status != "approved" || fc.lastStatusInput.Note != "scope approved" {
@@ -38,6 +44,9 @@ func TestChangeApproveApprovesThenPromotesWithOneDecision(t *testing.T) {
 	if fc.lastPromoteID != "artifact-1" {
 		t.Fatalf("promoted artifact = %q", fc.lastPromoteID)
 	}
+	if fc.lastCreateWorkItem["feature"] != "LOGIN" || fc.lastCreateWorkItem["title"] != "Implement login" {
+		t.Fatalf("work create input = %#v", fc.lastCreateWorkItem)
+	}
 	var envelope struct {
 		Command string `json:"command"`
 		Data    struct {
@@ -45,6 +54,8 @@ func TestChangeApproveApprovesThenPromotesWithOneDecision(t *testing.T) {
 			ArtifactVersion string `json:"artifact_version"`
 			SnapshotDigest  string `json:"snapshot_digest"`
 			FeatureKey      string `json:"feature_key"`
+			WorkRef         string `json:"work_ref"`
+			ContextState    string `json:"context_state"`
 			Next            string `json:"next_command"`
 		} `json:"data"`
 	}
@@ -53,8 +64,114 @@ func TestChangeApproveApprovesThenPromotesWithOneDecision(t *testing.T) {
 	}
 	if envelope.Command != "change.approve" || envelope.Data.ArtifactID != "artifact-1" ||
 		envelope.Data.ArtifactVersion != "v1" || envelope.Data.SnapshotDigest != "sha256:approved" ||
-		envelope.Data.FeatureKey != "LOGIN" || envelope.Data.Next == "" {
+		envelope.Data.FeatureKey != "LOGIN" || envelope.Data.WorkRef != "CR-1" ||
+		envelope.Data.ContextState != "assembled" || envelope.Data.Next != "specgate work context CR-1 --json" {
 		t.Fatalf("result = %#v, output = %s", envelope, out.String())
+	}
+}
+
+func TestChangeApproveRequiresExplicitWorkContractBeforeMutation(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "change", "approve", "artifact-1")
+	if code != output.ExitUsage {
+		t.Fatalf("exit = %d, want usage; output = %s", code, out.String())
+	}
+	if len(fc.callOrder) != 0 || fc.lastCreateWorkItem != nil {
+		t.Fatalf("approval mutated state before a complete work contract: calls=%v create=%#v", fc.callOrder, fc.lastCreateWorkItem)
+	}
+	for _, want := range []string{"--title", "--ac"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("missing actionable flag %q: %s", want, out.String())
+		}
+	}
+}
+
+func TestChangeApproveRetryReusesExactArtifactWork(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	fc.artifactResult = &client.Artifact{ID: "artifact-1", Version: "v1", Status: "approved", SnapshotDigest: "sha256:approved"}
+	fc.promoteResult = &client.Feature{ID: "feature-1", Key: "LOGIN", Version: 1, CanonicalArtifactID: "artifact-1"}
+	fc.workItems = []client.WorkItemSummary{{
+		ID: "cr-1", Key: "CR-1", Title: "Implement login", IntentMD: "Bound scope", Phase: "ready", LeadArtifactID: "artifact-1",
+	}}
+	fc.acceptanceCriteria = []client.AcceptanceCriterion{{ID: "ac-1", Text: "Login succeeds", VerificationBinding: "integration"}}
+
+	code := command.ExecuteForCode(
+		command.NewRootCommand(deps),
+		"--json", "--yes", "change", "approve", "artifact-1",
+		"--title", "Implement login", "--description", "Bound scope", "--ac", " Login succeeds   @check:integration ",
+	)
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if fc.lastCreateWorkItem != nil {
+		t.Fatalf("retry created duplicate work: %#v", fc.lastCreateWorkItem)
+	}
+	if fc.lastContextID != "cr-1" || !strings.Contains(out.String(), `"work_ref":"CR-1"`) {
+		t.Fatalf("retry did not reuse and verify existing work: context=%q output=%s", fc.lastContextID, out.String())
+	}
+}
+
+func TestChangeApproveRetryDoesNotPresentDeliveredWorkAsNewImplementation(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	fc.artifactResult = &client.Artifact{ID: "artifact-1", Version: "v1", Status: "approved", SnapshotDigest: "sha256:approved"}
+	fc.promoteResult = &client.Feature{ID: "feature-1", Key: "LOGIN", Version: 1, CanonicalArtifactID: "artifact-1"}
+	fc.workItems = []client.WorkItemSummary{{
+		ID: "cr-1", Key: "CR-1", Title: "Implement login", Phase: "delivered", LeadArtifactID: "artifact-1",
+	}}
+	fc.acceptanceCriteria = []client.AcceptanceCriterion{{ID: "ac-1", Text: "Login succeeds"}}
+
+	code := command.ExecuteForCode(
+		command.NewRootCommand(deps),
+		"--json", "--yes", "change", "approve", "artifact-1",
+		"--title", "Implement login", "--ac", "Login succeeds",
+	)
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), `"state":"already_delivered"`) ||
+		!strings.Contains(out.String(), `"next_command":"specgate change status CR-1"`) {
+		t.Fatalf("delivered retry is not terminal-aware: %s", out.String())
+	}
+}
+
+func TestChangeSubmitRunChecksMarksLocalAssuranceAsReproduced(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	stateDir, store, _, work := newLocalChangeWork(t, deps)
+	closeLocalChangeStore(t, deps, stateDir, store)
+	deps.RunCheckCommand = func(_ context.Context, command string) (int, string) {
+		if command != "go test ./..." {
+			t.Fatalf("executed command = %q", command)
+		}
+		return 0, "ok"
+	}
+	f := writeDeliveryJSON(t, map[string]any{
+		"event_type":     "coding_agent.completed",
+		"summary":        "done",
+		"context_digest": work.ContextDigest,
+		"checks": []map[string]any{{
+			"name": "tests", "command": "go test ./...", "status": "pass",
+		}},
+		"criteria": []map[string]any{{
+			"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"summary": "verified"},
+		}},
+	})
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "change", "submit", work.Key, "--file", f, "--run-checks")
+	if code != output.ExitOK {
+		t.Fatalf("submit exit = %d, output = %s", code, out.String())
+	}
+	if fc.calls != 0 || !strings.Contains(out.String(), `"assurance":"Agent-reported; locally reproduced"`) {
+		t.Fatalf("submit assurance did not expose local reproduction: calls=%d output=%s", fc.calls, out.String())
+	}
+	out.Reset()
+	got := runChangeStatusJSON(t, deps, out, work.Key)
+	if got.Assurance != "Agent-reported; locally reproduced" {
+		t.Fatalf("stored assurance = %q", got.Assurance)
 	}
 }
 

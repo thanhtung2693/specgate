@@ -294,7 +294,11 @@ same completion receipt.
 Canonical check names are free-form strings supplied by the reporter, but common
 CLI scaffolds use `tests`, `lint`, `types`, and `build`. Each runnable check's
 shell `command` is retained in the append-only receipt so an independent
-reviewer can reproduce it.
+reviewer can reproduce it. In Local mode, `delivery submit --run-checks`
+overwrites each executed row with the observed status and
+`source: "specgate_cli"`; Local status reports `locally reproduced` only when
+that marker is present. Full mode continues to strip caller-authored source
+fields at its trust boundary and derives assurance from server-side review.
 
 Acceptance criteria may include a human-authored `verification_binding`, created
 for quick work in Local or Full mode with:

@@ -121,24 +121,25 @@ specgate artifact show <artifact-id> --json
 specgate gates results <artifact-id> --json
 ```
 
-You approve the exact artifact version as the human user and make it canonical
-with one resumable decision:
+You approve the exact artifact version and the explicit implementation handoff
+as the human user with one resumable decision:
 
 ```bash
-specgate --yes change approve <artifact-id>
+specgate --yes change approve <artifact-id> \
+  --title "Add healthcheck endpoint" \
+  --ac "GET /healthz returns 200 while the service is healthy" \
+  --ac "The endpoint has an automated test @check:tests" \
+  --json
 ```
 
 Approval is separate from readiness. If the artifact is wrong, ask the agent to
 publish a corrected immutable version instead of editing the approved body.
 
-After approval, tell the agent to continue. It creates work bound to the
-canonical version and reads the Context Pack:
+The receipt returns `<work-ref>` for work bound to the canonical version and
+confirms its Context Pack is assembled. Tell the agent to continue by reading
+that exact handoff:
 
 ```bash
-specgate work create --feature <feature-key> --title "Add healthcheck endpoint" \
-  --ac "GET /healthz returns 200 while the service is healthy" \
-  --ac "The endpoint has an automated test @check:tests" \
-  --json
 specgate work context <work-ref> --json
 ```
 

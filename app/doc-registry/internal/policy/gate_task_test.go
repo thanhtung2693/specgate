@@ -70,7 +70,9 @@ func TestValidateAndStampResultStampsTrustAndJSONDefaults(t *testing.T) {
 	if result.Trust != policy.TrustAgentAttested || result.TaskID != task.ID {
 		t.Fatalf("result = %+v, want agent-attested result for task %q", result, task.ID)
 	}
-	if !bytes.Equal(result.EvaluatorJSON, []byte(`{}`)) || !bytes.Equal(result.FindingsJSON, []byte(`[]`)) {
-		t.Fatalf("JSON defaults = %s, %s; want {}, []", result.EvaluatorJSON, result.FindingsJSON)
+	if !bytes.Equal(result.EvaluatorJSON, []byte(`{}`)) ||
+		!bytes.Equal(result.EvidenceJSON, []byte(`{}`)) ||
+		!bytes.Equal(result.FindingsJSON, []byte(`[]`)) {
+		t.Fatalf("JSON defaults = %s, %s, %s; want {}, {}, []", result.EvaluatorJSON, result.EvidenceJSON, result.FindingsJSON)
 	}
 }

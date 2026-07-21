@@ -52,6 +52,7 @@ type GateResultRecord struct {
 	Summary       string
 	Trust         Trust
 	EvaluatorJSON json.RawMessage
+	EvidenceJSON  json.RawMessage
 	FindingsJSON  json.RawMessage
 	SubmittedAt   time.Time
 }

@@ -432,9 +432,12 @@ func TestSubmitGateResult_SpecRepoDrift_FindingsPersist(t *testing.T) {
 	if string(found.State) != "warn" {
 		t.Errorf("state = %q, want warn", found.State)
 	}
-	for _, want := range []string{"doc_path", "README.md", "conflicting_claim", "spec_section", "§5"} {
+	for _, want := range []string{
+		"examined_docs", "docs/spec.md", "repo_commit", "deadbeef",
+		"doc_path", "README.md", "conflicting_claim", "spec_section", "§5",
+	} {
 		if !strings.Contains(found.EvidenceJSON, want) {
-			t.Errorf("finding field %q missing from readiness evidence: %s", want, found.EvidenceJSON)
+			t.Errorf("attestation field %q missing from readiness evidence: %s", want, found.EvidenceJSON)
 		}
 	}
 }

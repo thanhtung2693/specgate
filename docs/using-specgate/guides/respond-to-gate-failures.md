@@ -19,8 +19,9 @@ do next. To look up the inputs and purpose of a gate, see the
 quality judgments. `pending` means the step has not happened yet:
 
 - `spec_drafted` pending — attach or publish a working spec for the item.
-- `spec_approved` pending — a human approves the spec
-  (`specgate --yes change approve <artifact-id>` or the Reviews page).
+- `spec_approved` pending — a human approves the spec and explicit work handoff
+  (`specgate --yes change approve <artifact-id> --title <title> --ac <criterion>`),
+  or uses the Reviews page for the expert artifact-only decision.
 On quick-route work the first five show `not_applicable` — that is correct,
 not a failure; quick work never grows a working spec.
 

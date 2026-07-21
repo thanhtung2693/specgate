@@ -740,6 +740,9 @@ func normalizeArtifactPublishBody(body map[string]any) error {
 			body["request_type"] = "unknown"
 		}
 	}
+	if requestType, ok := body["request_type"].(string); ok {
+		body["request_type"] = strings.TrimSpace(requestType)
+	}
 	return nil
 }
 
@@ -760,6 +763,10 @@ func validateArtifactPublishFields(body map[string]any) error {
 	slices.Sort(unknown)
 	if len(unknown) > 0 {
 		return fmt.Errorf("unknown artifact package field %q", unknown[0])
+	}
+	requestType, ok := body["request_type"].(string)
+	if !ok || !slices.Contains([]string{"new_feature", "change_request", "bugfix", "unknown"}, strings.TrimSpace(requestType)) {
+		return fmt.Errorf("request_type must be new_feature, change_request, bugfix, or unknown")
 	}
 	documents, ok := body["documents"].([]any)
 	if !ok {

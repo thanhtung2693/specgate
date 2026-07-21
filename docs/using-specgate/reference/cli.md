@@ -148,7 +148,7 @@ underlying detail.
 | `knowledge` | Full mode only: list, inspect, add, and search workspace-scoped Governance Knowledge documents. `knowledge add-text --title <title> --file <path>` uploads a text/Markdown source into the selected workspace; `knowledge search <query>` retrieves cited chunks using the configured embedding model |
 | `artifact` | Preview (`artifact publish --preview`), optionally compare that preview with one explicit base artifact (`--compare <artifact-id>`), publish complete immutable versions, inspect, and read artifacts; `artifact coverage <artifact-id>` is a read-only exact-version delivery view; decide as a human reviewer with `artifact approve` in either mode or `artifact request-changes` in Full mode (optional `--note`); `artifact show` accepts a unique id prefix from `artifact list` |
 | `gates` | Artifact readiness checks (`check`), stored artifact results (`results`), and IDE-agent artifact gate tasks (`tasks`) work in both modes. Local IDE gate tasks and Full model-less IDE gate tasks use the same `check` → `tasks list/show/submit-result` → `results` loop. Compact `gates check --summary` output preserves each result's executor origin so agent-attested evidence is not presented as platform evaluation. Work-item model gates (`run`, `status`, `history`) are Full-only |
-| `delivery` | Report implementation, run delivery review, and decide delivery as a human reviewer; `delivery report --init` scaffolds a conservative completion report (`.specgate/completion-<ref>.json`) with a required blank `agent.name`, empty affected files, skipped checks, and `not_done` criterion claims. The scaffold captures Git identity but defers delivery-scope comparison until `affected_files` is supplied at submission. Fill `agent.name` with the coding agent's stable name before submission. `delivery peer-review --init` scaffolds a review bound to the latest completion event and its exact Git receipt; its reviewer must cover every canonical criterion exactly once, then `--file` records it and reruns review. This works in both Local and Full mode: the peer must differ from the completion agent, and the CLI preserves the receipt in the bound scaffold so the server can verify the same completion. `delivery report` accepts the supported feedback-event types, while `delivery submit` accepts only `coding_agent.completed`; both reject missing completion-agent identity, `satisfied` claims without evidence, and passing checks without runnable commands before any network call. `delivery submit` runs the whole tail (report → gates → review → status), while `delivery approve` / `reject` record human decisions. A human may accept an advisory or false-negative review without hiding its evidence verdict; the completion reporter cannot approve its own delivery, and a new completion needs its own review and human decision. These rules are the same in Local and Full mode. Human `delivery status --detail` output separates evidence assessment, assurance source, human decision, and recorded Git receipt; JSON exposes the authoritative `verdict` and optional `evidence_verdict`. Cited local evidence paths are existence-checked and grounded with an excerpt plus SHA-256 digest; `submit --run-checks` previews and confirms the completion file's shell commands before re-executing non-skipped checks and submitting observed statuses. Noninteractive callers must add `--yes`. Git receipts retain full checkout provenance while labeling changes outside `affected_files` as unrelated checkout state. `agent_attested` passes require a bound peer review or human review. |
+| `delivery` | Report implementation, run delivery review, and decide delivery as a human reviewer; `delivery report --init` scaffolds a conservative completion report (`.specgate/completion-<ref>.json`) with a required blank `agent.name`, empty affected files, one skipped check per unique declared verification binding (or a `tests` fallback), and `not_done` criterion claims. The scaffold captures Git identity but defers delivery-scope comparison until `affected_files` is supplied at submission. Fill `agent.name` with the coding agent's stable name before submission. `delivery peer-review --init` scaffolds a review bound to the latest completion event and its exact Git receipt; its reviewer must cover every canonical criterion exactly once, then `--file` records it and reruns review. This works in both Local and Full mode: the peer must differ from the completion agent, and the CLI preserves the receipt in the bound scaffold so the server can verify the same completion. `delivery report` accepts the supported feedback-event types, while `delivery submit` accepts only `coding_agent.completed`; both reject missing completion-agent identity, `satisfied` claims without evidence, and passing checks without runnable commands before any network call. `delivery submit` runs the whole tail (report → gates → review → status), while `delivery approve` / `reject` record human decisions. A human may accept an advisory or false-negative review without hiding its evidence verdict; the completion reporter cannot approve its own delivery, and a new completion needs its own review and human decision. These rules are the same in Local and Full mode. Human `delivery status --detail` output separates evidence assessment, assurance source, human decision, and recorded Git receipt; JSON exposes the authoritative `verdict` and optional `evidence_verdict`. Cited local evidence paths are existence-checked and grounded with an excerpt plus SHA-256 digest; `submit --run-checks` previews and confirms the completion file's shell commands before re-executing non-skipped checks, marks those rows as observed by the SpecGate CLI, and submits their observed statuses. Local status then labels that assurance as `locally reproduced`. Noninteractive callers must add `--yes`. Git receipts retain full checkout provenance while labeling changes outside `affected_files` as unrelated checkout state. `agent_attested` passes require a bound peer review or human review. |
 
 ## Change facade
 
@@ -157,7 +157,7 @@ it does not create a new durable Change entity. Its exact commands are:
 
 ```bash
 specgate change status <work-ref>
-specgate --yes change approve <artifact-id> [--note <note>]
+specgate --yes change approve <artifact-id> --title <title> --ac <criterion> [--ac <criterion>...] [--description <text>] [--note <note>]
 specgate change submit <ref> [--file <completion.json>] [--run-checks] [--skip-evidence-check]
 
 # Local: explicit human assertion is required.
@@ -186,10 +186,17 @@ local citation validation and should be reserved for recovery when the cited
 paths cannot exist in the current checkout.
 
 `change approve` is the normal feature-backed preparation decision in both
-modes. It records approval of the exact artifact snapshot and promotes that
-version to the feature canonical in one resumable transition. Its receipt
-includes the exact `artifact_version` and `snapshot_digest`. The expert
-`artifact approve` and `artifact promote` commands remain available separately.
+modes. It records approval of the exact artifact snapshot, promotes that
+version to the feature canonical, creates or reuses its artifact-bound work
+item, and verifies the derived Context Pack in one resumable transition. The
+title and every repeated `--ac` must come from the human-reviewed preparation;
+SpecGate does not extract or invent criteria from document prose. Its receipt
+includes the exact `artifact_version`, `snapshot_digest`, `work_ref`, and
+Context Pack state. An exact retry reuses the existing work; if that work is
+already delivered, the receipt reports `already_delivered` and routes to
+`change status` instead of presenting it as new implementation. The expert
+`artifact approve`, `artifact promote`, and `work create` commands remain
+available separately.
 `change submit --json` returns the compact actionable Change status; use
 `delivery submit --json` when troubleshooting requires the full report, gate,
 review, and delivery-status payloads.
@@ -245,8 +252,8 @@ an interactive terminal and otherwise accepts the explicit command.
 
 For detailed preparation or troubleshooting, keep using the expert `delivery`,
 `work`, `gates`, `artifact`, `audit`, and `verify` families. `change prepare` is
-not available: preparation, snapshot-approval orchestration, and Local
-quick-work parity are deferred from this façade slice.
+not available: agents still prepare and preview the explicit artifact and work
+contract before the human runs `change approve`.
 
 `specgate model off` deliberately enables model-less operation while preserving
 the selected provider/model/key. `specgate model on` enables it again.

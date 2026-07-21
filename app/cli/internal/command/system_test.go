@@ -630,26 +630,28 @@ func TestLocalReadinessThenHumanApprovalNeedNoHTTP(t *testing.T) {
 	}
 	submitLocalGateResults(t, deps, out, published.Data.ArtifactID)
 	out.Reset()
-	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "change", "approve", published.Data.ArtifactID); code != output.ExitUsage {
+	if code := command.ExecuteForCode(
+		command.NewRootCommand(deps), "--json", "change", "approve", published.Data.ArtifactID,
+		"--title", "Implement local flow", "--ac", "Context Pack is followed",
+	); code != output.ExitUsage {
 		t.Fatalf("unconfirmed change approve exit = %d; output=%s", code, out.String())
 	}
 	if !strings.Contains(out.String(), `"code":"confirmation_required"`) {
 		t.Fatalf("unconfirmed change approval output = %s", out.String())
 	}
 	out.Reset()
-	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "change", "approve", published.Data.ArtifactID); code != output.ExitOK {
+	if code := command.ExecuteForCode(
+		command.NewRootCommand(deps), "--json", "--yes", "change", "approve", published.Data.ArtifactID,
+		"--title", "Implement local flow", "--ac", "Context Pack is followed",
+	); code != output.ExitOK {
 		t.Fatalf("change approve exit = %d; output=%s", code, out.String())
 	}
-	if !strings.Contains(out.String(), `"state":"approved_and_canonical"`) || deps.Client != nil {
+	if !strings.Contains(out.String(), `"state":"ready_for_implementation"`) || deps.Client != nil {
 		t.Fatalf("change approval output = %s client=%#v", out.String(), deps.Client)
-	}
-	out.Reset()
-	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "work", "create", "--feature", "LOCAL-READINESS", "--title", "Implement local flow", "--ac", "Context Pack is followed"); code != output.ExitOK {
-		t.Fatalf("work create exit = %d; output=%s", code, out.String())
 	}
 	var work struct {
 		Data struct {
-			Key string `json:"key"`
+			Key string `json:"work_ref"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(out.Bytes(), &work); err != nil {

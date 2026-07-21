@@ -183,7 +183,10 @@ appear in the migration set.
 | `evidence_json` | Gate evidence; workboard rows use `gate-run-v1` shape |
 
 IDE-agent gate-task result rows use the `gate_tasks.id` as `gate_runs.id`, so a
-submitted task result is also the persisted run.
+submitted task result is also the persisted run. Their `evidence_json` envelope
+preserves the task/result binding, trust, evaluator, submitted evidence, and
+findings. For `spec_repo_drift`, submitted evidence includes `examined_docs`
+and `repo_commit`.
 
 ## 4. Artifact Lifecycle
 

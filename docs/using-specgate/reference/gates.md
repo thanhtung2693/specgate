@@ -68,8 +68,10 @@ must carry an evidence attestation, else the submission is rejected (`400`):
 
 - `evidence.examined_docs[]` — repo-relative doc paths the agent read (non-empty).
 - `evidence.repo_commit` — the checkout commit SHA the examination ran against.
-- `findings[]` — zero or more `{doc_path, conflicting_claim, spec_section}`,
-  carried on the run's `FindingsJSON`.
+- `findings[]` — zero or more `{doc_path, conflicting_claim, spec_section}`.
+
+The stored readiness run's `evidence_json` preserves both the evidence
+attestation and findings for later audit/readback.
 
 The verdict is mapped from the findings, not the submitted state: a valid
 attestation with zero findings → `pass`; one or more findings → `warn`. Drift
