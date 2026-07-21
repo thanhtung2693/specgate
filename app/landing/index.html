@@ -223,29 +223,49 @@
       </section>
 
       <section class="wordmarks" aria-label="Works with your tools">
-        <p class="wordmarks-title">Keep the tools that already shape and ship your work.</p>
-        <div class="wm-groups">
-          <div class="wm-group">
-            <p class="wm-group-title mono">CLI and IDE handoff</p>
-            <ul class="wm-list" aria-label="Supported IDE agents">
-              <li><img src="https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/cursor.svg" alt="Cursor" loading="lazy" width="26" height="26" /></li>
-              <li><img src="https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/claudecode-color.svg" alt="Claude Code" loading="lazy" width="26" height="26" /></li>
-              <li><img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/openai.svg" alt="OpenAI Codex" loading="lazy" width="26" height="26" /></li>
-            </ul>
-          </div>
-          <div class="wm-group wm-group-muted">
-            <p class="wm-group-title mono">Repositories</p>
-            <ul class="wm-list" aria-label="GitHub and GitLab repositories">
-              <li><img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/github.svg" alt="GitHub" loading="lazy" width="26" height="26" /></li>
-              <li><img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/gitlab.svg" alt="GitLab" loading="lazy" width="26" height="26" /></li>
-            </ul>
-            <p class="wm-group-title mono">Work tracking: Linear</p>
-            <ul class="wm-list" aria-label="Linear work tracking">
-              <li><img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/linear.svg" alt="Linear" loading="lazy" width="26" height="26" /></li>
-            </ul>
-          </div>
+        <div class="wordmarks-intro">
+          <h2>Your tools stay in the loop.</h2>
+          <p>Start with direct IDE handoff. Add repository receipts and optional Linear work tracking when your team needs them.</p>
         </div>
-        <p class="wm-label mono">The supported v0.1 path is CLI-first, with Full-mode repository observation and optional Linear handoff.</p>
+        <div class="tool-routes">
+          <article class="tool-route">
+            <div class="tool-route-copy">
+              <p class="tool-route-kicker mono">CLI and IDE handoff</p>
+              <h3>Code where you already work</h3>
+              <p>Your agent reads the approved Context Pack and returns delivery evidence through the CLI.</p>
+            </div>
+            <div class="tool-mark-group">
+              <span class="tool-mark-label">Coding agents</span>
+              <ul class="tool-marks" aria-label="Supported IDE agents">
+                <li data-tool="cursor"><img src="https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/cursor.svg" alt="Cursor" loading="lazy" width="32" height="32" /></li>
+                <li data-tool="claude"><img src="https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/claudecode-color.svg" alt="Claude Code" loading="lazy" width="32" height="32" /></li>
+                <li><img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/openai.svg" alt="OpenAI Codex" loading="lazy" width="32" height="32" /></li>
+              </ul>
+            </div>
+          </article>
+          <article class="tool-route">
+            <div class="tool-route-copy">
+              <p class="tool-route-kicker mono">Full mode</p>
+              <h3>Repositories and optional work tracking</h3>
+              <p>GitHub and GitLab confirm merged PRs and MRs at the submitted commit. Linear can receive approved work without replacing direct IDE pickup.</p>
+            </div>
+            <div class="tool-team-marks">
+              <div class="tool-mark-group">
+                <span class="tool-mark-label">Repositories</span>
+                <ul class="tool-marks" aria-label="GitHub and GitLab repositories">
+                  <li><img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/github.svg" alt="GitHub" loading="lazy" width="32" height="32" /></li>
+                  <li><img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/gitlab.svg" alt="GitLab" loading="lazy" width="32" height="32" /></li>
+                </ul>
+              </div>
+              <div class="tool-mark-group">
+                <span class="tool-mark-label">Work tracking</span>
+                <ul class="tool-marks" aria-label="Linear work tracking">
+                  <li><img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/linear.svg" alt="Linear" loading="lazy" width="32" height="32" /></li>
+                </ul>
+              </div>
+            </div>
+          </article>
+        </div>
       </section>
 
       <!-- HOW IT WORKS -->
@@ -373,7 +393,6 @@ $ specgate --yes artifact approve &lt;artifact-id&gt;
             </ul>
           </article>
         </div>
-        <p class="cmp-note mono reveal-up">GitHub and GitLab Repositories observe marked merged PRs/MRs. Optional Linear Work tracking hands off approved work without replacing direct IDE handoff or the governed source of truth.</p>
       </section>
 
       <!-- FAQ -->

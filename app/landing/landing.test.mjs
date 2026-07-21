@@ -58,6 +58,7 @@ test("interactive landing controls keep accessible names and roles valid", () =>
   assert.match(js, /body\.setAttribute\("aria-labelledby", segs\[idx\]\.id\)/);
   assert.match(js, /ArrowRight/);
   assert.match(js, /ArrowLeft/);
+  assert.equal([...html.matchAll(/id="console-replay"/g)].length, 1);
 });
 
 test("small muted text colors meet contrast requirements in both themes", () => {
@@ -99,7 +100,7 @@ test("landing copy stays aligned with CLI-first v0.1 support", () => {
   assert.doesNotMatch(html, /production-ready/i);
   assert.doesNotMatch(html, /Jira/);
   assert.match(html, /CLI and IDE handoff/);
-  assert.match(html, /supported v0\.1 path is CLI-first/);
+  assert.match(html, /CLI is the supported v0\.1 path/);
   assert.match(html, /Repositories/);
   assert.match(html, /Work tracking/);
   assert.match(html, /GitHub/);
@@ -107,6 +108,20 @@ test("landing copy stays aligned with CLI-first v0.1 support", () => {
   assert.match(html, /Linear/);
   assert.doesNotMatch(html, /\bexperimental\s+(?:connectors?|integrations?|trackers?)\b/i);
   assert.doesNotMatch(html, /\b(?:connectors?|integrations?)\b[^.\n]{0,80}\bmirror(?:s|ed|ing)?\b[^.\n]{0,80}\btracker\b/i);
+});
+
+test("tool compatibility is compact and explains the direct and team routes", () => {
+  const tools = html.match(/<section class="wordmarks"[^>]*>(?<body>[\s\S]*?)<\/section>/)?.groups?.body ?? "";
+
+  assert.match(tools, /Your tools stay in the loop/);
+  assert.match(tools, /Start with direct IDE handoff/);
+  assert.equal([...tools.matchAll(/class="tool-route"/g)].length, 2);
+  assert.match(tools, /Code where you already work/);
+  assert.match(tools, /Repositories and optional work tracking/);
+  assert.match(tools, /GitHub and GitLab confirm merged PRs and MRs at the submitted commit/);
+  assert.match(tools, /Linear can receive approved work without replacing direct IDE pickup/);
+  assert.doesNotMatch(tools, /class="wm-group/);
+  assert.doesNotMatch(tools, /supported v0\.1 path is CLI-first/);
 });
 
 test("landing polish avoids repeated labels and decorative separators", () => {
@@ -133,9 +148,9 @@ test("landing positions existing tools around the governed handoff", () => {
   assert.match(html, /SPECGATE/);
   assert.match(html, /TRACKER \+ IDE/);
   assert.match(html, /Own the governed handoff/);
-  assert.match(html, /GitHub and GitLab Repositories observe marked merged PRs\/MRs/);
-  assert.match(html, /Optional Linear Work tracking hands off approved work/);
-  assert.match(html, /without replacing direct IDE handoff or the governed source of truth/);
+  assert.match(html, /GitHub and GitLab confirm merged PRs and MRs at the submitted commit/);
+  assert.match(html, /Linear can receive approved work/);
+  assert.match(html, /without replacing direct IDE pickup/);
   assert.doesNotMatch(html, /Own the contract/);
   assert.doesNotMatch(html, /Manual checklist steps only/);
   assert.doesNotMatch(html, /SpecGate sits/);

@@ -55,6 +55,10 @@ hands it off as a pinned Context Pack. Avoid copy that implies SpecGate authors
 the source spec, detects its framework, or replaces the IDE, tracker, or
 repository.
 
+The compatibility section keeps direct CLI and IDE handoff primary. Full-mode
+Repositories add exact-commit PR and MR confirmation, while Linear remains an
+optional work-tracking handoff for teams.
+
 Keep Lighthouse fixes grounded in the public page instead of browser extension
 noise. Accessibility-critical controls should keep visible labels aligned with
 accessible names, carousel tabs should preserve valid tablist roles, and muted
