@@ -110,7 +110,7 @@ Most implementation work stays in your IDE. Open the web UI when you need to
 inspect the governed handoff: artifact context, gates, Context Packs, delivery
 reviews, governance conversations, or workspace settings.
 
-![SpecGate Context Pack for a pickup-ready work item](./docs/assets/readme/specgate-ui-artifact-library.png)
+![SpecGate Governance Board showing lifecycle lanes, readiness, review states, and blockers](./docs/assets/readme/specgate-ui-governance-board.jpg)
 
 ## Repository layout
 
