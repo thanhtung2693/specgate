@@ -5,13 +5,13 @@
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ROUTER="${SCRIPT_DIR}/../skills/specgate-router/SKILL.md"
+ROUTER="${SCRIPT_DIR}/../skills/specgate/SKILL.md"
 if [ ! -f "$ROUTER" ]; then
   exit 0
 fi
 
 CONTENT='<EXTREMELY_IMPORTANT>
-SpecGate skills are installed. When the user explicitly mentions SpecGate, load `specgate-router`; for lifecycle work, load exactly one phase before a write. Read-only concept and troubleshooting questions stay in the router. Do not apply the SpecGate lifecycle to generic specifications or work that is not tied to SpecGate.
+SpecGate skills are installed. When the user explicitly mentions SpecGate, load `specgate`; for lifecycle work, load exactly one phase before a write. Read-only concept and troubleshooting questions stay in the root skill. Do not apply the SpecGate lifecycle to generic specifications or work that is not tied to SpecGate.
 </EXTREMELY_IMPORTANT>'
 
 escape_for_json() {

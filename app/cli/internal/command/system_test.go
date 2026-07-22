@@ -1072,7 +1072,7 @@ func TestLocalPluginInstallUsesEmbeddedPackageWithoutHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	var installedSkills string
-	for _, skill := range []string{"specgate-router", "specgate-project-setup", "specgate-work-preparation", "specgate-work-delivery"} {
+	for _, skill := range []string{"specgate", "specgate-project-setup", "specgate-work-preparation", "specgate-work-delivery"} {
 		body, err := os.ReadFile(filepath.Join(home, ".codex", "plugins", "specgate", "skills", skill, "SKILL.md"))
 		if err != nil {
 			t.Fatal(err)
@@ -2578,7 +2578,7 @@ func TestInitLocalCanInstallEmbeddedCodexPlugin(t *testing.T) {
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
 	}
-	if _, err := os.Stat(filepath.Join(homeDir, ".codex", "plugins", "specgate", "skills", "specgate-router", "SKILL.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(homeDir, ".codex", "plugins", "specgate", "skills", "specgate", "SKILL.md")); err != nil {
 		t.Fatalf("embedded Codex plugin missing after Local init: %v", err)
 	}
 	var envelope struct {
@@ -2787,7 +2787,7 @@ func TestInitCanInstallSelectedPlugins(t *testing.T) {
 	}
 	for _, path := range []string{
 		".cursor/rules/using-specgate.mdc",
-		".cursor/skills/specgate-router/SKILL.md",
+		".cursor/skills/specgate/SKILL.md",
 	} {
 		if _, err := os.Stat(filepath.Join(homeDir, path)); err != nil {
 			t.Fatalf("%s missing after init plugin install: %v\n%s", path, err, out.String())
@@ -2824,10 +2824,10 @@ func TestInitInstallsPluginsFromInferredLocalServer(t *testing.T) {
 				"workspace": map[string]any{"id": "ws-1", "slug": "dogfood", "name": "Dogfood workspace"},
 			})
 		case "/api/doc-registry/plugins/package.json":
-			_, _ = io.WriteString(w, `{"name":"specgate","version":"0.1.0","skills":["specgate-router"]}`)
+			_, _ = io.WriteString(w, `{"name":"specgate","version":"0.1.0","skills":["specgate"]}`)
 		case "/api/doc-registry/plugins/rules/using-specgate.mdc":
 			_, _ = io.WriteString(w, "use specgate\n")
-		case "/api/doc-registry/plugins/skills/specgate-router/SKILL.md":
+		case "/api/doc-registry/plugins/skills/specgate/SKILL.md":
 			_, _ = io.WriteString(w, "# using specgate\n")
 		default:
 			http.NotFound(w, r)
@@ -2919,8 +2919,8 @@ func TestUninstallKeepsDataByDefaultAndRemovesUserFiles(t *testing.T) {
 	home := t.TempDir()
 	writeTestFile(t, filepath.Join(home, ".cursor", "rules", "using-specgate.mdc"), "rule")
 	writeTestFile(t, filepath.Join(home, ".cursor", "rules", "using-specgate.mdc.specgate-owned"), "specgate-plugin-v1\n")
-	writeTestFile(t, filepath.Join(home, ".cursor", "skills", "specgate-router", "SKILL.md"), "skill")
-	writeTestFile(t, filepath.Join(home, ".cursor", "skills", "specgate-router", ".specgate-owned"), "specgate-plugin-v1\n")
+	writeTestFile(t, filepath.Join(home, ".cursor", "skills", "specgate", "SKILL.md"), "skill")
+	writeTestFile(t, filepath.Join(home, ".cursor", "skills", "specgate", ".specgate-owned"), "specgate-plugin-v1\n")
 	writeTestFile(t, filepath.Join(home, ".cursor", "skills", "delivering-work", "SKILL.md"), "retired skill")
 	writeTestFile(t, filepath.Join(home, ".cursor", "skills", "delivering-work", ".specgate-owned"), "specgate-plugin-v1\n")
 	writeTestFile(t, filepath.Join(home, ".codex", "plugins", "specgate", ".codex-plugin", "plugin.json"), "{}")
@@ -2970,7 +2970,7 @@ func TestUninstallKeepsDataByDefaultAndRemovesUserFiles(t *testing.T) {
 	}
 	for _, path := range []string{
 		filepath.Join(home, ".cursor", "rules", "using-specgate.mdc"),
-		filepath.Join(home, ".cursor", "skills", "specgate-router"),
+		filepath.Join(home, ".cursor", "skills", "specgate"),
 		filepath.Join(home, ".cursor", "skills", "delivering-work"),
 		filepath.Join(home, ".codex", "plugins", "specgate"),
 		filepath.Join(home, ".codex", "plugins", "cache", "personal", "specgate"),

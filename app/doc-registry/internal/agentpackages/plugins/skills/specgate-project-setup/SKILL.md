@@ -5,14 +5,47 @@ description: Use when SpecGate is being initialized or configured for a reposito
 
 # Setting Up SpecGate
 
-Apply the [router operating contract](../specgate-router/SKILL.md#operating-contract).
+Apply the [SpecGate operating contract](../specgate/SKILL.md#operating-contract).
 This phase configures SpecGate; it does not create specifications or product
 work.
 
-## 1. Inspect the current state
+## 1. Ensure the CLI is available
+
+Use the host shell's command lookup before running any SpecGate command:
 
 ```bash
-specgate --version
+command -v specgate
+```
+
+```powershell
+Get-Command specgate -ErrorAction SilentlyContinue
+```
+
+When lookup succeeds, run `specgate --version` and continue to inspect the
+current state.
+
+Installing from skills.sh does not install the SpecGate CLI; it provides agent
+instructions only. If the command is missing on macOS, Linux, or WSL2,
+show the user the exact installer command and wait for explicit approval before
+running it:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/scripts/install-cli.sh | sh
+```
+
+A general request to set up or initialize SpecGate is not approval to download
+and execute the installer. On native Windows, offer WSL2 with the command above
+or direct the user to
+`https://github.com/thanhtung2693/specgate/releases/latest`; do not invent a
+PowerShell installer. After installation, run `specgate --version`. If lookup
+still fails, report the install path and PATH recovery printed by the installer.
+
+Completion criterion: the installed CLI version is recorded, or setup is
+paused for explicit installer approval or native Windows installation.
+
+## 2. Inspect the current state
+
+```bash
 specgate doctor --json
 ```
 
@@ -21,10 +54,10 @@ follow that recovery action instead of rerunning initialization or switching
 mode. Initialization is required only when doctor reports no initialized
 topology.
 
-Completion criterion: the installed CLI version and every failing doctor check
-are recorded, or doctor confirms the current topology is healthy.
+Completion criterion: every failing doctor check is recorded, or doctor
+confirms the current topology is healthy.
 
-## 2. Initialize only when required
+## 3. Initialize only when required
 
 The user chooses Local or Full mode; never infer that product decision from
 Docker, a URL, or installed software. In an interactive terminal, run exactly
@@ -51,7 +84,7 @@ options. Do not purge, replace, or migrate existing data as part of setup.
 Completion criterion: the chosen mode is initialized, or the exact failed
 command and its recovery action are reported.
 
-## 3. Select and bind the workspace
+## 4. Select and bind the workspace
 
 ```bash
 specgate user current --json
@@ -68,7 +101,7 @@ Completion criterion: `specgate workspace current --json` identifies the
 intended workspace and the repository binding is correct or deliberately left
 unchanged.
 
-## 4. Install or refresh the selected IDE integration
+## 5. Install or refresh the selected IDE integration
 
 The user chooses the IDE and whether its files are user-global or
 project-local. Preview the exact scope, then install it noninteractively:
@@ -84,7 +117,7 @@ not install every IDE or change scope merely because an executable is present.
 Completion criterion: the preview and installation name the user-selected IDE
 and scope, and no unselected integration is modified.
 
-## 5. Verify and hand off
+## 6. Verify and hand off
 
 ```bash
 specgate doctor --json

@@ -100,9 +100,9 @@ configuration, `.codex/config.toml`, `AGENTS.md`, or unrelated project files.
 
 | IDE | User-global location | Project-local location |
 |---|---|---|
-| Codex | `~/.codex/plugins/specgate`, `~/.agents/plugins/marketplace.json`, and `~/.codex/config.toml` | `.agents/skills/specgate-*` |
-| Claude Code | `~/.claude/skills/specgate` | `.claude/skills/specgate-*` |
-| Cursor | `~/.cursor/rules/using-specgate.mdc` and `~/.cursor/skills/specgate-*` | `.cursor/rules/using-specgate.mdc` and `.cursor/skills/specgate-*` |
+| Codex | `~/.codex/plugins/specgate`, `~/.agents/plugins/marketplace.json`, and `~/.codex/config.toml` | `.agents/skills/specgate` and `.agents/skills/specgate-*` |
+| Claude Code | `~/.claude/skills/specgate` | `.claude/skills/specgate` and `.claude/skills/specgate-*` |
+| Cursor | `~/.cursor/rules/using-specgate.mdc`, `~/.cursor/skills/specgate`, and `~/.cursor/skills/specgate-*` | `.cursor/rules/using-specgate.mdc`, `.cursor/skills/specgate`, and `.cursor/skills/specgate-*` |
 
 Global Codex and Claude Code locations contain the native plugin package, hooks,
 and focused skills. Project-local Codex and Claude Code locations contain
@@ -110,14 +110,15 @@ focused skills only, using the repository paths those IDEs discover directly.
 
 The focused skills are:
 
-- `specgate-router` — point the agent at the right lifecycle phase
+- `specgate` — point the agent at the right lifecycle phase
 - `specgate-project-setup` — discover a repository's governance conventions
 - `specgate-work-preparation` — shape and publish work, then check readiness for handoff
 - `specgate-work-delivery` — pick up an approved pack, implement, and report delivery evidence
 
-All installed skill names use the `specgate-` namespace to avoid colliding with
-general-purpose IDE skills. The installer rejects empty, duplicate, or
-unnamespaced package inventories before writing or removing anything.
+All installed skill names use `specgate` or the `specgate-` namespace to avoid
+colliding with general-purpose IDE skills. The installer rejects empty,
+duplicate, or unnamespaced package inventories before writing or removing
+anything.
 
 Re-running `plugins install` refreshes those focused skills and removes obsolete
 SpecGate-owned skill names and prior versioned Codex cache bundles in the

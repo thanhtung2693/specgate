@@ -5,8 +5,8 @@ alwaysApply: true
 
 # Using SpecGate
 
-When the user explicitly mentions SpecGate, load `specgate-router`. For
+When the user explicitly mentions SpecGate, load `specgate`. For
 lifecycle work, load exactly one setup, preparation, or delivery phase before a
-write. Read-only concept and troubleshooting questions stay in the router. Do
+write. Read-only concept and troubleshooting questions stay in the root skill. Do
 not apply the SpecGate lifecycle to generic specifications or work that is not
 tied to SpecGate.

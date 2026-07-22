@@ -62,7 +62,7 @@ const files = {
   uiModelSettingsPanel: read("app/ui/src/components/layout/settings/model-settings-panel.tsx"),
   uiGovernanceAgent: read("app/ui/src/components/agent/governance-agent.tsx"),
   workboardModel: read("app/doc-registry/internal/workboard/model.go"),
-  routerSkill: read("plugins/skills/specgate-router/SKILL.md"),
+  routerSkill: read("plugins/skills/specgate/SKILL.md"),
   setupSkill: read("plugins/skills/specgate-project-setup/SKILL.md"),
   preparingWorkSkill: read("plugins/skills/specgate-work-preparation/SKILL.md"),
   deliveringWorkSkill: read("plugins/skills/specgate-work-delivery/SKILL.md"),
@@ -379,7 +379,7 @@ test("model docs distinguish IDE assistance from server-only features", () => {
   assert.doesNotMatch(docs.installIdePlugins, /project-local marketplace configuration/i);
 
   for (const skill of [
-    "specgate-router",
+    "specgate",
     "specgate-project-setup",
     "specgate-work-preparation",
     "specgate-work-delivery",
@@ -408,21 +408,38 @@ test("SpecGate uses one short bootstrap and one explicit lifecycle phase", () =>
 
   assert.match(files.sessionStartHook, /SpecGate skills are installed/);
   assert.match(files.sessionStartHook, /explicitly mentions SpecGate/);
-  assert.match(files.sessionStartHook, /Read-only.*stay in the router/is);
+  assert.match(files.sessionStartHook, /Read-only.*stay in the root skill/is);
   assert.doesNotMatch(files.sessionStartHook, /SpecGate is connected/);
   assert.doesNotMatch(files.sessionStartHook, /SKILL_CONTENT=.*cat/);
 
   assert.match(files.cursorRule, /explicitly mentions SpecGate/);
-  assert.match(files.cursorRule, /Read-only.*stay in the router/is);
+  assert.match(files.cursorRule, /Read-only.*stay in the root skill/is);
   assert.doesNotMatch(files.cursorPlugin, /hooks\/hooks-cursor\.json/);
   assert.doesNotMatch(files.pluginPackage, /hooks\/hooks-cursor\.json/);
   assert.ok(!existsSync(new URL("plugins/hooks/hooks-cursor.json", root)), "dead Cursor bootstrap hook remains");
+});
+
+test("SpecGate exposes one product-named entry skill", () => {
+  assert.ok(existsSync(new URL("plugins/skills/specgate/SKILL.md", root)));
+  assert.ok(!existsSync(new URL("plugins/skills/specgate-router/SKILL.md", root)));
+  assert.match(files.pluginPackage, /"skills\/specgate\/SKILL\.md"/);
+  assert.doesNotMatch(files.pluginPackage, /specgate-router/);
 });
 
 test("SpecGate project setup performs and verifies the requested setup", () => {
   const skill = files.setupSkill;
 
   assert.match(skill, /^description: Use when SpecGate is being (?:initialized|configured)/m);
+  assert.match(skill, /command -v specgate/);
+  assert.match(skill, /Get-Command specgate/);
+  assert.match(skill, /lookup succeeds[\s\S]*specgate --version/i);
+  assert.match(skill, /skills\.sh[\s\S]*does not install[\s\S]*CLI/i);
+  assert.match(
+    skill,
+    /curl -fsSL https:\/\/raw\.githubusercontent\.com\/thanhtung2693\/specgate\/main\/scripts\/install-cli\.sh \| sh/,
+  );
+  assert.match(skill, /show[\s\S]*installer command[\s\S]*explicit (?:approval|confirmation)/i);
+  assert.match(skill, /Windows[\s\S]*WSL2[\s\S]*releases\/latest/i);
   for (const command of [
     "specgate --version",
     "specgate doctor --json",

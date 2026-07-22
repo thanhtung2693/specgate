@@ -37,16 +37,21 @@ Per-IDE default destinations:
 - **Codex**: writes the native plugin package, including focused skills and bundled hooks, to `~/.codex/plugins/specgate/`.
 - **Claude Code**: writes the native plugin package, including focused skills and bundled hooks, to `~/.claude/skills/specgate/`.
 
-With `--project-local`, Codex receives focused skills under
-`.agents/skills/specgate-*`, Claude Code under `.claude/skills/specgate-*`, and
-Cursor under `.cursor/skills/specgate-*` plus `.cursor/rules/using-specgate.mdc`.
+With `--project-local`, each IDE receives the `specgate` root skill and focused
+`specgate-*` phase skills:
+
+- Codex: `.agents/skills/specgate` and `.agents/skills/specgate-*`
+- Claude Code: `.claude/skills/specgate` and `.claude/skills/specgate-*`
+- Cursor: `.cursor/skills/specgate`, `.cursor/skills/specgate-*`, and
+  `.cursor/rules/using-specgate.mdc`
+
 Project-local Codex and Claude Code installs do not change plugin marketplace or
 IDE configuration files.
 
 ## Skill invocation modes
 
-`specgate-router` selects one narrow phase when the user explicitly mentions
-SpecGate. Read-only SpecGate questions stay in the router; generic framework or
+`specgate` selects one narrow phase when the user explicitly mentions
+SpecGate. Read-only SpecGate questions stay in the root skill; generic framework or
 coding prompts are not claimed by the plugin.
 
 `specgate-project-setup` is explicit setup for initialization, workspace binding,

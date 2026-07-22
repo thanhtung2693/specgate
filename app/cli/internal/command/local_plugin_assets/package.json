@@ -2,7 +2,7 @@
   "schema": "specgate.plugin-package/v1",
   "name": "specgate",
   "display_name": "SpecGate",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Focused SpecGate skills for project setup, work preparation, and delivery.",
   "short_description": "Focused spec-to-delivery workflows",
   "long_description": "Select focused SpecGate workflows for project setup, work preparation (shaping and artifact readiness), and delivery (pickup, scoped implementation, evidence, and review).",
@@ -23,7 +23,7 @@
     "delivery"
   ],
   "skills": [
-    "specgate-router",
+    "specgate",
     "specgate-project-setup",
     "specgate-work-preparation",
     "specgate-work-delivery"
@@ -44,7 +44,7 @@
     "hooks/hooks.json",
     "hooks/hooks-claude.json",
     "rules/using-specgate.mdc",
-    "skills/specgate-router/SKILL.md",
+    "skills/specgate/SKILL.md",
     "skills/specgate-project-setup/SKILL.md",
     "skills/specgate-work-preparation/SKILL.md",
     "skills/specgate-work-delivery/SKILL.md"

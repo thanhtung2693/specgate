@@ -179,8 +179,14 @@ func TestValidatePluginOwnerMarkerRejectsSymlink(t *testing.T) {
 }
 
 func TestValidatePluginPackageRejectsUnsafeVersionAndExcessiveSkills(t *testing.T) {
+	if err := validatePluginPackage(&clientpkg.PluginPackage{
+		Version: "1.0.0",
+		Skills:  []string{"specgate", "specgate-project-setup"},
+	}); err != nil {
+		t.Fatalf("product-named root skill was rejected: %v", err)
+	}
 	for _, version := range []string{"", "../escape", "nested/version", `nested\version`} {
-		pkg := &clientpkg.PluginPackage{Version: version, Skills: []string{"specgate-router"}}
+		pkg := &clientpkg.PluginPackage{Version: version, Skills: []string{"specgate"}}
 		if err := validatePluginPackage(pkg); err == nil {
 			t.Fatalf("unsafe version %q was accepted", version)
 		}
@@ -198,7 +204,7 @@ func TestValidatePluginPackageRejectsUnsafeVersionAndExcessiveSkills(t *testing.
 	if err := validatePluginPackage(&clientpkg.PluginPackage{Version: "1.0.0", Skills: []string{"delivery"}}); err == nil {
 		t.Fatal("unnamespaced skill was accepted")
 	}
-	if err := validatePluginPackage(&clientpkg.PluginPackage{Version: "1.0.0", Skills: []string{"specgate-router", "specgate-router"}}); err == nil {
+	if err := validatePluginPackage(&clientpkg.PluginPackage{Version: "1.0.0", Skills: []string{"specgate", "specgate"}}); err == nil {
 		t.Fatal("duplicate skill was accepted")
 	}
 }
@@ -207,12 +213,12 @@ func TestPluginInstallerPreloadsWithinAggregateLimitBeforeWriting(t *testing.T) 
 	client := &fakePluginPackageClient{
 		files: map[string][]byte{
 			"rules/using-specgate.mdc":        []byte("rule"),
-			"skills/specgate-router/SKILL.md": make([]byte, maxPluginPackageBytes),
+			"skills/specgate/SKILL.md": make([]byte, maxPluginPackageBytes),
 		},
 	}
 	installer := &pluginInstaller{
 		ctx: context.Background(), client: client,
-		pkg:  &clientpkg.PluginPackage{Version: "0.1.0", Skills: []string{"specgate-router"}},
+		pkg:  &clientpkg.PluginPackage{Version: "0.1.0", Skills: []string{"specgate"}},
 		opts: pluginInstallOptions{ProjectLocal: true},
 	}
 
@@ -227,7 +233,7 @@ func TestPluginInstallerPreloadsWithinAggregateLimitBeforeWriting(t *testing.T) 
 func TestInstallFocusedSkillsRemovesOnlyObsoleteOwnedSkills(t *testing.T) {
 	home := t.TempDir()
 	skillsDir := filepath.Join(home, ".cursor", "skills")
-	retired := filepath.Join(skillsDir, "delivering-work")
+	retired := filepath.Join(skillsDir, "specgate-router")
 	for path, body := range map[string]string{
 		filepath.Join(retired, pluginOwnerMarker):       pluginOwnerValue,
 		filepath.Join(retired, "SKILL.md"):              "old managed skill",
@@ -357,7 +363,7 @@ func TestRemoveOwnedPluginDirKeepsRootMarkerWhenNestedRemovalFails(t *testing.T)
 		t.Skip("POSIX directory permissions are required")
 	}
 	root := filepath.Join(t.TempDir(), "specgate")
-	skillDir := filepath.Join(root, "skills", "specgate-router")
+	skillDir := filepath.Join(root, "skills", "specgate")
 	for path, body := range map[string]string{
 		filepath.Join(root, pluginOwnerMarker):     pluginOwnerValue,
 		filepath.Join(skillDir, pluginOwnerMarker): pluginOwnerValue,

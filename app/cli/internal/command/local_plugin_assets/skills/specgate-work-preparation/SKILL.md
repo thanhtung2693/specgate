@@ -5,7 +5,7 @@ description: Use when preparing a request or existing source documents for SpecG
 
 # Preparing Work
 
-Apply the [router operating contract](../specgate-router/SKILL.md#operating-contract).
+Apply the [SpecGate operating contract](../specgate/SKILL.md#operating-contract).
 This phase produces an approved implementation handoff; it never implements
 product code.
 

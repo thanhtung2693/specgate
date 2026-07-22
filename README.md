@@ -12,6 +12,7 @@
 <p align="center">
   <a href="https://thanhtung2693.github.io/specgate/"><img src="https://img.shields.io/badge/landing-GitHub%20Pages-111111.svg" alt="Landing page"></a>
   <a href="https://github.com/thanhtung2693/specgate/actions/workflows/release-readiness.yml"><img src="https://github.com/thanhtung2693/specgate/actions/workflows/release-readiness.yml/badge.svg" alt="Release readiness"></a>
+  <a href="https://skills.sh/thanhtung2693/specgate"><img src="https://skills.sh/b/thanhtung2693/specgate" alt="SpecGate skills on skills.sh"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License"></a>
 </p>
 
