@@ -90,6 +90,19 @@ Validate Compose:
 
 ## Publish
 
+Start the release by pushing the version tag:
+
+```bash
+VERSION=v0.1.2
+git tag -a "$VERSION" -m "SpecGate $VERSION"
+git push origin "$VERSION"
+```
+
+Do not create or publish a GitHub Release before pushing the tag. GoReleaser
+creates the draft, and `release.yml` publishes it only after all release gates
+pass. Publishing through the GitHub UI first exposes unverified assets and
+causes the workflow preflight to stop the release.
+
 Check:
 
 - tag points at the intended commit;
