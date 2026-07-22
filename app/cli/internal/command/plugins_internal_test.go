@@ -37,6 +37,57 @@ func TestCodexMarketplaceHasPluginParsesJSON(t *testing.T) {
 	}
 }
 
+func TestNativePluginDetectionUsesManagerMetadata(t *testing.T) {
+	for _, test := range []struct {
+		agent string
+		path  string
+		body  string
+	}{
+		{"codex", filepath.Join(".codex", "config.toml"), "[plugins.\"specgate@team\"]\nenabled = true\n"},
+		{"claude", filepath.Join(".claude", "plugins", "installed_plugins.json"), `{"plugins":{"specgate@team":[]}}`},
+	} {
+		t.Run(test.agent, func(t *testing.T) {
+			home := t.TempDir()
+			writeNativeTestFile(t, filepath.Join(home, test.path), test.body)
+			got := inspectNativePlugin(test.agent, home)
+			if len(got.Problems) != 0 || len(got.Installations) != 1 || got.Installations[0].Marketplace != "team" {
+				t.Fatalf("inspection = %#v", got)
+			}
+		})
+	}
+}
+
+func TestNativePluginDetectionFailsClosedForMalformedMetadata(t *testing.T) {
+	for _, test := range []struct {
+		agent string
+		path  string
+		body  string
+	}{
+		{"codex", filepath.Join(".codex", "config.toml"), `plugins = "invalid"`},
+		{"claude", filepath.Join(".claude", "plugins", "installed_plugins.json"), "{broken"},
+		{"claude", filepath.Join(".claude", "plugins", "installed_plugins.json"), `{"plugins":{"specgate@../bad":[]}}`},
+	} {
+		t.Run(test.agent+test.body, func(t *testing.T) {
+			home := t.TempDir()
+			writeNativeTestFile(t, filepath.Join(home, test.path), test.body)
+			got := inspectNativePlugin(test.agent, home)
+			if len(got.Problems) != 1 || len(got.Installations) != 0 {
+				t.Fatalf("inspection = %#v", got)
+			}
+		})
+	}
+}
+
+func writeNativeTestFile(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRemoveCodexConfigSectionsReplacesFileAtomically(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, []byte("[plugins.\"specgate@personal\"]\nenabled = true\n\n[tools]\nkeep = true\n"), 0o600); err != nil {
@@ -212,7 +263,7 @@ func TestValidatePluginPackageRejectsUnsafeVersionAndExcessiveSkills(t *testing.
 func TestPluginInstallerPreloadsWithinAggregateLimitBeforeWriting(t *testing.T) {
 	client := &fakePluginPackageClient{
 		files: map[string][]byte{
-			"rules/using-specgate.mdc":        []byte("rule"),
+			"rules/using-specgate.mdc": []byte("rule"),
 			"skills/specgate/SKILL.md": make([]byte, maxPluginPackageBytes),
 		},
 	}

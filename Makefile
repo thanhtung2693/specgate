@@ -138,15 +138,22 @@ check-plugins:
 	@for phrase in "specgate doctor --json" "specgate work show" "specgate work context" "specgate delivery report" "specgate change submit" "specgate change status"; do \
 	  if ! grep -rn "$$phrase" plugins/skills plugins/rules/ >/dev/null 2>&1; then \
 	    echo "ERROR: missing required CLI command in plugins: $$phrase" >&2; exit 1; fi; done
-	@tmp_home=$$(mktemp -d); cleanup() { rm -rf "$$tmp_home"; }; \
-	  mkdir -p "$$tmp_home/.claude/skills/using-specgate"; \
-	  printf '%s\n' 'OLD GLOBAL UNRELATED CONTENT' > "$$tmp_home/.claude/skills/using-specgate/SKILL.md"; \
-	  hook_context=$$(HOME="$$tmp_home" plugins/hooks/session-start codex | jq -r '.additionalContext'); \
-	  if ! printf '%s\n' "$$hook_context" | grep -Fq 'load `specgate`'; then \
+	@tmp_root=$$(mktemp -d); cleanup() { rm -rf "$$tmp_root"; }; trap cleanup EXIT INT TERM; \
+	  mkdir -p "$$tmp_root/home/.claude/skills/using-specgate" "$$tmp_root/cli-plugin"; \
+	  printf '%s\n' 'OLD GLOBAL UNRELATED CONTENT' > "$$tmp_root/home/.claude/skills/using-specgate/SKILL.md"; \
+	  cp -R plugins/. "$$tmp_root/cli-plugin"; \
+	  printf '%s\n' 'specgate-plugin-v1' > "$$tmp_root/cli-plugin/.specgate-owned"; \
+	  native_context=$$(HOME="$$tmp_root/home" plugins/hooks/session-start codex | jq -r '.additionalContext'); \
+	  cli_context=$$(HOME="$$tmp_root/home" "$$tmp_root/cli-plugin/hooks/session-start" codex | jq -r '.additionalContext'); \
+	  if ! printf '%s\n' "$$native_context" | grep -Fq 'load `specgate`'; then \
 	    cleanup; echo "ERROR: session-start hook did not route explicit SpecGate work" >&2; exit 1; fi; \
-	  if printf '%s\n' "$$hook_context" | grep -Fq '# Using SpecGate'; then \
+	  if ! printf '%s\n' "$$native_context" | grep -Fq 'IDE plugin manager owns'; then \
+	    cleanup; echo "ERROR: session-start hook did not identify native marketplace ownership" >&2; exit 1; fi; \
+	  if ! printf '%s\n' "$$cli_context" | grep -Fq 'SpecGate CLI owns'; then \
+	    cleanup; echo "ERROR: session-start hook did not identify CLI ownership" >&2; exit 1; fi; \
+	  if printf '%s\n' "$$native_context" | grep -Fq '# Using SpecGate'; then \
 	    cleanup; echo "ERROR: session-start hook injected the full router instead of the short bootstrap" >&2; exit 1; fi; \
-	  if printf '%s\n' "$$hook_context" | grep -Fq 'UNRELATED CONTENT'; then \
+	  if printf '%s\n' "$$native_context" | grep -Fq 'UNRELATED CONTENT'; then \
 	    cleanup; echo "ERROR: session-start hook loaded stale global skill content" >&2; exit 1; fi; \
 	  cleanup
 	@echo "plugin CLI migration checks passed"

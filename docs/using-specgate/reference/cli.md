@@ -539,8 +539,11 @@ Install/update refuses to overwrite an unmarked conflicting plugin path, and
 Codex plugin installation also refuses a same-name marketplace entry that does
 not point to SpecGate's managed plugin directory. Uninstall keeps unowned
 same-name marketplace entries and removes only known managed files from marked
-plugin paths. Unknown files inside those directories are preserved and listed
-as `preserved_paths` in JSON output. Symlinked deployment, cleanup,
+plugin paths. A native Codex or Claude Code installation makes CLI install stop
+with exit code `4` before writing. Update and uninstall touch only marked CLI
+files. Unknown files inside CLI-managed directories are preserved and listed as
+`preserved_paths` in JSON output.
+Symlinked deployment, cleanup,
 plugin-target, and plugin-config paths are refused instead of followed. Full
 data purge additionally requires the exact deployment marker and refuses
 filesystem root, the user home, and a Git repository root.
@@ -718,9 +721,10 @@ specgate update
 
 The updater installs the latest stable GitHub release, falling back to the
 newest prerelease only when no stable release exists. An explicit `--version`
-may select either. It refreshes only the already-installed global Codex, Claude
-Code, and Cursor SpecGate plugins from that exact release's public registry. In Local mode it then skips the
-appliance step because no appliance belongs to that mode. In Full mode it
+may select either. It refreshes only already-installed global Codex, Claude
+Code, and Cursor plugins carrying SpecGate CLI ownership markers. Other plugin
+installations stay untouched. In Local mode the updater then skips the appliance
+step because no appliance belongs to that mode. In Full mode it
 updates the Full appliance bundle and image when a CLI-managed deployment is
 present. It does not create files for
 an IDE the user did not select; refresh project-local installs with `specgate
@@ -755,14 +759,20 @@ global IDE install. Before writing, install validates at most 16 safe skill
 names and preloads no more than 32 MiB of required package files.
 `plugins install --dry-run --json` returns the exact `planned_operations` while
 keeping `written_count` at zero.
+If a selected Codex or Claude Code target already belongs to its native plugin
+manager, install stops before download or filesystem changes with exit code `4`.
+JSON details include the owner, marketplace, removal action, and retry command.
 If an official skills.sh-managed `specgate` bootstrap exists in project or
 global scope, install stops before writing with exit code `4` and a `conflict`
 error. JSON details list each bootstrap `scope`, `path`, and `remove_command`,
 plus the exact `retry_command`. The CLI does not edit skills.sh files or locks.
-Missing files fail the check and include an exact `specgate plugins install ...`
-repair command; stale versions or a stale Codex plugin cache warn with the
-reinstall/restart action to take. The check validates the selected plugin files
-without requiring the corresponding IDE executable on the current `PATH`.
+`plugins doctor` reports native-manager ownership without fetching CLI package
+inventory or inspecting manager caches. Malformed or ambiguous manager metadata
+fails closed. For CLI installs, missing files still include an exact `specgate
+plugins install ...` repair command; stale versions or a stale Codex plugin
+cache warn with the reinstall/restart action to take. The check validates the
+selected plugin files without requiring the corresponding IDE executable on
+the current `PATH`.
 
 Interactive `plugins install` and `plugins doctor` show a checkbox list for
 Cursor, Codex, and Claude Code when `--agent` is omitted. The default selection

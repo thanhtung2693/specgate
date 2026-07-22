@@ -6,7 +6,10 @@ SpecGate setup starts with the CLI:
 curl -fsSL "{{.RegistryBaseURL}}/cli/install.sh" | sh
 ```
 
-Then install or refresh agent-specific skills and integration files through the CLI:
+Codex and Claude Code can use their plugin managers. Do not combine that method
+with CLI-installed files for the same IDE.
+
+The CLI installs or refreshes agent-specific skills and integration files:
 
 ```bash
 specgate plugins install                 # interactive picker
@@ -31,6 +34,9 @@ agent list plus the `specgate plugins doctor` follow-up.
 Restart the selected IDEs after installation so they pick up the new files.
 Refresh removes obsolete SpecGate-owned skill names, rules, and prior versioned
 Codex cache bundles; unowned files are preserved.
+
+When a native Codex or Claude Code installation exists, CLI install stops before
+writing. CLI update and uninstall touch only CLI-owned files.
 
 Per-IDE default destinations:
 - **Cursor**: writes `~/.cursor/rules/using-specgate.mdc` and focused skills to `~/.cursor/skills/`.

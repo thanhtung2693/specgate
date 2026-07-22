@@ -58,7 +58,10 @@ the owning phase skill; do not expand the router into a second workflow.
 
 ## Install behavior
 
-The CLI owns JSON/TOML merging and user destinations:
+Codex and Claude Code can install this package through their plugin managers.
+The SpecGate CLI detects that ownership and avoids duplicate files.
+
+The CLI owns JSON/TOML merging and marked user destinations when it installs:
 
 ```bash
 specgate plugins install --agent all
@@ -71,7 +74,7 @@ directory; Cursor also receives its rule. Use `--project-local` only when a
 repository should vendor those files. Restart the selected IDE after refresh.
 
 The checked-in marketplace files support repository development and private
-distribution; they do not replace CLI-managed installation.
+distribution. They are not an official-directory availability claim.
 
 ## Editing checklist
 
