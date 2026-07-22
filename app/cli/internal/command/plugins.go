@@ -62,11 +62,12 @@ type pluginDoctorOptions struct {
 }
 
 type pluginInstallResult struct {
-	Agents       []string `json:"agents"`
-	Scope        string   `json:"scope"`
-	RestartIDEs  bool     `json:"restart_ides"`
-	WrittenCount int      `json:"written_count"`
-	DryRun       bool     `json:"dry_run"`
+	Agents            []string `json:"agents"`
+	Scope             string   `json:"scope"`
+	RestartIDEs       bool     `json:"restart_ides"`
+	WrittenCount      int      `json:"written_count"`
+	DryRun            bool     `json:"dry_run"`
+	PlannedOperations []string `json:"planned_operations,omitempty"`
 }
 
 type pluginDoctorResult struct {
@@ -116,6 +117,7 @@ type pluginInstaller struct {
 	files  map[string][]byte
 
 	written int
+	planned []string
 }
 
 func registerPluginCommands(root *cobra.Command, deps *Deps) {
@@ -233,11 +235,12 @@ func runPluginInstall(ctx context.Context, deps *Deps, opts pluginInstallOptions
 		return pluginInstallResult{}, err
 	}
 	return pluginInstallResult{
-		Agents:       agents,
-		Scope:        pluginScope(opts.ProjectLocal),
-		RestartIDEs:  true,
-		WrittenCount: installer.written,
-		DryRun:       opts.DryRun,
+		Agents:            agents,
+		Scope:             pluginScope(opts.ProjectLocal),
+		RestartIDEs:       true,
+		WrittenCount:      installer.written,
+		DryRun:            opts.DryRun,
+		PlannedOperations: installer.planned,
 	}, nil
 }
 
@@ -1468,10 +1471,16 @@ func (i *pluginInstaller) enableCodexConfig(path string, marketplaceRoot string)
 }
 
 func (i *pluginInstaller) printf(format string, args ...any) {
+	message := fmt.Sprintf(format, args...)
+	if i.opts.DryRun {
+		if operation, ok := strings.CutPrefix(strings.TrimSpace(message), "[dry-run] "); ok {
+			i.planned = append(i.planned, operation)
+		}
+	}
 	if i.deps.Printer != nil && i.deps.Printer.Mode() == output.ModeJSON {
 		return
 	}
-	fmt.Fprintf(i.deps.Stdout, format, args...)
+	fmt.Fprint(i.deps.Stdout, message)
 }
 
 func updateCodexConfig(text string, marketplaceRoot string) ([]byte, error) {

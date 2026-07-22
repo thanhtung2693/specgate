@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # --- deps ---
-FROM node:24-alpine AS deps
+FROM node:26-alpine AS deps
 WORKDIR /app
 
 COPY app/ui/package.json app/ui/package-lock.json ./

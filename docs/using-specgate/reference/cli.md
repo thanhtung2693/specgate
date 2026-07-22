@@ -753,6 +753,8 @@ for another source). Repository `.specgate/config` server values are never used
 for plugin packages or hooks; this prevents a checkout from redirecting a
 global IDE install. Before writing, install validates at most 16 safe skill
 names and preloads no more than 32 MiB of required package files.
+`plugins install --dry-run --json` returns the exact `planned_operations` while
+keeping `written_count` at zero.
 If an official skills.sh-managed `specgate` bootstrap exists in project or
 global scope, install stops before writing with exit code `4` and a `conflict`
 error. JSON details list each bootstrap `scope`, `path`, and `remove_command`,
