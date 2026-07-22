@@ -72,6 +72,10 @@ Codex, Claude Code, and Cursor plugin package; for example,
 plugin registry. Project-local installation writes only the selected IDE's
 managed plugin files; it never changes repository instructions such as
 `AGENTS.md`.
+Before `specgate init` selects a topology, plugin install and doctor also use
+that embedded package. This lets an IDE bootstrap finish on a clean machine
+without a running appliance. An explicit `--registry`, `--server`, or
+`SPECGATE_SERVER` still selects the remote package source.
 Use `--workspace <slug-or-id>` or `SPECGATE_WORKSPACE` for a one-command Local
 workspace override; neither changes the stored selection.
 

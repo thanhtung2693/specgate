@@ -131,6 +131,9 @@ Plugin packages and executable hooks never use a repository's committed
 `--server`/`SPECGATE_SERVER`, then the user's saved server, so opening another
 repository cannot redirect a global IDE-plugin install.
 
+On a new setup, this command works before `specgate init`; you do not need to
+start Full mode first.
+
 Choose one or more IDEs from the checkbox list. The default selection prefers
 IDE tools detected on your machine and falls back to all supported agents when
 none are detected. Interactive install also asks whether to write global user

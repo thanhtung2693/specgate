@@ -37,6 +37,9 @@ specgate plugins install --agent <codex|claude|cursor> [--project-local] --no-in
 specgate plugins doctor --agent <codex|claude|cursor> [--project-local] --json
 ```
 
+On native plugin ownership, stop. Never uninstall or disable it without
+separate explicit approval.
+
 Require an IDE restart and stop before initialization. Continue through
 `specgate-project-setup` after restart.
 
@@ -63,9 +66,6 @@ relevant CLI read. Do not force a lifecycle phase or mutate records.
 Before a mode-dependent write or handoff, run `specgate doctor --json`. Read
 `data.mode`; never infer Local or Full mode from Docker, URLs, or browser
 availability. Report an unsuccessful doctor result instead of guessing.
-
-Completion criterion: exactly one phase skill is selected, or the request is
-identified as a read-only SpecGate question.
 
 ## Operating contract
 

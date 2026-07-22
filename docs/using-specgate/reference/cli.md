@@ -751,12 +751,16 @@ specgate plugins install
 specgate plugins doctor
 ```
 
-`plugins doctor` compares installed files against the configured SpecGate
-agent-package registry (the connected deployment by default; pass `--registry`
-for another source). Repository `.specgate/config` server values are never used
-for plugin packages or hooks; this prevents a checkout from redirecting a
-global IDE install. Before writing, install validates at most 16 safe skill
-names and preloads no more than 32 MiB of required package files.
+Before initialization, `plugins install` and `plugins doctor` use the package
+embedded in the CLI so a clean IDE bootstrap does not require an appliance.
+After Full initialization, `plugins doctor` compares installed files against
+the configured SpecGate agent-package registry (the connected deployment by
+default; pass `--registry` for another source). An explicit `--registry`,
+`--server`, or `SPECGATE_SERVER` also selects the remote source before init.
+Repository `.specgate/config` server values are never used for plugin packages
+or hooks; this prevents a checkout from redirecting a global IDE install.
+Before writing, install validates at most 16 safe skill names and preloads no
+more than 32 MiB of required package files.
 `plugins install --dry-run --json` returns the exact `planned_operations` while
 keeping `written_count` at zero.
 If a selected Codex or Claude Code target already belongs to its native plugin

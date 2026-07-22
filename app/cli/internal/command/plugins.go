@@ -210,9 +210,7 @@ func runPluginInstall(ctx context.Context, deps *Deps, opts pluginInstallOptions
 		}
 	}
 	var pc pluginPackageClient
-	if opts.useRegistry {
-		pc = pluginClientFor(deps, opts.Registry)
-	} else if deps.Topology == config.ModeLocal {
+	if useEmbeddedPluginPackage(deps, opts.Registry, opts.useRegistry) {
 		pc = embeddedLocalPlugin{}
 	} else {
 		pc = pluginClientFor(deps, opts.Registry)
@@ -306,7 +304,7 @@ specgate plugins doctor --agent codex --project-local`),
 			var pkg *client.PluginPackage
 			if needsPackage {
 				pc := pluginPackageClient(pluginClientFor(deps, opts.Registry))
-				if deps.Topology == config.ModeLocal {
+				if useEmbeddedPluginPackage(deps, opts.Registry, false) {
 					pc = embeddedLocalPlugin{}
 				}
 				pkg, err = pc.PluginPackage(cmd.Context())
@@ -482,6 +480,13 @@ func pluginClientFor(deps *Deps, registry string) pluginPackageClient {
 		base = deps.ServerURL
 	}
 	return client.New(base, deps.Timeout)
+}
+
+func useEmbeddedPluginPackage(deps *Deps, registry string, forceRegistry bool) bool {
+	if forceRegistry || strings.TrimSpace(registry) != "" {
+		return false
+	}
+	return deps.Topology == config.ModeLocal || deps.useEmbeddedPlugins
 }
 
 func normalizePluginAgents(input string) ([]string, error) {

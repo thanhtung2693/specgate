@@ -415,6 +415,7 @@ test("SpecGate uses one short bootstrap and one explicit lifecycle phase", () =>
   assert.match(files.routerSkill, /npx skills remove specgate -y/);
   assert.match(files.routerSkill, /npx skills remove specgate -g -y/);
   assert.match(files.routerSkill, /never edit or delete[\s\S]*skills\.sh[\s\S]*directly/i);
+  assert.match(files.routerSkill, /native plugin ownership[\s\S]*never uninstall[\s\S]*separate explicit approval/i);
   assert.match(files.routerSkill, /plugins install[\s\S]*--dry-run[\s\S]*plugins install[\s\S]*plugins doctor/i);
   assert.match(files.routerSkill, /restart[\s\S]*stop before[\s\S]*initializ/i);
 

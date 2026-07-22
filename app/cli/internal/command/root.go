@@ -181,6 +181,7 @@ type Deps struct {
 	Yes          bool
 	Timeout      time.Duration
 
+	useEmbeddedPlugins  bool // no topology or configured server before init
 	versionWarningShown bool
 }
 
@@ -280,6 +281,10 @@ func NewRootCommand(deps *Deps) *cobra.Command {
 			code := deps.Printer.Error(commandOutputName(cmd), payload)
 			return &output.ExitError{Code: code, Err: err}
 		}
+		deps.useEmbeddedPlugins = cfg.Mode == "" &&
+			strings.TrimSpace(serverURL) == "" &&
+			strings.TrimSpace(os.Getenv("SPECGATE_SERVER")) == "" &&
+			strings.TrimSpace(cfg.Server) == ""
 		deps.WorkspaceOverride = ""
 		if trimmed := strings.TrimSpace(workspaceOverride); trimmed != "" {
 			deps.WorkspaceOverride = trimmed
@@ -321,6 +326,7 @@ func NewRootCommand(deps *Deps) *cobra.Command {
 		}
 		if cmd.Name() == "init" && initMode == "full" {
 			deps.Topology = config.ModeFull
+			deps.useEmbeddedPlugins = false
 		} else {
 			deps.Topology = config.ResolveMode(cfg)
 		}
