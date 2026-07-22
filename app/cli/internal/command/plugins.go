@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,6 +37,9 @@ const (
 	pluginOwnerValue           = "specgate-plugin-v1\n"
 	maxPluginSkills            = 16
 	maxPluginPackageBytes      = 32 << 20
+	maxSkillsSHLockBytes       = 1 << 20
+	skillsSHSpecGateSource     = "thanhtung2693/specgate"
+	skillsSHSpecGateSkillPath  = "plugins/skills/specgate/SKILL.md"
 )
 
 type pluginPackageClient interface {
@@ -70,6 +74,20 @@ type pluginDoctorResult struct {
 	LatestVersion string              `json:"latest_version,omitempty"`
 	Warnings      []string            `json:"warnings,omitempty"`
 	Agents        []pluginAgentHealth `json:"agents"`
+}
+
+type skillsSHConflict struct {
+	Scope         string `json:"scope"`
+	Path          string `json:"path"`
+	RemoveCommand string `json:"remove_command"`
+}
+
+type skillsSHLock struct {
+	Skills map[string]struct {
+		Source     string `json:"source"`
+		SourceType string `json:"sourceType"`
+		SkillPath  string `json:"skillPath"`
+	} `json:"skills"`
 }
 
 type pluginAgentHealth struct {
@@ -172,6 +190,22 @@ func runPluginInstall(ctx context.Context, deps *Deps, opts pluginInstallOptions
 	if deps.Topology == config.ModeLocal && strings.TrimSpace(opts.Registry) != "" && !opts.useRegistry {
 		return pluginInstallResult{}, pluginInstallError{kind: "incompatible", err: fmt.Errorf("--registry cannot be used in Local mode; the matching plugin is embedded in this CLI")}
 	}
+	home, homeErr := userHomeDir(deps)
+	if homeErr != nil && !opts.ProjectLocal {
+		return pluginInstallResult{}, homeErr
+	}
+	conflicts := findSkillsSHConflicts(agents, home)
+	if len(conflicts) > 0 {
+		retryCommand := pluginRepairCommand(strings.Join(agents, ","), opts.ProjectLocal) + " --no-input"
+		return pluginInstallResult{}, pluginInstallError{
+			kind: "conflict",
+			err:  fmt.Errorf("skills.sh manages the SpecGate bootstrap at %s; run %s, then retry %s; no plugin files were changed", skillsSHConflictPaths(conflicts), skillsSHRemovalCommands(conflicts), retryCommand),
+			details: map[string]any{
+				"conflicts":     conflicts,
+				"retry_command": retryCommand,
+			},
+		}
+	}
 	var pc pluginPackageClient
 	if opts.useRegistry {
 		pc = pluginClientFor(deps, opts.Registry)
@@ -186,10 +220,6 @@ func runPluginInstall(ctx context.Context, deps *Deps, opts pluginInstallOptions
 	}
 	if err := validatePluginPackage(pkg); err != nil {
 		return pluginInstallResult{}, pluginInstallError{kind: "validation_failed", err: err}
-	}
-	home, err := userHomeDir(deps)
-	if err != nil && !opts.ProjectLocal {
-		return pluginInstallResult{}, err
 	}
 	installer := &pluginInstaller{
 		ctx:    ctx,
@@ -212,8 +242,9 @@ func runPluginInstall(ctx context.Context, deps *Deps, opts pluginInstallOptions
 }
 
 type pluginInstallError struct {
-	kind string
-	err  error
+	kind    string
+	err     error
+	details map[string]any
 }
 
 func (e pluginInstallError) Error() string { return e.err.Error() }
@@ -222,7 +253,7 @@ func (e pluginInstallError) Unwrap() error { return e.err }
 func pluginInstallErrorPayload(err error) output.ErrorPayload {
 	var installErr pluginInstallError
 	if errors.As(err, &installErr) {
-		return output.ErrorPayload{Code: installErr.kind, Message: installErr.Error()}
+		return output.ErrorPayload{Code: installErr.kind, Message: installErr.Error(), Details: installErr.details}
 	}
 	return mapAPIError(err)
 }
@@ -526,6 +557,112 @@ func pluginScope(projectLocal bool) string {
 		return "project"
 	}
 	return "global"
+}
+
+func findSkillsSHConflicts(agents []string, home string) []skillsSHConflict {
+	type candidate struct {
+		scope         string
+		lockPath      string
+		skillPath     string
+		removeCommand string
+	}
+
+	var candidates []candidate
+	for _, agent := range agents {
+		projectSkill := filepath.Join(skillsSHSkillDir(agent), specgatePluginName, "SKILL.md")
+		candidates = append(candidates, candidate{
+			scope:         "project",
+			lockPath:      "skills-lock.json",
+			skillPath:     projectSkill,
+			removeCommand: "npx skills remove specgate -y",
+		})
+		if home != "" {
+			candidates = append(candidates, candidate{
+				scope:         "global",
+				lockPath:      filepath.Join(home, ".agents", ".skill-lock.json"),
+				skillPath:     filepath.Join(home, skillsSHSkillDir(agent), specgatePluginName, "SKILL.md"),
+				removeCommand: "npx skills remove specgate -g -y",
+			})
+		}
+	}
+
+	seen := map[string]bool{}
+	var conflicts []skillsSHConflict
+	for _, candidate := range candidates {
+		key := candidate.scope + "\x00" + candidate.skillPath
+		if seen[key] || !isOfficialSkillsSHBootstrap(candidate.lockPath, candidate.skillPath) {
+			continue
+		}
+		seen[key] = true
+		conflicts = append(conflicts, skillsSHConflict{
+			Scope:         candidate.scope,
+			Path:          candidate.skillPath,
+			RemoveCommand: candidate.removeCommand,
+		})
+	}
+	sort.Slice(conflicts, func(a, b int) bool {
+		if conflicts[a].Scope == conflicts[b].Scope {
+			return conflicts[a].Path < conflicts[b].Path
+		}
+		return conflicts[a].Scope < conflicts[b].Scope
+	})
+	return conflicts
+}
+
+func skillsSHSkillDir(agent string) string {
+	if agent == "claude" {
+		return filepath.Join(".claude", "skills")
+	}
+	return filepath.Join(".agents", "skills")
+}
+
+func isOfficialSkillsSHBootstrap(lockPath, skillPath string) bool {
+	for _, path := range []string{lockPath, skillPath} {
+		info, err := os.Lstat(path)
+		if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return false
+		}
+	}
+
+	file, err := os.Open(lockPath)
+	if err != nil {
+		return false
+	}
+	defer file.Close() //nolint:errcheck
+	body, err := io.ReadAll(io.LimitReader(file, maxSkillsSHLockBytes+1))
+	if err != nil || len(body) > maxSkillsSHLockBytes {
+		return false
+	}
+	var lock skillsSHLock
+	if json.Unmarshal(body, &lock) != nil {
+		return false
+	}
+	entry, ok := lock.Skills[specgatePluginName]
+	return ok &&
+		entry.Source == skillsSHSpecGateSource &&
+		entry.SourceType == "github" &&
+		entry.SkillPath == skillsSHSpecGateSkillPath
+}
+
+func skillsSHConflictPaths(conflicts []skillsSHConflict) string {
+	paths := make([]string, 0, len(conflicts))
+	for _, conflict := range conflicts {
+		paths = append(paths, conflict.Path)
+	}
+	return strings.Join(paths, ", ")
+}
+
+func skillsSHRemovalCommands(conflicts []skillsSHConflict) string {
+	seen := map[string]bool{}
+	commands := make([]string, 0, len(conflicts))
+	for _, conflict := range conflicts {
+		if seen[conflict.RemoveCommand] {
+			continue
+		}
+		seen[conflict.RemoveCommand] = true
+		commands = append(commands, conflict.RemoveCommand)
+	}
+	return strings.Join(commands, " and ")
 }
 
 func (i *pluginInstaller) install(agents []string) error {

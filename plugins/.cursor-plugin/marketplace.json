@@ -11,7 +11,7 @@
       "name": "specgate",
       "source": "./",
       "description": "Focused SpecGate skills for project setup, work preparation, and delivery.",
-      "version": "0.2.2"
+      "version": "0.2.3"
     }
   ]
 }

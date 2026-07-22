@@ -397,7 +397,7 @@ test("SpecGate uses one short bootstrap and one explicit lifecycle phase", () =>
   const routerWords = files.routerSkill.trim().split(/\s+/).length;
 
   assert.match(files.routerSkill, /^description: Use when the user explicitly mentions SpecGate/m);
-  assert.ok(routerWords <= 400, `router is ${routerWords} words; expected at most 400`);
+  assert.ok(routerWords <= 550, `router is ${routerWords} words; expected at most 550`);
   assert.match(files.routerSkill, /For lifecycle work, choose exactly one phase/is);
   assert.match(files.routerSkill, /exactly one.*setup.*prepar.*deliver/is);
   assert.match(files.routerSkill, /framework.*owns.*paths.*Git/is);
@@ -405,6 +405,14 @@ test("SpecGate uses one short bootstrap and one explicit lifecycle phase", () =>
   assert.match(files.routerSkill, /read-only[\s\S]{0,160}specgate change status "\$WORK_REF" --json/i);
   assert.match(files.routerSkill, /only product-state read and write surface/i);
   assert.match(files.routerSkill, /never inspect\s+or edit[\s\S]{0,200}SQLite[\s\S]{0,200}object storage/i);
+  assert.match(files.routerSkill, /bootstrap[\s-]*only[\s\S]*`specgate-project-setup`[\s\S]*unavailable/i);
+  assert.match(files.routerSkill, /skills\.sh[\s\S]*instructions only[\s\S]*explicit approval/i);
+  assert.match(files.routerSkill, /raw\.githubusercontent\.com\/thanhtung2693\/specgate\/main\/scripts\/install-cli\.sh/);
+  assert.match(files.routerSkill, /npx skills remove specgate -y/);
+  assert.match(files.routerSkill, /npx skills remove specgate -g -y/);
+  assert.match(files.routerSkill, /never edit or delete[\s\S]*skills\.sh[\s\S]*directly/i);
+  assert.match(files.routerSkill, /plugins install[\s\S]*--dry-run[\s\S]*plugins install[\s\S]*plugins doctor/i);
+  assert.match(files.routerSkill, /restart[\s\S]*stop before[\s\S]*initializ/i);
 
   assert.match(files.sessionStartHook, /SpecGate skills are installed/);
   assert.match(files.sessionStartHook, /explicitly mentions SpecGate/);
@@ -424,6 +432,19 @@ test("SpecGate exposes one product-named entry skill", () => {
   assert.ok(!existsSync(new URL("plugins/skills/specgate-router/SKILL.md", root)));
   assert.match(files.pluginPackage, /"skills\/specgate\/SKILL\.md"/);
   assert.doesNotMatch(files.pluginPackage, /specgate-router/);
+});
+
+test("skills.sh bootstrap hands plugin ownership to the SpecGate CLI", () => {
+  assert.match(docs.readme, /skills\.sh[\s\S]{0,240}bootstrap/i);
+  assert.match(docs.readme, /ask your\s+agent[\s\S]{0,160}set up SpecGate/i);
+  assert.match(docs.installIdePlugins, /## Start from skills\.sh/i);
+  assert.match(docs.installIdePlugins, /instructions only[\s\S]{0,240}SpecGate CLI/i);
+  assert.match(docs.installIdePlugins, /npx skills remove specgate -y/);
+  assert.match(docs.installIdePlugins, /npx skills remove specgate -g -y/);
+  assert.match(docs.installIdePlugins, /sole manager|one owner/i);
+  assert.match(docs.installIdePlugins, /never edits[\s\S]{0,160}skills\.sh lock/i);
+  assert.match(docs.cliReference, /skills\.sh[\s\S]{0,240}`conflict`[\s\S]{0,240}retry_command/i);
+  assert.match(files.pluginPackage, /"version": "0\.2\.3"/);
 });
 
 test("SpecGate project setup performs and verifies the requested setup", () => {
