@@ -85,18 +85,19 @@ A Context Pack is the agent's implementation brief. It can include:
 The agent should start from the Context Pack instead of reconstructing the task
 from memory or chat history.
 
-## Quick route and full route
+## Quick and artifact-backed routes
 
 The quick route in either mode creates a lightweight work item from title, description, and
 acceptance criteria. `work context` derives its Context Pack from that persisted
 work item; it is not a separately stored artifact. It is useful for small
 changes and bugfixes.
 
-The Local-or-Full route starts from an artifact package. It is useful when work needs an
-approved spec, design, plan, or verification document before implementation.
-After human approval, the artifact is promoted, feature-backed work is created
-against that exact canonical artifact, and `work context` assembles the Context
-Pack. Each step is a separate durable state and can be resumed safely.
+The artifact-backed route works in either mode and starts from an artifact
+package. It is useful when work needs an approved spec, design, plan, or
+verification document before implementation. After human approval, the artifact
+is promoted, feature-backed work is created against that exact canonical
+artifact, and `work context` assembles the Context Pack. Each step is a separate
+durable state and can be resumed safely.
 
 Both routes produce delivery evidence and review.
 

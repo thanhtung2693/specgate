@@ -12,7 +12,7 @@
 | Delivery review | Post-implementation review of evidence against acceptance criteria and policy. |
 | Executor | Actor or system that runs a gate: deterministic code, IDE agent, platform model, human, or integration. |
 | Feature | Product capability with linked work and an optional canonical artifact. |
-| Full route | Planning route based on a reviewed artifact bundle. |
+| Artifact-backed route | Planning route based on a reviewed artifact package in Local or Full mode. |
 | Gate | Versioned governance check that returns a common verdict and evidence. |
 | Governance level | Resolved control strength: `light`, `standard`, or `enhanced`. |
 | Governance policy | Versioned configuration for levels, gates, evidence, approval, and executors. |

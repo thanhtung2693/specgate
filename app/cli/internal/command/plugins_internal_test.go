@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -101,6 +102,60 @@ func TestRemoveCodexMarketplaceKeepsSamePathFromUnownedSourceType(t *testing.T) 
 	}
 	if changed {
 		t.Fatal("same path with an unowned source type was removed")
+	}
+}
+
+func TestRemoveCodexMarketplaceKeepsAlreadyEmptySharedFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "marketplace.json")
+	original := `{"name":"personal","plugins":[],"user_note":"keep"}`
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	changed, err := removeCodexMarketplaceEntry(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed {
+		t.Fatal("empty shared marketplace was reported as changed")
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != original {
+		t.Fatalf("empty shared marketplace changed:\n%s", body)
+	}
+}
+
+func TestRemoveCodexMarketplacePreservesUnknownTopLevelFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "marketplace.json")
+	original := `{"name":"personal","user_note":{"keep":true},"plugins":[{"name":"specgate","source":{"source":"local","path":"./.codex/plugins/specgate"}},{"name":"other"}]}`
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	changed, err := removeCodexMarketplaceEntry(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("managed SpecGate entry was not removed")
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+	if note, ok := got["user_note"].(map[string]any); !ok || note["keep"] != true {
+		t.Fatalf("unknown top-level field was lost: %s", body)
+	}
+	plugins, _ := got["plugins"].([]any)
+	if len(plugins) != 1 || plugins[0].(map[string]any)["name"] != "other" {
+		t.Fatalf("unexpected remaining plugins: %s", body)
 	}
 }
 

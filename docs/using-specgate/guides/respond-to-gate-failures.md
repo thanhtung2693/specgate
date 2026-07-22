@@ -71,8 +71,10 @@ with the reviewer's reasoning, and `outstanding_md` lists exactly what is
 missing.
 
 - **`unmet` criteria** — the work (or its evidence) does not satisfy the
-  criterion. Fix the implementation, then re-submit:
-  `specgate delivery submit <work-ref> --file .specgate/completion-<ref>.json`.
+  criterion. Fix the implementation, update the completion report at the exact
+  path returned by `specgate delivery report <work-ref> --init --json`, then run
+  `specgate change submit <work-ref> --file "$COMPLETION_PATH"` after assigning
+  that path to `COMPLETION_PATH`.
 - **`unclear` criteria** — the report under-claimed: no claim for the
   criterion, or evidence too thin to judge. Improve the completion report
   (one claim per criterion, concrete evidence paths) rather than the code.

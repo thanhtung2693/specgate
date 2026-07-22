@@ -370,13 +370,9 @@ func runLocalInit(cmd *cobra.Command, deps *Deps, cfg config.Config, stateDir, w
 		}
 		pluginResult = &installed
 	}
-	selectedPluginAgents := strings.TrimSpace(pluginAgentList)
-	if selectedPluginAgents == "" {
-		selectedPluginAgents = "codex"
-	}
-	next := "specgate plugins install --agent " + selectedPluginAgents
+	next := "specgate plugins install"
 	if pluginResult != nil {
-		next = "specgate plugins doctor --agent " + selectedPluginAgents
+		next = "specgate plugins doctor --agent " + strings.Join(pluginResult.Agents, ",")
 	}
 	result := map[string]any{"mode": config.ModeLocal, "state_dir": stateDir, "user": cfg.CurrentUser, "workspace": cfg.Workspace, "next": next}
 	if pluginResult != nil {
@@ -393,7 +389,7 @@ func runLocalInit(cmd *cobra.Command, deps *Deps, cfg config.Config, stateDir, w
 	if pluginResult != nil {
 		fmt.Fprintln(deps.Stdout, nextStep(deps, "Verify installed IDE plugins with", next))
 	} else {
-		fmt.Fprintln(deps.Stdout, nextStep(deps, "Install the Codex plugin with", "specgate plugins install --agent codex"))
+		fmt.Fprintln(deps.Stdout, nextStep(deps, "Install IDE integration files with", "specgate plugins install"))
 	}
 	return nil
 }

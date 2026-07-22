@@ -131,7 +131,7 @@ func (s *Store) DecideDelivery(ctx context.Context, workspaceID, ref, decision, 
 	var review DeliveryReview
 	err = tx.QueryRowContext(ctx, `SELECT id, work_id, report_id, verdict, summary, human_decision, note, created_at FROM delivery_reviews WHERE workspace_id = ? AND work_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`, workspaceID, work.ID).Scan(&review.ID, &review.WorkID, &review.ReportID, &review.Verdict, &review.Summary, &review.HumanDecision, &review.Note, &review.CreatedAt)
 	if err == sql.ErrNoRows {
-		return fmt.Errorf("run `specgate delivery submit %s --file <completion.json>` before a human decision", work.Key)
+		return fmt.Errorf("run `specgate change submit %s --file <completion.json>` before a human decision", work.Key)
 	}
 	if err != nil {
 		return err

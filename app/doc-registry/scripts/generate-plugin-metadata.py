@@ -95,7 +95,7 @@ def outputs(plugin_dir: Path, pkg: dict) -> dict[Path, str]:
             "defaultPrompt": [
                 "Check this artifact with SpecGate readiness.",
                 "Pick up and implement this SpecGate work item.",
-                "Complete delivery review for this change request.",
+                "Show the delivery status for this SpecGate work item.",
             ],
         },
     }
@@ -131,7 +131,6 @@ def outputs(plugin_dir: Path, pkg: dict) -> dict[Path, str]:
         "logo": "assets/logo.svg",
         "skills": "./skills/",
         "rules": "./rules/",
-        "hooks": "./hooks/hooks-cursor.json",
     }
 
     cursor_marketplace = {

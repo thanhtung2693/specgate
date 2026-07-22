@@ -374,6 +374,47 @@ func TestLocalWorkspaceCreateSelectAndCurrentNeedNoHTTP(t *testing.T) {
 	}
 }
 
+func TestLocalInitSuggestsAgentNeutralPluginInstall(t *testing.T) {
+	deps, out := newTestDeps(t, "")
+	stateDir := filepath.Join(t.TempDir(), "local")
+	code := command.ExecuteForCode(command.NewRootCommand(deps),
+		"--plain", "--no-input", "init", "--mode", "local", "--local-dir", stateDir,
+		"--workspace-name", "Alpha", "--display-name", "Human", "--username", "human",
+	)
+	if code != output.ExitOK {
+		t.Fatalf("init exit = %d; output=%s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "specgate plugins install") {
+		t.Fatalf("init output lacks generic plugin installer: %s", out.String())
+	}
+	if strings.Contains(out.String(), "Codex") || strings.Contains(out.String(), "--agent codex") {
+		t.Fatalf("init output assumes a specific IDE: %s", out.String())
+	}
+}
+
+func TestLocalInitJSONSuggestsAgentNeutralPluginInstall(t *testing.T) {
+	deps, out := newTestDeps(t, "")
+	stateDir := filepath.Join(t.TempDir(), "local")
+	code := command.ExecuteForCode(command.NewRootCommand(deps),
+		"--json", "--no-input", "init", "--mode", "local", "--local-dir", stateDir,
+		"--workspace-name", "Alpha", "--display-name", "Human", "--username", "human",
+	)
+	if code != output.ExitOK {
+		t.Fatalf("init exit = %d; output=%s", code, out.String())
+	}
+	var envelope struct {
+		Data struct {
+			Next string `json:"next"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.Data.Next != "specgate plugins install" {
+		t.Fatalf("next = %q, want agent-neutral plugin installer; output=%s", envelope.Data.Next, out.String())
+	}
+}
+
 func TestLocalUserLoginCreatesWorkspaceAndPersistsSelection(t *testing.T) {
 	deps, out := newTestDeps(t, "")
 	stateDir := filepath.Join(t.TempDir(), "local")
@@ -769,8 +810,9 @@ func TestLocalPluginRequiresExplicitQuickWorkCriteria(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(body), "### Quick work") ||
-		!strings.Contains(string(body), "Local mode has no platform model to draft missing criteria") {
+	if !strings.Contains(string(body), "## 2A. Create quick work") ||
+		!strings.Contains(string(body), "Quick work is available in Local and Full mode") ||
+		!strings.Contains(string(body), "with explicit criteria") {
 		t.Fatalf("Local plugin does not explain Local quick-work criteria:\n%s", body)
 	}
 }
@@ -780,7 +822,8 @@ func TestLocalPluginRequiresIDEAgentConfirmedAcceptanceCriteria(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(body), "at least one explicit `--ac`") {
+	if !strings.Contains(string(body), `--ac "$CONFIRMED_CRITERION_1"`) ||
+		!strings.Contains(string(body), "human-approved preview") {
 		t.Fatalf("Local plugin does not document explicit IDE-agent criteria:\n%s", body)
 	}
 }
@@ -1036,7 +1079,14 @@ func TestLocalPluginInstallUsesEmbeddedPackageWithoutHTTP(t *testing.T) {
 		}
 		installedSkills += string(body)
 	}
-	for _, want := range []string{"data.mode", "gates tasks list", "gates tasks submit-result", "different review-only agent"} {
+	for _, want := range []string{
+		"data.mode",
+		"gates tasks list",
+		"gates tasks submit-result",
+		"human explicitly requests it",
+		"SpecGate delivery receipt",
+		"For `awaiting_acceptance`",
+	} {
 		if !strings.Contains(installedSkills, want) {
 			t.Fatalf("installed Local skills missing %q", want)
 		}
@@ -3387,7 +3437,7 @@ func TestUninstallKeepsUnownedCodexMarketplaceAndConfig(t *testing.T) {
 	}
 }
 
-func TestUninstallRemovesEmptyPluginConfigFiles(t *testing.T) {
+func TestUninstallPreservesEmptySharedMarketplaceFile(t *testing.T) {
 	home := t.TempDir()
 	configPath := filepath.Join(home, ".codex", "config.toml")
 	marketplacePath := filepath.Join(home, ".agents", "plugins", "marketplace.json")
@@ -3402,10 +3452,15 @@ func TestUninstallRemovesEmptyPluginConfigFiles(t *testing.T) {
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
 	}
-	for _, path := range []string{configPath, marketplacePath} {
-		if _, err := os.Stat(path); !os.IsNotExist(err) {
-			t.Fatalf("%s should be removed; stat err=%v", path, err)
-		}
+	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+		t.Fatalf("empty managed config should be removed; stat err=%v", err)
+	}
+	body, err := os.ReadFile(marketplacePath)
+	if err != nil {
+		t.Fatalf("empty shared marketplace should be preserved: %v", err)
+	}
+	if string(body) != `{"name":"personal","plugins":[]}` {
+		t.Fatalf("empty shared marketplace changed: %s", body)
 	}
 }
 

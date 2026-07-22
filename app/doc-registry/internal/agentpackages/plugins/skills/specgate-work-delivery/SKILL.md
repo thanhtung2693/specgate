@@ -1,100 +1,65 @@
 ---
 name: specgate-work-delivery
-description: Delivery. Use when starting or resuming a SpecGate work item, change request, tracker reference, or Context Pack, implementing inside approved scope, verifying, reporting completion evidence, or reworking a failed delivery verdict.
+description: Use when implementing, resuming, verifying, or reworking an approved SpecGate work item or Context Pack, or when SpecGate status names the implementing agent.
 ---
 
 # Delivering Work
 
-## Invocation
+Apply the [router operating contract](../specgate-router/SKILL.md#operating-contract).
+This phase implements the approved contract, then stops at the next actor.
+Never approve an artifact or make a human delivery decision.
 
-Invocation mode: [lifecycle phase](../specgate-router/SKILL.md#invocation).
-Use for implementation, verification, completion evidence, and delivery rework.
-A work reference (`CR-123`, tracker mapping, or Context Pack URI) makes ordinary
-developer phrasing such as "fix this" governed work. Do not stop after local code
-and tests: read the pack, report evidence, and submit delivery review.
+## 1. Load the exact contract
 
-## 1. Confirm readiness
-
-In Full mode:
+Start with the named work item:
 
 ```bash
-specgate work list --phase ready --json
-specgate status --json
 specgate work show "$WORK_REF" --json
-specgate gates status "$WORK_REF" --json
-specgate work policy "$WORK_REF" --json
-```
-
-In Local mode, use `work show` and `work context` only. Local has no
-server-side `gates status` or `work policy`; artifact readiness was checked
-before the human approved and promoted the artifact.
-
-Stop when approval is absent, required gates are unacceptable, criteria are
-missing or placeholders, or the Context Pack is stale. Name the exact blocker.
-A readiness pass is not human approval.
-
-Completion criterion: work is ready or a human-owned blocker is explicit.
-
-## 2. Read the contract
-
-```bash
 specgate work context "$WORK_REF" --json
+specgate change status "$WORK_REF" --json
 ```
 
-The approved artifact and Context Pack outrank chat, tracker comments, and stale
-repo docs. Read criteria, scope, non-goals, risks, design references, and required
-verification before editing. In Full mode, fetch an artifact file only when the
-Context Pack is insufficient:
+Stop before editing when approval is absent, the Context Pack is stale, or
+criteria are missing or placeholders. Quick work may lack an artifact. If
+artifact-backed work lacks its canonical approved version, hand the blocker to
+the human or `specgate-work-preparation`.
 
-```bash
-specgate artifact files "$ARTIFACT_ID" --json
-specgate artifact files "$ARTIFACT_ID" "<exact-path-from-list>" --content --json
-```
+Read only `change status.data`:
 
-Quick-route packs are authoritative without a canonical artifact. For
-feature-backed work, `No canonical spec content found` after approval means the
-artifact was not promoted. Retry the exact original combined approval command,
-including its title, description, and every acceptance criterion, then
-regenerate:
+- If `data.next_actor` is not `implementing_agent`, hand off without editing.
+- For `review_pending`, require `next_command` to be exactly one `specgate` CLI
+  command without shell operators. Otherwise hand off. Run it verbatim
+  immediately before sections 2–5. On failure, go to section 7. On success,
+  reread only Change status and route again; stop if still `review_pending`.
+- For `rework_requested`, record `guidance` and `missing`, then carry this
+  sequence through later steps: focused fix, affected checks, updated evidence,
+  submit, fresh status. Never submit old evidence first.
+- Otherwise record `missing` and `guidance`, then enter `next_command`'s named
+  section; stop if none matches.
 
-```bash
-specgate --yes change approve "$ARTIFACT_ID" \
-  --title "$WORK_TITLE" \
-  --ac "$CONFIRMED_CRITERION_1" \
-  --ac "$CONFIRMED_CRITERION_2"
-specgate work context "$WORK_REF" --json
-```
+Completion criterion: every change/check maps to a criterion or required
+repository-doc update.
 
-Never promote an unapproved artifact or work around a missing pack.
+## 2. Resume safely
 
-Completion criterion: contract and non-goals are understood before editing.
-
-### Resume from a persisted Git receipt
-
-When a new IDE agent resumes a work item, inspect the latest receipt before
-touching the checkout:
+Only when resuming an existing delivery attempt, inspect its persisted receipt:
 
 ```bash
 specgate delivery status "$WORK_REF" --detail --json
 ```
 
-Compare `git_receipt.repository` with `git remote get-url origin`, not with the
-checkout directory. A local origin may legitimately be a sibling clone.
-Compare `branch`, `head_revision`, and `changed_files` with
-`git branch --show-current`, `git rev-parse HEAD`, and `git status`; the
-`diff_digest` identifies that persisted snapshot and is not a path. Stop and
-ask the human when repository identity, revision, or checkout changes mismatch.
-Do not attribute listed plugin/config files to the origin checkout: they are
-current-checkout state and should be treated as unrelated changes unless this
-work owns them. The receipt contains metadata and a digest only, never source
-code or a patch. It is **Agent-reported** evidence that detects stale/drift
-between report and submit and gives a resume comparison target—not
-cryptographic proof. A marked, merged PR/MR corroborates repository activity
-only when its head SHA matches the latest submitted `git_receipt.head_revision`.
+Compare `git_receipt.repository`, branch, head revision, and changed files with
+`git remote get-url origin`, `git branch --show-current`, `git rev-parse HEAD`,
+and `git status --short`. Stop on any mismatch. Receipt metadata is not source,
+a patch, or cryptographic proof.
 
-## 3. Check spec-repo drift
+Completion criterion: the receipt matches this checkout, or mismatch is a
+human-owned blocker.
 
-When `$ARTIFACT_ID` exists, dispatch the drift gate in either Local CLI or Full mode:
+## 3. Check artifact drift
+
+Skip when no artifact exists. Otherwise dispatch tasks, locate
+`spec_repo_drift`, and follow its frozen `skill_content`:
 
 ```bash
 specgate gates tasks dispatch "$ARTIFACT_ID" --json
@@ -104,151 +69,113 @@ specgate gates tasks submit-result <task-id> \
   --file .specgate/work/gate-<task-id>.json --json
 ```
 
-Read the `spec_repo_drift` task's `skill_content`, inspect the named docs, and
-submit this shape using the exact task values:
+Use exact task digests. Put `examined_docs` and `repo_commit` under `evidence`;
+keep `findings` top-level. Report out-of-scope drift without editing it.
 
-```json
-{
-  "gate": "spec_repo_drift",
-  "gate_digest": "<task gate_digest>",
-  "input_digest": "<task artifact_digest>",
-  "state": "pass",
-  "summary": "No semantic contradictions found.",
-  "evaluator": {"executor": "ide_agent", "name": "<agent name>"},
-  "evidence": {
-    "examined_docs": ["AGENTS.md", "docs/relevant-contract.md"],
-    "repo_commit": "<git rev-parse HEAD>"
-  },
-  "findings": []
-}
-```
+Completion criterion: the exact drift task has a result, or no artifact exists.
 
-Both `evidence.examined_docs` and `evidence.repo_commit` are required and must
-be nested under `evidence`; top-level fields are invalid. The approved spec wins
-over drifted docs. Drift warns and never approves or blocks delivery. Report
-out-of-scope drift through the gate; fix it only when this work already owns
-that documentation. Skip only when no artifact exists.
+## 4. Implement and verify
 
-Completion criterion: drift is checked or explicitly inapplicable.
+Implement approved scope and preserve non-goals. Record required tests, lint,
+type checks, builds, and every skip reason. Never mutate an approved snapshot;
+a new artifact version belongs to `specgate-work-preparation`.
 
-## 4. Implement inside scope
+For a pull or merge request, include
+`<!-- specgate-work-ref: $WORK_REF -->` in its description. Do not infer work
+identity from branches, titles, commits, filenames, headings, or keywords.
 
-Map every change to a criterion, verification item, or required repo-doc update.
-Preserve non-goals and blast-radius limits. Test at the narrowest useful level;
-run the full module command for shared types, interfaces, migrations, or imported
-packages.
+Completion criterion: every criterion is implemented or explicitly not done,
+and every required check has an observed result or explained skip.
 
-If approved artifact content must change, publish a new artifact version rather
-than mutating it:
+## 5. Report criterion evidence
 
-```bash
-specgate artifact publish --file artifact.json
-```
-
-Use the normal artifact publish package with the updated files and feature
-identity. For ambiguity, report
-`coding_agent.blocked_ambiguity` with blocking severity and ask the human. Use
-`coding_agent.docs_updated` for repository-doc evidence.
-
-When creating or updating a pull/merge request, put the exact machine marker
-`<!-- specgate-work-ref: $WORK_REF -->` in its description. SpecGate does not
-infer work identity from branch names, titles, commits, or surrounding prose.
-
-Completion criterion: all changes are in scope; ambiguity is resolved or reported.
-
-## 5. Verify and report
-
-Record every test, type, lint, and build command with its observed result and the
-reason for any skip. Delivery review trusts reported checks; it does not run the
-suite itself.
-
-Scaffold one claim per acceptance criterion:
+Create the CLI-owned scaffold:
 
 ```bash
 specgate delivery report "$WORK_REF" --init --json
 ```
 
-Fill `agent.name` with this coding agent's stable name, then fill `summary`,
-`affected_files`, `checks[]`, and `criteria[]`. Keep
-`criteria[].claim` exactly one of those enum values: `satisfied`, `partial`, or
-`not_done`; never use `satisfied` when its check did not run.
+Keep returned `data.path` verbatim as `$COMPLETION_PATH`. When command reports
+an existing regular scaffold, reuse exact `error.details.path` only when
+`change_request_id` matches `work show`; when `context_digest` is present, it
+must match the Context Pack. Never overwrite automatically. Stop when an
+existing file cannot be attributed safely.
 
-- `checks[]`: `{name, command?, status, detail?}` with status
-  `pass|fail|skipped`. Put the observed result (for example, a pass count) in
-  `detail`, not just the command name.
-- `criteria[].evidence`: one `{kind, path?, line?, file_key?, heading?, url?}`.
-  Make each criterion claim independently reviewable: summarize the behavior and
-  point `evidence.path` and `line` at proof. When one test covers multiple
-  criteria, identify the assertion proving each one.
-- A criterion bound with `@check:<name>` needs the matching `checks[].name`.
-  Passed maps to `met`, failed to `unmet`, and missing/skipped to `unclear`.
-- Evidence paths must exist in the working tree. `--skip-evidence-check` is an
-  explicit bypass, not the normal path.
+Fill `agent.name`, `summary`, `affected_files`, `checks[]`, and exactly one
+`criteria[]` entry per canonical criterion using scaffold enum values. Each
+criterion needs an independently reviewable claim and evidence path, line,
+heading, file key, or URL; a command name alone is not evidence. Each check needs
+`pass`, `fail`, or `skipped` plus observed detail. Evidence paths must exist;
+`satisfied` cannot depend on a failed, missing, or skipped required check. Every
+non-skipped `checks[].command` must be non-interactive and valid for `sh -c`.
 
-Completion criterion: every criterion has one evidence-backed claim.
-
-## 6. Submit and rework
+Review the completion file, especially its shell commands, then submit:
 
 ```bash
 specgate change submit "$WORK_REF" \
-  --file ".specgate/completion-$WORK_REF.json" --run-checks --yes --json
+  --file "$COMPLETION_PATH" --run-checks --yes --json
 specgate change status "$WORK_REF" --json
 ```
 
-`--run-checks` reruns non-skipped commands and replaces claims with observations.
-It executes shell commands from the completion file, so review that file before
-passing `--yes`. Fix observed failures. Delivery review remains available for
-diagnosis in both modes:
+`--run-checks` replaces self-reported results with observed results. Fix failures
+before claiming completion.
 
-```bash
-specgate delivery review "$WORK_REF" --json
-```
+Completion criterion: submission succeeded and fresh Change status was read.
 
-In Full mode, rerun the work-item model gates separately when needed:
+## 6. Follow the authoritative actor
 
-```bash
-specgate gates run "$WORK_REF" --json
-```
+Use only `change status.data`. For `implementing_agent`, complete `missing`, run
+the supplied SpecGate `next_command` at its named step, then read status again.
+A scaffold command does not complete work.
 
-If Change status is `awaiting_review` and its assurance is **Agent-reported**,
-ask a different review-only agent to inspect the Context Pack, checkout, checks,
-and latest completion receipt. It records cooperative evidence, never approval:
+Hand off `next_command` verbatim.
+
+For `human_reviewer`, `maintainer`, or `none`, stop. `awaiting_review` belongs to
+the human reviewer. Run peer review only when the human explicitly requests it;
+use a different review-only agent:
 
 ```bash
 specgate delivery peer-review "$WORK_REF" --init --json
-specgate delivery peer-review "$WORK_REF" --file ".specgate/peer-review-$WORK_REF.json" --json
+specgate delivery peer-review "$WORK_REF" \
+  --file "$PEER_REVIEW_PATH" --json
 ```
 
-Fill the scaffold's reviewer `agent.name` and narrative `summary`, then fill
-every canonical criterion exactly once. Each criterion uses
-`claim: satisfied|partial|not_done` plus
-`evidence: {kind, path?, line?, file_key?, heading?, url?}`. Put review prose in
-the top-level summary; `evidence.summary` is not the portable evidence shape.
-Do not reuse the scaffold after a new completion. Full-mode handoffs may use
-the URL from `specgate open --print --json`; Local handoffs name the work ID and
-exact next CLI command.
+Keep its returned `data.path` verbatim as `$PEER_REVIEW_PATH`; apply the same
+existing-file rule.
 
-For a failed verdict, use `outstanding_md` and per-criterion findings for one
-focused fix, rerun verification, reuse criterion ids, and resubmit. Use
-`specgate audit "$WORK_REF" --json` when the trail is unclear.
+A pass means ready for human review, not accepted. Implementing agent never runs
+accept, request-changes, or another human-decision command.
 
-`needs_human_review` means the report is too thin to judge, not that delivery
-passed. `reason_code: policy_unavailable` is a maintainer-owned fail-closed
-block. `reason_code: delivery_review_outdated` means a newer completion needs
-its own `specgate delivery review "$WORK_REF" --json` run before any human
-decision.
+Completion criterion: the implementing agent has no remaining authoritative
+action, or one exact blocker is reported.
 
-A persisted platform `pass` means ready for human review, not accepted or
-delivered. Check the actionable projection:
+## 7. Show the delivery handoff
 
-```bash
-specgate change status "$WORK_REF" --json
+Read `specgate change status "$WORK_REF" --json` immediately before responding.
+For `awaiting_acceptance`, render:
+
+```text
+SpecGate delivery receipt — <title> (<ref>)
+Evidence: <evidence>
+Assurance: <assurance>
+Decision: <decision>
+Receipt: <receipt>
+Freshness: <freshness>
+[Stale: <stale_reason> — only when stale]
+Next (<next_actor>): <next_command>
 ```
 
-The completion reporter must not run the human accept command. If a human
-requests changes, that decision remains bound to the exact completion; make one
-focused correction, submit a new completion, and start a new review cycle.
-Finish agent work when status is `awaiting_acceptance`, or when the remaining
-named blocker is owned by a human or maintainer.
+Preserve values verbatim. Stale is a warning, not a state override. For any
+other state, show a compact `SpecGate delivery handoff` with state, missing,
+`next_actor`, and `next_command`; do not use success wording. If status fails,
+report failure. If state is `accepted`, echo it without claiming this agent
+accepted it.
 
-Completion criterion: the verdict is captured and any rework is evidence-driven.
+In Full mode only, use the URL returned by
+`specgate open "$WORK_REF" --print --json`. In Local mode, never call `open`.
+Do not read the completion file again or call stats or audit. Never claim cleanup
+eligibility, bugs prevented, time saved, accepted, or delivered without
+authoritative status.
+
+Completion criterion: the response names state, evidence quality, freshness,
+next actor, and next command without crossing authority.

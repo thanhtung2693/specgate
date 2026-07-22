@@ -135,15 +135,17 @@ check-plugins:
 	    echo "ERROR: missing focused skill plugins/skills/$$skill/SKILL.md" >&2; exit 1; fi; \
 	  if ! grep -Fxq "name: $$skill" "plugins/skills/$$skill/SKILL.md"; then \
 	    echo "ERROR: skill directory and frontmatter name disagree for $$skill" >&2; exit 1; fi; done
-	@for phrase in "specgate status --json" "specgate work context" "specgate delivery report" "specgate gates run" "specgate delivery review"; do \
+	@for phrase in "specgate doctor --json" "specgate work show" "specgate work context" "specgate delivery report" "specgate change submit" "specgate change status"; do \
 	  if ! grep -rn "$$phrase" plugins/skills plugins/rules/ >/dev/null 2>&1; then \
 	    echo "ERROR: missing required CLI command in plugins: $$phrase" >&2; exit 1; fi; done
 	@tmp_home=$$(mktemp -d); cleanup() { rm -rf "$$tmp_home"; }; \
 	  mkdir -p "$$tmp_home/.claude/skills/using-specgate"; \
 	  printf '%s\n' 'OLD GLOBAL UNRELATED CONTENT' > "$$tmp_home/.claude/skills/using-specgate/SKILL.md"; \
 	  hook_context=$$(HOME="$$tmp_home" plugins/hooks/session-start codex | jq -r '.additionalContext'); \
-	  if ! printf '%s\n' "$$hook_context" | grep -Fq 'specgate-project-setup'; then \
-	    cleanup; echo "ERROR: session-start hook did not prefer bundled specgate-router skill" >&2; exit 1; fi; \
+	  if ! printf '%s\n' "$$hook_context" | grep -Fq 'load `specgate-router`'; then \
+	    cleanup; echo "ERROR: session-start hook did not route explicit SpecGate work" >&2; exit 1; fi; \
+	  if printf '%s\n' "$$hook_context" | grep -Fq '# Using SpecGate'; then \
+	    cleanup; echo "ERROR: session-start hook injected the full router instead of the short bootstrap" >&2; exit 1; fi; \
 	  if printf '%s\n' "$$hook_context" | grep -Fq 'UNRELATED CONTENT'; then \
 	    cleanup; echo "ERROR: session-start hook loaded stale global skill content" >&2; exit 1; fi; \
 	  cleanup

@@ -54,6 +54,7 @@ Typical shape:
 
 | Field | Purpose |
 |---|---|
+| `change_request_id` | durable work identity populated by the scaffold command; verify it before reusing an existing scaffold |
 | `agent.name` | required stable name of the coding agent submitting this completion |
 | `summary` | concise delivery summary |
 | `checks[]` | tests, builds, lint, type checks, manual checks |

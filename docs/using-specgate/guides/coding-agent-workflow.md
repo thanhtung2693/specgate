@@ -1,227 +1,185 @@
 # Use SpecGate with a coding agent
 
-Use this guide when you want a coding agent to implement a SpecGate work item.
-The agent will start from approved context, stay within the agreed scope, and
-return evidence you can review.
+Use this guide after you have approved a SpecGate work item. Give its work
+reference to your coding agent; the installed SpecGate skill will read the
+approved contract, keep the implementation in scope, submit evidence, and stop
+for your final decision.
 
-## IDE readiness tasks in Local and Full
+SpecGate works with your existing spec framework. Superpowers, OpenSpec, Spec
+Kit, and other authoring tools keep their own file locations and Git behavior.
+SpecGate registers those documents in place; `.specgate/` is for SpecGate state
+and generated work receipts, not a replacement home for framework documents.
 
-For the default Local CLI mode, install the project-local plugin for Codex,
-Claude Code, or Cursor. In either topology, the coding agent completes semantic readiness through the same
-frozen task loop:
+## Before you start
 
-```bash
-specgate plugins doctor --agent codex --project-local
-specgate gates check <artifact-id> --json --summary
-specgate gates tasks list <artifact-id> --json
-specgate gates tasks show <task-id> --json
-specgate gates tasks submit-result <task-id> \
-  --file .specgate/work/gate-<task-id>.json --json
-specgate gates results <artifact-id> --json
-specgate work list --phase ready --json
-specgate work context <work-ref> --json
-# Implement only the Context Pack, then:
-specgate delivery report <work-ref> --init
-specgate change submit <work-ref> --file .specgate/completion-<ref>.json --json
-specgate change status <work-ref> --json
-# Optional independent evidence review; the completion and peer agents differ:
-specgate delivery peer-review <work-ref> --init
-specgate delivery peer-review <work-ref> --file .specgate/peer-review-<ref>.json --json
-```
-
-`aggregate=not_run` after a successful command means a required semantic task
-has not been submitted; it never means readiness passed. The
-`dispatched_to_ide_agent.pending_task_ids` receipt is authoritative in both
-modes. `created_task_ids` identifies only tasks created by that invocation and
-can be empty when a repeated dispatch finds the same pending tasks.
-
-The human approves artifacts and delivery; the coding agent never does. Local
-peer review binds to the exact Git receipt submitted with the latest completion.
-It remains evidence for the human reviewer—not permission to approve delivery.
-Because Local has no browser UI, an agent hands off the work title and stable
-ID with an exact CLI action such as
-`specgate --yes change accept <work-ref>`; it does not call `specgate open`
-or construct a localhost URL.
-
-When deciding whether an exact published spec version has corresponding work
-and delivery, use `specgate artifact coverage <artifact-id>`. Artifact coverage
-is exact-version evidence, not an inference from filenames or chat history.
-
-## Full appliance workflow
-
-The remaining steps use Full appliance capabilities or an existing SpecGate
-server.
-
-## Before the agent starts
-
-Confirm:
-
-- the `specgate` CLI is installed;
-- `specgate doctor` passes;
-- the correct local user and workspace are selected;
-- IDE plugins are installed, or the agent has access to this workflow.
+Install the CLI and IDE plugin at the scope that fits your project, then verify
+both layers:
 
 ```bash
 specgate doctor
-specgate user current
-specgate workspace current
 specgate plugins doctor
 ```
 
-## 1. Resolve the work item
+The plugin may be user-global or project-local. Follow [Install SpecGate in your
+coding IDE](install-ide-plugins.md) for the exact install and doctor commands.
+The IDE executable itself does not need to be on `PATH`; the plugin doctor
+checks the managed SpecGate files.
 
-```bash
-specgate work show <work-ref>
+The work item must already have human approval and acceptance criteria. If you
+are still publishing or reviewing a specification, follow [Use the SpecGate
+CLI](cli-workflow.md) first.
+
+## Give the work to the agent
+
+Start a fresh IDE task with the stable work reference:
+
+```text
+Implement SpecGate work CR-123. Follow the installed SpecGate skills. Stop for
+any human decision.
 ```
 
-Use a change-request ID, SpecGate key, tracker key, or supported issue URL.
-If the work item is ambiguous, stop and ask for the correct reference.
+That is enough. You do not need to paste the specification or a long command
+sequence into the prompt.
 
-## 2. Check policy and gate state
+## What the agent does
 
-```bash
-specgate work policy <work-ref>
-specgate gates status <work-ref>
-```
+### 1. Read the approved contract
 
-Policy shows which level of review applies. Gate status shows anything that
-still needs attention before implementation or delivery.
-
-## 3. Read the Context Pack
+The agent starts from the Context Pack:
 
 ```bash
-specgate work context <work-ref>
+specgate work show <work-ref> --json
+specgate work context <work-ref> --json
+specgate change status <work-ref> --json
 ```
 
-The Context Pack is the agent's brief. Full-route work includes approved
-artifact context; quick work uses the persisted intent and acceptance criteria.
-It can also contain scope limits, risks, design references, and applicable
-skills.
+The Context Pack contains the approved scope, acceptance criteria, non-goals,
+risks, and artifact references. It outranks chat history and stale tracker or
+repository notes. The agent stops when approval is absent, the pack is stale,
+or the contract is ambiguous. It also stops without editing when Change status
+names a human reviewer, maintainer, or no next actor.
 
-If the Context Pack disagrees with memory, tracker text, or a chat summary, the
-Context Pack wins. Stop and ask when that difference looks wrong.
+### 2. Implement and verify
 
-## 4. Fetch extra artifact files only when needed
+The agent maps each change to an acceptance criterion or required repository
+documentation update, follows the repository's contributor rules, and records
+the checks it actually ran. It does not silently expand scope or mutate an
+approved artifact. A material spec change returns to artifact preparation and
+human approval as a new version.
 
-Use the Context Pack first. Fetch file bodies only when implementation needs the
-exact source artifact text:
+### 3. Submit criterion-level evidence
+
+The agent scaffolds a completion report, fills one claim for every acceptance
+criterion, and submits it:
 
 ```bash
-specgate artifact files <artifact-id> spec.md verification.md --content
+specgate delivery report <work-ref> --init --json
+COMPLETION_PATH="<exact data.path from the preceding response>"
+specgate change submit <work-ref> \
+  --file "$COMPLETION_PATH" \
+  --run-checks --yes --json
+specgate change status <work-ref> --json
 ```
 
-Without `--content`, the command prints file references and metadata.
+The agent uses the scaffold command's returned `data.path`; it does not build a
+filename from the work reference. If a regular scaffold already exists, the CLI
+refuses to overwrite it and returns its exact `error.details.path`. The agent
+reuses that file only after confirming it belongs to the same work and Context
+Pack.
 
-## 5. Implement within scope
+`--run-checks` executes the commands stored in the completion report, so the
+agent reviews that file before authorizing execution. Each claim points to
+reviewable evidence such as a test assertion, source line, API response, or UI
+observation. A skipped or failed check cannot support a satisfied claim.
 
-Follow the repository's own agent rules. Common project rules include:
+### 4. Add an independent review only when you request one
 
-- keep docs updated with code changes;
-- write or update relevant tests;
-- avoid unrelated refactors;
-- do not commit secrets;
-- do not bypass hooks.
-
-If required context is missing or contradictory, report the blocker instead of
-guessing.
-
-## 6. Report documentation updates or ambiguity
-
-When code changes include docs, report that signal:
+If you want another agent's evidence before deciding, ask a different
+review-only agent to inspect the same Context Pack, checkout, checks, and latest
+completion receipt:
 
 ```bash
-cat > /tmp/specgate-docs-updated.json <<JSON
-{
-  "change_request_id": "<work-ref>",
-  "event_type": "coding_agent.docs_updated",
-  "severity": "info",
-  "summary": "Updated repository documentation to match shipped behavior."
-}
-JSON
-
-specgate delivery report <work-ref> --file /tmp/specgate-docs-updated.json --json
+specgate delivery peer-review <work-ref> --init --json
+PEER_REVIEW_PATH="<exact data.path from the preceding response>"
+specgate delivery peer-review <work-ref> \
+  --file "$PEER_REVIEW_PATH" --json
 ```
 
-When scope is blocked:
+Peer review strengthens the evidence but never approves or accepts the work.
+It is bound to the latest submitted Git receipt and becomes stale after a new
+completion. It also does not override `change status`: when status names a human
+as `next_actor`, the implementing agent stops for that human.
+
+### 5. Return the delivery handoff
+
+Immediately before its final response, the agent reads a fresh
+`specgate change status <work-ref> --json`. When the state is exactly
+`awaiting_acceptance`, it returns a compact per-work governance handoff:
+
+```text
+SpecGate delivery receipt — Add health endpoint (CR-123)
+Evidence: Ready for human review
+Assurance: Agent-reported; locally reproduced; second agent affirmed
+Decision: Awaiting human acceptance
+Receipt: commit a1b2c3d
+Freshness: The stored receipt was not checked against the current checkout.
+Next (human_reviewer): specgate --yes change accept CR-123
+```
+
+The receipt means the work is awaiting your acceptance, not accepted or
+delivered. It does not prove that SpecGate prevented bugs or saved time. A
+stale warning does not rewrite the reported state; the exact reason appears on
+a separate `Stale:` line so you can judge it before deciding.
+
+Other states produce a delivery handoff with the blocker, missing evidence,
+next actor, and exact next command rather than success language.
+
+## Make the final decision
+
+Review the implementation and receipt, then run exactly one human decision:
 
 ```bash
-cat > /tmp/specgate-blocked.json <<JSON
-{
-  "change_request_id": "<work-ref>",
-  "event_type": "coding_agent.blocked_ambiguity",
-  "severity": "blocking",
-  "summary": "Implementation contract needs clarification."
-}
-JSON
-
-specgate delivery report <work-ref> --file /tmp/specgate-blocked.json --json
+specgate --yes change accept <work-ref>
+specgate --yes change request-changes <work-ref> --note "<focused feedback>"
 ```
 
-## 7. Prepare completion evidence
+In Local mode, the handoff uses the work title, stable ID, and exact CLI
+command. There is no browser UI. In Full mode, the agent may also show the URL
+returned by `specgate open <work-ref> --print --json`; it never constructs a
+URL itself.
 
-Scaffold a completion report:
+If you request changes, give one focused reason. The agent fixes that gap,
+reruns the affected verification, submits a new completion, and starts a new
+review cycle.
+
+## Check whether a published spec was delivered
+
+To verify that one immutable published spec has corresponding work and delivery
+state, inspect that exact version:
 
 ```bash
-specgate delivery report <work-ref> --init
+specgate artifact coverage <artifact-id>
 ```
 
-Fill the `.specgate/completion-<ref>.json` file (`--init` prints its path) with:
+Artifact coverage is exact-version evidence. Do not infer coverage from a
+filename, feature name, latest version, or chat history.
 
-- the coding agent's stable name in `agent.name`;
-- summary of what changed;
-- affected files;
-- checks run and their results (`name` is a label; set `command` to the shell
-  command when using `--run-checks`);
-- evidence for each acceptance criterion.
+## Local and Full behavior
 
-Make the evidence easy for another person or agent to check: include command
-output, test names, file paths, observed UI behavior, API responses, PR links,
-or screenshots when relevant.
+| Concern | Local mode | Full mode |
+| --- | --- | --- |
+| Contract and delivery evidence | Local SpecGate store | Selected server workspace |
+| IDE semantic readiness | Frozen tasks completed by the IDE agent | Same task loop when dispatched to the IDE |
+| Final handoff | Stable ID and CLI command | Stable ID, CLI command, and returned UI URL when available |
+| Human authority | Explicit CLI decision | CLI or UI decision |
+| Server-only policy and model operations | Unavailable | Available when configured |
 
-## 8. Submit delivery
-
-```bash
-specgate change submit <work-ref> --file .specgate/completion-<ref>.json
-specgate change status <work-ref>
-```
-
-`change submit` runs the complete tail and returns the compact actionable
-Change status:
-
-1. report completion evidence;
-2. run gates;
-3. trigger delivery review;
-4. return status.
-
-When Change status is `awaiting_review` with **Agent-reported** assurance, do
-not treat it as a pass. If the IDE supports subagents, ask a fresh review-only
-agent to inspect the Context Pack, checkout, checks, and completion receipt. It
-must use the bound scaffold and must not approve work:
-
-```bash
-specgate delivery peer-review <work-ref> --init
-specgate delivery peer-review <work-ref> --file .specgate/peer-review-<ref>.json
-```
-
-The peer review adds useful evidence, but it does not replace human authority.
-If a person still needs to act, Full mode may include the URL returned by
-`specgate open <work-ref> --print --json`; Local mode instead includes the
-stable work ID and the exact CLI action. Never construct a `localhost` link.
-
-## 9. Rework failed review
-
-If review fails:
-
-1. read the failed criterion or gate hint;
-2. make the smallest focused fix;
-3. update tests and docs if needed;
-4. update evidence;
-5. run `change submit` again.
-
-Do not mark work complete while delivery review still names unresolved gaps.
+The agent determines the mode from `specgate doctor --json`; it does not infer
+it from Docker, URLs, or browser availability.
 
 ## Related
 
 - [Use the SpecGate CLI](cli-workflow.md)
-- [Evidence reference](../reference/evidence.md)
 - [Artifacts and Context Packs](../concepts/artifacts-and-context-packs.md)
+- [Evidence reference](../reference/evidence.md)
+- [CLI reference](../reference/cli.md)

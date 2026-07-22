@@ -1,53 +1,102 @@
 ---
 name: specgate-project-setup
-description: Setup. Use when onboarding SpecGate to a repository, installing or refreshing IDE plugins for a project, clarifying canonical docs/tracker mirrors/readiness rules, or preparing an agent to use SpecGate in an unfamiliar repo.
+description: Use when SpecGate is being initialized or configured for a repository, its workspace binding is missing, IDE plugins need installation or refresh, or setup diagnostics fail.
 ---
 
-# Setting Up SpecGate Project
+# Setting Up SpecGate
 
-## Invocation
+Apply the [router operating contract](../specgate-router/SKILL.md#operating-contract).
+This phase configures SpecGate; it does not create specifications or product
+work.
 
-Invocation mode: explicit setup entry point. Use it when a user asks to install,
-refresh, or map SpecGate for a repository, or when the router finds that the
-project's docs, tracker mirrors, readiness rules, or vocabulary are unknown.
+## 1. Inspect the current state
 
-1. Map the project context.
+```bash
+specgate --version
+specgate doctor --json
+```
 
-Read only enough repository context to identify the governing sources: root and
-module `AGENTS.md`, docs entry points, module specs, README files, ADRs,
-tracker/integration docs, and existing SpecGate plugin/install docs. Prefer
-existing repo conventions over inventing a new setup structure.
+Use the doctor's reported state and recovery action. In an existing topology,
+follow that recovery action instead of rerunning initialization or switching
+mode. Initialization is required only when doctor reports no initialized
+topology.
 
-Completion criterion: canonical docs, module boundaries, tracker/work mirrors,
-and likely ownership areas are listed with file paths or marked missing.
+Completion criterion: the installed CLI version and every failing doctor check
+are recorded, or doctor confirms the current topology is healthy.
 
-2. Identify the readiness contract.
+## 2. Initialize only when required
 
-Find what must be true before an agent can pick up work: quality gates, human
-approval, acceptance criteria, Context Pack freshness, doc-update rules, and
-module-specific verification commands. Separate hard stops from helpful habits.
+The user chooses Local or Full mode; never infer that product decision from
+Docker, a URL, or installed software. In an interactive terminal, run exactly
+the chosen mode:
 
-Completion criterion: every readiness rule is classified as `hard_stop`,
-`required_practice`, or `local_convention`, with source evidence.
+```bash
+specgate init --mode local
+specgate init --mode full
+```
 
-3. Capture domain language.
+For noninteractive Local initialization, collect the user's identity values and
+run:
 
-List domain terms, glossary files, status names, policy names, and workflow
-phrases the agent should reuse. Challenge ambiguous terms by naming the ambiguity
-rather than normalizing it silently.
+```bash
+specgate init --mode local --no-input \
+  --workspace-name "<workspace>" \
+  --display-name "<display name>" \
+  --username "<username>"
+```
 
-Completion criterion: the setup map contains the vocabulary needed to read or
-write Context Packs without changing product meaning.
+Use `specgate init --help` for Full or non-default noninteractive deployment
+options. Do not purge, replace, or migrate existing data as part of setup.
 
-4. Produce a project setup map.
+Completion criterion: the chosen mode is initialized, or the exact failed
+command and its recovery action are reported.
 
-Return a concise summary in whatever shape fits the findings, covering:
-canonical docs, tracker/work mirrors, readiness rules, verification commands,
-domain vocabulary, Context Pack inputs, and open gaps or questions.
+## 3. Select and bind the workspace
 
-Do not change SpecGate server storage, SpecGate UI, SpecGate schemas, or Context
-Pack schema under this skill. If the target repository needs persistent setup
-documentation, propose the narrowest follow-up work item or repo-doc update.
+```bash
+specgate user current --json
+specgate workspace current --json
+specgate workspace bind
+```
 
-Completion criterion: the map is actionable for a fresh coding agent and every
-gap has a named owner or follow-up question.
+If identity or workspace selection is missing or ambiguous, stop for the user
+to choose it. Bind only when the current repository binding is missing,
+incorrect, or explicitly requested; a plugin-only refresh leaves a correct
+binding unchanged.
+
+Completion criterion: `specgate workspace current --json` identifies the
+intended workspace and the repository binding is correct or deliberately left
+unchanged.
+
+## 4. Install or refresh the selected IDE integration
+
+The user chooses the IDE and whether its files are user-global or
+project-local. Preview the exact scope, then install it noninteractively:
+
+```bash
+specgate plugins install --agent <codex|claude|cursor> --dry-run --no-input
+specgate plugins install --agent <codex|claude|cursor> --no-input
+```
+
+Add `--project-local` to both commands only when that scope was selected. Do
+not install every IDE or change scope merely because an executable is present.
+
+Completion criterion: the preview and installation name the user-selected IDE
+and scope, and no unselected integration is modified.
+
+## 5. Verify and hand off
+
+```bash
+specgate doctor --json
+specgate workspace current --json
+specgate plugins doctor --agent <codex|claude|cursor> --json
+```
+
+Add `--project-local` to plugin doctor when that is the installed scope. Tell
+the user to restart the selected IDE; file verification does not prove a
+running IDE has reloaded the plugin.
+
+Completion criterion: SpecGate and plugin doctor are healthy for the selected
+topology, workspace, IDE, and scope; any required restart is explicit. On
+failure, report the exact failed command and recovery action instead of an
+advisory repository map.

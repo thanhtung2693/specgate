@@ -147,7 +147,7 @@ specgate plugins install --agent codex --project-local`),
 			} else {
 				fmt.Fprintln(deps.Stdout, label(deps, "Scope:")+" global user files under your home directory.")
 			}
-			fmt.Fprintln(deps.Stdout, "Restart the selected IDE(s) so the new SpecGate plugin, Skills, hooks, and rules are loaded.")
+			fmt.Fprintln(deps.Stdout, "Restart the selected IDE(s) so the new SpecGate files are loaded.")
 			if humanVisuals(deps) {
 				fmt.Fprintln(deps.Stdout, nextStep(deps, "verify IDE files:", "specgate plugins doctor"))
 			} else {
@@ -567,11 +567,19 @@ func (i *pluginInstaller) preloadPluginFiles(agents []string) error {
 			paths["rules/using-specgate.mdc"] = true
 			addSkills()
 		case "codex":
+			if i.opts.ProjectLocal {
+				addSkills()
+				continue
+			}
 			for _, path := range []string{".codex-plugin/plugin.json", "assets/logo.svg", "hooks/hooks.json", "hooks/run-hook.cmd", "hooks/session-start", codexPersonalMarketURL} {
 				paths[path] = true
 			}
 			addSkills()
 		case "claude":
+			if i.opts.ProjectLocal {
+				addSkills()
+				continue
+			}
 			for _, path := range []string{".claude-plugin/plugin.json", "assets/logo.svg", "hooks/hooks-claude.json", "hooks/run-hook.cmd", "hooks/session-start"} {
 				paths[path] = true
 			}
@@ -604,6 +612,17 @@ func (i *pluginInstaller) validateInstallTargets(agents []string) error {
 	root := i.home
 	if i.opts.ProjectLocal {
 		root = "."
+		if err := validateProjectLocalPluginAncestors(root, agents); err != nil {
+			return err
+		}
+	}
+	validateSkills := func(dir string) error {
+		for _, skill := range i.pkg.Skills {
+			if err := validateOwnedPluginDir(filepath.Join(dir, skill)); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 	for _, agent := range agents {
 		switch agent {
@@ -612,16 +631,23 @@ func (i *pluginInstaller) validateInstallTargets(agents []string) error {
 			if err := validateOwnedPluginFile(rule); err != nil {
 				return err
 			}
-			for _, skill := range i.pkg.Skills {
-				if err := validateOwnedPluginDir(filepath.Join(root, ".cursor", "skills", skill)); err != nil {
-					return err
-				}
+			if err := validateSkills(filepath.Join(root, ".cursor", "skills")); err != nil {
+				return err
 			}
 		case "codex":
+			if i.opts.ProjectLocal {
+				if err := validateSkills(filepath.Join(root, ".agents", "skills")); err != nil {
+					return err
+				}
+				if err := i.validateLegacyProjectCodexInstall(root); err != nil {
+					return err
+				}
+				continue
+			}
 			if err := validateOwnedPluginDir(filepath.Join(root, ".codex", "plugins", specgatePluginName)); err != nil {
 				return err
 			}
-			if !i.opts.ProjectLocal && strings.TrimSpace(i.pkg.Version) != "" {
+			if strings.TrimSpace(i.pkg.Version) != "" {
 				if err := validateOwnedPluginDir(filepath.Join(root, ".codex", "plugins", "cache", "personal", specgatePluginName, i.pkg.Version)); err != nil {
 					return err
 				}
@@ -652,9 +678,83 @@ func (i *pluginInstaller) validateInstallTargets(agents []string) error {
 				return fmt.Errorf("parse %s: %w", configPath, err)
 			}
 		case "claude":
+			if i.opts.ProjectLocal {
+				if err := validateSkills(filepath.Join(root, ".claude", "skills")); err != nil {
+					return err
+				}
+				continue
+			}
 			if err := validateOwnedPluginDir(filepath.Join(root, ".claude", "skills", specgatePluginName)); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+func validateProjectLocalPluginAncestors(root string, agents []string) error {
+	var dirs []string
+	for _, agent := range agents {
+		switch agent {
+		case "cursor":
+			dirs = append(dirs,
+				filepath.Join(root, ".cursor", "rules"),
+				filepath.Join(root, ".cursor", "skills"),
+			)
+		case "codex":
+			dirs = append(dirs, filepath.Join(root, ".agents", "skills"))
+		case "claude":
+			dirs = append(dirs, filepath.Join(root, ".claude", "skills"))
+		}
+	}
+	for _, dir := range dirs {
+		if err := validatePluginDirectoryPath(root, dir); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validatePluginDirectoryPath(root, path string) error {
+	absRoot, _, rel, err := resolvePluginPath(root, path)
+	if err != nil {
+		return err
+	}
+	return validatePluginDirectoryChain(absRoot, rel)
+}
+
+func resolvePluginPath(root, path string) (string, string, string, error) {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", "", "", err
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", "", "", err
+	}
+	rel, err := filepath.Rel(absRoot, absPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", "", "", fmt.Errorf("plugin path %s is outside install root %s", path, root)
+	}
+	return absRoot, absPath, rel, nil
+}
+
+func validatePluginDirectoryChain(root, rel string) error {
+	current := root
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		if part == "" || part == "." {
+			continue
+		}
+		current = filepath.Join(current, part)
+		info, err := os.Lstat(current)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			return fmt.Errorf("%s is not a real directory; refusing plugin changes", current)
 		}
 	}
 	return nil
@@ -724,15 +824,36 @@ func validateOwnedPluginFile(path string) error {
 }
 
 func validatePluginOwnerMarker(marker, target string) error {
+	_, err := pluginOwnerMarkerVersion(marker, target)
+	return err
+}
+
+func pluginOwnerMarkerVersion(marker, target string) (string, error) {
 	info, err := os.Lstat(marker)
 	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-		return fmt.Errorf("%s exists but is not owned by SpecGate; move or remove it before installing", target)
+		return "", fmt.Errorf("%s exists but is not owned by SpecGate; move or remove it before installing", target)
 	}
 	body, err := os.ReadFile(marker)
-	if err != nil || string(body) != pluginOwnerValue {
-		return fmt.Errorf("%s exists but is not owned by SpecGate; move or remove it before installing", target)
+	if err != nil {
+		return "", fmt.Errorf("%s exists but is not owned by SpecGate; move or remove it before installing", target)
 	}
-	return nil
+	text := string(body)
+	if text == pluginOwnerValue {
+		return "", nil
+	}
+	version, ok := strings.CutPrefix(text, pluginOwnerValue+"version=")
+	if !ok || !strings.HasSuffix(version, "\n") {
+		return "", fmt.Errorf("%s exists but is not owned by SpecGate; move or remove it before installing", target)
+	}
+	version = strings.TrimSuffix(version, "\n")
+	if !validPluginVersion(version) {
+		return "", fmt.Errorf("%s exists but is not owned by SpecGate; move or remove it before installing", target)
+	}
+	return version, nil
+}
+
+func pluginOwnerMarkerValue(version string) string {
+	return pluginOwnerValue + "version=" + strings.TrimSpace(version) + "\n"
 }
 
 func (i *pluginInstaller) installCursor() error {
@@ -745,7 +866,7 @@ func (i *pluginInstaller) installCursor() error {
 	if err := i.writePluginFile("rules/using-specgate.mdc", rule, 0o644); err != nil {
 		return err
 	}
-	if err := i.writeFile(rule+pluginOwnerMarker, []byte(pluginOwnerValue), 0o600); err != nil {
+	if err := i.writeFile(rule+pluginOwnerMarker, []byte(pluginOwnerMarkerValue(i.pkg.Version)), 0o600); err != nil {
 		return err
 	}
 	return i.installFocusedSkills(skillsDir)
@@ -755,6 +876,10 @@ func (i *pluginInstaller) installCodex() error {
 	root := i.home
 	if i.opts.ProjectLocal {
 		root = "."
+		if err := i.installFocusedSkills(filepath.Join(root, ".agents", "skills")); err != nil {
+			return err
+		}
+		return i.migrateLegacyProjectCodexInstall(root)
 	}
 	pluginRoot := filepath.Join(root, ".codex", "plugins", specgatePluginName)
 	cacheRoot := filepath.Join(root, ".codex", "plugins", "cache", "personal", specgatePluginName, i.pkg.Version)
@@ -767,7 +892,7 @@ func (i *pluginInstaller) installCodex() error {
 	if err := i.installPluginBundle(pluginRoot, ".codex-plugin/plugin.json", "hooks/hooks.json"); err != nil {
 		return err
 	}
-	if !i.opts.ProjectLocal && strings.TrimSpace(i.pkg.Version) != "" {
+	if strings.TrimSpace(i.pkg.Version) != "" {
 		if err := i.installPluginBundle(cacheRoot, ".codex-plugin/plugin.json", "hooks/hooks.json"); err != nil {
 			return err
 		}
@@ -780,6 +905,105 @@ func (i *pluginInstaller) installCodex() error {
 		return err
 	}
 	return i.enableCodexConfig(configPath, marketplaceRoot)
+}
+
+func (i *pluginInstaller) validateLegacyProjectCodexInstall(root string) error {
+	legacyRoot := filepath.Join(root, ".codex", "plugins", specgatePluginName)
+	if !hasValidPluginOwnership(legacyRoot, true) {
+		return nil
+	}
+	for _, dir := range []string{
+		filepath.Join(root, ".codex", "plugins"),
+		filepath.Join(root, ".agents", "plugins"),
+	} {
+		if err := validatePluginDirectoryPath(root, dir); err != nil {
+			return err
+		}
+	}
+	if err := validateOwnedPluginDir(legacyRoot); err != nil {
+		return err
+	}
+	marketplacePath := filepath.Join(root, ".agents", "plugins", "marketplace.json")
+	if err := validateRegularFileOrMissing(marketplacePath); err != nil {
+		return err
+	}
+	unowned, err := codexMarketplaceHasUnownedSpecGateEntry(marketplacePath)
+	if err != nil {
+		return err
+	}
+	if unowned {
+		return nil
+	}
+	configPath := filepath.Join(root, ".codex", "config.toml")
+	if err := validateRegularFileOrMissing(configPath); err != nil {
+		return err
+	}
+	body, err := os.ReadFile(configPath)
+	if os.IsNotExist(err) || strings.TrimSpace(string(body)) == "" {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := parseTOML(string(body)); err != nil {
+		return fmt.Errorf("parse %s: %w", configPath, err)
+	}
+	return nil
+}
+
+func (i *pluginInstaller) migrateLegacyProjectCodexInstall(root string) error {
+	legacyRoot := filepath.Join(root, ".codex", "plugins", specgatePluginName)
+	if !hasValidPluginOwnership(legacyRoot, true) {
+		return nil
+	}
+	if i.opts.DryRun {
+		i.printf("[dry-run] remove owned legacy Codex plugin files from %s\n", legacyRoot)
+		return nil
+	}
+	marketplacePath := filepath.Join(root, ".agents", "plugins", "marketplace.json")
+	unowned, err := codexMarketplaceHasUnownedSpecGateEntry(marketplacePath)
+	if err != nil {
+		return err
+	}
+	if !unowned {
+		if _, err := removeCodexMarketplaceEntry(marketplacePath); err != nil {
+			return err
+		}
+		removePersonalMarketplace := false
+		if _, err := os.Stat(marketplacePath); os.IsNotExist(err) {
+			removePersonalMarketplace = true
+		} else if err != nil {
+			return err
+		}
+		marketplaceRoot, err := filepath.Abs(root)
+		if err != nil {
+			return err
+		}
+		if _, err := removeCodexConfigSections(filepath.Join(root, ".codex", "config.toml"), removePersonalMarketplace, marketplaceRoot); err != nil {
+			return err
+		}
+	}
+	changed, fullyRemoved, err := removeOwnedPluginDir(legacyRoot)
+	if err != nil {
+		return err
+	}
+	if changed {
+		if fullyRemoved {
+			i.printf("removed owned legacy Codex plugin files from %s\n", legacyRoot)
+		} else {
+			i.printf("removed owned legacy Codex plugin files from %s; preserved unrelated files\n", legacyRoot)
+		}
+	}
+	for _, dir := range []string{
+		filepath.Join(root, ".codex", "plugins"),
+		filepath.Join(root, ".agents", "plugins"),
+		filepath.Join(root, ".codex"),
+	} {
+		if _, err := removeDirIfEmpty(dir); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (i *pluginInstaller) installPluginBundle(pluginRoot, manifest, hooks string) error {
@@ -795,13 +1019,14 @@ func (i *pluginInstaller) installPluginBundle(pluginRoot, manifest, hooks string
 	if err := i.installFocusedSkills(filepath.Join(pluginRoot, "skills")); err != nil {
 		return err
 	}
-	return i.writeFile(filepath.Join(pluginRoot, pluginOwnerMarker), []byte(pluginOwnerValue), 0o600)
+	return i.writeFile(filepath.Join(pluginRoot, pluginOwnerMarker), []byte(pluginOwnerMarkerValue(i.pkg.Version)), 0o600)
 }
 
 func (i *pluginInstaller) installClaude() error {
 	root := i.home
 	if i.opts.ProjectLocal {
 		root = "."
+		return i.installFocusedSkills(filepath.Join(root, ".claude", "skills"))
 	}
 	pluginRoot := filepath.Join(root, ".claude", "skills", specgatePluginName)
 	return i.installPluginBundle(pluginRoot, ".claude-plugin/plugin.json", "hooks/hooks-claude.json")
@@ -813,7 +1038,7 @@ func (i *pluginInstaller) installFocusedSkills(destDir string) error {
 		if err := i.writePluginFile("skills/"+skill+"/SKILL.md", filepath.Join(skillDir, "SKILL.md"), 0o644); err != nil {
 			return err
 		}
-		if err := i.writeFile(filepath.Join(skillDir, pluginOwnerMarker), []byte(pluginOwnerValue), 0o600); err != nil {
+		if err := i.writeFile(filepath.Join(skillDir, pluginOwnerMarker), []byte(pluginOwnerMarkerValue(i.pkg.Version)), 0o600); err != nil {
 			return err
 		}
 	}
@@ -913,34 +1138,12 @@ func (i *pluginInstaller) writeFile(dest string, body []byte, mode os.FileMode) 
 }
 
 func validatePluginWritePath(root, dest string) error {
-	absRoot, err := filepath.Abs(root)
+	absRoot, absDest, rel, err := resolvePluginPath(root, dest)
 	if err != nil {
 		return err
 	}
-	absDest, err := filepath.Abs(dest)
-	if err != nil {
+	if err := validatePluginDirectoryChain(absRoot, filepath.Dir(rel)); err != nil {
 		return err
-	}
-	rel, err := filepath.Rel(absRoot, absDest)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return fmt.Errorf("plugin destination %s is outside install root %s", dest, root)
-	}
-	current := absRoot
-	for _, part := range strings.Split(filepath.Dir(rel), string(filepath.Separator)) {
-		if part == "" || part == "." {
-			continue
-		}
-		current = filepath.Join(current, part)
-		info, err := os.Lstat(current)
-		if os.IsNotExist(err) {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-			return fmt.Errorf("%s is not a real directory; refusing plugin write", current)
-		}
 	}
 	if info, err := os.Lstat(absDest); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
@@ -1266,18 +1469,25 @@ func checkPluginAgent(agent, home string, projectLocal bool, pkg *client.PluginP
 	var required []string
 	var pluginManifest string
 	var ownershipTargets []pluginOwnershipTarget
+	addSkills := func(dir string) {
+		for _, skill := range skills {
+			skillDir := filepath.Join(dir, skill)
+			required = append(required, filepath.Join(skillDir, "SKILL.md"))
+			ownershipTargets = append(ownershipTargets, pluginOwnershipTarget{path: skillDir, directory: true})
+		}
+	}
 	switch agent {
 	case "cursor":
 		pluginRoot := filepath.Join(root, ".cursor")
 		rule := filepath.Join(pluginRoot, "rules", "using-specgate.mdc")
 		required = append(required, rule)
 		ownershipTargets = append(ownershipTargets, pluginOwnershipTarget{path: rule})
-		for _, skill := range skills {
-			skillDir := filepath.Join(pluginRoot, "skills", skill)
-			required = append(required, filepath.Join(skillDir, "SKILL.md"))
-			ownershipTargets = append(ownershipTargets, pluginOwnershipTarget{path: skillDir, directory: true})
-		}
+		addSkills(filepath.Join(pluginRoot, "skills"))
 	case "codex":
+		if projectLocal {
+			addSkills(filepath.Join(root, ".agents", "skills"))
+			break
+		}
 		pluginRoot := filepath.Join(root, ".codex", "plugins", specgatePluginName)
 		configPath := filepath.Join(root, ".codex", "config.toml")
 		marketplace := filepath.Join(root, ".agents", "plugins", "marketplace.json")
@@ -1292,12 +1502,12 @@ func checkPluginAgent(agent, home string, projectLocal bool, pkg *client.PluginP
 			configPath,
 		)
 		ownershipTargets = append(ownershipTargets, pluginOwnershipTarget{path: pluginRoot, directory: true})
-		for _, skill := range skills {
-			skillDir := filepath.Join(pluginRoot, "skills", skill)
-			required = append(required, filepath.Join(skillDir, "SKILL.md"))
-			ownershipTargets = append(ownershipTargets, pluginOwnershipTarget{path: skillDir, directory: true})
-		}
+		addSkills(filepath.Join(pluginRoot, "skills"))
 	case "claude":
+		if projectLocal {
+			addSkills(filepath.Join(root, ".claude", "skills"))
+			break
+		}
 		pluginRoot := filepath.Join(root, ".claude", "skills", specgatePluginName)
 		pluginManifest = filepath.Join(pluginRoot, ".claude-plugin", "plugin.json")
 		required = append(required,
@@ -1308,14 +1518,7 @@ func checkPluginAgent(agent, home string, projectLocal bool, pkg *client.PluginP
 			filepath.Join(pluginRoot, "hooks", "session-start"),
 		)
 		ownershipTargets = append(ownershipTargets, pluginOwnershipTarget{path: pluginRoot, directory: true})
-		for _, skill := range skills {
-			skillDir := filepath.Join(pluginRoot, "skills", skill)
-			required = append(required, filepath.Join(skillDir, "SKILL.md"))
-			ownershipTargets = append(ownershipTargets, pluginOwnershipTarget{path: skillDir, directory: true})
-		}
-	}
-	if warning := missingAgentExecutableWarning(agent); warning != "" {
-		health.Warnings = append(health.Warnings, warning)
+		addSkills(filepath.Join(pluginRoot, "skills"))
 	}
 	for _, path := range required {
 		if !isRegularPluginFile(path) {
@@ -1327,7 +1530,7 @@ func checkPluginAgent(agent, home string, projectLocal bool, pkg *client.PluginP
 			health.Missing = append(health.Missing, target.path+" SpecGate ownership")
 		}
 	}
-	if agent == "codex" {
+	if agent == "codex" && !projectLocal {
 		configPath := filepath.Join(root, ".codex", "config.toml")
 		marketplace := filepath.Join(root, ".agents", "plugins", "marketplace.json")
 		pluginRoot := filepath.Join(root, ".codex", "plugins", specgatePluginName)
@@ -1351,7 +1554,7 @@ func checkPluginAgent(agent, home string, projectLocal bool, pkg *client.PluginP
 				health.Missing = append(health.Missing, marketplace+" SpecGate-managed entry")
 			}
 		}
-		if !projectLocal && latestVersion != "" {
+		if latestVersion != "" {
 			cacheWarnings := codexCacheWarnings(home, pluginRoot, latestVersion, skills)
 			health.Warnings = append(health.Warnings, cacheWarnings...)
 			health.NeedsUpdate = len(cacheWarnings) > 0
@@ -1362,7 +1565,22 @@ func checkPluginAgent(agent, home string, projectLocal bool, pkg *client.PluginP
 		health.InstalledVersion = installedVersion
 		if installedVersion != "" && installedVersion != latestVersion {
 			health.NeedsUpdate = true
-			health.Warnings = append(health.Warnings, fmt.Sprintf("Installed plugin version %s is older than latest %s; run '%s'.", installedVersion, latestVersion, pluginRepairCommand(agent, projectLocal)))
+			health.Warnings = append(health.Warnings, pluginVersionMismatchWarning(installedVersion, latestVersion, pluginRepairCommand(agent, projectLocal)))
+		}
+	}
+	if pluginManifest == "" && latestVersion != "" && len(ownershipTargets) > 0 && len(health.Missing) == 0 {
+		installedVersion, consistent := directPluginInstallVersion(ownershipTargets)
+		if consistent {
+			health.InstalledVersion = installedVersion
+		}
+		if !consistent || installedVersion != latestVersion {
+			health.NeedsUpdate = true
+			repair := pluginRepairCommand(agent, projectLocal)
+			if installedVersion == "" {
+				health.Warnings = append(health.Warnings, fmt.Sprintf("Installed plugin file versions are missing or mixed; latest is %s; run '%s'.", latestVersion, repair))
+			} else {
+				health.Warnings = append(health.Warnings, pluginVersionMismatchWarning(installedVersion, latestVersion, repair))
+			}
 		}
 	}
 	sort.Strings(health.Missing)
@@ -1372,6 +1590,32 @@ func checkPluginAgent(agent, home string, projectLocal bool, pkg *client.PluginP
 		health.RepairCommand = pluginRepairCommand(agent, projectLocal)
 	}
 	return health
+}
+
+func pluginVersionMismatchWarning(installed, latest, repair string) string {
+	return fmt.Sprintf("Installed plugin version %s does not match latest %s; run '%s'.", installed, latest, repair)
+}
+
+func directPluginInstallVersion(targets []pluginOwnershipTarget) (string, bool) {
+	version := ""
+	for _, target := range targets {
+		marker := target.path + pluginOwnerMarker
+		if target.directory {
+			marker = filepath.Join(target.path, pluginOwnerMarker)
+		}
+		current, err := pluginOwnerMarkerVersion(marker, target.path)
+		if err != nil || current == "" {
+			return "", false
+		}
+		if version == "" {
+			version = current
+			continue
+		}
+		if current != version {
+			return "", false
+		}
+	}
+	return version, version != ""
 }
 
 func isRegularPluginFile(path string) bool {
@@ -1392,22 +1636,6 @@ func hasValidPluginOwnership(path string, directory bool) bool {
 		marker = filepath.Join(path, pluginOwnerMarker)
 	}
 	return validatePluginOwnerMarker(marker, path) == nil
-}
-
-func missingAgentExecutableWarning(agent string) string {
-	if pluginAgentAvailable(agent) {
-		return ""
-	}
-	switch agent {
-	case "cursor":
-		return "Cursor executable/app was not found; install Cursor before relying on this IDE integration."
-	case "codex":
-		return "Codex CLI executable was not found on PATH; install Codex CLI before relying on this IDE integration."
-	case "claude":
-		return "Claude Code executable was not found on PATH; install Claude Code before relying on this IDE integration."
-	default:
-		return ""
-	}
 }
 
 func pluginAgentAvailable(agent string) bool {
@@ -1837,23 +2065,24 @@ func removeCodexMarketplaceEntry(path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	var data struct {
-		Name      string           `json:"name"`
-		Interface map[string]any   `json:"interface,omitempty"`
-		Plugins   []map[string]any `json:"plugins"`
-	}
+	var data map[string]json.RawMessage
 	if err := json.Unmarshal(body, &data); err != nil {
 		return false, fmt.Errorf("parse %s: %w", path, err)
 	}
-	if len(data.Plugins) == 0 {
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			return false, err
-		}
-		return true, nil
+	pluginsRaw, ok := data["plugins"]
+	if !ok {
+		return false, nil
 	}
-	filtered := data.Plugins[:0]
+	var plugins []map[string]any
+	if err := json.Unmarshal(pluginsRaw, &plugins); err != nil {
+		return false, fmt.Errorf("parse %s plugins: %w", path, err)
+	}
+	if len(plugins) == 0 {
+		return false, nil
+	}
+	filtered := plugins[:0]
 	changed := false
-	for _, plugin := range data.Plugins {
+	for _, plugin := range plugins {
 		if name, _ := plugin["name"].(string); name == specgatePluginName && codexPluginHasLocalSource(plugin, installedCodexPluginSource) {
 			changed = true
 			continue
@@ -1863,18 +2092,31 @@ func removeCodexMarketplaceEntry(path string) (bool, error) {
 	if !changed {
 		return false, nil
 	}
-	data.Plugins = filtered
-	if len(data.Plugins) == 0 {
+	if len(filtered) == 0 && codexMarketplaceHasOnlyManagedFields(data) {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			return false, err
 		}
 		return true, nil
 	}
+	pluginsBody, err := json.Marshal(filtered)
+	if err != nil {
+		return false, err
+	}
+	data["plugins"] = pluginsBody
 	out, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return false, err
 	}
 	return true, atomicReplaceFile(path, append(out, '\n'), 0o644)
+}
+
+func codexMarketplaceHasOnlyManagedFields(data map[string]json.RawMessage) bool {
+	for key := range data {
+		if key != "name" && key != "interface" && key != "plugins" {
+			return false
+		}
+	}
+	return true
 }
 
 func atomicReplaceFile(path string, body []byte, fallbackMode os.FileMode) error {

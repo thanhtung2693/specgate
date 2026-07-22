@@ -118,7 +118,9 @@ Run:
 specgate doctor
 specgate model test
 specgate gates check <artifact-id>
-specgate delivery submit <work-ref> --file .specgate/completion-<ref>.json
+specgate delivery report <work-ref> --init --json
+COMPLETION_PATH="<exact data.path from the preceding response>"
+specgate change submit <work-ref> --file "$COMPLETION_PATH"
 ```
 
 `model test` is a settings-only check: it verifies that provider, model, and

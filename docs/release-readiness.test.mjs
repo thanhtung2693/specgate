@@ -62,8 +62,14 @@ const files = {
   uiModelSettingsPanel: read("app/ui/src/components/layout/settings/model-settings-panel.tsx"),
   uiGovernanceAgent: read("app/ui/src/components/agent/governance-agent.tsx"),
   workboardModel: read("app/doc-registry/internal/workboard/model.go"),
+  routerSkill: read("plugins/skills/specgate-router/SKILL.md"),
+  setupSkill: read("plugins/skills/specgate-project-setup/SKILL.md"),
   preparingWorkSkill: read("plugins/skills/specgate-work-preparation/SKILL.md"),
   deliveringWorkSkill: read("plugins/skills/specgate-work-delivery/SKILL.md"),
+  pluginPackage: read("plugins/package.json"),
+  sessionStartHook: read("plugins/hooks/session-start"),
+  cursorRule: read("plugins/rules/using-specgate.mdc"),
+  cursorPlugin: read("plugins/.cursor-plugin/plugin.json"),
   localGateway: read("docker/local/nginx.conf"),
   fullGateway: read("app/ui/docker/nginx-default.conf"),
   landingPage: read("app/landing/index.html"),
@@ -348,6 +354,9 @@ test("model docs distinguish IDE assistance from server-only features", () => {
   assert.match(docs.codingAgentWorkflow, /artifact coverage[\s\S]*exact[- ]version/i);
   assert.doesNotMatch(docs.quickstart, /Configure a model when you want server-side summaries, route suggestions/);
   assert.doesNotMatch(docs.quickstart + docs.installIdePlugins, /Offline Local CLI/);
+  assert.match(docs.installIdePlugins, /Codex[\s\S]{0,160}`\.agents\/skills\/specgate-\*`/i);
+  assert.match(docs.installIdePlugins, /Claude Code[\s\S]{0,160}`\.claude\/skills\/specgate-\*`/i);
+  assert.doesNotMatch(docs.installIdePlugins, /project-local marketplace configuration/i);
 
   for (const skill of [
     "specgate-router",
@@ -364,6 +373,56 @@ test("model docs distinguish IDE assistance from server-only features", () => {
   }
 });
 
+test("SpecGate uses one short bootstrap and one explicit lifecycle phase", () => {
+  const routerWords = files.routerSkill.trim().split(/\s+/).length;
+
+  assert.match(files.routerSkill, /^description: Use when the user explicitly mentions SpecGate/m);
+  assert.ok(routerWords <= 400, `router is ${routerWords} words; expected at most 400`);
+  assert.match(files.routerSkill, /For lifecycle work, choose exactly one phase/is);
+  assert.match(files.routerSkill, /exactly one.*setup.*prepar.*deliver/is);
+  assert.match(files.routerSkill, /framework.*owns.*paths.*Git/is);
+  assert.match(files.routerSkill, /readiness.*not.*approval/is);
+  assert.match(files.routerSkill, /read-only[\s\S]{0,160}specgate change status "\$WORK_REF" --json/i);
+  assert.match(files.routerSkill, /only product-state read and write surface/i);
+  assert.match(files.routerSkill, /never inspect\s+or edit[\s\S]{0,200}SQLite[\s\S]{0,200}object storage/i);
+
+  assert.match(files.sessionStartHook, /SpecGate skills are installed/);
+  assert.match(files.sessionStartHook, /explicitly mentions SpecGate/);
+  assert.match(files.sessionStartHook, /Read-only.*stay in the router/is);
+  assert.doesNotMatch(files.sessionStartHook, /SpecGate is connected/);
+  assert.doesNotMatch(files.sessionStartHook, /SKILL_CONTENT=.*cat/);
+
+  assert.match(files.cursorRule, /explicitly mentions SpecGate/);
+  assert.match(files.cursorRule, /Read-only.*stay in the router/is);
+  assert.doesNotMatch(files.cursorPlugin, /hooks\/hooks-cursor\.json/);
+  assert.doesNotMatch(files.pluginPackage, /hooks\/hooks-cursor\.json/);
+  assert.ok(!existsSync(new URL("plugins/hooks/hooks-cursor.json", root)), "dead Cursor bootstrap hook remains");
+});
+
+test("SpecGate project setup performs and verifies the requested setup", () => {
+  const skill = files.setupSkill;
+
+  assert.match(skill, /^description: Use when SpecGate is being (?:initialized|configured)/m);
+  for (const command of [
+    "specgate --version",
+    "specgate doctor --json",
+    "specgate workspace bind",
+    "specgate plugins install",
+    "specgate plugins doctor",
+    "specgate workspace current",
+  ]) assert.match(skill, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+
+  assert.match(skill, /user.*chooses.*Local.*Full/is);
+  assert.match(skill, /user.*chooses.*IDE.*scope/is);
+  assert.match(skill, /--workspace-name/);
+  assert.match(skill, /--display-name/);
+  assert.match(skill, /--username/);
+  assert.match(skill, /bind only when.*missing.*incorrect.*explicitly requested/is);
+  assert.match(skill, /existing topology.*recovery action/is);
+  assert.match(skill, /restart.*IDE/is);
+  assert.doesNotMatch(skill, /Produce a project setup map|hard_stop.*required_practice.*local_convention/is);
+});
+
 test("user docs keep Local and Full capability boundaries explicit", () => {
   assert.match(docs.featureStatus, /Local and Full quick work item creation/);
   assert.match(docs.featureStatus, /Embedded Codex, Claude Code, and Cursor plugin install in Local mode/);
@@ -371,8 +430,13 @@ test("user docs keep Local and Full capability boundaries explicit", () => {
   assert.match(docs.cliReference, /`artifact request-changes` in Full mode/);
   assert.match(docs.cliReference, /List and inspect governed features in either mode/);
   assert.match(docs.configReference, /## Full appliance/);
-  assert.match(files.deliveringWorkSkill, /Delivery review remains available for\s+diagnosis in both modes/);
-  assert.match(files.deliveringWorkSkill, /In Full mode[\s\S]{0,120}specgate gates run/);
+  assert.match(docs.howSpecGateWorks, /Local and Full modes[\s\S]{0,100}quick route/i);
+  assert.match(docs.howSpecGateWorks, /artifact-backed route/i);
+  assert.doesNotMatch(docs.howSpecGateWorks, /no Local quick-work parity/i);
+  assert.match(docs.cliReference, /same in Local and Full mode/i);
+  assert.doesNotMatch(files.deliveringWorkSkill, /specgate delivery review/i);
+  assert.match(files.deliveringWorkSkill, /checks\[\]\.command[\s\S]{0,240}`sh -c`/i);
+  assert.doesNotMatch(files.deliveringWorkSkill, /specgate gates run/);
   for (const text of [docs.quickstart, docs.installIdePlugins, docs.cliReference]) {
     assert.match(text, /removes\s+CLI\s+configuration\s+and\s+globally\s+installed\s+managed\s+plugin\s+files/);
     assert.match(text, /Project-local\s+plugin\s+files[\s\S]{0,120}preserved/i);
@@ -429,6 +493,32 @@ test("Change facade docs describe the actionable post-handoff path without inven
   assert.match(docs.featureStatus, /`change prepare`[\s\S]*not available/i);
 });
 
+test("coding-agent delivery ends with a truthful human-acceptance receipt", () => {
+  const workflow = docs.codingAgentWorkflow;
+
+  for (const phrase of [
+    "SpecGate delivery receipt",
+    "`awaiting_acceptance`",
+    "Evidence",
+    "Assurance",
+    "Decision",
+    "Receipt",
+    "Freshness",
+    "Next",
+  ]) assert.match(workflow, new RegExp(phrase));
+  assert.match(workflow, /fresh\s+`specgate change status <work-ref> --json`/);
+  assert.match(workflow, /per-work\s+governance handoff/i);
+  assert.match(workflow, /Evidence: Ready for human review/);
+  assert.match(workflow, /Assurance: Agent-reported; locally reproduced; second agent affirmed/);
+  assert.match(workflow, /Freshness: The stored receipt was not checked against the current checkout\./);
+  assert.match(workflow, /stale warning does not rewrite the reported state/i);
+  assert.match(workflow, /separate `Stale:` line/);
+  assert.match(workflow, /does not prove that SpecGate prevented bugs or saved\s+time/i);
+  assert.match(workflow, /not\s+accepted\s+or\s+delivered/i);
+  assert.match(workflow, /returned `data\.path`/i);
+  assert.doesNotMatch(workflow, /--file \.specgate\/completion-<work-ref>\.json/);
+});
+
 test("quickstart completes one Local CLI work item before linking to Full", () => {
   for (const command of [
     "specgate workspace bind",
@@ -461,9 +551,53 @@ test("Local human-decision examples require an explicit human assertion", () => 
   assert.match(docs.codingAgentWorkflow, /specgate --yes change accept/);
   assert.match(docs.respondToGateFailures, /specgate --yes change approve/);
   assert.match(files.preparingWorkSkill, /specgate --yes change approve/);
-  assert.match(files.deliveringWorkSkill, /specgate --yes change approve/);
+  assert.doesNotMatch(files.deliveringWorkSkill, /specgate --yes change approve/);
   assert.match(docs.cliReference, /Local mode[\s\S]{0,240}requires explicit `--yes`/);
   assert.match(docs.cliReference, /Full-mode[\s\S]{0,240}`--yes` is optional/);
+});
+
+test("delivery skill follows the authoritative SpecGate actor without crossing phases", () => {
+  const skill = files.deliveringWorkSkill;
+  const words = skill.trim().split(/\s+/).length;
+  const firstStatus = skill.indexOf('specgate change status "$WORK_REF" --json');
+  const driftDispatch = skill.indexOf('specgate gates tasks dispatch "$ARTIFACT_ID" --json');
+  const reworkRouting = skill.indexOf("`rework_requested`");
+  const reportSection = skill.indexOf("## 5. Report criterion evidence");
+  const reviewPendingRouting = skill.indexOf("`review_pending`");
+
+  assert.match(skill, /^description: Use when .*approved SpecGate work item/m);
+  assert.match(skill, /specgate work show "\$WORK_REF" --json[\s\S]*specgate work context "\$WORK_REF" --json/);
+  assert.ok(firstStatus > 0 && firstStatus < driftDispatch, "authoritative actor must be checked before drift or implementation");
+  assert.ok(reworkRouting > 0 && reworkRouting < reportSection, "rework guidance must be read before evidence is submitted");
+  assert.ok(reviewPendingRouting > 0 && reviewPendingRouting < driftDispatch, "review_pending must route before drift or implementation");
+  assert.match(skill.slice(reviewPendingRouting, driftDispatch), /next_command[\s\S]*immediately[\s\S]*status/i);
+  assert.match(skill, /data\.next_actor/);
+  assert.match(skill, /next_command.*verbatim/is);
+  assert.match(skill, /awaiting_review.*human reviewer/is);
+  assert.match(skill, /peer review.*only when.*human.*explicitly requests/is);
+  assert.match(skill, /new artifact version.*specgate-work-preparation/is);
+  assert.match(skill, /stop on\s+any mismatch/i);
+  assert.match(skill, /existing regular scaffold[\s\S]*reuse/is);
+  assert.match(skill, /`data\.path`.*verbatim/is);
+  assert.match(skill, /rework_requested[\s\S]*guidance[\s\S]*missing[\s\S]*focused fix[\s\S]*affected checks[\s\S]*submit[\s\S]*fresh status/is);
+  assert.doesNotMatch(skill, /specgate --yes change approve|specgate artifact publish|specgate work list|specgate status --json/);
+  assert.doesNotMatch(skill, /completion-\$WORK_REF|peer-review-\$WORK_REF|--force/);
+  assert.doesNotMatch(skill, /coding_agent\.blocked_ambiguity|coding_agent\.docs_updated/);
+  assert.ok(words <= 950, `delivery skill is ${words} words; expected at most 950`);
+});
+
+test("delivery examples capture the scaffold path before submitting", () => {
+  assert.match(docs.cliWorkflow, /delivery report <work-ref> --init --json[\s\S]*COMPLETION_PATH[\s\S]*change submit <work-ref> --file "\$COMPLETION_PATH"/);
+  assert.match(docs.configureModels, /delivery report <work-ref> --init --json[\s\S]*COMPLETION_PATH[\s\S]*change submit <work-ref> --file "\$COMPLETION_PATH"/);
+  assert.match(docs.codingAgentWorkflow, /delivery report <work-ref> --init --json[\s\S]*COMPLETION_PATH[\s\S]*change submit <work-ref>[\s\S]*--file "\$COMPLETION_PATH"/);
+  assert.match(docs.codingAgentWorkflow, /delivery peer-review <work-ref> --init --json[\s\S]*PEER_REVIEW_PATH[\s\S]*delivery peer-review <work-ref>[\s\S]*--file "\$PEER_REVIEW_PATH"/);
+  assert.match(docs.quickstart, /delivery report <work-ref> --init --json[\s\S]*COMPLETION_PATH[\s\S]*change submit <work-ref>[\s\S]*--file "\$COMPLETION_PATH"/);
+  assert.doesNotMatch(`${docs.cliWorkflow}\n${docs.configureModels}\n${docs.codingAgentWorkflow}\n${docs.quickstart}\n${docs.cliReference}\n${docs.respondToGateFailures}`, /<returned-data\.path>/);
+});
+
+test("update docs distinguish global refresh from project-local refresh", () => {
+  assert.match(docs.cliWorkflow, /update[\s\S]{0,220}already-installed global IDE plugin\s+files/i);
+  assert.match(docs.cliWorkflow, /project-local[\s\S]{0,180}specgate plugins install --project-local/i);
 });
 
 test("Full appliance custom-port setup selects Full mode explicitly", () => {
@@ -471,17 +605,39 @@ test("Full appliance custom-port setup selects Full mode explicitly", () => {
   assert.doesNotMatch(docs.operateSpecGate, /SPECGATE_PORT=13000 specgate init\s*(?:\n|$)/);
 });
 
-test("work-preparation skill keeps comparison explicit and completes full-route handoff", () => {
+test("work-preparation skill keeps comparison explicit and completes artifact-backed handoff", () => {
   const skill = files.preparingWorkSkill;
+  const artifactRoute = skill.slice(skill.indexOf("## 2B."));
 
-  assert.match(skill, /artifact publish --file artifact\.json --preview --compare/);
+  assert.match(skill, /artifact publish --file \.specgate\/work\/artifact\.json[\s\S]{0,80}--preview --compare/);
   assert.match(skill, /artifact show/);
   assert.match(skill, /specgate --yes change approve[\s\S]{0,180}--title[\s\S]{0,180}--ac/);
   assert.match(skill, /work context/);
   assert.match(skill, /does not detect frameworks or infer roles/i);
   assert.doesNotMatch(skill, /auto-detect|detected source kind/i);
   assert.doesNotMatch(skill, /specgate work create --feature/);
-  assert.ok(skill.indexOf("change approve") < skill.indexOf("work context"));
+  assert.ok(artifactRoute.indexOf("change approve") < artifactRoute.indexOf("work context"));
+});
+
+test("work preparation preserves framework sources and separates its two routes", () => {
+  const skill = files.preparingWorkSkill;
+  const words = skill.trim().split(/\s+/).length;
+
+  assert.match(skill, /^description: Use when preparing .*SpecGate/m);
+  assert.match(skill, /quick work[\s\S]*artifact-backed work/i);
+  assert.match(skill, /\.specgate\/work\/artifact\.json/);
+  assert.match(skill, /`path`.*repository-relative POSIX path/is);
+  assert.match(skill, /`source_file`.*contained.*manifest directory/is);
+  assert.match(skill, /`file_url`.*outside.*manifest directory/is);
+  assert.match(skill, /"feature_key"[\s\S]*"request_type"[\s\S]*"documents"/);
+  assert.match(skill, /new_feature.*change_request.*bugfix.*unknown/is);
+  assert.match(skill, /publication succeeded[\s\S]*On failure, stop[\s\S]*do not run readiness/is);
+  assert.match(skill, /never (?:relocate|move).*copy.*rename.*delete.*commit.*ignore/is);
+  assert.match(skill, /every selected source appears exactly once/i);
+  assert.match(skill, /explicit human confirmation[\s\S]*artifact publish/is);
+  assert.match(skill, /Quick work ends here/i);
+  assert.doesNotMatch(skill, /source path.*may differ|Fix each gap in the document that owns it/i);
+  assert.ok(words <= 1000, `preparation skill is ${words} words; expected at most 1000`);
 });
 
 test("public gateways strip the internal governance settings header", () => {

@@ -23,7 +23,8 @@ func TestCatalogRendersRegistryAwareFiles(t *testing.T) {
 		`curl -fsSL "https://sdlc.test/cli/install.sh" | sh`,
 		"specgate plugins install",
 		"`specgate plugins doctor` follow-up",
-		"`.codex/plugins/specgate/`, `.cursor/skills/`, `.cursor/rules/`",
+		"`.agents/skills/specgate-*`",
+		"`.claude/skills/specgate-*`",
 	} {
 		if !strings.Contains(readme, want) {
 			t.Fatalf("readme missing %q: %s", want, readme)
@@ -51,6 +52,7 @@ func TestCatalogRendersRegistryAwareFiles(t *testing.T) {
 		`"skills": "./skills/"`,
 		`"composerIcon": "./assets/logo.svg"`,
 		`"logo": "./assets/logo.svg"`,
+		`"Show the delivery status for this SpecGate work item."`,
 	} {
 		if !strings.Contains(manifest, want) {
 			t.Fatalf("codex plugin manifest missing %q: %s", want, manifest)
@@ -151,7 +153,7 @@ func TestPackageInventoryServedFilesRender(t *testing.T) {
 	}
 }
 
-func TestFocusedSkillsDocumentInvocationModes(t *testing.T) {
+func TestFocusedSkillsKeepOneExplicitSpecGatePhase(t *testing.T) {
 	t.Parallel()
 
 	pkg, err := PackageInventory()
@@ -164,11 +166,16 @@ func TestFocusedSkillsDocumentInvocationModes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("render %s: %v", path, err)
 		}
-		if !strings.Contains(body, "\n## Invocation\n") {
-			t.Fatalf("%s missing Invocation section:\n%s", path, body)
+		frontmatter := strings.SplitN(body, "---", 3)
+		if len(frontmatter) != 3 || !strings.Contains(frontmatter[1], "description: Use when") || !strings.Contains(frontmatter[1], "SpecGate") {
+			t.Fatalf("%s needs an explicit, trigger-oriented SpecGate description:\n%s", path, body)
 		}
-		if !strings.Contains(body, "Invocation mode:") {
-			t.Fatalf("%s missing invocation mode label:\n%s", path, body)
+		if skill == "specgate-router" {
+			if !strings.Contains(body, "## Route one phase") {
+				t.Fatalf("%s missing phase routing:\n%s", path, body)
+			}
+		} else if !strings.Contains(body, "router operating contract") || !strings.Contains(body, "This phase") {
+			t.Fatalf("%s does not inherit the router contract as one phase:\n%s", path, body)
 		}
 	}
 
@@ -178,7 +185,7 @@ func TestFocusedSkillsDocumentInvocationModes(t *testing.T) {
 	}
 	for _, want := range []string{
 		"## Skill invocation modes",
-		"`specgate-router` is the router",
+		"`specgate-router` selects one narrow phase",
 		"`specgate-project-setup` is explicit setup",
 		"Lifecycle skills stay focused",
 	} {
@@ -202,12 +209,12 @@ func TestSkillsDescribeIDEAgentNoModelBoundaries(t *testing.T) {
 	delivering := render("skills/specgate-work-delivery/SKILL.md")
 	router := render("skills/specgate-router/SKILL.md")
 	all := preparing + delivering + router
-	for _, want := range []string{"data.mode", "gates tasks list", "gates tasks submit-result", "artifact coverage", "both Local and Full"} {
+	for _, want := range []string{"data.mode", "gates tasks list", "gates tasks submit-result", "artifact coverage", "Local and Full mode"} {
 		if !strings.Contains(all, want) {
 			t.Fatalf("skills missing %q", want)
 		}
 	}
-	for _, want := range []string{"not Governance Knowledge", "does not approve", "different review-only agent"} {
+	for _, want := range []string{"readiness pass is not human approval", "human explicitly requests", "different review-only agent"} {
 		if !strings.Contains(router+delivering, want) {
 			t.Fatalf("skills missing boundary %q", want)
 		}
@@ -227,8 +234,8 @@ func TestDeliveringWorkSkillRequiresObservedCheckResults(t *testing.T) {
 	normalized := strings.Join(strings.Fields(body), " ")
 	for _, want := range []string{
 		"observed result",
-		"pass count",
-		"not just the command name",
+		"command name alone is not evidence",
+		"pass`, `fail`, or `skipped",
 	} {
 		if !strings.Contains(normalized, want) {
 			t.Fatalf("work-delivery skill missing observed check-result guidance %q:\n%s", want, body)
@@ -236,21 +243,20 @@ func TestDeliveringWorkSkillRequiresObservedCheckResults(t *testing.T) {
 	}
 }
 
-func TestDeliveringWorkSkillCoversPlainDeveloperPrompts(t *testing.T) {
+func TestDeliveringWorkSkillRequiresExplicitSpecGateContext(t *testing.T) {
 	t.Parallel()
 
 	body, err := Render("skills/specgate-work-delivery/SKILL.md", Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	normalized := strings.Join(strings.Fields(body), " ")
-	for _, want := range []string{
-		"ordinary developer phrasing",
-		"Do not stop after local code and tests",
-		"submit delivery review",
-	} {
-		if !strings.Contains(normalized, want) {
-			t.Fatalf("work-delivery skill missing plain-prompt guidance %q:\n%s", want, body)
+	frontmatter := strings.SplitN(body, "---", 3)
+	if len(frontmatter) != 3 || !strings.Contains(frontmatter[1], "approved SpecGate work item") {
+		t.Fatalf("work-delivery skill must require explicit SpecGate context:\n%s", body)
+	}
+	for _, legacy := range []string{"ordinary developer phrasing", "A work reference (`CR-123`"} {
+		if strings.Contains(body, legacy) {
+			t.Fatalf("work-delivery skill still auto-governs generic prompts with %q:\n%s", legacy, body)
 		}
 	}
 }
@@ -264,15 +270,55 @@ func TestDeliveringWorkSkillRequiresCriterionSpecificEvidence(t *testing.T) {
 	}
 	normalized := strings.Join(strings.Fields(body), " ")
 	for _, want := range []string{
-		"Make each criterion claim independently reviewable",
-		"Keep `criteria[].claim` exactly one of those enum values",
-		"evidence.path",
-		"`line`",
-		"one test covers multiple criteria",
+		"exactly one `criteria[]` entry per canonical criterion",
+		"independently reviewable claim",
+		"evidence path, line, heading, file key, or URL",
+		"command name alone is not evidence",
 	} {
 		if !strings.Contains(normalized, want) {
 			t.Fatalf("work-delivery skill missing criterion-specific evidence guidance %q:\n%s", want, body)
 		}
+	}
+}
+
+func TestDeliveringWorkSkillReportsTruthfulAwaitingAcceptanceReceipt(t *testing.T) {
+	t.Parallel()
+
+	body, err := Render("skills/specgate-work-delivery/SKILL.md", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := strings.SplitN(body, "## 7. Show the delivery handoff", 2)
+	if len(parts) != 2 {
+		t.Fatalf("work-delivery skill missing delivery handoff section:\n%s", body)
+	}
+	receipt := strings.Join(strings.Fields(parts[1]), " ")
+	for _, want := range []string{
+		`specgate change status "$WORK_REF" --json`,
+		"For `awaiting_acceptance`",
+		"SpecGate delivery receipt",
+		"Evidence: <evidence>",
+		"Assurance: <assurance>",
+		"Decision: <decision>",
+		"Receipt: <receipt>",
+		"Freshness: <freshness>",
+		"Stale: <stale_reason>",
+		"`next_actor`",
+		"`next_command`",
+		`specgate open "$WORK_REF" --print --json`,
+		"In Local mode, never call `open`",
+		"SpecGate delivery handoff",
+		"Stale is a warning, not a state override",
+		"Do not read the completion file again",
+		"call stats or audit",
+		"Never claim cleanup eligibility, bugs prevented, time saved, accepted, or delivered",
+	} {
+		if !strings.Contains(receipt, want) {
+			t.Fatalf("work-delivery receipt contract missing %q:\n%s", want, parts[1])
+		}
+	}
+	if !strings.Contains(receipt, "For any other state") || !strings.Contains(receipt, "do not use success wording") {
+		t.Fatalf("work-delivery handoff contract does not cover non-success states:\n%s", parts[1])
 	}
 }
 

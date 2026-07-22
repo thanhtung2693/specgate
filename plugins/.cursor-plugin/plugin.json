@@ -1,6 +1,6 @@
 {
   "name": "specgate",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Focused SpecGate skills for project setup, work preparation, and delivery.",
   "author": {
     "name": "Thanh Tung"
@@ -22,6 +22,5 @@
   "category": "developer-tools",
   "logo": "assets/logo.svg",
   "skills": "./skills/",
-  "rules": "./rules/",
-  "hooks": "./hooks/hooks-cursor.json"
+  "rules": "./rules/"
 }

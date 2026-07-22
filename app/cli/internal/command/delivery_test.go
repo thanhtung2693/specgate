@@ -318,6 +318,28 @@ func TestDeliveryReportFromFile(t *testing.T) {
 	}
 }
 
+func TestLocalDeliveryReportFromFileReturnsActionableError(t *testing.T) {
+	t.Parallel()
+	deps, _, _, out := newFakeDeps(t)
+	stateDir, store, _, work := newLocalChangeWork(t, deps)
+	closeLocalChangeStore(t, deps, stateDir, store)
+	deps.Client = nil
+	f := writeDeliveryJSON(t, map[string]any{
+		"event_type":     "coding_agent.completed",
+		"summary":        "done",
+		"context_digest": work.ContextDigest,
+		"agent":          map[string]any{"name": "Codex"},
+	})
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "delivery", "report", work.Key, "--file", f)
+	if code != output.ExitIncompatible {
+		t.Fatalf("exit = %d, want incompatible; output = %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "specgate change submit") || !strings.Contains(out.String(), "--file") {
+		t.Fatalf("error does not route Local completion to change submit: %s", out.String())
+	}
+}
+
 func deliveryGitOutput(dir string, args ...string) string {
 	return strings.Join(append([]string{"git", "-C", dir}, args...), " ")
 }
@@ -1172,6 +1194,29 @@ func TestLocalDeliveryReportInitCapturesGitReceiptAndAllCheckBindings(t *testing
 	}
 }
 
+func TestLocalDeliveryReportInitPlainRoutesToChangeSubmit(t *testing.T) {
+	deps, _, _, out := newFakeDeps(t)
+	stateDir, store, _, work := newLocalChangeWork(t, deps)
+	closeLocalChangeStore(t, deps, stateDir, store)
+	deps.Client = nil
+	dir := t.TempDir()
+	deps.WorkingDir = dir
+	deps.DeployRunner = deliveryGitRunner(dir, nil)
+	path := filepath.Join(t.TempDir(), "completion.json")
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "delivery", "report", work.Key, "--init="+path)
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	want := "specgate change submit " + work.Key + " --file " + path
+	if !strings.Contains(out.String(), want) {
+		t.Fatalf("Local scaffold handoff = %q, want command %q", out.String(), want)
+	}
+	if strings.Contains(out.String(), "specgate delivery submit") {
+		t.Fatalf("Local scaffold advertised the diagnostic delivery facade: %s", out.String())
+	}
+}
+
 func TestDeliveryReportInitAcceptsSpaceSeparatedPath(t *testing.T) {
 	t.Parallel()
 	deps, fc, _, out := newFakeDeps(t)
@@ -1278,6 +1323,35 @@ func TestDeliveryReportInitRefusesOverwriteWithoutForce(t *testing.T) {
 	}
 }
 
+func TestDeliveryReportInitJSONReturnsExistingScaffoldPathWithoutOverwriting(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	fc.acceptanceCriteria = []client.AcceptanceCriterion{{ID: "ac-1", Text: "AC"}}
+	path := filepath.Join(t.TempDir(), "completion.json")
+	if err := os.WriteFile(path, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "delivery", "report", "CR-101", "--init="+path)
+	if code != output.ExitUsage {
+		t.Fatalf("exit = %d, want %d; output=%s", code, output.ExitUsage, out.String())
+	}
+	var env struct {
+		Error struct {
+			Details map[string]any `json:"details"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal: %v; output=%s", err, out.String())
+	}
+	if got := env.Error.Details["path"]; got != path {
+		t.Fatalf("error.details.path = %#v, want %q; output=%s", got, path, out.String())
+	}
+	if got, _ := os.ReadFile(path); string(got) != "{}" {
+		t.Fatalf("existing scaffold was overwritten: %s", got)
+	}
+}
+
 func TestDeliveryReportInitJSONReportsPathAndCount(t *testing.T) {
 	t.Parallel()
 	deps, fc, _, out := newFakeDeps(t)
@@ -1299,6 +1373,19 @@ func TestDeliveryReportInitJSONReportsPathAndCount(t *testing.T) {
 	}
 	if !env.OK || env.Data.Path != path || env.Data.Criteria != 1 {
 		t.Fatalf("unexpected envelope: %s", out.String())
+	}
+	var scaffold struct {
+		ChangeRequestID string `json:"change_request_id"`
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(body, &scaffold); err != nil {
+		t.Fatal(err)
+	}
+	if scaffold.ChangeRequestID != "cr-1" {
+		t.Fatalf("change_request_id = %q, want cr-1; scaffold=%s", scaffold.ChangeRequestID, body)
 	}
 }
 

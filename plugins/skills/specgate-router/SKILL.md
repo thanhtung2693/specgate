@@ -1,87 +1,57 @@
 ---
 name: specgate-router
-description: SpecGate router. Use when a task mentions SpecGate, the specgate CLI, work items, artifacts, quality/readiness gates, Context Packs, implementation feedback, or delivery review.
+description: Use when the user explicitly mentions SpecGate, the specgate CLI, or a SpecGate artifact, gate, Context Pack, work reference, or delivery state.
 ---
 
 # Using SpecGate
 
-## Invocation
+## Route one phase
 
-Invocation mode: router. Load this skill when SpecGate is mentioned, then select
-one focused phase skill before acting. Keep this file small; it is the index,
-not the workflow body. Load a phase skill directly only when the user request
-already names that phase; return here when the task crosses phases.
+For lifecycle work, choose exactly one phase before acting:
 
-Select the narrowest phase (each skill's frontmatter carries its triggers):
+- `specgate-project-setup` — initialize, bind, install, refresh, or diagnose SpecGate for a repository.
+- `specgate-work-preparation` — turn a request or source specification into approved SpecGate work.
+- `specgate-work-delivery` — implement, resume, review, or rework approved SpecGate work.
 
-- `specgate-project-setup` — onboarding SpecGate to a repository.
-- `specgate-work-preparation` — shaping, publishing, and readiness before approval.
-- `specgate-work-delivery` — pickup through implementation, evidence, and review.
-
-Use the `specgate` CLI for platform interactions. Run `specgate --help` when
-the required command is unclear.
-
-Before a mode-dependent action or handoff, run:
+For a read-only work or lifecycle-status question with a work reference, start
+with the authoritative read:
 
 ```bash
-specgate doctor --json
+specgate change status "$WORK_REF" --json
 ```
 
-Read `data.mode`: `local` means Local CLI; `full` means the Full
-appliance or a remote server. Do not infer the mode from Docker, a configured
-URL, or whether a browser happens to be available. If `doctor` cannot return a
-successful envelope, report that blocker instead of guessing a handoff route.
+For other SpecGate concept or troubleshooting questions, use the smallest
+relevant CLI read. Do not force a lifecycle phase or mutate records.
 
-## Advisory assistance is ephemeral
+Before a mode-dependent write or handoff, run `specgate doctor --json`. Read
+`data.mode`; never infer Local or Full mode from Docker, URLs, or browser
+availability. Report an unsuccessful doctor result instead of guessing.
 
-Answer governance questions from the smallest relevant CLI record:
+Completion criterion: exactly one phase skill is selected, or the request is
+identified as a read-only SpecGate question.
 
-- `work show` / `work context` — implementation contract;
-- `artifact show` — exact Local content or Full metadata;
-- `artifact coverage` — exact-version linked work and delivery state;
-- `gates results` — stored readiness evidence;
-- `delivery status` — delivery verdict and peer evidence;
-- `audit` — governance history.
+## Operating contract
 
-Advice, acceptance-criteria drafts, explanations, and summaries are ephemeral
-IDE output unless an explicit CLI command persists the canonical record. Repo
-reads are not Governance Knowledge; advisory output does not approve an
-artifact or delivery.
-For one published spec, use `artifact coverage <artifact-id>`; for all versions,
-enumerate `artifact list --json` and inspect coverage for every exact id. Do not
-collapse versions by feature key.
+- The `specgate` CLI is the only product-state read and write surface. Never inspect
+  or edit SpecGate SQLite, Postgres, object storage, deployment volumes, or
+  `.specgate/local` directly. Repository source reads remain allowed.
+- Drafts, explanations, summaries, and repository reads remain ephemeral until
+  an explicit CLI command persists them.
+- The originating authoring framework owns durable source documents: their
+  paths, names, lifecycle, and Git policy. SpecGate snapshots them in place. It
+  does not move, copy, rename, delete, commit, or change ignore rules for them.
+- A readiness pass is not human approval. Approval, acceptance, and requested
+  changes remain human decisions. Run a decision command only after the human
+  explicitly chooses and authorizes that exact decision; never infer one.
+- An approved Context Pack outranks chat history, tracker prose, and stale
+  repository documentation. Never silently expand its scope.
+- Follow exact identifiers and versions. `artifact coverage <artifact-id>` is
+  exact-version evidence; do not collapse versions by feature name.
+- Follow `change status.data.next_actor` and `next_command`. When the next actor
+  is human, stop and hand off that command verbatim.
+- Local mode has no UI URL and never calls `specgate open`. In Full mode, use
+  only the URL returned by `specgate open ... --print --json`; never construct
+  one.
 
-## Human-readable entity links
-
-In Full mode, when asking for a decision or reporting lifecycle state, render
-the first work item or artifact mention as a Markdown link with its
-human-readable title and stable ID. Obtain the URL from SpecGate; never
-construct or guess it:
-
-```bash
-specgate open "$WORK_REF" --print --json
-specgate open --artifact "$ARTIFACT_ID" --print --json
-```
-
-Use the returned URL as the link destination and `<title> (<stable-id>)` as
-its text. Repeated mentions in the same response may use the ID alone. If
-SpecGate returns no URL, fall back to `<title> (<stable-id>)` without a link.
-This applies to approval and promotion requests, blockers, handoffs, and
-delivery receipts.
-
-In Local CLI mode there is no browser UI. Do not call `specgate open` and do
-not invent a URL. Render `<title> (<stable-id>)` as plain text and give the
-human the exact next CLI command instead.
-
-If the user only asks a SpecGate concept, audit, or troubleshooting question,
-answer it from this router without forcing a lifecycle phase. Do not edit the
-target repository or SpecGate records unless a phase skill requires it.
-
-Hard stops:
-
-- A readiness pass is not human approval.
-- A Context Pack outranks chat history, tracker comments, and stale repo docs.
-- Do not silently change approved scope.
-
-Completion criterion: before leaving this router, one phase skill is selected
-or the task is explicitly identified as a non-lifecycle SpecGate question.
+For command syntax, run `specgate <command> --help` rather than reconstructing
+flags from memory.

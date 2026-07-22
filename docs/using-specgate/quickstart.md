@@ -153,11 +153,15 @@ checks, and prepares one evidence claim per acceptance criterion:
 
 ```bash
 specgate delivery report <work-ref> --init --json
+COMPLETION_PATH="<exact data.path from the preceding response>"
 specgate change submit <work-ref> \
-  --file .specgate/completion-<ref>.json \
+  --file "$COMPLETION_PATH" \
   --run-checks --yes --json
 specgate change status <work-ref>
 ```
+
+Use the scaffold command's exact `data.path` value in `--file`; do not build a
+filename from a URL or another arbitrary work reference.
 
 If review reports a gap, the agent fixes that gap, reruns the relevant checks,
 updates the evidence, and submits again. A passing readiness check or agent

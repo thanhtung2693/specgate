@@ -476,6 +476,24 @@ func TestQuickWorkCreatesArtifactFreeImmutableContextPack(t *testing.T) {
 	}
 }
 
+func TestDeliveryDecisionWithoutReportRoutesToChangeSubmit(t *testing.T) {
+	store, err := local.Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	selection, err := store.Initialize(context.Background(), local.InitInput{WorkspaceName: "Alpha", DisplayName: "Human", Username: "human"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	work := readyLocalWork(t, store, selection)
+
+	err = store.DecideDelivery(context.Background(), selection.Workspace.ID, work.Key, "approve", "human", "looks good")
+	if err == nil || !strings.Contains(err.Error(), "specgate change submit "+work.Key) {
+		t.Fatalf("decision error = %v, want change submit recovery", err)
+	}
+}
+
 func TestDeliveryEvidenceBindsContextAndNeedsHumanApproval(t *testing.T) {
 	store, err := local.Open(filepath.Join(t.TempDir(), "state.db"))
 	if err != nil {

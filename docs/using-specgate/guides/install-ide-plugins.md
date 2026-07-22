@@ -3,8 +3,9 @@
 Use this guide to install or refresh the SpecGate IDE files for Codex, Claude
 Code, and Cursor.
 
-The plugins give coding agents focused SpecGate skills, hooks, and rules. They
-use the `specgate` CLI for all product operations.
+The IDE integration gives coding agents focused SpecGate skills and, where the
+IDE supports them, hooks or rules. It uses the `specgate` CLI for all product
+operations.
 
 ## Before you start
 
@@ -15,7 +16,7 @@ curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/scripts
 ```
 
 For the default Local CLI workflow, initialize the local store, then install the
-embedded project-local plugin for your IDE:
+embedded project-local IDE files for your agent:
 
 ```bash
 specgate init
@@ -24,7 +25,7 @@ specgate plugins install --agent codex --project-local
 specgate plugins doctor --agent codex --project-local
 ```
 
-Local embeds the complete Codex, Claude Code, and Cursor package with the same
+Local embeds the complete Codex, Claude Code, and Cursor assets with the same
 focused skills as Full—router, setup, preparation, and delivery—without
 contacting a registry, Docker, or a server. Replace `codex` with `claude` or
 `cursor`, or pass `--agent all`. Restart the selected IDE after installation.
@@ -91,19 +92,21 @@ specgate plugins install --project-local
 specgate plugins doctor --project-local
 ```
 
-Project-local installation updates only the selected IDE's SpecGate files.
-Codex installation also updates its project-local marketplace configuration.
-It does not change `AGENTS.md` or delete other project files.
+Project-local installation updates only the selected IDE's focused SpecGate
+skills and, for Cursor, its SpecGate rule. It does not change Codex marketplace
+configuration, `.codex/config.toml`, `AGENTS.md`, or unrelated project files.
 
 ## What is written
 
-| IDE | User-global location | Purpose |
+| IDE | User-global location | Project-local location |
 |---|---|---|
-| Codex | `~/.codex/plugins/specgate` | native plugin package, hooks, focused skills |
-| Codex | `~/.agents/plugins/marketplace.json` | personal marketplace entry for `specgate@personal` |
-| Codex | `~/.codex/config.toml` | registers the local personal marketplace and enables the personal SpecGate plugin |
-| Claude Code | `~/.claude/skills/specgate` | native plugin package, hooks, focused skills |
-| Cursor | `~/.cursor/rules/using-specgate.mdc` and `~/.cursor/skills/*` | rule and focused skills |
+| Codex | `~/.codex/plugins/specgate`, `~/.agents/plugins/marketplace.json`, and `~/.codex/config.toml` | `.agents/skills/specgate-*` |
+| Claude Code | `~/.claude/skills/specgate` | `.claude/skills/specgate-*` |
+| Cursor | `~/.cursor/rules/using-specgate.mdc` and `~/.cursor/skills/specgate-*` | `.cursor/rules/using-specgate.mdc` and `.cursor/skills/specgate-*` |
+
+Global Codex and Claude Code locations contain the native plugin package, hooks,
+and focused skills. Project-local Codex and Claude Code locations contain
+focused skills only, using the repository paths those IDEs discover directly.
 
 The focused skills are:
 
@@ -120,8 +123,11 @@ Re-running `plugins install` refreshes those focused skills and removes obsolete
 SpecGate-owned skill names and prior versioned Codex cache bundles in the
 selected IDE scope. It preserves unowned skills and files.
 
-For Codex, the installer edits only SpecGate-owned `config.toml` sections.
-Unrelated settings, ordering, whitespace, and comments are preserved.
+For a global Codex install, the installer edits only SpecGate-owned
+`config.toml` sections. Unrelated settings, ordering, whitespace, and comments
+are preserved. When refreshing an older project-local Codex install, it removes
+only the legacy SpecGate-owned bundle and registration; unrelated files and
+configuration survive.
 
 ## Refresh an existing install
 

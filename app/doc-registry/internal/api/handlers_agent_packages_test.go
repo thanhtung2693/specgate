@@ -78,7 +78,6 @@ func TestAgentPackagesNativePluginManifestsServed(t *testing.T) {
 		"/plugins/.cursor-plugin/marketplace.json",
 		"/plugins/hooks/hooks.json",
 		"/plugins/hooks/hooks-claude.json",
-		"/plugins/hooks/hooks-cursor.json",
 	} {
 		res, err := http.Get(srv.URL + path)
 		if err != nil {

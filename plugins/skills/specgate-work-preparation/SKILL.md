@@ -1,165 +1,129 @@
 ---
 name: specgate-work-preparation
-description: Preparation. Use when turning an ambiguous request, PRD, spec, or planning discussion into SpecGate-ready vertical-slice work, publishing or updating an artifact package, or checking whether an artifact is ready for human review or handoff.
+description: Use when preparing a request or existing source documents for SpecGate approval, creating quick SpecGate work, publishing an artifact version, or repairing artifact readiness before implementation.
 ---
 
 # Preparing Work
 
-## Invocation
+Apply the [router operating contract](../specgate-router/SKILL.md#operating-contract).
+This phase produces an approved implementation handoff; it never implements
+product code.
 
-Invocation mode: [lifecycle phase](../specgate-router/SKILL.md#invocation).
-Use for shaping work, publishing artifacts, repairing readiness gaps, and
-preparing a human handoff. This phase never implements product code.
+## 1. Define the contract and route
 
-## 1. Understand the request
+Read the request, governing repository instructions, and author-selected source
+documents. Show the human the exact title, description, observable acceptance
+criteria, and non-goals. Split work that can be accepted independently. Use an
+`@check:<name>` binding only when the human confirms that exact deterministic
+check.
 
-Read the request, relevant PRD/spec/task notes, nearby repo docs, and only enough
-code to learn domain language and integration boundaries. Capture the outcome,
-constraints, known risks, and unresolved product decisions. Ask the human when
-intent is missing; plausible prose is not a substitute for a decision.
+Choose one route with the human:
 
-Completion criterion: intent and open questions are explicit.
+- **Quick work** for a small change that does not need a governed source snapshot.
+- **Artifact-backed work** when an existing spec, design, plan, verification
+  document, or other source must be versioned and approved.
 
-## IDE-agent quick route
+Do not create a durable record until the human approves the displayed contract.
 
-For an eligible one-repository task, draft and show the exact title,
-description, one to five observable acceptance criteria, and explicit non-goals.
-Do not create work until the developer explicitly approves that preview. If the
-contract changes, show a revised preview and wait again.
+Completion criterion: the human-approved preview contains every slice's title,
+scope, criteria, and non-goals, and names one route.
 
-### Quick work
+## 2A. Create quick work
 
-In either mode, approved small work may use `specgate work create-quick --ac`.
-Local mode has no platform model to draft missing criteria, so it requires at least one explicit `--ac`.
-Verify the persisted list with
-`specgate work show --json`. Never infer criteria from headings, numbering,
-filenames, or keywords.
-
-## 2. Draft vertical slices
-
-Each slice should deliver a narrow, independently reviewable path through the
-needed layers. Include its title, implementation scope, acceptance criteria,
-dependencies, and non-goals. Keep unrelated cleanup and horizontal prefactoring
-separate.
-
-Delivery review is atomic, so separate work that can pass independently.
-
-### Acceptance criteria
-
-Acceptance criteria must describe observable behavior. A human may bind one to
-a deterministic check with a trailing `@check:<name>`:
+Quick work is available in Local and Full mode. Persist the approved contract
+with explicit criteria, then read it back:
 
 ```bash
-specgate work create-quick "Fix login" \
-  --ac "Valid credentials open the dashboard @check:integration"
+specgate work create-quick "$TITLE" --description "$DESCRIPTION" \
+  --ac "$CONFIRMED_CRITERION_1" --json
+specgate work show "$WORK_REF" --json
+specgate work context "$WORK_REF" --json
 ```
 
-Use a binding only when the human authored or confirmed that exact check. The
-delivery report must later contain a matching `checks[].name`.
+Never derive criteria from filenames, headings, numbering, or keywords. If the
+persisted title, description, or ordered criteria differ from the preview, stop
+instead of implementing.
 
-Completion criterion: every slice has testable criteria and clear non-goals.
+Completion criterion: the returned Context Pack reproduces the approved quick
+contract exactly. Quick work ends here; switch to `specgate-work-delivery`.
 
-## 3. Publish the artifact package
+## 2B. Preview and publish an artifact
 
-For an existing local specification package, map exact files and roles in
-`artifact.json`, then preview before publication:
+The originating framework owns source paths, names, lifecycle, and Git policy.
+Never relocate, copy, rename, delete, commit, or change ignore rules for source
+documents to fit SpecGate. Do not detect frameworks from directory names. Edit
+source content only when the user's preparation or readiness-repair request
+authorizes that edit.
+
+SpecGate does not detect frameworks or infer roles; the agent maps each selected
+source explicitly.
+
+Keep the transient manifest at `.specgate/work/artifact.json`. For every mapped
+document:
+
+- set `path` to its unchanged repository-relative POSIX path;
+- set its explicit governance `role`;
+- use `source_file` only when the source is contained by the manifest directory;
+- use an explicit absolute local `file_url` when the source is outside the
+  manifest directory;
+- set exactly one of `content`, `source_file`, or `file_url`.
+
+Start from this minimum shape. The human selects `feature_key`; `request_type`
+must be `new_feature`, `change_request`, `bugfix`, or `unknown`:
 
 ```json
 {
-  "feature_key": "checkout-loyalty-points",
+  "feature_key": "<human-selected-key>",
   "request_type": "new_feature",
-  "documents": [
-    {
-      "path": "docs/spec.md",
-      "role": "spec",
-      "source_file": "docs/spec.md"
-    },
-    {
-      "path": "docs/verification.md",
-      "role": "verification",
-      "source_file": "docs/verification.md"
-    }
-  ]
+  "documents": [{
+    "path": "docs/framework/spec.md",
+    "role": "spec",
+    "file_url": "file:///absolute/path/to/docs/framework/spec.md"
+  }]
 }
 ```
 
-```bash
-specgate artifact publish --file artifact.json --preview --json
-```
-
-`source_file` is relative to the directory containing `artifact.json`; `path`
-is the package path preserved in SpecGate and may differ from the source path.
-Every document must set exactly one of `content`, `source_file`, or `file_url`.
-Use `content` for deliberate inline text and `file_url` only for an explicit
-absolute local file URL. Omitting all three is invalid; SpecGate never guesses a
-source from `path`.
-
-The preview must show exact repository-relative paths, explicit roles, target
-work, update `base_version`, provenance, and non-goals. It never uploads or
-calls the server. SpecGate does not detect frameworks or infer roles from
-directory names; `source_kind` is optional provenance only.
-
-If the preview lists `impact_declaration` under `omitted`, stop before
-publication. Ask the developer for explicit `yes`, `no`, or `unknown` answers
-for protected domains, data/schema change, external contract change,
-irreversible/complex rollback, and broad blast radius, then add the declaration
-to `artifact.json` and preview again. Never infer `no`; missing or `unknown`
-signals may intentionally select stricter governance.
-
-For an update, compare the prepared package with one explicitly selected base
-artifact:
+Do not use `..` traversal or copy sources under `.specgate/work`. Preview the
+package without a server write:
 
 ```bash
-specgate artifact publish --file artifact.json --preview --compare "$BASE_ARTIFACT_ID" --json
+specgate artifact publish --file .specgate/work/artifact.json --preview --json
 ```
 
-Comparison makes read-only metadata calls for the base artifact and its stored
-file hashes; it never downloads previous content or publishes. Report added,
-removed, changed, and unchanged files. A comparison is local
-preparation evidence, not synchronization. `artifact.json` must carry the exact
-`base_version`; a mismatch stops before publication.
-
-Only after explicit human confirmation should the agent invoke the existing
-`artifact publish` path. Local files are not synchronized merely because a
-framework generated them. A successful publication creates one immutable,
-path-preserving artifact version with server-computed file/package digests and
-source provenance. The quick route below remains valid for work with no source
-specification. This shortcut works in Local and Full mode.
-
-Inspect named work first with `specgate work show "$WORK_REF" --json`. Otherwise
-publish the prepared package:
+For an update, set the exact `base_version` and compare with the selected base:
 
 ```bash
-specgate artifact publish --file artifact.json --json
+specgate artifact publish --file .specgate/work/artifact.json \
+  --preview --compare "$BASE_ARTIFACT_ID" --json
 ```
 
-`artifact.json` is the publish body, not a dependency manifest. For feature-backed
-work, choose `feature_key` deliberately:
+Report added, removed, changed, and unchanged paths. If preview lists an omitted
+impact declaration, ask for the exact `yes`, `no`, or `unknown` answers it
+requires; never infer `no`. Resolve feature identity from an explicitly named
+work item or human selection rather than similarity.
 
-- Continuing work: reuse the exact key from `work show`, or search with
-  `specgate feature list --search <topic> --all` (`--all` includes archived keys).
-- New feature: create a new key.
-- Ambiguous ownership: show candidate keys and let the human choose.
+Completion criterion: every selected source appears exactly once in preview
+under its unchanged repository-relative path and explicit role; source files
+and Git policy are unchanged except for authorized content edits.
 
-Do not invent a feature for quick-route work. Record the returned artifact id,
-version, and `missing_roles`. Missing roles are readiness gaps, not publish errors.
-Present the artifact using the router's human-readable entity-link rule.
+Only after explicit human confirmation of that preview may the agent publish:
 
-Completion criterion: publication is recorded, or its error is reported without
-editing implementation code.
+```bash
+specgate artifact publish --file .specgate/work/artifact.json --json
+```
 
-## 4. Run readiness
+Completion criterion: publication succeeded and its artifact ID and immutable
+version are recorded. On failure, stop; do not run readiness.
+
+## 3. Complete readiness
 
 ```bash
 specgate gates check "$ARTIFACT_ID" --json --summary
 ```
 
-In both Local and Full mode, if `dispatched_to_ide_agent` is returned, complete every frozen gate task:
-
-1. List: `specgate gates tasks list "$ARTIFACT_ID" --json`.
-2. Read each rubric: `specgate gates tasks show <task-id> --json`.
-3. Judge against `skill_content`; reserve `pass` for the stated pass condition.
-4. Write the result to `.specgate/work/gate-<task-id>.json`:
+When `dispatched_to_ide_agent.pending_task_ids` is non-empty, complete every
+frozen task. List tasks, read each task's `skill_content`, judge only against
+that rubric, and write `.specgate/work/gate-<task-id>.json`:
 
 ```json
 {
@@ -173,74 +137,54 @@ In both Local and Full mode, if `dispatched_to_ide_agent` is returned, complete 
 ```
 
 ```bash
+specgate gates tasks list "$ARTIFACT_ID" --json
+specgate gates tasks show <task-id> --json
 specgate gates tasks submit-result <task-id> \
   --file .specgate/work/gate-<task-id>.json --json
+specgate gates results "$ARTIFACT_ID" --json
 ```
 
-Completion criterion: every dispatched task is submitted and the aggregate plus
-remaining gaps are known.
+`aggregate=not_run` means work remains; it is never a pass. Stale digests require
+a fresh task. Readiness errors preserve the artifact and become explicit
+blockers.
 
-Keep gate-result scratch files under `.specgate/work`; never leave `result.json`
-or another generated receipt in the repository root. They then appear in
-`specgate cleanup --work --dry-run`.
+Completion criterion: every pending task has a submitted result for its exact
+digests, and the final aggregate plus every remaining gap is recorded.
 
-For a normal terminal user, give the exact `gates tasks list`, `gates tasks
-show`, and `gates tasks submit-result` commands. The CLI never invoked a model.
+## 4. Repair without taking ownership
 
-Use `specgate gates results "$ARTIFACT_ID" --json` only when stored detailed
-evidence is needed; it does not rerun readiness.
+For an authorized content correction, publish a new version using the same
+path-preserving manifest, exact `base_version`, comparison, human-confirmed
+preview, and readiness loop. Ask the human about ambiguous product intent.
+Report out-of-scope gaps without editing their source.
 
-## 5. Repair and recheck
+Completion criterion: readiness is acceptable under the stored policy, or each
+remaining gap has an explicit human owner and no unauthorized source edit.
 
-Fix each gap in the document that owns it. Do not fill ambiguous product intent.
-For a corrected artifact, set `base_version` to the version being replaced, then:
+## 5. Obtain the human decision
 
-```bash
-specgate artifact publish --file artifact.json --preview --compare "$BASE_ARTIFACT_ID" --json
-# Wait for explicit human confirmation of the changed package.
-specgate artifact publish --file artifact.json --json
-specgate gates check "$ARTIFACT_ID" --json --summary
-```
-
-Judge any fresh IDE tasks again; stale digests are rejected. If readiness is
-unavailable, preserve the artifact and report the service error.
-
-Completion criterion: readiness is clean, or each remaining warning has a human
-owner.
-
-## 6. Stop for human approval
-
-Readiness is not approval. Do not implement or record approval before the human
-decides. Stop here. First ask the human to inspect the exact immutable snapshot,
-then run or explicitly authorize the single normal-path decision:
+Show the exact immutable snapshot and readiness evidence:
 
 ```bash
 specgate artifact show "$ARTIFACT_ID" --json
+specgate gates results "$ARTIFACT_ID" --json
+```
+
+Stop for the human decision. After the human explicitly approves and authorizes
+that exact snapshot, run the normal handoff with every confirmed criterion:
+
+```bash
 specgate --yes change approve "$ARTIFACT_ID" \
   --title "$TITLE" \
   --ac "$CONFIRMED_CRITERION_1" \
-  --ac "$CONFIRMED_CRITERION_2" \
   --json
+specgate work context "$WORK_REF" --json
 ```
 
-This records approval of the exact snapshot, makes that version canonical,
-creates or reuses its artifact-bound work item, and verifies the Context Pack
-as one resumable transition. The expert `artifact approve`, `artifact promote`,
-and `work create` commands remain available for diagnosis or deliberate
-multi-slice work. Read the returned work reference with
-`specgate work context "$WORK_REF" --json`.
+Require the returned work item's `lead_artifact_id` to equal the approved
+artifact and its Context Pack to reference the governed sources. A conflicting
+existing work contract is a blocker, never a silent relink.
 
-Every `--ac` value must come from the agent's explicit review of the mapped
-source documents and the developer-approved preview.
-
-Record the returned work reference and require its `lead_artifact_id` to equal
-the promoted artifact. Verify the Context Pack contains the governed
-spec/design/plan/verification material or exact artifact references. If the
-intended work item already exists, inspect it instead of creating a duplicate;
-stop when it points at a different artifact because this flow has no silent
-relink step. Report publication, approval, promotion, work linkage, and Context
-Pack assembly as separate durable states, using linked titles plus stable IDs
-per the router rule. Switch to `specgate-work-delivery` only after
-approval and handoff readiness.
-
-Completion criterion: no implementation files were edited in this phase.
+Completion criterion: either the human is reviewing the named immutable
+artifact, or the approved work reference and matching Context Pack are recorded;
+no implementation file was edited in this phase.

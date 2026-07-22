@@ -6,7 +6,7 @@ SpecGate setup starts with the CLI:
 curl -fsSL "{{.RegistryBaseURL}}/cli/install.sh" | sh
 ```
 
-Then install or refresh agent-specific Skills, hooks, and rules through the CLI:
+Then install or refresh agent-specific skills and integration files through the CLI:
 
 ```bash
 specgate plugins install                 # interactive picker
@@ -19,16 +19,16 @@ server. By default, IDE files are installed globally under your home directory.
 Add `--project-local` only when the current repository should vendor its
 SpecGate agent setup.
 
-The CLI writes IDE-specific plugin packages, Skills, hooks, and Cursor rules to
-global user locations.
+Global installs write IDE-specific plugin packages and hooks for Codex and
+Claude Code, plus focused skills. Cursor receives focused skills and its rule.
+Project-local installs write only the files each IDE discovers from a repository.
 
 The served `/plugins/package.json` file is the package inventory. It declares
 the focused Skills and exact files this server will publish under `/plugins/*`.
 
 Human mode lists the IDE files written or removed and ends with the selected
 agent list plus the `specgate plugins doctor` follow-up.
-Restart the selected IDEs after installation so their plugin, Skill, hook, and
-rule loaders pick up the new files.
+Restart the selected IDEs after installation so they pick up the new files.
 Refresh removes obsolete SpecGate-owned skill names, rules, and prior versioned
 Codex cache bundles; unowned files are preserved.
 
@@ -37,20 +37,23 @@ Per-IDE default destinations:
 - **Codex**: writes the native plugin package, including focused skills and bundled hooks, to `~/.codex/plugins/specgate/`.
 - **Claude Code**: writes the native plugin package, including focused skills and bundled hooks, to `~/.claude/skills/specgate/`.
 
-With `--project-local`, these destinations move under the current repository
-instead (`.codex/plugins/specgate/`, `.cursor/skills/`, `.cursor/rules/`,
-`.claude/skills/specgate/` as applicable).
+With `--project-local`, Codex receives focused skills under
+`.agents/skills/specgate-*`, Claude Code under `.claude/skills/specgate-*`, and
+Cursor under `.cursor/skills/specgate-*` plus `.cursor/rules/using-specgate.mdc`.
+Project-local Codex and Claude Code installs do not change plugin marketplace or
+IDE configuration files.
 
 ## Skill invocation modes
 
-`specgate-router` is the router. Use it for normal SpecGate work so the agent
-chooses exactly one narrower phase before acting.
+`specgate-router` selects one narrow phase when the user explicitly mentions
+SpecGate. Read-only SpecGate questions stay in the router; generic framework or
+coding prompts are not claimed by the plugin.
 
-`specgate-project-setup` is explicit setup. Invoke it when installing or
-refreshing SpecGate for a repository, or when canonical docs, tracker mirrors,
-readiness rules, verification commands, or domain vocabulary are still unknown.
+`specgate-project-setup` is explicit setup for initialization, workspace binding,
+plugin installation or refresh, and setup diagnosis.
 
-Lifecycle skills stay focused: `specgate-work-preparation` covers shaping and
-artifact readiness before approval; `specgate-work-delivery` covers pickup, scoped
-implementation, evidence, and delivery review. Prefer reaching them through the
-router unless the user names the phase directly.
+Lifecycle skills stay focused: `specgate-work-preparation` covers quick-work
+creation or artifact readiness through human approval;
+`specgate-work-delivery` covers approved implementation, criterion evidence,
+authoritative status routing, and the human handoff. Only one phase acts at a
+time.

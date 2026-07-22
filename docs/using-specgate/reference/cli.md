@@ -148,7 +148,7 @@ underlying detail.
 | `knowledge` | Full mode only: list, inspect, add, and search workspace-scoped Governance Knowledge documents. `knowledge add-text --title <title> --file <path>` uploads a text/Markdown source into the selected workspace; `knowledge search <query>` retrieves cited chunks using the configured embedding model |
 | `artifact` | Preview (`artifact publish --preview`), optionally compare that preview with one explicit base artifact (`--compare <artifact-id>`), publish complete immutable versions, inspect, and read artifacts; `artifact coverage <artifact-id>` is a read-only exact-version delivery view; decide as a human reviewer with `artifact approve` in either mode or `artifact request-changes` in Full mode (optional `--note`); `artifact show` accepts a unique id prefix from `artifact list` |
 | `gates` | Artifact readiness checks (`check`), stored artifact results (`results`), and IDE-agent artifact gate tasks (`tasks`) work in both modes. Local IDE gate tasks and Full model-less IDE gate tasks use the same `check` → `tasks list/show/submit-result` → `results` loop. Compact `gates check --summary` output preserves each result's executor origin so agent-attested evidence is not presented as platform evaluation. Work-item model gates (`run`, `status`, `history`) are Full-only |
-| `delivery` | Report implementation, run delivery review, and decide delivery as a human reviewer; `delivery report --init` scaffolds a conservative completion report (`.specgate/completion-<ref>.json`) with a required blank `agent.name`, empty affected files, one skipped check per unique declared verification binding (or a `tests` fallback), and `not_done` criterion claims. The scaffold captures Git identity but defers delivery-scope comparison until `affected_files` is supplied at submission. Fill `agent.name` with the coding agent's stable name before submission. `delivery peer-review --init` scaffolds a review bound to the latest completion event and its exact Git receipt; its reviewer must cover every canonical criterion exactly once, then `--file` records it and reruns review. This works in both Local and Full mode: the peer must differ from the completion agent, and the CLI preserves the receipt in the bound scaffold so the server can verify the same completion. `delivery report` accepts the supported feedback-event types, while `delivery submit` accepts only `coding_agent.completed`; both reject missing completion-agent identity, `satisfied` claims without evidence, and passing checks without runnable commands before any network call. `delivery submit` runs the whole tail (report → gates → review → status), while `delivery approve` / `reject` record human decisions. A human may accept an advisory or false-negative review without hiding its evidence verdict; the completion reporter cannot approve its own delivery, and a new completion needs its own review and human decision. These rules are the same in Local and Full mode. Human `delivery status --detail` output separates evidence assessment, assurance source, human decision, and recorded Git receipt; JSON exposes the authoritative `verdict` and optional `evidence_verdict`. Cited local evidence paths are existence-checked and grounded with an excerpt plus SHA-256 digest; `submit --run-checks` previews and confirms the completion file's shell commands before re-executing non-skipped checks, marks those rows as observed by the SpecGate CLI, and submits their observed statuses. Local status then labels that assurance as `locally reproduced`. Noninteractive callers must add `--yes`. Git receipts retain full checkout provenance while labeling changes outside `affected_files` as unrelated checkout state. `agent_attested` passes require a bound peer review or human review. |
+| `delivery` | Report implementation, run delivery review, and decide delivery as a human reviewer; `delivery report --init` scaffolds a conservative completion report (`.specgate/completion-<ref>.json`) with a required blank `agent.name`, empty affected files, one skipped check per unique declared verification binding (or a `tests` fallback), and `not_done` criterion claims. The scaffold captures Git identity but defers delivery-scope comparison until `affected_files` is supplied at submission. Fill `agent.name` with the coding agent's stable name before submission. `delivery peer-review --init` scaffolds a review bound to the latest completion event and its exact Git receipt; its reviewer must cover every canonical criterion exactly once, then `--file` records it and reruns review. This works in both Local and Full mode: the peer must differ from the completion agent, and the CLI preserves the receipt in the bound scaffold so the server can verify the same completion. Direct `delivery report --file` is Full-mode feedback ingestion; Local completion uses `change submit`. `delivery submit` accepts only `coding_agent.completed`; both paths reject missing completion-agent identity, `satisfied` claims without evidence, and passing checks without runnable commands before any network call. `delivery submit` runs the whole tail (report → gates → review → status), while `delivery approve` / `reject` record human decisions. A human may accept an advisory or false-negative review without hiding its evidence verdict; the completion reporter cannot approve its own delivery, and a new completion needs its own review and human decision. These rules are the same in Local and Full mode. Human `delivery status --detail` output separates evidence assessment, assurance source, human decision, and recorded Git receipt; JSON exposes the authoritative `verdict` and optional `evidence_verdict`. Cited local evidence paths are existence-checked and grounded with an excerpt plus SHA-256 digest; `submit --run-checks` previews and confirms the completion file's commands before re-executing non-skipped checks through `sh -c`, marks those rows as observed by the SpecGate CLI, and submits their observed statuses. Local status then labels that assurance as `locally reproduced`. Noninteractive callers must add `--yes`. Git receipts retain full checkout provenance while labeling changes outside `affected_files` as unrelated checkout state. `agent_attested` passes require a bound peer review or human review. |
 
 ## Change facade
 
@@ -177,11 +177,14 @@ the ref is unsafe or the completion file is intentionally elsewhere:
 ```bash
 specgate change submit CR-123
 # Full mode, when this stored issue URL resolves to the work item:
-specgate change submit https://github.com/acme/shop/issues/42 --file .specgate/completion-CR-123.json
+specgate delivery report https://github.com/acme/shop/issues/42 --init --json
+COMPLETION_PATH="<exact data.path from the preceding response>"
+specgate change submit https://github.com/acme/shop/issues/42 --file "$COMPLETION_PATH"
 ```
 
-`--run-checks` re-executes non-skipped checks after previewing their commands;
-noninteractive callers must also pass `--yes`. `--skip-evidence-check` bypasses
+`--run-checks` re-executes non-skipped checks through `sh -c` after previewing
+their commands; noninteractive callers must also pass `--yes`. Use
+non-interactive POSIX shell commands. `--skip-evidence-check` bypasses
 local citation validation and should be reserved for recovery when the cited
 paths cannot exist in the current checkout.
 
@@ -640,6 +643,9 @@ or summaries:
   Bare `--init` writes `.specgate/completion-<ref>.json` — a per-work-item
   scaffold under the gitignored repo-local `.specgate/` working directory (see
   [Configuration → Repo-level `.specgate/` directory](configuration.md#repo-level-specgate-directory)).
+  JSON success returns the exact scaffold in `data.path`. If that regular file
+  already exists, the command refuses to overwrite it and returns the same path
+  in `error.details.path`; reuse it only after verifying its work and context.
   It also accepts an explicit `--init=<path>` or `--init <path>` to write a
   specific file elsewhere; add `--force` to overwrite an existing scaffold.
 
@@ -748,8 +754,9 @@ for plugin packages or hooks; this prevents a checkout from redirecting a
 global IDE install. Before writing, install validates at most 16 safe skill
 names and preloads no more than 32 MiB of required package files.
 Missing files fail the check and include an exact `specgate plugins install ...`
-repair command; stale versions, missing IDE executables, or a stale Codex plugin
-cache warn with the reinstall/restart action to take.
+repair command; stale versions or a stale Codex plugin cache warn with the
+reinstall/restart action to take. The check validates the selected plugin files
+without requiring the corresponding IDE executable on the current `PATH`.
 
 Interactive `plugins install` and `plugins doctor` show a checkbox list for
 Cursor, Codex, and Claude Code when `--agent` is omitted. The default selection

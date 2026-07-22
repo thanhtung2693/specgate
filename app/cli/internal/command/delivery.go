@@ -101,7 +101,10 @@ func deliveryScaffoldWriteError(deps *Deps, command, path string, err error) err
 	if errors.As(err, &usageErr) {
 		codeName = "usage"
 	}
-	payload := output.ErrorPayload{Code: codeName, Message: fmt.Sprintf("write %s: %v", path, err)}
+	payload := output.ErrorPayload{
+		Code: codeName, Message: fmt.Sprintf("write %s: %v", path, err),
+		Details: map[string]any{"path": path},
+	}
 	code := deps.Printer.Error(command, payload)
 	return &output.ExitError{Code: code, Err: err}
 }
@@ -601,6 +604,9 @@ func newDeliveryReportCmd(deps *Deps) *cobra.Command {
 				}
 				return runDeliveryReportInit(cmd, args, deps, initPath, force)
 			}
+			if deps.Topology == config.ModeLocal {
+				return incompatibleCommand(deps, "delivery.report", "direct delivery report submission is available only in Full mode; in Local mode, run `specgate change submit <ref> --file <completion.json>`")
+			}
 			// Read and validate the file before any network call so input errors
 			// are caught early, without consuming a ResolveWorkRef round-trip.
 			var body map[string]any
@@ -955,14 +961,15 @@ func latestCompletionFeedback(events []client.GovernanceFeedbackEvent) (client.G
 // `delivery report --init`. JSON has no comments, so example entries carry
 // empty-string values that show the expected shape.
 type completionTemplate struct {
-	EventType     string                        `json:"event_type"`
-	Summary       string                        `json:"summary"`
-	Agent         map[string]string             `json:"agent"`
-	ContextDigest string                        `json:"context_digest,omitempty"`
-	AffectedFiles []string                      `json:"affected_files"`
-	GitReceipt    gitReceipt                    `json:"git_receipt"`
-	Checks        []completionCheckTemplate     `json:"checks"`
-	Criteria      []completionCriterionTemplate `json:"criteria"`
+	EventType       string                        `json:"event_type"`
+	ChangeRequestID string                        `json:"change_request_id"`
+	Summary         string                        `json:"summary"`
+	Agent           map[string]string             `json:"agent"`
+	ContextDigest   string                        `json:"context_digest,omitempty"`
+	AffectedFiles   []string                      `json:"affected_files"`
+	GitReceipt      gitReceipt                    `json:"git_receipt"`
+	Checks          []completionCheckTemplate     `json:"checks"`
+	Criteria        []completionCriterionTemplate `json:"criteria"`
 }
 
 func runLocalDeliveryReportInit(cmd *cobra.Command, args []string, deps *Deps, path string, force bool) error {
@@ -996,12 +1003,13 @@ func runLocalDeliveryReportInit(cmd *cobra.Command, args []string, deps *Deps, p
 		}
 	}
 	tpl := completionTemplate{
-		EventType:     "coding_agent.completed",
-		Agent:         map[string]string{"name": ""},
-		ContextDigest: work.ContextDigest,
-		AffectedFiles: []string{},
-		GitReceipt:    receipt,
-		Criteria:      make([]completionCriterionTemplate, 0, len(work.AcceptanceCriteria)),
+		EventType:       "coding_agent.completed",
+		ChangeRequestID: work.ID,
+		Agent:           map[string]string{"name": ""},
+		ContextDigest:   work.ContextDigest,
+		AffectedFiles:   []string{},
+		GitReceipt:      receipt,
+		Criteria:        make([]completionCriterionTemplate, 0, len(work.AcceptanceCriteria)),
 	}
 	bindings := make([]string, 0, len(work.AcceptanceCriteria))
 	for index, criterion := range work.AcceptanceCriteria {
@@ -1024,7 +1032,7 @@ func runLocalDeliveryReportInit(cmd *cobra.Command, args []string, deps *Deps, p
 		deps.Printer.Success("delivery.report", map[string]any{"path": path, "criteria": len(tpl.Criteria), "context_digest": work.ContextDigest})
 		return nil
 	}
-	fmt.Fprintf(deps.Stdout, "Wrote %s for %s. Fill evidence, then run: specgate delivery submit %s --file %s\n", path, work.Key, work.Key, path)
+	fmt.Fprintf(deps.Stdout, "Wrote %s for %s. Fill evidence, then run: specgate change submit %s --file %s\n", path, work.Key, work.Key, path)
 	return nil
 }
 
@@ -1091,13 +1099,14 @@ func runDeliveryReportInit(cmd *cobra.Command, args []string, deps *Deps, path s
 	}
 
 	tpl := completionTemplate{
-		EventType:     "coding_agent.completed",
-		Agent:         map[string]string{"name": ""},
-		Summary:       "",
-		AffectedFiles: []string{},
-		GitReceipt:    receipt,
-		Checks:        completionTemplateChecksFromCriteria(criteria),
-		Criteria:      make([]completionCriterionTemplate, 0, len(criteria)),
+		EventType:       "coding_agent.completed",
+		ChangeRequestID: work.ChangeRequestID,
+		Agent:           map[string]string{"name": ""},
+		Summary:         "",
+		AffectedFiles:   []string{},
+		GitReceipt:      receipt,
+		Checks:          completionTemplateChecksFromCriteria(criteria),
+		Criteria:        make([]completionCriterionTemplate, 0, len(criteria)),
 	}
 	for _, c := range criteria {
 		tpl.Criteria = append(tpl.Criteria, completionCriterionTemplate{
@@ -1371,7 +1380,7 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 
 	cmd.Flags().StringVar(&filePath, "file", "", "JSON file containing the completion report body (scaffold with 'delivery report --init')")
 	cmd.Flags().BoolVar(&skipEvidenceCheck, "skip-evidence-check", false, "Skip verifying that cited evidence paths exist in the working tree")
-	cmd.Flags().BoolVar(&runChecks, "run-checks", false, "Re-execute each explicit checks[].command locally and submit observed results")
+	cmd.Flags().BoolVar(&runChecks, "run-checks", false, "Re-execute each non-skipped checks[].command locally with sh -c and submit observed results")
 	return cmd
 }
 

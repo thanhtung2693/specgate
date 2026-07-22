@@ -257,7 +257,9 @@ steps.
 
 In either mode, use the quick route for small, understood work. Local mode
 requires at least one explicit `--ac`; Full mode can draft missing criteria
-when its platform model is configured.
+when its platform model is configured. An IDE agent following the SpecGate
+preparation skill instead shows you explicit criteria for confirmation before
+creating the work item in either mode.
 
 ```bash
 specgate work create-quick "Fix Redis-free quickstart wording" \
@@ -285,9 +287,9 @@ specgate work create-quick --file work-item.json --json
 }
 ```
 
-The quick route skips the full PRD/spec/FE-BE-QA bundle. It still creates
-governed context and delivery review. It is immediately pickup-ready; discover
-it later with `specgate work list --phase ready`.
+The quick route skips an artifact package. It still creates governed context
+and delivery review. It is immediately pickup-ready; discover it later with
+`specgate work list --phase ready`.
 
 ## Read approved context
 
@@ -452,8 +454,11 @@ specgate gates run <work-ref> --json
 Scaffold the completion report:
 
 ```bash
-specgate delivery report <work-ref> --init
+specgate delivery report <work-ref> --init --json
 ```
+
+Copy the response's exact `data.path` into `COMPLETION_PATH`; do not derive it
+from an arbitrary work reference.
 
 Bare `--init` writes `.specgate/completion-<ref>.json` — a transient scaffold
 under the repo-local `.specgate/` working directory, which is gitignored so it
@@ -477,7 +482,7 @@ non-empty criterion evidence, and every reported passing check needs a runnable
 Submit the whole delivery tail (`<ref>` is your work reference):
 
 ```bash
-specgate delivery submit <work-ref> --file .specgate/completion-<ref>.json
+specgate change submit <work-ref> --file "$COMPLETION_PATH"
 specgate delivery status <work-ref> --detail
 ```
 
@@ -602,8 +607,11 @@ Example:
 
 ```bash
 specgate --json --no-input --server "$SPECGATE_SERVER" \
-  delivery submit "$WORK_REF" --file ".specgate/completion-$WORK_REF.json"
+  delivery submit "$WORK_REF" --file "$COMPLETION_PATH"
 ```
+
+Set `COMPLETION_PATH` from the preceding `delivery report --init --json`
+response's `data.path`; do not derive it from an arbitrary work reference.
 
 ## Update or diagnose the CLI
 
@@ -620,8 +628,10 @@ plus setup state for identity, workspace, the selected workspace's board,
 model, and IDE plugin follow-up. It can still report a missing workspace before
 a selection exists. `model test` is a settings-only check: it verifies that
 model provider, model, and API-key settings are present and does not contact the
-model provider. `update` refreshes the CLI, IDE plugin files, and a CLI-managed
-Full appliance when one exists.
+model provider. `update` refreshes the CLI, already-installed global IDE plugin
+files, and a CLI-managed Full appliance when one exists. Project-local IDE
+files are scoped to each repository and are not changed implicitly; refresh
+them from that repository with `specgate plugins install --project-local`.
 
 ## Related
 

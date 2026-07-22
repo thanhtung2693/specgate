@@ -50,17 +50,19 @@ Each step leaves a durable record. You can come back later and see why the work
 was ready, what the agent received, and whether the result met the acceptance
 criteria.
 
-## Quick route and full route
+## Quick and artifact-backed routes
 
 SpecGate supports two common routes.
 
-In Full mode, use the **quick route** for small, well-understood changes. Give SpecGate a title
-and acceptance criteria; `work context` then derives a lightweight brief from
-the persisted work item. The agent still returns delivery evidence.
+In Local and Full modes, use the **quick route** for small, well-understood
+changes. Give SpecGate a title and acceptance criteria; `work context` derives a
+lightweight brief from the persisted work item. The agent still returns delivery
+evidence.
 
-In Local or Full mode, use the **full route** when work needs a reviewed spec, design, plan, or other
-documents. SpecGate snapshots the package, checks it, and records human
-approval. The resulting work item points back to that exact version.
+In either mode, use the **artifact-backed route** when work needs a reviewed
+spec, design, plan, or other documents. SpecGate snapshots the package, checks
+it, and records human approval. The resulting work item points back to that
+exact version.
 
 Both routes end in delivery review.
 
@@ -80,9 +82,9 @@ families remain available when the compact view is not enough: `work`,
 `artifact`, `gates`, `delivery`, `audit`, and `verify`.
 
 Preparation and approval orchestration deliberately remain outside this slice:
-there is no `change prepare`, no snapshot-approval orchestration, and no Local
-quick-work parity yet. That boundary keeps the facade focused on the implemented
-post-handoff loop rather than implying a new lifecycle or storage model.
+there is no `change prepare` or snapshot-approval orchestration. That boundary
+keeps the facade focused on the implemented post-handoff loop rather than
+implying a new lifecycle or storage model.
 
 ## Why the CLI is the main interface
 
