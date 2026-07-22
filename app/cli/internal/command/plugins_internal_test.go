@@ -16,24 +16,21 @@ import (
 func TestCodexMarketplaceHasPluginParsesJSON(t *testing.T) {
 	t.Parallel()
 
-	if !codexMarketplaceHasPlugin([]byte(`{"plugins":[{"name":"specgate","source":{"source":"local","path":"./.codex/plugins/specgate"}}]}`), "specgate", false) {
+	if !codexMarketplaceHasPlugin([]byte(`{"plugins":[{"name":"specgate","source":{"source":"local","path":"./.codex/plugins/specgate"}}]}`)) {
 		t.Fatal("compact marketplace entry was not found")
 	}
-	if codexMarketplaceHasPlugin([]byte(`{"plugins":[{"name":"other","description":"specgate"}]}`), "specgate", false) {
+	if codexMarketplaceHasPlugin([]byte(`{"plugins":[{"name":"other","description":"specgate"}]}`)) {
 		t.Fatal("plugin name must match structurally")
 	}
-	if codexMarketplaceHasPlugin([]byte(`{"plugins":[{"name":"specgate","source":{"source":"local","path":"/custom/specgate"}}]}`), "specgate", false) {
+	if codexMarketplaceHasPlugin([]byte(`{"plugins":[{"name":"specgate","source":{"source":"local","path":"/custom/specgate"}}]}`)) {
 		t.Fatal("unowned SpecGate marketplace entry must not pass health validation")
 	}
-	if codexMarketplaceHasPlugin([]byte(`not json`), "specgate", false) {
+	if codexMarketplaceHasPlugin([]byte(`not json`)) {
 		t.Fatal("malformed marketplace must not pass health validation")
 	}
 	committed := []byte(`{"plugins":[{"name":"specgate","source":{"source":"local","path":"./plugins"}}]}`)
-	if codexMarketplaceHasPlugin(committed, "specgate", false) {
+	if codexMarketplaceHasPlugin(committed) {
 		t.Fatal("project-only source was accepted for a global install")
-	}
-	if !codexMarketplaceHasPlugin(committed, "specgate", true) {
-		t.Fatal("project-only source was not accepted for a project-local install")
 	}
 }
 
