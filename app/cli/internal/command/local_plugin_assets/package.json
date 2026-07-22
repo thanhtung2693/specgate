@@ -2,7 +2,7 @@
   "schema": "specgate.plugin-package/v1",
   "name": "specgate",
   "display_name": "SpecGate",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Focused SpecGate skills for project setup, work preparation, and delivery.",
   "short_description": "Focused spec-to-delivery workflows",
   "long_description": "Select focused SpecGate workflows for project setup, work preparation (shaping and artifact readiness), and delivery (pickup, scoped implementation, evidence, and review).",

@@ -753,6 +753,10 @@ for another source). Repository `.specgate/config` server values are never used
 for plugin packages or hooks; this prevents a checkout from redirecting a
 global IDE install. Before writing, install validates at most 16 safe skill
 names and preloads no more than 32 MiB of required package files.
+If an official skills.sh-managed `specgate` bootstrap exists in project or
+global scope, install stops before writing with exit code `4` and a `conflict`
+error. JSON details list each bootstrap `scope`, `path`, and `remove_command`,
+plus the exact `retry_command`. The CLI does not edit skills.sh files or locks.
 Missing files fail the check and include an exact `specgate plugins install ...`
 repair command; stale versions or a stale Codex plugin cache warn with the
 reinstall/restart action to take. The check validates the selected plugin files

@@ -5,6 +5,43 @@ description: Use when the user explicitly mentions SpecGate, the specgate CLI, o
 
 # Using SpecGate
 
+## Bootstrap-only install
+
+Use when `specgate-project-setup` is unavailable after a root-only skills.sh
+install. Check `command -v specgate` (PowerShell: `Get-Command specgate`). If
+absent, explain skills.sh provides instructions only. On macOS, Linux, or
+WSL2, show this and await explicit approval:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/scripts/install-cli.sh | sh
+```
+
+Native Windows: use `https://github.com/thanhtung2693/specgate/releases/latest`;
+never invent PowerShell. Record `specgate --version` afterward.
+
+Trust only a lock with source `thanhtung2693/specgate` and path
+`plugins/skills/specgate/SKILL.md`, in project `skills-lock.json` or global
+`~/.agents/.skill-lock.json`. Show its matching command and await approval:
+
+```bash
+npx skills remove specgate -y
+npx skills remove specgate -g -y
+```
+
+Never edit or delete skills.sh files or locks directly. Ask for IDE and scope,
+then preview, install, and verify:
+
+```bash
+specgate plugins install --agent <codex|claude|cursor> [--project-local] --dry-run --no-input
+specgate plugins install --agent <codex|claude|cursor> [--project-local] --no-input
+specgate plugins doctor --agent <codex|claude|cursor> [--project-local] --json
+```
+
+Require an IDE restart and stop before initialization. Continue through
+`specgate-project-setup` after restart.
+
+Completion: one CLI-managed plugin, healthy doctor, explicit restart.
+
 ## Route one phase
 
 For lifecycle work, choose exactly one phase before acting:

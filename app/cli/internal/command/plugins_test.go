@@ -349,6 +349,168 @@ func TestPluginsInstallRefusesToOverwriteUnownedCursorSkill(t *testing.T) {
 	}
 }
 
+func TestPluginsInstallReportsProjectSkillsSHBootstrapConflictForEachIDE(t *testing.T) {
+	for _, testCase := range []struct {
+		agent     string
+		skillPath string
+	}{
+		{agent: "codex", skillPath: filepath.Join(".agents", "skills", "specgate", "SKILL.md")},
+		{agent: "claude", skillPath: filepath.Join(".claude", "skills", "specgate", "SKILL.md")},
+		{agent: "cursor", skillPath: filepath.Join(".agents", "skills", "specgate", "SKILL.md")},
+	} {
+		t.Run(testCase.agent, func(t *testing.T) {
+			workDir := t.TempDir()
+			t.Chdir(workDir)
+			home := t.TempDir()
+			writeSkillsSHBootstrap(t, workDir, testCase.skillPath, false, "thanhtung2693/specgate")
+
+			deps, out := newPluginDeps(home)
+			code := command.ExecuteForCode(command.NewRootCommand(deps),
+				"--json", "--no-input", "--server", newPluginRegistry(t).URL,
+				"plugins", "install", "--agent", testCase.agent, "--project-local",
+			)
+			if code != output.ExitConflict {
+				t.Fatalf("install exit = %d, want conflict; output=%s", code, out.String())
+			}
+
+			var env struct {
+				OK    bool `json:"ok"`
+				Error struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+					Details struct {
+						Conflicts []struct {
+							Scope         string `json:"scope"`
+							Path          string `json:"path"`
+							RemoveCommand string `json:"remove_command"`
+						} `json:"conflicts"`
+						RetryCommand string `json:"retry_command"`
+					} `json:"details"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+				t.Fatalf("unmarshal: %v, output=%s", err, out.String())
+			}
+			if env.OK || env.Error.Code != "conflict" || len(env.Error.Details.Conflicts) != 1 {
+				t.Fatalf("unexpected conflict envelope: %s", out.String())
+			}
+			conflict := env.Error.Details.Conflicts[0]
+			if conflict.Scope != "project" || conflict.Path != testCase.skillPath || conflict.RemoveCommand != "npx skills remove specgate -y" {
+				t.Fatalf("unexpected conflict details: %+v", conflict)
+			}
+			wantRetry := "specgate plugins install --agent " + testCase.agent + " --project-local --no-input"
+			if env.Error.Details.RetryCommand != wantRetry {
+				t.Fatalf("retry command = %q, want %q", env.Error.Details.RetryCommand, wantRetry)
+			}
+			if _, err := os.Stat(filepath.Join(workDir, filepath.Dir(testCase.skillPath), ".specgate-owned")); !os.IsNotExist(err) {
+				t.Fatalf("installer claimed the skills.sh directory before failing: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(home, ".codex", "plugins", "specgate")); !os.IsNotExist(err) {
+				t.Fatalf("installer wrote global files before failing: %v", err)
+			}
+		})
+	}
+}
+
+func TestPluginsInstallReportsGlobalSkillsSHBootstrapConflictBeforeWriting(t *testing.T) {
+	workDir := t.TempDir()
+	t.Chdir(workDir)
+	home := t.TempDir()
+	writeSkillsSHBootstrap(t, home, filepath.Join(".agents", "skills", "specgate", "SKILL.md"), true, "thanhtung2693/specgate")
+
+	deps, out := newPluginDeps(home)
+	code := command.ExecuteForCode(command.NewRootCommand(deps),
+		"--json", "--no-input", "--server", newPluginRegistry(t).URL,
+		"plugins", "install", "--agent", "codex",
+	)
+	if code != output.ExitConflict {
+		t.Fatalf("install exit = %d, want conflict; output=%s", code, out.String())
+	}
+	for _, want := range []string{
+		`"scope":"global"`,
+		`"remove_command":"npx skills remove specgate -g -y"`,
+		`"retry_command":"specgate plugins install --agent codex --no-input"`,
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("conflict output missing %q: %s", want, out.String())
+		}
+	}
+	if _, err := os.Stat(filepath.Join(home, ".codex", "plugins", "specgate")); !os.IsNotExist(err) {
+		t.Fatalf("installer wrote plugin before failing: %v", err)
+	}
+}
+
+func TestPluginsInstallReportsCrossScopeSkillsSHBootstrapConflict(t *testing.T) {
+	workDir := t.TempDir()
+	t.Chdir(workDir)
+	home := t.TempDir()
+	writeSkillsSHBootstrap(t, workDir, filepath.Join(".agents", "skills", "specgate", "SKILL.md"), false, "thanhtung2693/specgate")
+
+	deps, out := newPluginDeps(home)
+	var stderr bytes.Buffer
+	deps.Stderr = &stderr
+	code := command.ExecuteForCode(command.NewRootCommand(deps),
+		"--plain", "--server", newPluginRegistry(t).URL,
+		"plugins", "install", "--agent", "codex",
+	)
+	if code != output.ExitConflict {
+		t.Fatalf("install exit = %d, want conflict; output=%s", code, out.String())
+	}
+	if !strings.Contains(stderr.String(), "npx skills remove specgate -y") || !strings.Contains(stderr.String(), "specgate plugins install --agent codex --no-input") {
+		t.Fatalf("plain conflict lacks exact recovery commands: stdout=%q stderr=%q", out.String(), stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(home, ".codex", "plugins", "specgate")); !os.IsNotExist(err) {
+		t.Fatalf("cross-scope conflict wrote plugin before failing: %v", err)
+	}
+}
+
+func TestPluginsInstallDoesNotTrustForeignSkillsSHLock(t *testing.T) {
+	workDir := t.TempDir()
+	t.Chdir(workDir)
+	foreign := filepath.Join(".agents", "skills", "specgate", "SKILL.md")
+	writeSkillsSHBootstrap(t, workDir, foreign, false, "someone-else/specgate")
+
+	deps, out := newPluginDeps(t.TempDir())
+	code := command.ExecuteForCode(command.NewRootCommand(deps),
+		"--json", "--no-input", "--server", newPluginRegistry(t).URL,
+		"plugins", "install", "--agent", "codex", "--project-local",
+	)
+	if code != output.ExitUsage {
+		t.Fatalf("install exit = %d, want validation failure; output=%s", code, out.String())
+	}
+	if !strings.Contains(out.String(), `"code":"validation_failed"`) || strings.Contains(out.String(), "npx skills remove") {
+		t.Fatalf("foreign lock received trusted migration advice: %s", out.String())
+	}
+	body, err := os.ReadFile(foreign)
+	if err != nil || string(body) != "# skills.sh SpecGate bootstrap\n" {
+		t.Fatalf("foreign skill changed: body=%q err=%v", body, err)
+	}
+}
+
+func TestPluginsInstallSucceedsAfterSkillsSHBootstrapIsRemoved(t *testing.T) {
+	workDir := t.TempDir()
+	t.Chdir(workDir)
+	home := t.TempDir()
+	skillPath := filepath.Join(".agents", "skills", "specgate")
+	writeSkillsSHBootstrap(t, workDir, filepath.Join(skillPath, "SKILL.md"), false, "thanhtung2693/specgate")
+	if err := os.RemoveAll(skillPath); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(workDir, "skills-lock.json"), `{"version":1,"skills":{}}`)
+
+	deps, out := newPluginDeps(home)
+	code := command.ExecuteForCode(command.NewRootCommand(deps),
+		"--plain", "--server", newPluginRegistry(t).URL,
+		"plugins", "install", "--agent", "codex", "--project-local",
+	)
+	if code != output.ExitOK {
+		t.Fatalf("install after bootstrap removal exit = %d; output=%s", code, out.String())
+	}
+	if _, err := os.Stat(filepath.Join(workDir, skillPath, ".specgate-owned")); err != nil {
+		t.Fatalf("CLI-managed root skill missing after migration: %v", err)
+	}
+}
+
 func TestPluginsInstallRefusesSymlinkedOwnedTarget(t *testing.T) {
 	t.Parallel()
 	srv := newPluginRegistry(t)
@@ -1267,6 +1429,26 @@ func newPluginDeps(homeDir string) (*command.Deps, *bytes.Buffer) {
 			return homeDir, nil
 		},
 	}, &out
+}
+
+func writeSkillsSHBootstrap(t *testing.T, root, skillPath string, global bool, source string) {
+	t.Helper()
+	writeTestFile(t, filepath.Join(root, skillPath), "# skills.sh SpecGate bootstrap\n")
+	lockPath := filepath.Join(root, "skills-lock.json")
+	if global {
+		lockPath = filepath.Join(root, ".agents", ".skill-lock.json")
+	}
+	body := fmt.Sprintf(`{
+  "version": 1,
+  "skills": {
+    "specgate": {
+      "source": %q,
+      "sourceType": "github",
+      "skillPath": "plugins/skills/specgate/SKILL.md"
+    }
+  }
+}`, source)
+	writeTestFile(t, lockPath, body)
 }
 
 func newPluginRegistry(t *testing.T) *httptest.Server {

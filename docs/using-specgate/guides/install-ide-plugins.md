@@ -43,6 +43,41 @@ specgate config server http://localhost:3000/api/doc-registry
 specgate doctor
 ```
 
+## Start from skills.sh
+
+The skills.sh entry is an agent-led bootstrap. It installs instructions only,
+not the SpecGate CLI or complete IDE plugin:
+
+```bash
+npx skills add https://github.com/thanhtung2693/specgate --skill specgate
+```
+
+Start a new IDE-agent conversation and ask it to **“Set up SpecGate.”** The
+bootstrap checks for the CLI, shows the official installer when needed, and
+waits for approval before running it.
+
+The bootstrap and complete plugin must not become two managers for the same
+root skill. Immediately before the approved plugin install, remove the
+skills.sh bootstrap from the scope where skills.sh reported it:
+
+```bash
+# Project scope
+npx skills remove specgate -y
+
+# Global scope
+npx skills remove specgate -g -y
+```
+
+The already-loaded bootstrap can finish the current conversation after its
+file is removed. It previews and installs the complete plugin, verifies it,
+then asks you to restart the IDE. The SpecGate CLI becomes the sole manager for
+all four focused skills and any supported hooks or rules.
+
+`specgate plugins install` recognizes an official skills.sh bootstrap and stops
+before writing files. Its error includes the exact removal and retry commands.
+SpecGate never edits or deletes skills.sh lock files; the skills.sh removal
+command preserves unrelated skills and lock entries.
+
 ## Install plugins from the CLI
 
 Interactive install:

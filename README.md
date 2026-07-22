@@ -52,6 +52,12 @@ curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/scripts
 specgate init
 ```
 
+Prefer agent-led setup? Install the `specgate` bootstrap from
+[skills.sh](https://skills.sh/thanhtung2693/specgate/specgate), then ask your
+agent: **“Set up SpecGate.”** The bootstrap requests approval before installing
+the CLI and hands the selected IDE integration to `specgate plugins install`,
+so one installer owns the finished plugin.
+
 Interactive `specgate init` starts with **Local CLI**: SQLite state on this
 machine, no Docker, server, browser, or TCP service. It creates a local user
 and workspace, then prints the matching IDE-plugin command. Choose **Full appliance** in
