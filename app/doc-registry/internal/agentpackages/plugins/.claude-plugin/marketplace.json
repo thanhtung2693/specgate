@@ -11,13 +11,13 @@
       "name": "specgate",
       "source": "./",
       "description": "Focused SpecGate skills for project setup, work preparation, and delivery.",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "author": {
         "name": "Thanh Tung"
       },
       "strict": true,
       "skills": [
-        "./skills/specgate-router",
+        "./skills/specgate",
         "./skills/specgate-project-setup",
         "./skills/specgate-work-preparation",
         "./skills/specgate-work-delivery"

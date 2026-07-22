@@ -19,9 +19,9 @@ plugins/
 └── package.json        Canonical metadata and served-file inventory
 ```
 
-Do not create `plugins/specgate/`. The CLI writes project-local Codex skills to
-`.agents/skills/specgate-*` and Claude Code skills to
-`.claude/skills/specgate-*`.
+Do not create `plugins/specgate/`. The CLI writes the project-local root skill
+to `.agents/skills/specgate` or `.claude/skills/specgate`, with phase skills in
+the matching `specgate-*` directories.
 
 ## Source and generated files
 
@@ -39,7 +39,7 @@ copies canonical assets into
 
 ## Skill invocation modes
 
-`specgate-router` selects one narrow phase for normal SpecGate
+`specgate` selects one narrow phase for normal SpecGate
 work.
 
 `specgate-project-setup` is explicit setup. It maps canonical docs,

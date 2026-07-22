@@ -179,7 +179,7 @@ func TestAgentPackagesServeFocusedSkills(t *testing.T) {
 	defer srv.Close()
 
 	for _, name := range []string{
-		"specgate-router",
+		"specgate",
 		"specgate-project-setup",
 		"specgate-work-preparation",
 		"specgate-work-delivery",

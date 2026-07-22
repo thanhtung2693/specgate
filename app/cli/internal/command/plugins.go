@@ -478,8 +478,8 @@ func validatePluginPackage(pkg *client.PluginPackage) error {
 		if !validPluginSkillName(skill) {
 			return fmt.Errorf("plugin package has unsafe skill name %q", skill)
 		}
-		if !strings.HasPrefix(skill, "specgate-") {
-			return fmt.Errorf("plugin package skill %q is outside the specgate- namespace", skill)
+		if skill != "specgate" && !strings.HasPrefix(skill, "specgate-") {
+			return fmt.Errorf("plugin package skill %q is outside the specgate namespace", skill)
 		}
 		if seenSkills[skill] {
 			return fmt.Errorf("plugin package repeats skill %q", skill)
@@ -2155,7 +2155,7 @@ func removeDirIfEmpty(path string) (bool, error) {
 
 func focusedPluginSkills() []string {
 	return []string{
-		"specgate-router",
+		"specgate",
 		"specgate-project-setup",
 		"specgate-work-preparation",
 		"specgate-work-delivery",

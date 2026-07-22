@@ -130,7 +130,7 @@ check-plugins:
 	@if grep -rn '\.claude/skills/using-specgate\|legacy global skill\|older global skill' \
 	    plugins/hooks $(AGENTPKG_PLUGINS)/hooks 2>/dev/null; then \
 	  echo "ERROR: plugin hooks must use bundled skills, not stale global fallbacks" >&2; exit 1; fi
-	@for skill in specgate-router specgate-project-setup specgate-work-preparation specgate-work-delivery; do \
+	@for skill in specgate specgate-project-setup specgate-work-preparation specgate-work-delivery; do \
 	  if [ ! -f "plugins/skills/$$skill/SKILL.md" ]; then \
 	    echo "ERROR: missing focused skill plugins/skills/$$skill/SKILL.md" >&2; exit 1; fi; \
 	  if ! grep -Fxq "name: $$skill" "plugins/skills/$$skill/SKILL.md"; then \
@@ -142,7 +142,7 @@ check-plugins:
 	  mkdir -p "$$tmp_home/.claude/skills/using-specgate"; \
 	  printf '%s\n' 'OLD GLOBAL UNRELATED CONTENT' > "$$tmp_home/.claude/skills/using-specgate/SKILL.md"; \
 	  hook_context=$$(HOME="$$tmp_home" plugins/hooks/session-start codex | jq -r '.additionalContext'); \
-	  if ! printf '%s\n' "$$hook_context" | grep -Fq 'load `specgate-router`'; then \
+	  if ! printf '%s\n' "$$hook_context" | grep -Fq 'load `specgate`'; then \
 	    cleanup; echo "ERROR: session-start hook did not route explicit SpecGate work" >&2; exit 1; fi; \
 	  if printf '%s\n' "$$hook_context" | grep -Fq '# Using SpecGate'; then \
 	    cleanup; echo "ERROR: session-start hook injected the full router instead of the short bootstrap" >&2; exit 1; fi; \

@@ -23,7 +23,9 @@ func TestCatalogRendersRegistryAwareFiles(t *testing.T) {
 		`curl -fsSL "https://sdlc.test/cli/install.sh" | sh`,
 		"specgate plugins install",
 		"`specgate plugins doctor` follow-up",
+		"`.agents/skills/specgate`",
 		"`.agents/skills/specgate-*`",
+		"`.claude/skills/specgate`",
 		"`.claude/skills/specgate-*`",
 	} {
 		if !strings.Contains(readme, want) {
@@ -105,7 +107,7 @@ func TestPackageInventoryServedFilesRender(t *testing.T) {
 		t.Fatalf("skills = %v, want 4 focused skills", pkg.Skills)
 	}
 	for _, want := range []string{
-		"specgate-router",
+		"specgate",
 		"specgate-project-setup",
 		"specgate-work-preparation",
 		"specgate-work-delivery",
@@ -170,11 +172,11 @@ func TestFocusedSkillsKeepOneExplicitSpecGatePhase(t *testing.T) {
 		if len(frontmatter) != 3 || !strings.Contains(frontmatter[1], "description: Use when") || !strings.Contains(frontmatter[1], "SpecGate") {
 			t.Fatalf("%s needs an explicit, trigger-oriented SpecGate description:\n%s", path, body)
 		}
-		if skill == "specgate-router" {
+		if skill == "specgate" {
 			if !strings.Contains(body, "## Route one phase") {
 				t.Fatalf("%s missing phase routing:\n%s", path, body)
 			}
-		} else if !strings.Contains(body, "router operating contract") || !strings.Contains(body, "This phase") {
+		} else if !strings.Contains(body, "SpecGate operating contract") || !strings.Contains(body, "This phase") {
 			t.Fatalf("%s does not inherit the router contract as one phase:\n%s", path, body)
 		}
 	}
@@ -185,7 +187,7 @@ func TestFocusedSkillsKeepOneExplicitSpecGatePhase(t *testing.T) {
 	}
 	for _, want := range []string{
 		"## Skill invocation modes",
-		"`specgate-router` selects one narrow phase",
+		"`specgate` selects one narrow phase",
 		"`specgate-project-setup` is explicit setup",
 		"Lifecycle skills stay focused",
 	} {
@@ -207,7 +209,7 @@ func TestSkillsDescribeIDEAgentNoModelBoundaries(t *testing.T) {
 	}
 	preparing := render("skills/specgate-work-preparation/SKILL.md")
 	delivering := render("skills/specgate-work-delivery/SKILL.md")
-	router := render("skills/specgate-router/SKILL.md")
+	router := render("skills/specgate/SKILL.md")
 	all := preparing + delivering + router
 	for _, want := range []string{"data.mode", "gates tasks list", "gates tasks submit-result", "artifact coverage", "Local and Full mode"} {
 		if !strings.Contains(all, want) {

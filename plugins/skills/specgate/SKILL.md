@@ -1,5 +1,5 @@
 ---
-name: specgate-router
+name: specgate
 description: Use when the user explicitly mentions SpecGate, the specgate CLI, or a SpecGate artifact, gate, Context Pack, work reference, or delivery state.
 ---
 

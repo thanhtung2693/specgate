@@ -5,7 +5,7 @@ description: Use when implementing, resuming, verifying, or reworking an approve
 
 # Delivering Work
 
-Apply the [router operating contract](../specgate-router/SKILL.md#operating-contract).
+Apply the [SpecGate operating contract](../specgate/SKILL.md#operating-contract).
 This phase implements the approved contract, then stops at the next actor.
 Never approve an artifact or make a human delivery decision.
 
