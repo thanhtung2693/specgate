@@ -74,8 +74,9 @@ specgate plugins doctor --agent codex --project-local
 ```
 
 Restart the IDE agent so it loads the installed skills and rules. Claude Code
-and Cursor use the same commands with `--agent claude` or `--agent cursor`; see
-[Install IDE plugins](guides/install-ide-plugins.md).
+and Cursor use the same commands with `--agent claude` or `--agent cursor`.
+Codex and Claude Code also support native installation; see
+[Install IDE plugins](guides/install-ide-plugins.md). Use one method per IDE.
 
 Check the Local setup:
 

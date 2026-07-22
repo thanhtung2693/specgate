@@ -1,7 +1,7 @@
 # Install SpecGate in your coding IDE
 
-Use this guide to install or refresh the SpecGate IDE files for Codex, Claude
-Code, and Cursor.
+Use this guide to install or refresh SpecGate for Codex, Claude Code, and
+Cursor. Use one installation method per IDE.
 
 The IDE integration gives coding agents focused SpecGate skills and, where the
 IDE supports them, hooks or rules. It uses the `specgate` CLI for all product
@@ -15,20 +15,15 @@ Install the CLI first:
 curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/scripts/install-cli.sh | sh
 ```
 
-For the default Local CLI workflow, initialize the local store, then install the
-embedded project-local IDE files for your agent:
+For the default Local workflow, initialize the local store:
 
 ```bash
 specgate init
 specgate doctor
-specgate plugins install --agent codex --project-local
-specgate plugins doctor --agent codex --project-local
 ```
 
-Local embeds the complete Codex, Claude Code, and Cursor assets with the same
-focused skills as Full—router, setup, preparation, and delivery—without
-contacting a registry, Docker, or a server. Replace `codex` with `claude` or
-`cursor`, or pass `--agent all`. Restart the selected IDE after installation.
+Local uses the same focused IDE plugin as Full without contacting a registry,
+Docker, or server; the CLI embeds its files.
 
 For Full appliance or an existing server, first verify the configured server:
 
@@ -42,6 +37,51 @@ If no server is configured, set one before installing Full-mode plugins:
 specgate config server http://localhost:3000/api/doc-registry
 specgate doctor
 ```
+
+## Choose an installation method
+
+The supported paths are:
+
+1. **Codex or Claude Code plugin manager**
+2. **SpecGate CLI** for Codex, Claude Code, or Cursor
+3. **skills.sh** for agent-led setup
+
+Do not combine the plugin manager and CLI methods for the same IDE.
+
+## Install through a native plugin manager
+
+The repository can act as a Codex or Claude Code marketplace. SpecGate is not
+listed in an official plugin directory.
+
+For Codex, add the repository marketplace:
+
+```bash
+codex plugin marketplace add thanhtung2693/specgate
+```
+
+Then start Codex, open `/plugins`, and install `specgate@specgate`. Codex owns
+the cached package and its enablement. Use `/plugins` again to update, disable,
+or remove it; `codex plugin marketplace upgrade specgate` refreshes the
+repository marketplace catalog.
+
+For Claude Code, add the GitHub repository as a marketplace, then install the
+plugin from the shell:
+
+```bash
+claude plugin marketplace add thanhtung2693/specgate
+claude plugin install specgate@specgate
+claude plugin list
+```
+
+Refresh or remove the Claude plugin through the same manager:
+
+```bash
+claude plugin update specgate@specgate
+claude plugin uninstall specgate@specgate
+```
+
+Use the same manager to update or remove the plugin. `specgate plugins install`
+detects native ownership and stops before writing duplicate IDE files.
 
 ## Start from skills.sh
 
@@ -78,7 +118,7 @@ before writing files. Its error includes the exact removal and retry commands.
 SpecGate never edits or deletes skills.sh lock files; the skills.sh removal
 command preserves unrelated skills and lock entries.
 
-## Install plugins from the CLI
+## Install through the SpecGate CLI
 
 Interactive install:
 
@@ -178,9 +218,8 @@ Or refresh everything with the CLI updater:
 specgate update
 ```
 
-In Local mode, `update` refreshes the CLI and already-installed global IDE
-plugins from the exact selected release, then skips the Full-appliance step. It
-does not inspect, start, or update Docker.
+In Local mode, `update` refreshes the CLI and IDE plugins installed by it, then
+skips the Full appliance. Update native plugins with their plugin manager.
 
 Restart the IDE after refresh. Some IDEs cache plugin files until restart.
 
@@ -195,8 +234,9 @@ specgate uninstall
 In Local CLI mode, `uninstall` removes CLI configuration and globally installed
 managed plugin files while preserving the selected SQLite store. Project-local
 plugin files in repositories are preserved; review and remove them through
-normal repository file cleanup when no longer needed. To delete the store too,
-run:
+normal repository file cleanup when no longer needed. Native Codex and Claude
+Code plugins are preserved; remove them with their plugin manager. To delete
+the store too, run:
 
 ```bash
 specgate uninstall --purge-data --yes
@@ -211,10 +251,15 @@ Docker's cache.
 
 ## Troubleshooting
 
-### `plugins doctor` reports missing files
+### `plugins install` reports a native marketplace conflict
 
-Run the repair command shown by `plugins doctor`. It includes the selected
-agent and `--project-local` when needed. For example:
+Keep the native plugin, or remove it through that manager before retrying the
+CLI install. Do not delete marketplace cache files by hand.
+
+### `plugins doctor` reports missing CLI-managed files
+
+For a CLI-managed install, run the repair command shown by `plugins doctor`. It
+includes the selected agent and `--project-local` when needed. For example:
 
 ```bash
 specgate plugins install --agent codex --project-local

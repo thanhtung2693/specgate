@@ -94,6 +94,8 @@ type skillsSHLock struct {
 type pluginAgentHealth struct {
 	Agent            string   `json:"agent"`
 	OK               bool     `json:"ok"`
+	Owner            string   `json:"owner,omitempty"`
+	Marketplace      string   `json:"marketplace,omitempty"`
 	InstalledVersion string   `json:"installed_version,omitempty"`
 	LatestVersion    string   `json:"latest_version,omitempty"`
 	NeedsUpdate      bool     `json:"needs_update,omitempty"`
@@ -193,8 +195,11 @@ func runPluginInstall(ctx context.Context, deps *Deps, opts pluginInstallOptions
 		return pluginInstallResult{}, pluginInstallError{kind: "incompatible", err: fmt.Errorf("--registry cannot be used in Local mode; the matching plugin is embedded in this CLI")}
 	}
 	home, homeErr := userHomeDir(deps)
-	if homeErr != nil && !opts.ProjectLocal {
+	if homeErr != nil && (!opts.ProjectLocal || needsNativePluginInspection(agents)) {
 		return pluginInstallResult{}, homeErr
+	}
+	if err := rejectNativePluginConflicts(agents, home, opts.ProjectLocal); err != nil {
+		return pluginInstallResult{}, err
 	}
 	conflicts := findSkillsSHConflicts(agents, home)
 	if len(conflicts) > 0 {
@@ -282,7 +287,7 @@ specgate plugins doctor --agent codex --project-local`),
 				return &output.ExitError{Code: code, Err: err}
 			}
 			home, err := userHomeDir(deps)
-			if err != nil && !opts.ProjectLocal {
+			if err != nil && (!opts.ProjectLocal || needsNativePluginInspection(agents)) {
 				payload := output.ErrorPayload{Code: "unavailable", Message: err.Error()}
 				code := deps.Printer.Error("plugins.doctor", payload)
 				return &output.ExitError{Code: code, Err: err}
@@ -292,28 +297,41 @@ specgate plugins doctor --agent codex --project-local`),
 				code := deps.Printer.Error("plugins.doctor", payload)
 				return &output.ExitError{Code: code}
 			}
-			pc := pluginPackageClient(pluginClientFor(deps, opts.Registry))
-			if deps.Topology == config.ModeLocal {
-				pc = embeddedLocalPlugin{}
-			}
-			pkg, pkgErr := pc.PluginPackage(cmd.Context())
 			result := pluginDoctorResult{Scope: pluginScope(opts.ProjectLocal)}
-			if pkg != nil {
-				result.LatestVersion = pkg.Version
-			}
-			if pkg != nil {
-				if err := validatePluginPackage(pkg); err != nil {
-					payload := output.ErrorPayload{Code: "validation_failed", Message: err.Error()}
-					code := deps.Printer.Error("plugins.doctor", payload)
-					return &output.ExitError{Code: code, Err: err}
+			nativeHealth := make(map[string]pluginAgentHealth, len(agents))
+			needsPackage := false
+			for _, agent := range agents {
+				if health, native := nativePluginHealth(agent, home); native {
+					nativeHealth[agent] = health
+				} else {
+					needsPackage = true
 				}
 			}
-			if pkgErr != nil {
-				result.Warnings = append(result.Warnings, "Could not fetch the latest plugin package inventory; checked local files only.")
+			var pkg *client.PluginPackage
+			if needsPackage {
+				pc := pluginPackageClient(pluginClientFor(deps, opts.Registry))
+				if deps.Topology == config.ModeLocal {
+					pc = embeddedLocalPlugin{}
+				}
+				pkg, err = pc.PluginPackage(cmd.Context())
+				if pkg != nil {
+					result.LatestVersion = pkg.Version
+					if err := validatePluginPackage(pkg); err != nil {
+						payload := output.ErrorPayload{Code: "validation_failed", Message: err.Error()}
+						code := deps.Printer.Error("plugins.doctor", payload)
+						return &output.ExitError{Code: code, Err: err}
+					}
+				}
+				if err != nil {
+					result.Warnings = append(result.Warnings, "Could not fetch the latest plugin package inventory; checked local files only.")
+				}
 			}
 			ok := true
 			for _, agent := range agents {
-				health := checkPluginAgent(agent, home, opts.ProjectLocal, pkg)
+				health, native := nativeHealth[agent]
+				if !native {
+					health = checkPluginAgent(agent, home, opts.ProjectLocal, pkg)
+				}
 				if !health.OK {
 					ok = false
 				}
@@ -340,11 +358,15 @@ specgate plugins doctor --agent codex --project-local`),
 			}
 			for _, health := range result.Agents {
 				if health.OK {
+					suffix := ""
+					if health.Owner == "native" {
+						suffix = fmt.Sprintf(" (native marketplace %s)", health.Marketplace)
+					}
 					if len(health.Warnings) == 0 {
-						fmt.Fprintf(deps.Stdout, "%s   %s\n", styled(deps, output.StyleSuccess, "OK"), styled(deps, output.StyleBold, health.Agent))
+						fmt.Fprintf(deps.Stdout, "%s   %s%s\n", styled(deps, output.StyleSuccess, "OK"), styled(deps, output.StyleBold, health.Agent), suffix)
 						continue
 					}
-					fmt.Fprintf(deps.Stdout, "%s %s\n", styled(deps, output.StyleWarning, "WARN"), styled(deps, output.StyleBold, health.Agent))
+					fmt.Fprintf(deps.Stdout, "%s %s%s\n", styled(deps, output.StyleWarning, "WARN"), styled(deps, output.StyleBold, health.Agent), suffix)
 				} else {
 					fmt.Fprintf(deps.Stdout, "%s %s\n", styled(deps, output.StyleDanger, "MISS"), styled(deps, output.StyleBold, health.Agent))
 					for _, path := range health.Missing {

@@ -5,14 +5,22 @@
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ROUTER="${SCRIPT_DIR}/../skills/specgate/SKILL.md"
 if [ ! -f "$ROUTER" ]; then
   exit 0
 fi
 
+OWNER_CONTEXT="The IDE plugin manager owns this SpecGate plugin. Skip \`specgate plugins install\` and \`specgate plugins doctor\` for this IDE."
+if [ -f "${PLUGIN_ROOT}/.specgate-owned" ] && [ "$(sed -n '1p' "${PLUGIN_ROOT}/.specgate-owned")" = "specgate-plugin-v1" ]; then
+  OWNER_CONTEXT='The SpecGate CLI owns this plugin. It may use `specgate plugins install` and `specgate plugins doctor` for this IDE.'
+fi
+
 CONTENT='<EXTREMELY_IMPORTANT>
 SpecGate skills are installed. When the user explicitly mentions SpecGate, load `specgate`; for lifecycle work, load exactly one phase before a write. Read-only concept and troubleshooting questions stay in the root skill. Do not apply the SpecGate lifecycle to generic specifications or work that is not tied to SpecGate.
-</EXTREMELY_IMPORTANT>'
+'
+CONTENT="${CONTENT}${OWNER_CONTEXT}
+</EXTREMELY_IMPORTANT>"
 
 escape_for_json() {
   local s="$1"

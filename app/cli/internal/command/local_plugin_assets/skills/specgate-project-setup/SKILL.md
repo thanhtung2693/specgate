@@ -103,7 +103,10 @@ unchanged.
 
 ## 5. Install or refresh the selected IDE integration
 
-The user chooses the IDE and whether its files are user-global or
+Read the session ownership context. If the IDE plugin manager owns SpecGate,
+skip plugin install and doctor for that IDE. Use that manager for plugin changes.
+
+Otherwise, the user chooses the IDE and whether its files are user-global or
 project-local. Preview the exact scope, then install it noninteractively:
 
 ```bash
@@ -114,8 +117,7 @@ specgate plugins install --agent <codex|claude|cursor> --no-input
 Add `--project-local` to both commands only when that scope was selected. Do
 not install every IDE or change scope merely because an executable is present.
 
-Completion criterion: the preview and installation name the user-selected IDE
-and scope, and no unselected integration is modified.
+Completion criterion: one owner, selected IDE and scope only.
 
 ## 6. Verify and hand off
 
@@ -125,11 +127,9 @@ specgate workspace current --json
 specgate plugins doctor --agent <codex|claude|cursor> --json
 ```
 
-Add `--project-local` to plugin doctor when that is the installed scope. Tell
-the user to restart the selected IDE; file verification does not prove a
-running IDE has reloaded the plugin.
+Run plugin doctor only for a CLI-installed integration; add `--project-local`
+when needed. Otherwise use the IDE plugin manager. Restart the IDE after plugin
+changes.
 
-Completion criterion: SpecGate and plugin doctor are healthy for the selected
-topology, workspace, IDE, and scope; any required restart is explicit. On
-failure, report the exact failed command and recovery action instead of an
-advisory repository map.
+Completion criterion: SpecGate, workspace, and selected IDE integration are
+healthy. On failure, report the failed command and recovery action.

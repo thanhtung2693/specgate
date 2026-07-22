@@ -96,11 +96,12 @@ test("stats copy calls unadjudicated events signals", () => {
   assert.doesNotMatch(js, /caught by SpecGate/i);
 });
 
-test("landing copy stays aligned with CLI-first v0.1 support", () => {
+test("landing copy stays aligned with current installation", () => {
   assert.doesNotMatch(html, /production-ready/i);
   assert.doesNotMatch(html, /Jira/);
   assert.match(html, /CLI and IDE handoff/);
-  assert.match(html, /CLI is the supported v0\.1 path/);
+  assert.match(html, /Install through the CLI/);
+  assert.match(html, /Codex and Claude Code plugin managers/i);
   assert.match(html, /Repositories/);
   assert.match(html, /Work tracking/);
   assert.match(html, /GitHub/);
@@ -108,13 +109,14 @@ test("landing copy stays aligned with CLI-first v0.1 support", () => {
   assert.match(html, /Linear/);
   assert.doesNotMatch(html, /\bexperimental\s+(?:connectors?|integrations?|trackers?)\b/i);
   assert.doesNotMatch(html, /\b(?:connectors?|integrations?)\b[^.\n]{0,80}\bmirror(?:s|ed|ing)?\b[^.\n]{0,80}\btracker\b/i);
+  assert.doesNotMatch(html, /official (?:Codex|Claude|plugin) marketplace/i);
+  assert.doesNotMatch(html, /approved (?:by|for) (?:OpenAI|Anthropic|Codex|Claude)/i);
 });
 
 test("tool compatibility is compact and explains the direct and team routes", () => {
   const tools = html.match(/<section class="wordmarks"[^>]*>(?<body>[\s\S]*?)<\/section>/)?.groups?.body ?? "";
 
   assert.match(tools, /Your tools stay in the loop/);
-  assert.match(tools, /Start with direct IDE handoff/);
   assert.equal([...tools.matchAll(/class="tool-route"/g)].length, 2);
   assert.match(tools, /Code where you already work/);
   assert.match(tools, /Repositories and optional work tracking/);
