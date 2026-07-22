@@ -3,7 +3,7 @@
 # SpecGate local appliance: one image containing the existing UI, Doc Registry,
 # Agents runtime, and PostgreSQL/pgvector. Only nginx is reachable from outside.
 
-FROM node:24-alpine AS ui-build
+FROM node:26-alpine AS ui-build
 WORKDIR /src/ui
 COPY app/ui/package.json app/ui/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \

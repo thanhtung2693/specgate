@@ -70,6 +70,8 @@ const files = {
   sessionStartHook: read("plugins/hooks/session-start"),
   cursorRule: read("plugins/rules/using-specgate.mdc"),
   cursorPlugin: read("plugins/.cursor-plugin/plugin.json"),
+  localDockerfile: read("docker/Dockerfile.local"),
+  uiDockerfile: read("docker/Dockerfile.ui"),
   localGateway: read("docker/local/nginx.conf"),
   fullGateway: read("app/ui/docker/nginx-default.conf"),
   landingPage: read("app/landing/index.html"),
@@ -710,6 +712,13 @@ test("Node workflows use the current setup-node action", () => {
   for (const workflow of workflows) {
     assert.match(workflow, /actions\/setup-node@v6/);
     assert.doesNotMatch(workflow, /actions\/setup-node@v[1-5]/);
+  }
+});
+
+test("release UI images build with the supported Node major", () => {
+  for (const dockerfile of [files.localDockerfile, files.uiDockerfile]) {
+    assert.match(dockerfile, /^FROM node:26-alpine AS /m);
+    assert.doesNotMatch(dockerfile, /^FROM node:(?!26-alpine\b)/m);
   }
 });
 

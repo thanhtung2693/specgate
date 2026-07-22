@@ -1378,6 +1378,47 @@ func TestPluginsInstallDryRunSaysNoFilesWereWritten(t *testing.T) {
 	}
 }
 
+func TestPluginsInstallJSONDryRunReportsPlannedOperations(t *testing.T) {
+	srv := newPluginRegistry(t)
+	workDir := t.TempDir()
+	t.Chdir(workDir)
+
+	deps, out := newPluginDeps(t.TempDir())
+	code := command.ExecuteForCode(command.NewRootCommand(deps),
+		"--json", "--server", srv.URL,
+		"plugins", "install",
+		"--agent", "codex",
+		"--project-local",
+		"--dry-run",
+	)
+	if code != output.ExitOK {
+		t.Fatalf("dry-run exit = %d, output = %s", code, out.String())
+	}
+	var env struct {
+		Data struct {
+			DryRun            bool     `json:"dry_run"`
+			WrittenCount      int      `json:"written_count"`
+			PlannedOperations []string `json:"planned_operations"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal: %v, output=%s", err, out.String())
+	}
+	if !env.Data.DryRun || env.Data.WrittenCount != 0 {
+		t.Fatalf("unexpected dry-run result: %+v", env.Data)
+	}
+	if len(env.Data.PlannedOperations) == 0 {
+		t.Fatalf("JSON dry-run omitted planned operations: %s", out.String())
+	}
+	want := "write " + filepath.Join(".agents", "skills", "specgate", "SKILL.md")
+	if !strings.Contains(strings.Join(env.Data.PlannedOperations, "\n"), want) {
+		t.Fatalf("planned operations missing %q: %#v", want, env.Data.PlannedOperations)
+	}
+	if _, err := os.Stat(filepath.Join(workDir, ".agents")); !os.IsNotExist(err) {
+		t.Fatalf("JSON dry-run wrote project files: %v", err)
+	}
+}
+
 func TestPluginsInstallProjectLocalLeavesUnrelatedMalformedCodexConfigUntouched(t *testing.T) {
 	for _, dryRun := range []bool{false, true} {
 		t.Run(fmt.Sprintf("dry_run_%t", dryRun), func(t *testing.T) {
