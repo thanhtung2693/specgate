@@ -221,6 +221,26 @@ test("local and full gateways route provider callbacks and managed webhooks", ()
   }
 });
 
+test("release automation rejects an already-published GitHub Release before verification", () => {
+  const workflow = files.releaseWorkflow;
+  const verifyJob = workflow.slice(
+    workflow.indexOf("\n  verify:\n"),
+    workflow.indexOf("\n  release-cli:\n"),
+  );
+  const preflight = verifyJob.indexOf("Reject pre-published GitHub Release");
+  const checkout = verifyJob.indexOf("actions/checkout@v6");
+
+  assert.notEqual(preflight, -1, "tag releases need a published-release preflight");
+  assert.ok(preflight < checkout, "release-state validation must run before expensive verification");
+  assert.match(verifyJob, /\.tag_name == \$version and \.draft == false/);
+  assert.match(verifyJob, /push the tag directly/i);
+});
+
+test("release guide tells maintainers to push a tag without publishing a GitHub Release", () => {
+  assert.match(docs.release, /git push origin "\$VERSION"/);
+  assert.match(docs.release, /Do not create or publish a GitHub Release/i);
+});
+
 test("release workflow builds only the appliance and exercises doctor repair", () => {
   const workflow = files.releaseWorkflow;
   const manifestJob = workflow.slice(
