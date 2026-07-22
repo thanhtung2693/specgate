@@ -201,9 +201,8 @@ selected IDE scope. It preserves unowned skills and files.
 
 For a global Codex install, the installer edits only SpecGate-owned
 `config.toml` sections. Unrelated settings, ordering, whitespace, and comments
-are preserved. When refreshing an older project-local Codex install, it removes
-only the legacy SpecGate-owned bundle and registration; unrelated files and
-configuration survive.
+are preserved. Project-local installs do not change Codex configuration or
+plugin-manager files.
 
 ## Refresh an existing install
 

@@ -9,7 +9,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -41,6 +40,13 @@ func TestPluginsInstallProjectLocalAndDoctor(t *testing.T) {
 	if err := os.WriteFile(existingMarketplace, existingMarketplaceBody, 0o644); err != nil {
 		t.Fatal(err)
 	}
+	existingCodexPlugin := filepath.Join(workDir, ".codex", "plugins", "specgate", ".codex-plugin", "plugin.json")
+	existingCodexPluginBody := []byte(`{"keep":true}`)
+	writeTestFile(t, filepath.Join(workDir, ".codex", "plugins", "specgate", ".specgate-owned"), "specgate-plugin-v1\n")
+	writeTestFile(t, existingCodexPlugin, string(existingCodexPluginBody))
+	existingCodexConfig := filepath.Join(workDir, ".codex", "config.toml")
+	existingCodexConfigBody := []byte("[plugins.\"specgate@personal\"]\nenabled = true\n")
+	writeTestFile(t, existingCodexConfig, string(existingCodexConfigBody))
 	deps, out := newPluginDeps(homeDir)
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
 		"--plain", "--server", srv.URL,
@@ -73,13 +79,11 @@ func TestPluginsInstallProjectLocalAndDoctor(t *testing.T) {
 	if !bytes.Equal(marketplaceBody, existingMarketplaceBody) {
 		t.Fatalf("project-local install changed unrelated marketplace config: %s", marketplaceBody)
 	}
-	for _, path := range []string{
-		".codex/plugins/specgate",
-		".codex/config.toml",
-	} {
-		if _, err := os.Stat(filepath.Join(workDir, path)); !os.IsNotExist(err) {
-			t.Fatalf("obsolete project-local path %s was created: %v", path, err)
-		}
+	if body, err := os.ReadFile(existingCodexPlugin); err != nil || !bytes.Equal(body, existingCodexPluginBody) {
+		t.Fatalf("project-local install changed existing Codex plugin state: body=%q err=%v", body, err)
+	}
+	if body, err := os.ReadFile(existingCodexConfig); err != nil || !bytes.Equal(body, existingCodexConfigBody) {
+		t.Fatalf("project-local install changed existing Codex config: body=%q err=%v", body, err)
 	}
 
 	deps, out = newPluginDeps(homeDir)
@@ -91,143 +95,6 @@ func TestPluginsInstallProjectLocalAndDoctor(t *testing.T) {
 	)
 	if code != output.ExitOK {
 		t.Fatalf("doctor exit = %d, output = %s", code, out.String())
-	}
-}
-
-func TestPluginsInstallProjectLocalCodexMigratesOnlyOwnedLegacyFiles(t *testing.T) {
-	srv := newPluginRegistry(t)
-	workDir := t.TempDir()
-	t.Chdir(workDir)
-	homeDir := t.TempDir()
-
-	legacyRoot := filepath.Join(workDir, ".codex", "plugins", "specgate")
-	writeTestFile(t, filepath.Join(legacyRoot, ".specgate-owned"), "specgate-plugin-v1\n")
-	writeTestFile(t, filepath.Join(legacyRoot, ".codex-plugin", "plugin.json"), `{}`)
-	marketplacePath := filepath.Join(workDir, ".agents", "plugins", "marketplace.json")
-	writeTestFile(t, marketplacePath, `{"name":"personal","plugins":[{"name":"specgate","source":{"source":"local","path":"./.codex/plugins/specgate"}},{"name":"other"}]}`)
-	configPath := filepath.Join(workDir, ".codex", "config.toml")
-	writeTestFile(t, configPath, "[plugins.\"specgate@personal\"]\nenabled = true\n\n[marketplaces.personal]\nsource_type = \"local\"\nsource = "+strconv.Quote(workDir)+"\n\n[tools]\nkeep = true\n")
-
-	deps, out := newPluginDeps(homeDir)
-	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--plain", "--server", srv.URL,
-		"plugins", "install", "--project-local", "--agent", "codex",
-	)
-	if code != output.ExitOK {
-		t.Fatalf("install exit = %d, output = %s", code, out.String())
-	}
-	if _, err := os.Stat(legacyRoot); !os.IsNotExist(err) {
-		t.Fatalf("owned legacy Codex bundle remains: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(workDir, ".agents", "skills", "specgate", "SKILL.md")); err != nil {
-		t.Fatalf("focused Codex skill missing: %v", err)
-	}
-	marketplaceBody, err := os.ReadFile(marketplacePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if bytes.Contains(marketplaceBody, []byte(`"name": "specgate"`)) || !bytes.Contains(marketplaceBody, []byte(`"name": "other"`)) {
-		t.Fatalf("legacy marketplace entry was not removed safely: %s", marketplaceBody)
-	}
-	configBody, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if bytes.Contains(configBody, []byte("specgate@personal")) || !bytes.Contains(configBody, []byte("[tools]")) {
-		t.Fatalf("legacy Codex config was not cleaned safely: %s", configBody)
-	}
-}
-
-func TestPluginsInstallProjectLocalCodexRemovesEmptyLegacyDirectory(t *testing.T) {
-	srv := newPluginRegistry(t)
-	workDir := t.TempDir()
-	t.Chdir(workDir)
-
-	legacyRoot := filepath.Join(workDir, ".codex", "plugins", "specgate")
-	writeTestFile(t, filepath.Join(legacyRoot, ".specgate-owned"), "specgate-plugin-v1\n")
-	writeTestFile(t, filepath.Join(legacyRoot, ".codex-plugin", "plugin.json"), `{}`)
-	writeTestFile(t, filepath.Join(workDir, ".agents", "plugins", "marketplace.json"), `{"name":"personal","plugins":[{"name":"specgate","source":{"source":"local","path":"./.codex/plugins/specgate"}}]}`)
-	writeTestFile(t, filepath.Join(workDir, ".codex", "config.toml"), "[plugins.\"specgate@personal\"]\nenabled = true\n\n[marketplaces.personal]\nsource_type = \"local\"\nsource = "+strconv.Quote(workDir)+"\n")
-
-	deps, out := newPluginDeps(t.TempDir())
-	if code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--plain", "--server", srv.URL,
-		"plugins", "install", "--project-local", "--agent", "codex",
-	); code != output.ExitOK {
-		t.Fatalf("install exit = %d, output = %s", code, out.String())
-	}
-	if _, err := os.Stat(filepath.Join(workDir, ".codex")); !os.IsNotExist(err) {
-		t.Fatalf("empty legacy Codex directory remains: %v", err)
-	}
-}
-
-func TestPluginsInstallProjectLocalCodexRejectsSymlinkedLegacyAncestors(t *testing.T) {
-	for _, testCase := range []struct {
-		name          string
-		linkPath      func(string) string
-		externalSetup func(*testing.T, string)
-		sentinel      func(string) string
-	}{
-		{
-			name:     "codex directory",
-			linkPath: func(workDir string) string { return filepath.Join(workDir, ".codex") },
-			externalSetup: func(t *testing.T, external string) {
-				writeTestFile(t, filepath.Join(external, "plugins", "specgate", ".specgate-owned"), "specgate-plugin-v1\n")
-				writeTestFile(t, filepath.Join(external, "plugins", "specgate", ".codex-plugin", "plugin.json"), `{}`)
-			},
-			sentinel: func(external string) string {
-				return filepath.Join(external, "plugins", "specgate", ".codex-plugin", "plugin.json")
-			},
-		},
-		{
-			name:     "agents plugins directory",
-			linkPath: func(workDir string) string { return filepath.Join(workDir, ".agents", "plugins") },
-			externalSetup: func(t *testing.T, external string) {
-				writeTestFile(t, filepath.Join(external, "marketplace.json"), `{"name":"personal","plugins":[{"name":"specgate","source":{"source":"local","path":"./.codex/plugins/specgate"}}]}`)
-			},
-			sentinel: func(external string) string { return filepath.Join(external, "marketplace.json") },
-		},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			srv := newPluginRegistry(t)
-			workDir := t.TempDir()
-			t.Chdir(workDir)
-			external := t.TempDir()
-			testCase.externalSetup(t, external)
-			before, err := os.ReadFile(testCase.sentinel(external))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if testCase.name == "agents plugins directory" {
-				writeTestFile(t, filepath.Join(workDir, ".codex", "plugins", "specgate", ".specgate-owned"), "specgate-plugin-v1\n")
-				writeTestFile(t, filepath.Join(workDir, ".codex", "plugins", "specgate", ".codex-plugin", "plugin.json"), `{}`)
-			}
-			if err := os.MkdirAll(filepath.Dir(testCase.linkPath(workDir)), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.Symlink(external, testCase.linkPath(workDir)); err != nil {
-				t.Skipf("symlink unsupported: %v", err)
-			}
-
-			deps, out := newPluginDeps(t.TempDir())
-			code := command.ExecuteForCode(command.NewRootCommand(deps),
-				"--plain", "--server", srv.URL,
-				"plugins", "install", "--project-local", "--agent", "codex",
-			)
-			if code == output.ExitOK {
-				t.Fatalf("project-local install accepted symlinked ancestor: %s", out.String())
-			}
-			after, err := os.ReadFile(testCase.sentinel(external))
-			if err != nil {
-				t.Fatalf("external sentinel was removed: %v", err)
-			}
-			if !bytes.Equal(after, before) {
-				t.Fatalf("external sentinel changed:\n%s", after)
-			}
-			if _, err := os.Stat(filepath.Join(workDir, ".agents", "skills", "specgate", "SKILL.md")); !os.IsNotExist(err) {
-				t.Fatalf("installer wrote project skills before rejecting unsafe ancestry: %v", err)
-			}
-		})
 	}
 }
 

@@ -52,6 +52,16 @@ curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/scripts
 specgate init
 ```
 
+Using Claude Code? Install the plugin directly from this GitHub repository:
+
+```bash
+claude plugin marketplace add thanhtung2693/specgate
+claude plugin install specgate@specgate
+```
+
+See [IDE plugin installation](docs/using-specgate/guides/install-ide-plugins.md)
+for Codex, Cursor, updates, and uninstall. Use one installation method per IDE.
+
 Prefer agent-led setup? Install the `specgate` bootstrap from
 [skills.sh](https://skills.sh/thanhtung2693/specgate/specgate), then ask your
 agent: **“Set up SpecGate.”** The bootstrap requests approval before installing

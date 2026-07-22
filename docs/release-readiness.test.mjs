@@ -123,6 +123,8 @@ test("release docs keep the public install path CLI-first", () => {
     assert.match(text, /specgate plugins install/);
   }
   assert.match(docs.readme, /specgate plugins doctor/);
+  assert.match(docs.readme, /claude plugin marketplace add thanhtung2693\/specgate/);
+  assert.match(docs.readme, /claude plugin install specgate@specgate/);
   assert.match(docs.installIdePlugins, /specgate plugins doctor/);
   assert.match(docs.contracts, /normal coding-agent workflow publishes through `specgate artifact publish`/);
 

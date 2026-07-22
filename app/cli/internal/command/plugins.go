@@ -29,10 +29,6 @@ const (
 	pluginPathPlaceholder      = "__SPECGATE_PLUGIN_PATH__"
 	codexPersonalMarketURL     = ".agents/plugins/personal-marketplace.json"
 	installedCodexPluginSource = "./.codex/plugins/specgate"
-	// committedCodexPluginSource is the plugin source path used by the checked-in
-	// repo-root marketplace pointer (.agents/plugins/marketplace.json). The
-	// installer must never overwrite that committed pointer with a machine path.
-	committedCodexPluginSource = "./plugins"
 	pluginOwnerMarker          = ".specgate-owned"
 	pluginOwnerValue           = "specgate-plugin-v1\n"
 	maxPluginSkills            = 16
@@ -801,9 +797,6 @@ func (i *pluginInstaller) validateInstallTargets(agents []string) error {
 				if err := validateSkills(filepath.Join(root, ".agents", "skills")); err != nil {
 					return err
 				}
-				if err := i.validateLegacyProjectCodexInstall(root); err != nil {
-					return err
-				}
 				continue
 			}
 			if err := validateOwnedPluginDir(filepath.Join(root, ".codex", "plugins", specgatePluginName)); err != nil {
@@ -822,7 +815,7 @@ func (i *pluginInstaller) validateInstallTargets(agents []string) error {
 					return err
 				}
 			}
-			if err := validateCodexMarketplaceOwnership(filepath.Join(root, ".agents", "plugins", "marketplace.json"), i.opts.ProjectLocal); err != nil {
+			if err := validateCodexMarketplaceOwnership(filepath.Join(root, ".agents", "plugins", "marketplace.json")); err != nil {
 				return err
 			}
 			configPath := filepath.Join(root, ".codex", "config.toml")
@@ -1038,10 +1031,7 @@ func (i *pluginInstaller) installCodex() error {
 	root := i.home
 	if i.opts.ProjectLocal {
 		root = "."
-		if err := i.installFocusedSkills(filepath.Join(root, ".agents", "skills")); err != nil {
-			return err
-		}
-		return i.migrateLegacyProjectCodexInstall(root)
+		return i.installFocusedSkills(filepath.Join(root, ".agents", "skills"))
 	}
 	pluginRoot := filepath.Join(root, ".codex", "plugins", specgatePluginName)
 	cacheRoot := filepath.Join(root, ".codex", "plugins", "cache", "personal", specgatePluginName, i.pkg.Version)
@@ -1063,109 +1053,10 @@ func (i *pluginInstaller) installCodex() error {
 			return err
 		}
 	}
-	if err := i.mergeCodexMarketplace(marketplace, installedCodexPluginSource); err != nil {
+	if err := i.mergeCodexMarketplace(marketplace); err != nil {
 		return err
 	}
 	return i.enableCodexConfig(configPath, marketplaceRoot)
-}
-
-func (i *pluginInstaller) validateLegacyProjectCodexInstall(root string) error {
-	legacyRoot := filepath.Join(root, ".codex", "plugins", specgatePluginName)
-	if !hasValidPluginOwnership(legacyRoot, true) {
-		return nil
-	}
-	for _, dir := range []string{
-		filepath.Join(root, ".codex", "plugins"),
-		filepath.Join(root, ".agents", "plugins"),
-	} {
-		if err := validatePluginDirectoryPath(root, dir); err != nil {
-			return err
-		}
-	}
-	if err := validateOwnedPluginDir(legacyRoot); err != nil {
-		return err
-	}
-	marketplacePath := filepath.Join(root, ".agents", "plugins", "marketplace.json")
-	if err := validateRegularFileOrMissing(marketplacePath); err != nil {
-		return err
-	}
-	unowned, err := codexMarketplaceHasUnownedSpecGateEntry(marketplacePath)
-	if err != nil {
-		return err
-	}
-	if unowned {
-		return nil
-	}
-	configPath := filepath.Join(root, ".codex", "config.toml")
-	if err := validateRegularFileOrMissing(configPath); err != nil {
-		return err
-	}
-	body, err := os.ReadFile(configPath)
-	if os.IsNotExist(err) || strings.TrimSpace(string(body)) == "" {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if _, err := parseTOML(string(body)); err != nil {
-		return fmt.Errorf("parse %s: %w", configPath, err)
-	}
-	return nil
-}
-
-func (i *pluginInstaller) migrateLegacyProjectCodexInstall(root string) error {
-	legacyRoot := filepath.Join(root, ".codex", "plugins", specgatePluginName)
-	if !hasValidPluginOwnership(legacyRoot, true) {
-		return nil
-	}
-	if i.opts.DryRun {
-		i.printf("[dry-run] remove owned legacy Codex plugin files from %s\n", legacyRoot)
-		return nil
-	}
-	marketplacePath := filepath.Join(root, ".agents", "plugins", "marketplace.json")
-	unowned, err := codexMarketplaceHasUnownedSpecGateEntry(marketplacePath)
-	if err != nil {
-		return err
-	}
-	if !unowned {
-		if _, err := removeCodexMarketplaceEntry(marketplacePath); err != nil {
-			return err
-		}
-		removePersonalMarketplace := false
-		if _, err := os.Stat(marketplacePath); os.IsNotExist(err) {
-			removePersonalMarketplace = true
-		} else if err != nil {
-			return err
-		}
-		marketplaceRoot, err := filepath.Abs(root)
-		if err != nil {
-			return err
-		}
-		if _, err := removeCodexConfigSections(filepath.Join(root, ".codex", "config.toml"), removePersonalMarketplace, marketplaceRoot); err != nil {
-			return err
-		}
-	}
-	changed, fullyRemoved, err := removeOwnedPluginDir(legacyRoot)
-	if err != nil {
-		return err
-	}
-	if changed {
-		if fullyRemoved {
-			i.printf("removed owned legacy Codex plugin files from %s\n", legacyRoot)
-		} else {
-			i.printf("removed owned legacy Codex plugin files from %s; preserved unrelated files\n", legacyRoot)
-		}
-	}
-	for _, dir := range []string{
-		filepath.Join(root, ".codex", "plugins"),
-		filepath.Join(root, ".agents", "plugins"),
-		filepath.Join(root, ".codex"),
-	} {
-		if _, err := removeDirIfEmpty(dir); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (i *pluginInstaller) installPluginBundle(pluginRoot, manifest, hooks string) error {
@@ -1317,21 +1208,6 @@ func validatePluginWritePath(root, dest string) error {
 	return nil
 }
 
-// hasCommittedCodexPointer reports whether the plugin entry named entryName
-// targets the checked-in repo-root source ("./plugins"). Only project-local
-// installs may preserve this pointer.
-func hasCommittedCodexPointer(plugins []map[string]any, entryName string) bool {
-	for _, plugin := range plugins {
-		if pname, _ := plugin["name"].(string); pname != entryName {
-			continue
-		}
-		if codexPluginHasLocalSource(plugin, committedCodexPluginSource) {
-			return true
-		}
-	}
-	return false
-}
-
 func codexPluginSourcePath(plugin map[string]any) string {
 	source, _ := plugin["source"].(map[string]any)
 	path, _ := source["path"].(string)
@@ -1344,7 +1220,7 @@ func codexPluginHasLocalSource(plugin map[string]any, path string) bool {
 	return strings.TrimSpace(sourceType) == "local" && codexPluginSourcePath(plugin) == path
 }
 
-func validateCodexMarketplaceOwnership(path string, projectLocal bool) error {
+func validateCodexMarketplaceOwnership(path string) error {
 	body, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return nil
@@ -1364,8 +1240,7 @@ func validateCodexMarketplaceOwnership(path string, projectLocal bool) error {
 			continue
 		}
 		source := codexPluginSourcePath(plugin)
-		if codexPluginHasLocalSource(plugin, installedCodexPluginSource) ||
-			(projectLocal && codexPluginHasLocalSource(plugin, committedCodexPluginSource)) {
+		if codexPluginHasLocalSource(plugin, installedCodexPluginSource) {
 			continue
 		}
 		return fmt.Errorf("marketplace entry %q points to %q and is not managed by SpecGate; move or remove it before installing", specgatePluginName, source)
@@ -1396,12 +1271,12 @@ func codexMarketplaceHasUnownedSpecGateEntry(path string) (bool, error) {
 	return false, nil
 }
 
-func (i *pluginInstaller) mergeCodexMarketplace(path, pluginPath string) error {
+func (i *pluginInstaller) mergeCodexMarketplace(path string) error {
 	templateBytes, err := i.pluginFile(codexPersonalMarketURL)
 	if err != nil {
 		return err
 	}
-	templateBytes = bytes.ReplaceAll(templateBytes, []byte(pluginPathPlaceholder), []byte(pluginPath))
+	templateBytes = bytes.ReplaceAll(templateBytes, []byte(pluginPathPlaceholder), []byte(installedCodexPluginSource))
 	if i.opts.DryRun {
 		i.printf("[dry-run] add or update specgate entry in %s\n", path)
 		return nil
@@ -1431,13 +1306,6 @@ func (i *pluginInstaller) mergeCodexMarketplace(path, pluginPath string) error {
 		if err := json.Unmarshal(existing, &data); err != nil {
 			return fmt.Errorf("parse %s: %w", path, err)
 		}
-	}
-	// A project-local install must not clobber the checked-in repo-root pointer.
-	// It already resolves to the local package; rewriting it would corrupt the
-	// committed marketplace.
-	if i.opts.ProjectLocal && hasCommittedCodexPointer(data.Plugins, entryName) {
-		i.printf("keeping committed repo-root marketplace pointer in %s (source %s)\n", path, committedCodexPluginSource)
-		return nil
 	}
 	if data.Name == "" {
 		data.Name = tmpl.Name
@@ -1718,7 +1586,7 @@ func checkPluginAgent(agent, home string, projectLocal bool, pkg *client.PluginP
 		}
 		if isRegularPluginFile(marketplace) {
 			body, _ := os.ReadFile(marketplace)
-			if !codexMarketplaceHasPlugin(body, specgatePluginName, projectLocal) {
+			if !codexMarketplaceHasPlugin(body) {
 				health.Missing = append(health.Missing, marketplace+" SpecGate-managed entry")
 			}
 		}
@@ -1818,7 +1686,7 @@ func pluginAgentAvailable(agent string) bool {
 	return false
 }
 
-func codexMarketplaceHasPlugin(body []byte, name string, projectLocal bool) bool {
+func codexMarketplaceHasPlugin(body []byte) bool {
 	var data struct {
 		Plugins []map[string]any `json:"plugins"`
 	}
@@ -1827,9 +1695,7 @@ func codexMarketplaceHasPlugin(body []byte, name string, projectLocal bool) bool
 	}
 	for _, plugin := range data.Plugins {
 		pluginName, _ := plugin["name"].(string)
-		if pluginName == name &&
-			(codexPluginHasLocalSource(plugin, installedCodexPluginSource) ||
-				(projectLocal && codexPluginHasLocalSource(plugin, committedCodexPluginSource))) {
+		if pluginName == specgatePluginName && codexPluginHasLocalSource(plugin, installedCodexPluginSource) {
 			return true
 		}
 	}
