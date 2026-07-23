@@ -273,11 +273,14 @@ prevented a defect.
 
 ## Move Local history into Full mode
 
-Export a Local workspace, switch to Full mode, select the destination
-workspace, and inspect the dry run before importing:
+Export a Local workspace, initialize Full mode, select the destination
+workspace, and inspect the dry run before importing. Initializing Full mode
+changes the active CLI topology; it does not delete the Local SQLite state.
 
 ```bash
 specgate portable export --file ~/specgate-local.json
+specgate init --mode full
+specgate workspace select <destination-workspace-slug>
 specgate portable import --file ~/specgate-local.json --dry-run
 specgate portable import --file ~/specgate-local.json --yes
 ```

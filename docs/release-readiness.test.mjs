@@ -338,7 +338,6 @@ test("release env examples document runtime config without requiring model secre
   const docRegistryOperatorDocs = [
     files.docRegistryEnvExample,
     docs.deployReadme,
-    docs.configReference,
     docs.docRegistryReadme,
     docs.docRegistrySpec,
   ].join("\n");
