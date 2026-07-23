@@ -445,6 +445,28 @@ test("SpecGate exposes one product-named entry skill", () => {
   assert.doesNotMatch(files.pluginPackage, /specgate-router/);
 });
 
+test("Codex plugin metadata stays within public-directory limits", () => {
+  const plugin = JSON.parse(files.pluginPackage);
+  const prompts = [
+    "Check this artifact with SpecGate readiness.",
+    "Pick up and implement this SpecGate work item.",
+    "Show the delivery status for this SpecGate work item.",
+  ];
+
+  assert.match(plugin.name, /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/);
+  assert.match(plugin.version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/);
+  assert.ok(plugin.display_name.length <= 30, "plugin display name exceeds 30 characters");
+  assert.ok(plugin.short_description.length <= 30, "plugin short description exceeds 30 characters");
+  assert.ok(plugin.long_description.length <= 4000, "plugin long description exceeds 4,000 characters");
+  assert.ok(plugin.developer_name.length <= 80, "plugin developer name exceeds 80 characters");
+  assert.ok(prompts.length <= 3, "plugin has more than three starter prompts");
+  assert.equal(new Set(prompts.map((prompt) => prompt.trim().normalize())).size, prompts.length);
+  for (const prompt of prompts) {
+    assert.ok(prompt.length <= 128, `starter prompt exceeds 128 characters: ${prompt}`);
+    assert.doesNotMatch(prompt, /@\w/);
+  }
+});
+
 test("skills.sh bootstrap hands plugin ownership to the SpecGate CLI", () => {
   assert.match(docs.readme, /skills\.sh[\s\S]{0,240}bootstrap/i);
   assert.match(docs.readme, /ask your\s+agent[\s\S]{0,160}set up SpecGate/i);
