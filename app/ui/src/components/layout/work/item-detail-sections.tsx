@@ -1,6 +1,6 @@
 // Work-item detail sections and their local rendering helpers.
 
-import { AlertTriangleIcon, BotIcon, CheckCircle2Icon, ChevronRightIcon, CircleDotIcon, ClockIcon, CopyIcon, ExternalLinkIcon, FileTextIcon, ShieldCheckIcon } from "lucide-react"
+import { AlertTriangleIcon, CheckCircle2Icon, ChevronRightIcon, CircleDotIcon, ClockIcon, CopyIcon, ExternalLinkIcon, FileTextIcon, ShieldCheckIcon } from "lucide-react"
 import { useState } from "react"
 import { Link } from "react-router-dom"
 import { Badge } from "@/components/ui/badge"
@@ -8,12 +8,12 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { summarizeDeliveryTrust, trustTierLabel } from "@/data/delivery-trust"
 import { handoffToLinear, integrationsBase, listIntegrationResources, listIntegrations, type IntegrationResourceSummary, type IntegrationSummary } from "@/data/integrations"
-import { repositoryObservation, type AcceptanceCriterionSummary, type DeliveryLinkSummary, type DeliveryStatusSummary, type GateRunSummary, type NextActionSummary, type StaleWarningSummary, type TrackerLinkSummary, type WorkItemDetailData } from "@/data/workboard"
+import { recordDeliveryDecision, repositoryObservation, type AcceptanceCriterionSummary, type DeliveryLinkSummary, type DeliveryStatusSummary, type GateRunSummary, type NextActionSummary, type StaleWarningSummary, type TrackerLinkSummary, type WorkItemDetailData } from "@/data/workboard"
 import { type WorkItem } from "@/data/workspace"
 import { formatDateTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { deliveryText, gateChecks, gateText, readableKey, stateText, statusTone, toneClass, type Tone } from "../shared"
-import { ActionTooltip, copyText, GateEvidenceWhy, MarkdownText, runGovernanceAgentPrompt } from "../shared-ui"
+import { ActionTooltip, copyText, GateEvidenceWhy, MarkdownText } from "../shared-ui"
 
 export function FreshnessSignalsSummary({ warnings }: { warnings: StaleWarningSummary[] }) {
   if (warnings.length === 0) return null
@@ -269,31 +269,11 @@ export function ContextPackDetail({
   if (!contextPack && !contextPackUnavailable) {
     return (
       <section className="rounded-lg border bg-background/70 p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-semibold">Handoff / Context Pack</h3>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-              No Context Pack is available yet. Continue preparation in your IDE or CLI, then return here to inspect the handoff.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <ActionTooltip content="Opens governance agent. Does not create a Context Pack or change workflow state.">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="rounded-md"
-                onClick={() =>
-                  runGovernanceAgentPrompt(
-                    `For ${item.key} (${item.title}), explain what blocks a governed coding-agent handoff. Check scope, acceptance criteria, route, gate state, and whether a Context Pack or approved source artifact is available.`,
-                  )
-                }
-              >
-                <BotIcon data-icon="inline-start" />
-                Ask what blocks handoff
-              </Button>
-            </ActionTooltip>
-          </div>
+        <div>
+          <h3 className="text-sm font-semibold">Handoff / Context Pack</h3>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+            No Context Pack is available yet. Continue preparation in your IDE or CLI, then return here to inspect the handoff.
+          </p>
         </div>
       </section>
     )
@@ -790,7 +770,23 @@ function RepositoryObservationLink({ link, latestCompletionHead }: { link: Deliv
   )
 }
 
-export function DeliverySummary({ item, detail }: { item: WorkItem; detail: WorkItemDetailData }) {
+export function DeliverySummary({
+  item,
+  detail,
+  reviewer,
+  workspaceId,
+  onDecided,
+}: {
+  item: WorkItem
+  detail: WorkItemDetailData
+  reviewer: string
+  workspaceId: string
+  onDecided: () => void
+}) {
+  const [pendingDecision, setPendingDecision] = useState<"approve" | "reject">()
+  const [decisionNote, setDecisionNote] = useState("")
+  const [decisionBusy, setDecisionBusy] = useState(false)
+  const [decisionError, setDecisionError] = useState("")
   const deliveryRun = detail.gateRuns.find((run) => run.gate === "delivery_review")
   const deliveryStatus = detail.deliveryStatus
   const evidenceState = deliveryStatus?.evidenceVerdict ??
@@ -806,6 +802,49 @@ export function DeliverySummary({ item, detail }: { item: WorkItem; detail: Work
   const trust = deliveryStatus?.found ? summarizeDeliveryTrust(deliveryStatus) : undefined
   const accepted = trust?.decision === "Accepted"
   const rejected = trust?.decision === "Rejected"
+  const decisionGateRunId = deliveryStatus?.gateRunId
+  const decisionCompletionId = deliveryStatus?.completionFeedbackEventId
+  const canDecide = deliveryStatus?.found &&
+    Boolean(decisionGateRunId) &&
+    Boolean(decisionCompletionId) &&
+    deliveryStatus.executor !== "human" &&
+    deliveryStatus.reasonCode !== "delivery_review_outdated"
+  const completion = decisionCompletionId
+    ? deliveryStatus?.gitReceipt?.headRevision
+      ? `Completion ${decisionCompletionId} at commit ${deliveryStatus.gitReceipt.headRevision}`
+      : deliveryStatus?.reviewedAt
+        ? `Completion ${decisionCompletionId}, reviewed ${formatDateTime(deliveryStatus.reviewedAt)}`
+        : `Completion ${decisionCompletionId}`
+    : "Latest reviewed completion"
+
+  async function confirmDecision() {
+    if (!pendingDecision || !decisionGateRunId || !decisionCompletionId) return
+    const note = decisionNote.trim()
+    if (pendingDecision === "reject" && !note) {
+      setDecisionError("Describe what must change before resubmission.")
+      return
+    }
+    setDecisionBusy(true)
+    setDecisionError("")
+    try {
+      await recordDeliveryDecision(
+        item.registryId || item.key,
+        pendingDecision,
+        reviewer,
+        workspaceId,
+        decisionGateRunId,
+        decisionCompletionId,
+        note || undefined,
+      )
+      setPendingDecision(undefined)
+      setDecisionNote("")
+      onDecided()
+    } catch (error) {
+      setDecisionError(error instanceof Error ? error.message : "Delivery decision failed.")
+    } finally {
+      setDecisionBusy(false)
+    }
+  }
 
   return (
     <section className="rounded-lg border bg-background/70 p-4">
@@ -822,9 +861,18 @@ export function DeliverySummary({ item, detail }: { item: WorkItem; detail: Work
           )}
           <h3 className="text-sm font-semibold">Delivery review</h3>
         </div>
-        <Badge variant="outline" className="rounded-full">
-          read-only
-        </Badge>
+        {canDecide ? (
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" className="rounded-md" onClick={() => setPendingDecision("approve")}>
+              Accept delivery
+            </Button>
+            <Button variant="outline" size="sm" className="rounded-md text-destructive" onClick={() => setPendingDecision("reject")}>
+              Request changes
+            </Button>
+          </div>
+        ) : (
+          <Badge variant="outline" className="rounded-full">read-only</Badge>
+        )}
       </div>
       {detail.readback.delivery === "error" ? (
         <p className="mt-3 rounded-md border bg-card/70 p-3 text-sm leading-6 text-muted-foreground">
@@ -847,6 +895,59 @@ export function DeliverySummary({ item, detail }: { item: WorkItem; detail: Work
           {deliveryStatus ? <DeliveryStatusDetails status={deliveryStatus} /> : null}
         </>
       )}
+      <Dialog
+        open={pendingDecision !== undefined}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingDecision(undefined)
+            setDecisionNote("")
+            setDecisionError("")
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{pendingDecision === "approve" ? "Accept delivery" : "Request changes"}</DialogTitle>
+            <DialogDescription>
+              {item.key} · {item.title} as {reviewer}. {completion}. Doc Registry validates latest-review binding and reviewer identity.
+            </DialogDescription>
+          </DialogHeader>
+          <label className="grid gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">
+              {pendingDecision === "reject" ? "Required changes" : "Note (optional)"}
+            </span>
+            <textarea
+              className="min-h-24 rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              value={decisionNote}
+              onChange={(event) => setDecisionNote(event.target.value)}
+              placeholder={pendingDecision === "reject" ? "Describe specific evidence or behavior that must change" : "Why this delivery is acceptable"}
+            />
+          </label>
+          {decisionError ? <p role="alert" className="text-sm text-destructive">{decisionError}</p> : null}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="rounded-md"
+              disabled={decisionBusy}
+              onClick={() => {
+                setPendingDecision(undefined)
+                setDecisionNote("")
+                setDecisionError("")
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={pendingDecision === "approve" ? "default" : "destructive"}
+              className="rounded-md"
+              disabled={decisionBusy}
+              onClick={() => void confirmDecision()}
+            >
+              {decisionBusy ? "Recording…" : pendingDecision === "approve" ? "Accept delivery" : "Request changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }

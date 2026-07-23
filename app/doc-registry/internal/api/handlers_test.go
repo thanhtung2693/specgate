@@ -182,6 +182,24 @@ func TestMapGovernanceError_UnsupportedPolicySnapshot(t *testing.T) {
 	}
 }
 
+func TestMapGovernanceError_WorkboardErrors(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		err    error
+		status int
+	}{
+		{err: workboard.ErrValidation, status: http.StatusBadRequest},
+		{err: workboard.ErrConflict, status: http.StatusConflict},
+	} {
+		err := mapGovernanceError("delivery-decision", tc.err)
+		var em *huma.ErrorModel
+		if !errors.As(err, &em) || em.Status != tc.status {
+			t.Fatalf("want %d huma ErrorModel, got %v", tc.status, err)
+		}
+	}
+}
+
 func TestRouter_CreateUploadDocument_Multipart(t *testing.T) {
 	t.Parallel()
 	knowledgeSvc, err := knowledge.NewService(

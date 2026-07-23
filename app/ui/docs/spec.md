@@ -31,7 +31,7 @@ from the URL. OAuth returns may use `?settings=integrations`.
 ## Shell and attribution
 
 The shell has Work, Reviews, Artifacts, and Knowledge navigation; a theme toggle; an
-identity/workspace menu; Settings; and a governance-agent launcher. Desktop
+identity/workspace menu; Settings; and, when available, a governance-agent launcher. Desktop
 uses a persistent sidebar. Narrow viewports use the sidebar sheet so tables
 retain their usable width. The browser and sidebar title are `SpecGate
 (Experimental)`. A keyboard-visible skip control moves focus past the persistent
@@ -49,8 +49,9 @@ identity editor. It has no logout, invite, role, or member-removal flow.
 
 ## Work
 
-Work is read-only. The overview provides search, lifecycle and reason filters,
-list-first and board-secondary views, workspace signals, and explicit refresh.
+The Work overview is read-only. It provides search, lifecycle and reason
+filters, list-first and board-secondary views, workspace signals, and explicit
+refresh.
 `Ready` means approved source is available for IDE/CLI pickup; it is neither an
 implementation nor a review queue state. Delivered items appear separately from
 attention work.
@@ -70,6 +71,14 @@ replaces the submitted PR/MR `head_sha` in that comparison.
 Evidence readiness alone never renders as human acceptance. Model-reviewed
 evidence carries a persistent reminder that the model did not inspect the code,
 replace CI, or make the human decision.
+For a current platform review, Work detail exposes **Accept** and **Request
+changes** regardless of its advisory evidence verdict. A deliberate
+confirmation identifies the exact work item and exact reviewed completion and
+attributes the decision to the selected username. Request changes requires
+actionable feedback. The request is scoped to the selected workspace, and Doc
+Registry remains authoritative for stale, self-review, duplicate,
+missing-review, and workspace errors. Success refreshes work detail, delivery
+status, and the review queue.
 Work-list delivery labels follow the same boundary: a platform pass is `Ready
 for human review`, while only the server-derived human-approved Delivered phase
 is `Accepted`.
@@ -101,9 +110,10 @@ queue. Registry failures render an unavailable state, never an empty-workspace
 claim.
 
 Reviews owns durable artifact decisions. It lists draft and needs-changes
-artifacts and delivery evidence. Approve and request-changes actions use the
-backed Doc Registry flow. Delivery evidence is read-only and links to Work verification. The UI
-does not expose a separate Features browser, artifact-attached agent action, or
+artifacts and delivery evidence. Artifact approve/request-changes actions use
+the backed Doc Registry flow. Delivery rows link to Work verification, where
+ready evidence can receive the human delivery decision. The UI does not expose
+a separate Features browser, artifact-attached agent action, or
 feedback-triage workflow.
 
 ## Settings
@@ -171,21 +181,21 @@ text authoring is excluded.
 
 ## Governance agent
 
-The governance agent is an advisory assistant-ui modal. With
-`VITE_LANGGRAPH_API_URL`, it uses the LangGraph-backed runtime; otherwise it
-uses the local deterministic adapter for layout work. It supports thread
-history, search, rename, archive, delete, structured work/artifact/Skill
-mentions, and governed slash prompts. LangGraph threads and runs are keyed to
-the active workspace; switching workspaces remounts the runtime, filters
-thread metadata, and injects the trusted workspace into new runs. An empty
-workspace selection creates no product-data request, and workspace-owned data
-adapters reject an unscoped call. Enter sends; Shift+Enter
-inserts a newline.
+The governance agent is an optional advisory assistant-ui modal. It appears
+only when `VITE_LANGGRAPH_API_URL` is configured and a fail-closed health check
+reports chat configured and reachable. Otherwise the launcher is hidden; no
+fake runtime or setup placeholder is shown. Full-mode core work, review,
+artifact, Knowledge, and settings surfaces remain usable without chat.
 
-Agent prompts can explain blockers, handoff readiness, gate state, artifact
-context, or delivery next steps. They do not substitute for durable workflow
-actions, Context Pack readback, artifact decisions, gate dispatch, or delivery
-submission.
+The UI does not expose the appliance's ephemeral thread history or
+thread-management controls. Switching workspaces remounts the runtime and
+creates a workspace-tagged LangGraph thread for new runs without a separate
+title or sidebar-index service. The composer has no `@` entity
+insertion and offers only **Artifact summary**, **Readiness results**, and
+**Knowledge search** prompts, matching the graph's four read-only tools. An
+empty workspace selection creates no product-data request, and
+workspace-owned data adapters reject an unscoped call. Enter sends;
+Shift+Enter inserts a newline.
 
 ## Data ownership
 

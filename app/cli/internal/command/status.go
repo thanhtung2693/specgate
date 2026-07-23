@@ -206,13 +206,12 @@ func printAttentionSection(deps *Deps, items []client.NeedsAttentionItem) {
 }
 
 func phaseBreakdown(counts client.PhaseCounts) string {
-	parts := make([]string, 0, 6)
+	parts := make([]string, 0, 5)
 	for _, phase := range []struct {
 		name  string
 		count int
 	}{
 		{name: "intake", count: counts.Intake},
-		{name: "draft", count: counts.Draft},
 		{name: "review", count: counts.Review},
 		{name: "ready", count: counts.Ready},
 		{name: "delivered", count: counts.Delivered},

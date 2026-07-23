@@ -99,7 +99,7 @@ func TestSeedDemoCreatesRealisticWorkBoardData(t *testing.T) {
 
 	var staleKnowledgeCR string
 	var reviewCR string
-	var draftingCR string
+	var intakeCR string
 	var stalePackCR string
 	var deliveredCR string
 	for _, cr := range requests {
@@ -113,15 +113,15 @@ func TestSeedDemoCreatesRealisticWorkBoardData(t *testing.T) {
 			staleKnowledgeCR = cr.ID
 			stalePackCR = cr.ID
 		case "DEMO-201":
-			draftingCR = cr.ID
-			if cr.Phase != workboard.BoardPhaseDraft {
-				t.Fatalf("DEMO-201 phase=%q, want Draft", cr.Phase)
+			intakeCR = cr.ID
+			if cr.Phase != workboard.BoardPhaseIntake {
+				t.Fatalf("DEMO-201 phase=%q, want Intake", cr.Phase)
 			}
 		case "DEMO-301":
 			deliveredCR = cr.ID
 		}
 	}
-	if staleKnowledgeCR == "" || stalePackCR == "" || draftingCR == "" || reviewCR == "" || deliveredCR == "" {
+	if staleKnowledgeCR == "" || stalePackCR == "" || intakeCR == "" || reviewCR == "" || deliveredCR == "" {
 		t.Fatalf("expected seeded CR coverage for DEMO-102/103/201/301, got %+v", requests)
 	}
 

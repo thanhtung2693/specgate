@@ -360,6 +360,8 @@ function SectionContent({
           workspaceId={workspaceId ?? ""}
           hydrateDetail={workboard.source === "registry"}
           refreshGeneration={workboard.refreshGeneration}
+          reviewer={reviewer}
+          onDeliveryDecided={workboard.refresh}
         />
       )
     }

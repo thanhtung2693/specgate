@@ -51,16 +51,13 @@ Feature attachments and governance files:
 | `POST` | `/governance/files/{id}/touch?workspace_id=...` | Refresh TTL usage |
 | `DELETE` | `/governance/files/{id}?workspace_id=...` | Delete an unreferenced file row and object (409 when pinned) |
 
-Settings, Skills, and threads:
+Settings and Skills:
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` / `PUT` | `/settings` | Operator key/value settings |
 | `GET` / `POST` | `/skills` | List/create workspace-owned Skills (`workspace_id` query/body) |
 | `PUT` / `DELETE` | `/skills/{id}` | Replace/delete Skill (`workspace_id` query) |
-| `GET` | `/governance/threads?workspace_id=...` | List thread summaries within one workspace |
-| `PUT` | `/governance/threads/{thread_id}` | Upsert a thread summary; body requires `workspace_id` |
-| `DELETE` | `/governance/threads/{thread_id}?workspace_id=...` | Archive one workspace-owned thread summary |
 
 Workboard:
 

@@ -223,7 +223,6 @@ func TestRouter_GovernanceRoutesOnly(t *testing.T) {
 
 	for _, path := range []string{
 		"/workboard/change-requests",
-		"/governance/threads",
 		"/governance/feedback-events",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -236,6 +235,7 @@ func TestRouter_GovernanceRoutesOnly(t *testing.T) {
 
 	for _, path := range []string{
 		"/old-workboard/change-requests",
+		"/governance/threads",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
@@ -296,9 +296,6 @@ func TestRouter_SpecSectionSixOneCoreEndpointsRegistered(t *testing.T) {
 		{http.MethodGet, "/governance/files"},
 		{http.MethodPost, "/governance/files/{id}/touch"},
 		{http.MethodDelete, "/governance/files/{id}"},
-		{http.MethodGet, "/governance/threads"},
-		{http.MethodPut, "/governance/threads/{thread_id}"},
-		{http.MethodDelete, "/governance/threads/{thread_id}"},
 		{http.MethodGet, "/conflicts"},
 		{http.MethodGet, "/events"},
 		{http.MethodGet, "/repos/file"},
@@ -385,6 +382,8 @@ func TestRouter_SpecSectionSixOneCoreEndpointsRegistered(t *testing.T) {
 	}
 
 	for _, path := range []string{
+		"/governance/threads",
+		"/governance/threads/{thread_id}",
 		"/governance/threads/{thread_id}/artifacts",
 		"/governance/threads/{thread_id}/artifacts/{artifact_id}",
 		"/workboard/change-requests/{id}/lead-artifact",

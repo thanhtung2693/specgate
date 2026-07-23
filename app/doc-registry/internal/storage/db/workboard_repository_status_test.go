@@ -255,21 +255,6 @@ func TestWorkBoardRepository_ChangeRequestPhaseDerivedOnRead(t *testing.T) {
 			t.Fatalf("no pointers: phase = %q, want Intake", got.Phase)
 		}
 
-		// Draft: thread exists, but no working spec is attached yet.
-		if _, err := repo.UpdateChangeRequest(ctx, workboard.ChangeRequest{
-			ID:                 cr.ID,
-			GovernanceThreadID: "thread-phase",
-		}); err != nil {
-			t.Fatal(err)
-		}
-		got, err = repo.GetChangeRequest(ctx, cr.ID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got.Phase != workboard.BoardPhaseDraft {
-			t.Fatalf("thread but no lead: phase = %q, want Draft", got.Phase)
-		}
-
 		// Review: a non-approved lead artifact is waiting for human approval.
 		lead := newArtifact("art-phase-lead", feature.ID, "v1.0", artifact.StatusDraft, now)
 		if err := artifactRepo.Insert(ctx, lead); err != nil {

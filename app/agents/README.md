@@ -45,9 +45,8 @@ inspected by the agent.
 
 - **LangGraph (adds the experimental governance-ops chat agent).** Runs the full
   `langgraph.json` (the `governance` chat graph plus the same webapp as `http.app`)
-  via the LangGraph CLI / server, as below. The chat agent is an experimental,
-  in-development feature; the chat-surface endpoint (thread title) is inert in
-  the FastAPI-only mode.
+  via the LangGraph CLI / server, as below. The chat agent remains optional and
+  experimental; FastAPI-only mode exposes governance operations but no chat.
 
 ### Fast loop (in-memory checkpoints, with chat)
 

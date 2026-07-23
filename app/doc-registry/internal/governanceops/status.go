@@ -218,8 +218,6 @@ func (s *Service) GovernanceStatus(ctx context.Context, in GovernanceStatusInput
 		switch phase {
 		case workboard.BoardPhaseIntake:
 			result.Counts.Intake++
-		case workboard.BoardPhaseDraft:
-			result.Counts.Draft++
 		case workboard.BoardPhaseReview:
 			result.Counts.Review++
 		case workboard.BoardPhaseReady:
@@ -465,23 +463,24 @@ func (s *Service) DeliveryStatus(ctx context.Context, in DeliveryStatusInput) (D
 		return result, nil
 	}
 	result := DeliveryStatusResult{
-		ChangeRequestID:  id,
-		GateRunID:        latest.ID,
-		Found:            true,
-		Verdict:          string(latest.State),
-		EvidenceVerdict:  wrapper.evidenceVerdict(*latest),
-		ReasonCode:       detail.ReasonCode,
-		Hint:             latest.Hint,
-		Confidence:       wrapper.reviewConfidence(*latest),
-		JudgeModel:       wrapper.judgeModel(),
-		EvalSuite:        wrapper.evalSuiteVersion(),
-		ReviewedAt:       formatRFC3339(latest.CreatedAt),
-		Executor:         latest.Executor,
-		Actor:            wrapper.actor(),
-		Note:             wrapper.Note,
-		Summary:          workboard.DeliveryDecisionSummary(*latest, wrapper.actor(), wrapper.Note),
-		OutstandingMD:    deliveryReviewOutstandingMD(*latest, detail),
-		AssuranceSources: deliveryReviewAssuranceSources(detail),
+		ChangeRequestID:           id,
+		GateRunID:                 latest.ID,
+		CompletionFeedbackEventID: wrapper.CompletionFeedbackEventID,
+		Found:                     true,
+		Verdict:                   string(latest.State),
+		EvidenceVerdict:           wrapper.evidenceVerdict(*latest),
+		ReasonCode:                detail.ReasonCode,
+		Hint:                      latest.Hint,
+		Confidence:                wrapper.reviewConfidence(*latest),
+		JudgeModel:                wrapper.judgeModel(),
+		EvalSuite:                 wrapper.evalSuiteVersion(),
+		ReviewedAt:                formatRFC3339(latest.CreatedAt),
+		Executor:                  latest.Executor,
+		Actor:                     wrapper.actor(),
+		Note:                      wrapper.Note,
+		Summary:                   workboard.DeliveryDecisionSummary(*latest, wrapper.actor(), wrapper.Note),
+		OutstandingMD:             deliveryReviewOutstandingMD(*latest, detail),
+		AssuranceSources:          deliveryReviewAssuranceSources(detail),
 	}
 	if in.Detail {
 		if completion != nil {
@@ -586,12 +585,9 @@ func buildSummary(counts GovernanceStatusCounts, attention int) string {
 	if counts.Total == 0 {
 		return "No active work items."
 	}
-	parts := make([]string, 0, 6)
+	parts := make([]string, 0, 5)
 	if counts.Intake > 0 {
 		parts = append(parts, fmt.Sprintf("%d in intake", counts.Intake))
-	}
-	if counts.Draft > 0 {
-		parts = append(parts, fmt.Sprintf("%d in draft", counts.Draft))
 	}
 	if counts.Review > 0 {
 		parts = append(parts, fmt.Sprintf("%d in review", counts.Review))

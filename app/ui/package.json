@@ -22,7 +22,6 @@
     "@langchain/langgraph-sdk": "^1.9.28",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-query": "^5.101.4",
-    "assistant-stream": "^0.3.26",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.26.0",

@@ -263,9 +263,11 @@ type CLIDeliveryDecisionInput struct {
 	// required body property, which rejected the CLI's wire body before the
 	// handler could backfill from the path.
 	Body struct {
-		Decision string `json:"decision" enum:"approve,reject" doc:"Human delivery decision"`
-		Actor    string `json:"actor" doc:"Human reviewer identity"`
-		Note     string `json:"note,omitempty" doc:"Optional reviewer note"`
+		Decision                  string `json:"decision" enum:"approve,reject" doc:"Human delivery decision"`
+		Actor                     string `json:"actor" doc:"Human reviewer identity"`
+		Note                      string `json:"note,omitempty" doc:"Optional reviewer note"`
+		ReviewedGateRunID         string `json:"reviewed_gate_run_id,omitempty" doc:"Gate run shown to the reviewer; rejects the decision if the current review changed."`
+		CompletionFeedbackEventID string `json:"completion_feedback_event_id,omitempty" doc:"Completion shown to the reviewer; rejects the decision if the current completion changed."`
 	}
 }
 

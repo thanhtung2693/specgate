@@ -1058,41 +1058,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/governance/threads": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List lightweight governance-chat thread summaries */
-        get: operations["list_governance_threads"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/governance/threads/{thread_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Upsert a lightweight governance-chat thread summary */
-        put: operations["upsert_governance_thread"];
-        post?: never;
-        /** Archive a lightweight governance-chat thread summary */
-        delete: operations["delete_governance_thread"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -1969,6 +1934,8 @@ export interface components {
             readonly $schema?: string;
             /** @description Human reviewer identity */
             actor: string;
+            /** @description Completion shown to the reviewer; rejects the decision if the current completion changed. */
+            completion_feedback_event_id?: string;
             /**
              * @description Human delivery decision
              * @enum {string}
@@ -1976,6 +1943,8 @@ export interface components {
             decision: "approve" | "reject";
             /** @description Optional reviewer note */
             note?: string;
+            /** @description Gate run shown to the reviewer; rejects the decision if the current review changed. */
+            reviewed_gate_run_id?: string;
         };
         CLIGatesStatusOutputBody: {
             /**
@@ -2104,7 +2073,6 @@ export interface components {
             created_by?: string;
             delivery_review?: components["schemas"]["DeliveryReviewSnapshot"];
             feature_id?: string;
-            governance_thread_id?: string;
             id?: string;
             intent_md?: string;
             key?: string;
@@ -2433,6 +2401,7 @@ export interface components {
             assurance_sources?: string[] | null;
             change_request_id: string;
             checks?: components["schemas"]["CheckResult"][] | null;
+            completion_feedback_event_id?: string;
             /** Format: double */
             confidence?: number;
             eval_suite_version?: string;
@@ -2824,8 +2793,6 @@ export interface components {
             /** Format: int64 */
             delivered: number;
             /** Format: int64 */
-            draft: number;
-            /** Format: int64 */
             intake: number;
             /** Format: int64 */
             ready: number;
@@ -2844,23 +2811,6 @@ export interface components {
             attention: components["schemas"]["GovernanceStatusAttentionItem"][] | null;
             counts: components["schemas"]["GovernanceStatusCounts"];
             summary: string;
-        };
-        GovernanceThreadDTO: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/GovernanceThreadDTO.json
-             */
-            readonly $schema?: string;
-            archived: boolean;
-            /** Format: date-time */
-            created_at: string;
-            preview: string;
-            thread_id: string;
-            title: string;
-            /** Format: date-time */
-            updated_at: string;
-            workspace_id: string;
         };
         HealthResponseBody: {
             /**
@@ -3179,17 +3129,6 @@ export interface components {
              */
             readonly $schema?: string;
             items: components["schemas"]["GateRun"][] | null;
-        };
-        ListGovernanceThreadsOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ListGovernanceThreadsOutputBody.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["GovernanceThreadDTO"][] | null;
-            /** Format: int64 */
-            total: number;
         };
         ListKnowledgeDocumentsOutputBody: {
             /**
@@ -3719,19 +3658,6 @@ export interface components {
             key: string;
             name?: string;
             workspace_id?: string;
-        };
-        UpsertGovernanceThreadInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/UpsertGovernanceThreadInputBody.json
-             */
-            readonly $schema?: string;
-            preview?: string;
-            title?: string;
-            /** Format: date-time */
-            updated_at?: string;
-            workspace_id: string;
         };
         User: {
             /**
@@ -5951,107 +5877,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["GovernanceFileDTO"];
                 };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    list_governance_threads: {
-        parameters: {
-            query: {
-                workspace_id: string;
-                limit?: number;
-                offset?: number;
-                /** @description Include archived threads when true. */
-                all?: boolean;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListGovernanceThreadsOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    upsert_governance_thread: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                thread_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpsertGovernanceThreadInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GovernanceThreadDTO"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    delete_governance_thread: {
-        parameters: {
-            query: {
-                workspace_id: string;
-            };
-            header?: never;
-            path: {
-                thread_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Error */
             default: {

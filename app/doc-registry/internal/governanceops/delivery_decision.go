@@ -73,6 +73,15 @@ func (s *Service) DecideDelivery(ctx context.Context, in DeliveryDecisionInput) 
 			ErrValidation,
 		)
 	}
+	expectedReviewID := strings.TrimSpace(in.ReviewedGateRunID)
+	expectedCompletionID := strings.TrimSpace(in.CompletionFeedbackEventID)
+	if (expectedReviewID != "" && expectedReviewID != currentReview.ID) ||
+		(expectedCompletionID != "" && expectedCompletionID != reviewedCompletionID) {
+		return nil, fmt.Errorf(
+			"%w: reviewed delivery changed; refresh and confirm the current completion",
+			ErrVersionConflict,
+		)
+	}
 	// Identity bar (approve only — the reporter MAY reject its own delivery). The
 	// match is case-insensitive and best-effort: actor is the CLI human identity
 	// while reporter is the completion event's agent.Name, so an exact-name match

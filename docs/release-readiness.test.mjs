@@ -40,6 +40,10 @@ const docs = {
   docRegistryAPI: read("app/doc-registry/docs/api.md"),
   docRegistryReadme: read("app/doc-registry/docs/README.md"),
   agentsReadme: read("app/agents/docs/README.md"),
+  agentsSpec: read("app/agents/docs/spec.md"),
+  governanceGraphSpec: read("app/agents/docs/governance/docs/spec.md"),
+  uiReadme: read("app/ui/README.md"),
+  uiSpec: read("app/ui/docs/spec.md"),
   architecture: read("docs/contributing/architecture.md"),
   testing: read("docs/contributing/testing.md"),
   release: read("docs/contributing/release.md"),
@@ -63,6 +67,9 @@ const files = {
   uiModelSettings: read("app/ui/src/data/model-settings.ts"),
   uiModelSettingsPanel: read("app/ui/src/components/layout/settings/model-settings-panel.tsx"),
   uiGovernanceAgent: read("app/ui/src/components/agent/governance-agent.tsx"),
+  uiGovernanceRuntime: read("app/ui/src/components/agent/governance-runtime.tsx"),
+  agentsWebapp: read("app/agents/src/specgate_agents/governance/webapp.py"),
+  docRegistryMigration: read("app/doc-registry/migrations/postgres/0001_init.migration"),
   workboardModel: read("app/doc-registry/internal/workboard/model.go"),
   routerSkill: read("plugins/skills/specgate/SKILL.md"),
   setupSkill: read("plugins/skills/specgate-project-setup/SKILL.md"),
@@ -736,6 +743,28 @@ test("public gateways strip the internal governance settings header", () => {
   for (const gateway of [files.localGateway, files.fullGateway]) {
     assert.match(gateway, /proxy_set_header X-SpecGate-Internal-Agent "";/);
   }
+});
+
+test("Full UI docs keep delivery decisions and optional chat boundaries truthful", () => {
+  const uiDocs = `${docs.uiReadme}\n${docs.uiSpec}`;
+  const agentDocs = `${docs.agentsSpec}\n${docs.governanceGraphSpec}`;
+
+  assert.match(uiDocs, /Accept[\s\S]*Request changes/);
+  assert.match(uiDocs, /current platform review[\s\S]*regardless of its advisory evidence verdict/i);
+  assert.match(uiDocs, /selected username/i);
+  assert.match(uiDocs, /exact reviewed completion/i);
+  assert.match(uiDocs, /chat[\s\S]*hidden[\s\S]*unavailable/i);
+  assert.match(uiDocs, /Artifact summary[\s\S]*Readiness results[\s\S]*Knowledge search/);
+  assert.doesNotMatch(uiDocs, /deterministic local adapter|@ context insertion|thread history, search, rename, archive, delete/i);
+  assert.match(agentDocs, /four read-only diagnostic tools/);
+  assert.match(agentDocs, /Full-mode core[\s\S]*without governance chat/i);
+  assert.match(docs.contracts, /active workspace[\s\S]*workspace_id[\s\S]*thread_workspace_id/i);
+  assert.doesNotMatch(docs.contracts, /thread lists|thread fetch|thread projection|rename, archive, restore, and delete/i);
+  assert.match(docs.configureModels, /launcher is hidden/i);
+  assert.match(docs.operateSpecGate, /does not expose chat history/i);
+  assert.doesNotMatch(files.uiGovernanceRuntime, /unstable_threadListAdapter|\/governance\/threads/);
+  assert.doesNotMatch(files.agentsWebapp, /\/governance\/threads/);
+  assert.doesNotMatch(files.docRegistryMigration, /governance_threads|governance_thread_id/);
 });
 
 test("Node workflows use the current setup-node action", () => {

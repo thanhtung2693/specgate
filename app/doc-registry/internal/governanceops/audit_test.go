@@ -226,6 +226,54 @@ func TestAuditTrail_MergesSourcesSortedAscendingWithDerivedTrust(t *testing.T) {
 	}
 }
 
+func TestAuditTrail_PreservesActorForOlderHumanDeliveryDecision(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 7, 23, 14, 0, 0, 0, time.UTC)
+	cr := &workboard.ChangeRequest{
+		ID:    "cr-rework",
+		Key:   "CR-REWORK",
+		Title: "Rework delivery",
+		DeliveryReview: &workboard.DeliveryReviewSnapshot{
+			Verdict:    "pass",
+			Executor:   workboard.GateRunExecutorHuman,
+			Actor:      "approver",
+			ReviewedAt: base.Add(time.Hour),
+		},
+	}
+	svc := &Service{WorkBoard: &fakeAuditWorkBoard{
+		cr: cr,
+		gateRuns: []workboard.GateRun{
+			{
+				Gate:         "delivery_review",
+				State:        workboard.NextActionStateFail,
+				Hint:         "delivery rejected by reviewer: add evidence",
+				Executor:     workboard.GateRunExecutorHuman,
+				EvidenceJSON: `{"decision":"reject","note":"add evidence","evaluator":{"actor":"reviewer","type":"human_decision","trust":"human_decision"}}`,
+				CreatedAt:    base,
+			},
+			{
+				Gate:      "delivery_review",
+				State:     workboard.NextActionStatePass,
+				Executor:  workboard.GateRunExecutorHuman,
+				CreatedAt: base.Add(time.Hour),
+			},
+		},
+	}}
+
+	trail, err := svc.AuditTrail(context.Background(), ResolveWorkRefInput{Ref: "CR-REWORK"}, false)
+	if err != nil {
+		t.Fatalf("AuditTrail: %v", err)
+	}
+	if len(trail.Events) != 2 {
+		t.Fatalf("events = %+v, want rejection and approval", trail.Events)
+	}
+	rejection := trail.Events[0]
+	if rejection.Actor != "reviewer" || rejection.ActorKind != "human" ||
+		rejection.Trust != "human" || rejection.Detail != "delivery rejected by reviewer: add evidence" {
+		t.Fatalf("historical rejection attribution lost: %+v", rejection)
+	}
+}
+
 func TestAuditTrail_UnresolvableRefReturnsNotFound(t *testing.T) {
 	t.Parallel()
 	svc := &Service{WorkBoard: &fakeAuditWorkBoard{cr: &workboard.ChangeRequest{ID: "cr-9", Key: "CR-9"}}}

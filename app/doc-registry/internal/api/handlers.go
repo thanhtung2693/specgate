@@ -13,7 +13,6 @@ import (
 	"github.com/specgate/doc-registry/internal/config"
 	"github.com/specgate/doc-registry/internal/governancefiles"
 	"github.com/specgate/doc-registry/internal/governanceops"
-	"github.com/specgate/doc-registry/internal/governancethreads"
 	"github.com/specgate/doc-registry/internal/identity"
 	"github.com/specgate/doc-registry/internal/integrations"
 	"github.com/specgate/doc-registry/internal/knowledge"
@@ -48,8 +47,6 @@ type Handlers struct {
 	// ArtifactAttachments persists feature-scoped reference attachments (links,
 	// files, screenshots) surfaced to quality gates and the coding-agent handoff.
 	ArtifactAttachments artifactattachment.Store
-	// GovernanceThreads persists lightweight governance-chat sidebar summaries.
-	GovernanceThreads governancethreads.Store
 	// GovernanceUploadMaxBytes rejects uploads above this size.
 	GovernanceUploadMaxBytes int64
 	// S3KeyPrefix is prepended to every generated S3 key so a shared bucket

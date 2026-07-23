@@ -43,7 +43,7 @@ LangGraph governance graph              FastAPI app (webapp.py)
 governance_chat node (read-only)  ->    readiness / llm-gates
 create_agent(...)                 ->    delivery review
 four runtime-scoped read tools     ->    acceptance-criteria drafting
-no drafting subagents             ->    quick work / thread title
+no drafting subagents             ->    quick work
 ```
 
 `governance_chat.py:graph` is the only graph. It uses
@@ -60,6 +60,9 @@ operations; callers run those through the explicit CLI/IDE workflow.
 The alpha local appliance starts this graph through `langgraph dev`, so its
 chat checkpoints are process-lifetime only. Durable records belong to Doc
 Registry; users must not rely on appliance chat threads surviving a restart.
+Full-mode core remains usable without governance chat. The web launcher is
+hidden unless the chat endpoint is configured and reachable; failure does not
+activate a synthetic chat implementation.
 
 ## 5. Governance Operations
 
@@ -72,7 +75,6 @@ Registry; users must not rely on appliance chat threads surviving a restart.
 | Work-item gates | `board/quality_gates.py` | Runs CR quality gates and persists `gate_runs` |
 | Quick work item | `webapp.py` + Doc Registry client | Creates CR, AC rows, and quick handoff when possible |
 | Delivery review | `quality_gates/delivery_review.py`, `board/delivery_review.py` | Judges built result and persists `delivery_review`; an Agent-reported (`agent_attested`) pass requires a valid bound peer review or human review, while an all-bound locally reproduced result records `deterministic_checks` |
-| Thread title | `webapp.py` | Generates title from thread messages after validating the trusted workspace |
 
 Doc Registry is the source of truth. Agents code must use the REST API; it must
 not couple to Doc Registry database, S3, or pgvector internals.

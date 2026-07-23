@@ -48,6 +48,13 @@ func agentsRunnerOrNil(c *agentsclient.Client) governanceops.AgentsRunner {
 	return c
 }
 
+func knowledgeObjectStoreFor(storageDriver string, s3Client *s3.Client) knowledge.ObjectStore {
+	if storageDriver == "s3" && s3Client != nil {
+		return s3Client
+	}
+	return knowledge.NullObjectStore{}
+}
+
 func main() {
 	migrateOnly := flag.Bool("migrate-only", false, "apply migrations then exit")
 	seedSkillsFlag := flag.Bool("seed-skills", false, "register missing gate-rubric skills, then exit")
@@ -275,7 +282,6 @@ func main() {
 	// The async worker is started after the knowledge service is built (below) so
 	// both the webhook and knowledge-ingest handlers register on one mux.
 	governanceFilesRepo := storagedb.NewGovernanceFilesRepository(gormDB)
-	governanceThreadsRepo := storagedb.NewGovernanceThreadsRepository(gormDB)
 	artifactAttachmentsRepo := storagedb.NewArtifactAttachmentRepository(gormDB)
 	knowledgeRepo := storagedb.NewKnowledgeRepository(gormDB)
 	artifactObjectKey := func(artifactID, version, filename string) string {
@@ -342,12 +348,7 @@ func main() {
 	}
 	// Knowledge source bytes go to S3 when configured; local mode uses
 	// NullObjectStore (vector chunks in pgvector are the source of truth for search).
-	var knowledgeObjectStore knowledge.ObjectStore
-	if governanceFileObjectDeleter != nil {
-		knowledgeObjectStore = s3Client
-	} else {
-		knowledgeObjectStore = knowledge.NullObjectStore{}
-	}
+	knowledgeObjectStore := knowledgeObjectStoreFor(cfg.Blob.Driver, s3Client)
 	knowledgeSvc, err := knowledge.NewService(
 		knowledgeRepo,
 		knowledgeObjectStore,
@@ -471,7 +472,6 @@ func main() {
 		BlobStore:                blobStore,
 		GovernanceUploadPutTTL:   cfg.GovernanceUploadPutTTL,
 		GovernanceFiles:          governanceFilesRepo,
-		GovernanceThreads:        governanceThreadsRepo,
 		ArtifactAttachments:      artifactAttachmentsRepo,
 		GovernanceUploadMaxBytes: cfg.GovernanceUploadMaxBytes,
 		S3KeyPrefix:              cfg.S3.KeyPrefix,

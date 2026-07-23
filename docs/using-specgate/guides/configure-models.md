@@ -34,7 +34,9 @@ Two model configurations are independent: the **governance model** for gates,
 delivery review, and Full-mode quick-work AC drafting (set with `specgate model
 set` and stored encrypted in server settings), and the **governance chat
 model**. Configuring one does not configure the other. Ask the Full-appliance
-operator to configure chat when it is unavailable.
+operator to configure chat when it is unavailable. Until the chat service is
+configured and reachable, its launcher is hidden; Full-mode work, reviews,
+artifacts, Knowledge, and settings remain usable.
 
 The coding IDE agent can still perform scoping and implementation work through
 SpecGate skills without a server-side model.

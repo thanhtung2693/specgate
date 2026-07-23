@@ -14,6 +14,8 @@ var (
 	// missing required field). Mapped to HTTP 400 by the API layer so the
 	// agent can surface a useful message rather than a 500.
 	ErrValidation = errors.New("workboard validation error")
+	// ErrConflict indicates state changed after the caller read it.
+	ErrConflict = errors.New("workboard state conflict")
 )
 
 type Store interface {
@@ -93,14 +95,13 @@ const (
 )
 
 // BoardPhase is the derived work-item board phase. It is computed on read and
-// never persisted. The richer read path can distinguish Draft and Review when
-// governance-thread / lead-artifact state is available; DerivePhase remains the
-// pointer-only fallback for callers that do not hydrate related rows.
+// never persisted. The richer read path distinguishes Review from Ready using
+// lead-artifact state; DerivePhase remains the pointer-only fallback for
+// callers that do not hydrate related rows.
 type BoardPhase string
 
 const (
 	BoardPhaseIntake BoardPhase = "Intake"
-	BoardPhaseDraft  BoardPhase = "Draft"
 	BoardPhaseReview BoardPhase = "Review"
 	BoardPhaseReady  BoardPhase = "Ready"
 	// BoardPhaseDelivered is derived when the current completion has an
@@ -180,7 +181,6 @@ type ChangeRequest struct {
 	OpenQuestions      string     `gorm:"column:open_questions_json;not null;default:'[]'" json:"open_questions_json,omitempty"`
 	SourceRefs         string     `gorm:"column:source_refs_json;not null;default:'[]'" json:"source_refs_json,omitempty"`
 	LeadArtifactID     string     `gorm:"column:lead_artifact_id" json:"lead_artifact_id,omitempty"`
-	GovernanceThreadID string     `gorm:"column:governance_thread_id" json:"governance_thread_id,omitempty"`
 	Archived           bool       `gorm:"column:archived;not null;default:false" json:"archived,omitempty"`
 	ArchivedAt         *time.Time `gorm:"column:archived_at" json:"archived_at,omitempty"`
 	ArchivedBy         string     `gorm:"column:archived_by" json:"archived_by,omitempty"`
@@ -214,8 +214,8 @@ type DeliveryReviewSnapshot struct {
 
 // DerivePhase computes the fallback board phase. A quick-route bug fix is ready
 // from its persisted intent and acceptance criteria; full-route work needs an
-// artifact. A richer read path may upgrade full-route work to Draft or Review
-// when governance-thread or lead-artifact status is available.
+// artifact. A richer read path may classify a non-approved lead artifact as
+// Review.
 func (cr ChangeRequest) DerivePhase() BoardPhase {
 	if cr.IsQuickRoute() {
 		return BoardPhaseReady

@@ -205,6 +205,8 @@ describe("workboard data adapter", () => {
     expect(
       mapDeliveryStatus({
         change_request_id: "cr-155",
+        gate_run_id: "gate-run-155",
+        completion_feedback_event_id: "completion-155",
         found: true,
         verdict: "pass",
         assurance_sources: ["repository_observed"],
@@ -239,6 +241,8 @@ describe("workboard data adapter", () => {
       }),
     ).toMatchObject({
       found: true,
+      gateRunId: "gate-run-155",
+      completionFeedbackEventId: "completion-155",
       verdict: "pass",
       assuranceSources: ["repository_observed"],
       reasonCode: "review_completed",

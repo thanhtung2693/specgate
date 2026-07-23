@@ -76,6 +76,8 @@ type DeliveryCheckDTO = {
 
 type DeliveryStatusDTO = {
   change_request_id?: string
+  gate_run_id?: string
+  completion_feedback_event_id?: string
   found?: boolean
   verdict?: string
   assurance_sources?: string[] | null
@@ -260,6 +262,8 @@ type DeliveryCheckSummary = {
 
 export type DeliveryStatusSummary = {
   found: boolean
+  gateRunId?: string
+  completionFeedbackEventId?: string
   verdict?: string
   assuranceSources?: string[]
   evidenceVerdict?: string
@@ -596,6 +600,8 @@ export function mapDeliveryStatus(item: DeliveryStatusDTO | undefined): Delivery
 
   return {
     found: item.found ?? true,
+    gateRunId: item.gate_run_id?.trim() || undefined,
+    completionFeedbackEventId: item.completion_feedback_event_id?.trim() || undefined,
     verdict: item.verdict?.trim() || undefined,
     assuranceSources: (item.assurance_sources ?? []).map((source) => source.trim()).filter(Boolean),
     evidenceVerdict: item.evidence_verdict?.trim() || undefined,
@@ -767,7 +773,7 @@ function readbackStatusForDetail(status: WorkItemDetailData["status"]): WorkItem
 }
 
 function buildLanes(items: WorkItem[]): Lane[] {
-  const laneOrder = ["Intake", "Draft", "Review", "Ready"]
+  const laneOrder = ["Intake", "Review", "Ready"]
 
   return laneOrder
     .map((title) => {
@@ -937,6 +943,42 @@ export async function fetchWorkItemDetail(baseUrl: string, item: WorkItem, works
     status: "ready",
     source: "registry",
   }
+}
+
+export async function recordDeliveryDecision(
+  workItemId: string,
+  decision: "approve" | "reject",
+  actor: string,
+  workspaceId: string,
+  reviewedGateRunId: string,
+  completionFeedbackEventId: string,
+  note?: string,
+): Promise<void> {
+  const baseUrl = import.meta.env.VITE_DOC_REGISTRY_URL as string | undefined
+  const workspace = workspaceId.trim()
+  if (!baseUrl) throw new Error("Doc Registry is not configured.")
+  if (!workspace) throw new Error("Workspace is required.")
+
+  const body: components["schemas"]["CLIDeliveryDecisionInputBody"] = {
+    decision,
+    actor,
+    reviewed_gate_run_id: reviewedGateRunId,
+    completion_feedback_event_id: completionFeedbackEventId,
+    ...(note ? { note } : {}),
+  }
+  const response = await fetch(
+    `${baseUrl.replace(/\/$/, "")}/api/v1/work-items/${encodeURIComponent(workItemId)}/delivery-decision?${new URLSearchParams({ workspace_id: workspace })}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  )
+  if (response.ok) return
+
+  const problem = await response.json().catch(() => undefined) as { detail?: unknown } | undefined
+  const detail = typeof problem?.detail === "string" ? problem.detail.trim() : ""
+  throw new Error(detail || `Delivery decision failed (${response.status}).`)
 }
 
 export type WorkboardData = WorkboardView & {
