@@ -21,7 +21,7 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "SpecGate",
-    "shortDescription": "Focused spec-to-delivery workflows",
+    "shortDescription": "Governed delivery workflows",
     "longDescription": "Select focused SpecGate workflows for project setup, work preparation (shaping and artifact readiness), and delivery (pickup, scoped implementation, evidence, and review).",
     "developerName": "Thanh Tung",
     "category": "Productivity",
