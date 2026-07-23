@@ -223,6 +223,48 @@ func TestLocalArtifactPublishListAndShowNeedNoHTTP(t *testing.T) {
 	}
 }
 
+func TestLocalArtifactPublishPreviewCompareNeedNoHTTP(t *testing.T) {
+	deps, out := newTestDeps(t, "")
+	stateDir := filepath.Join(t.TempDir(), "local")
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--no-input", "init", "--mode", "local", "--local-dir", stateDir, "--workspace-name", "Alpha", "--display-name", "Human", "--username", "human"); code != output.ExitOK {
+		t.Fatalf("init exit = %d; output=%s", code, out.String())
+	}
+	basePath := filepath.Join(t.TempDir(), "base.json")
+	if err := os.WriteFile(basePath, []byte(`{"feature_key":"LOCAL-COMPARE","request_type":"change_request","documents":[{"path":"spec.md","role":"design","content":"old body"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "publish", "--file", basePath); code != output.ExitOK {
+		t.Fatalf("publish exit = %d; output=%s", code, out.String())
+	}
+	var published struct {
+		Data struct {
+			ArtifactID string `json:"artifact_id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &published); err != nil {
+		t.Fatal(err)
+	}
+	previewPath := filepath.Join(t.TempDir(), "preview.json")
+	if err := os.WriteFile(previewPath, []byte(`{"feature_key":"LOCAL-COMPARE","request_type":"change_request","base_version":"v1","documents":[{"path":"spec.md","role":"spec","content":"new body"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	out.Reset()
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "publish", "--file", previewPath, "--preview", "--compare", published.Data.ArtifactID)
+	if code != output.ExitOK {
+		t.Fatalf("compare preview exit = %d; output=%s", code, out.String())
+	}
+	for _, want := range []string{`"base_artifact_id":"` + published.Data.ArtifactID + `"`, `"base_version":"v1"`, `"changed":1`, `"changes":["content","role"]`} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("compare preview missing %s: %s", want, out.String())
+		}
+	}
+	if deps.Client != nil {
+		t.Fatal("Local compare preview created an HTTP client")
+	}
+}
+
 func TestLocalWorkspaceOverrideScopesArtifactWithoutChangingSelection(t *testing.T) {
 	deps, out := newTestDeps(t, "")
 	stateDir := filepath.Join(t.TempDir(), "local")
