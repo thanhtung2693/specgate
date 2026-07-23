@@ -1,6 +1,6 @@
 @font-face {
   font-family: "Host Grotesk";
-  src: url("./fonts/host-grotesk-latin.woff2") format("woff2");
+  src: url("../fonts/host-grotesk-latin.woff2") format("woff2");
   font-style: normal;
   font-weight: 400 800;
   font-display: swap;
@@ -8,7 +8,7 @@
 
 @font-face {
   font-family: "Commit Mono";
-  src: url("./fonts/commit-mono.woff2") format("woff2");
+  src: url("../fonts/commit-mono.woff2") format("woff2");
   font-style: normal;
   font-weight: 400 700;
   font-display: swap;

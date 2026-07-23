@@ -14,7 +14,7 @@ npm run check
 
 ```bash
 npm run render -- \
-  --output ../../docs/assets/readme/specgate-promo.mp4 \
+  --output ../../app/landing/media/specgate-promo.mp4 \
   --quality high \
   --fps 30
 ```
@@ -24,9 +24,9 @@ After rendering, refresh the poster frame:
 ```bash
 ffmpeg -y \
   -ss 14.8 \
-  -i ../../docs/assets/readme/specgate-promo.mp4 \
+  -i ../../app/landing/media/specgate-promo.mp4 \
   -frames:v 1 \
   -update 1 \
   -q:v 2 \
-  ../../docs/assets/readme/specgate-promo-poster.jpg
+  ../../app/landing/media/specgate-promo-poster.jpg
 ```
