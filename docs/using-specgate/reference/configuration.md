@@ -189,7 +189,7 @@ The CLI-managed local deployment exposes one port and persists one volume:
 | Variable | Default | Purpose |
 |---|---:|---|
 | `SPECGATE_PORT` | `3000` | Public gateway port for the UI and APIs |
-| `SPECGATE_COMPOSE_PROJECT` | `specgate` | Names the local Compose project |
+| `SPECGATE_COMPOSE_PROJECT` | `specgate` for the default deployment; path-scoped for a new custom `--dir` | Names the local Compose project; an explicit value overrides automatic isolation |
 
 If `specgate up` reports that its host port is in use, choose an unused port in
 the deployment `.env` (for example `SPECGATE_PORT=3010`) and run `specgate up`

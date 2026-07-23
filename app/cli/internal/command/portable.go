@@ -738,10 +738,13 @@ func executePortableImport(cmd *cobra.Command, deps *Deps, bundle portableBundle
 			}
 			result.WorkMapping[sourceWork.ID] = workID
 			if delivery, ok := deliveryByWork[sourceWork.ID]; ok && delivery.Report != nil {
-				if err := importPortableDelivery(cmd, deps, workID, artifactID, delivery, actor, sourceWork.AcceptanceCriteria); err != nil {
+				imported, err := importPortableDelivery(cmd, deps, workID, artifactID, delivery, actor, sourceWork.AcceptanceCriteria)
+				if err != nil {
 					return result, err
 				}
-				result.ImportedDelivery++
+				if imported {
+					result.ImportedDelivery++
+				}
 			}
 		}
 	}
@@ -769,44 +772,63 @@ func executePortableImport(cmd *cobra.Command, deps *Deps, bundle portableBundle
 		}
 		result.WorkMapping[sourceWork.ID] = workID
 		if delivery, ok := deliveryByWork[sourceWork.ID]; ok && delivery.Report != nil {
-			if err := importPortableDelivery(cmd, deps, workID, "", delivery, actor, sourceWork.AcceptanceCriteria); err != nil {
+			imported, err := importPortableDelivery(cmd, deps, workID, "", delivery, actor, sourceWork.AcceptanceCriteria)
+			if err != nil {
 				return result, err
 			}
-			result.ImportedDelivery++
+			if imported {
+				result.ImportedDelivery++
+			}
 		}
 	}
 	return result, nil
 }
 
-func importPortableDelivery(cmd *cobra.Command, deps *Deps, workID, artifactID string, delivery local.PortableDeliveryEvidence, actor string, sourceCriteria []string) error {
-	report := cloneMap(delivery.Report)
-	if artifactID != "" {
-		report["artifact_id"] = artifactID
-	} else {
-		delete(report, "artifact_id")
+func importPortableDelivery(cmd *cobra.Command, deps *Deps, workID, artifactID string, delivery local.PortableDeliveryEvidence, actor string, sourceCriteria []string) (bool, error) {
+	hasDecision := delivery.HumanDecision == "approve" || delivery.HumanDecision == "reject"
+	note := strings.TrimSpace("Imported Local decision: " + delivery.ReviewNote)
+	expectedVerdict := "fail"
+	if delivery.HumanDecision == "approve" {
+		expectedVerdict = "pass"
 	}
+	decisionMatches := func(status *client.DeliveryStatusResult) bool {
+		return status != nil && status.Found && status.Executor == "human" &&
+			status.Verdict == expectedVerdict && status.Actor == actor && status.Note == note
+	}
+	if hasDecision {
+		status, err := deps.Client.DeliveryStatus(cmd.Context(), workID, true)
+		if err != nil {
+			return false, err
+		}
+		if decisionMatches(status) {
+			return false, nil
+		}
+	}
+	report := cloneMap(delivery.Report)
+	normalizePortableFeedback(report, workID, artifactID)
 	if strings.TrimSpace(fmt.Sprint(report["event_type"])) == "" {
 		report["event_type"] = "coding_agent.completed"
 	}
 	criteria, err := deps.Client.ListAcceptanceCriteria(cmd.Context(), workID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	criterionIDs, err := portableCriterionMapping(sourceCriteria, criteria)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if err := remapPortableCriteria(report, criterionIDs); err != nil {
-		return err
+		return false, err
 	}
 	completion, err := deps.Client.ReportFeedback(cmd.Context(), workID, report)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if delivery.PeerReview != nil {
 		peer := cloneMap(delivery.PeerReview)
+		normalizePortableFeedback(peer, workID, artifactID)
 		if err := remapPortableCriteria(peer, criterionIDs); err != nil {
-			return err
+			return false, err
 		}
 		binding, _ := peer["peer_review_of"].(map[string]any)
 		if binding == nil {
@@ -817,28 +839,37 @@ func importPortableDelivery(cmd *cobra.Command, deps *Deps, workID, artifactID s
 			binding["completion_feedback_event_id"] = id
 		}
 		if _, err := deps.Client.ReportFeedback(cmd.Context(), workID, peer); err != nil {
-			return err
+			return false, err
 		}
 	}
-	if delivery.HumanDecision == "approve" || delivery.HumanDecision == "reject" {
-		note := strings.TrimSpace("Imported Local decision: " + delivery.ReviewNote)
+	if _, err := deps.Client.TriggerDeliveryReview(cmd.Context(), workID); err != nil {
+		return false, err
+	}
+	if hasDecision {
 		status, err := deps.Client.DeliveryStatus(cmd.Context(), workID, true)
 		if err != nil {
-			return err
+			return false, err
 		}
-		expectedVerdict := "fail"
-		if delivery.HumanDecision == "approve" {
-			expectedVerdict = "pass"
-		}
-		if status.Found && status.Executor == "human" && status.Verdict == expectedVerdict && status.Actor == actor && status.Note == note {
-			return nil
+		if decisionMatches(status) {
+			return true, nil
 		}
 		_, err = deps.Client.DecideDelivery(cmd.Context(), workID, client.DeliveryDecisionInput{
 			Decision: delivery.HumanDecision, Actor: actor, Note: note,
 		})
-		return err
+		return err == nil, err
 	}
-	return nil
+	return true, nil
+}
+
+func normalizePortableFeedback(body map[string]any, workID, artifactID string) {
+	body["change_request_id"] = workID
+	body["severity"] = "info"
+	delete(body, "context_digest")
+	if artifactID != "" {
+		body["artifact_id"] = artifactID
+	} else {
+		delete(body, "artifact_id")
+	}
 }
 
 func cloneMap(source map[string]any) map[string]any {

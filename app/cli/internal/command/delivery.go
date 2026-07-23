@@ -222,6 +222,13 @@ func validateCompletionReport(deps *Deps, command string, body map[string]any) e
 	for _, raw := range checks {
 		check, _ := raw.(map[string]any)
 		status := strings.TrimSpace(fmt.Sprint(check["status"]))
+		if status == "pending" {
+			return completionValidationError(
+				deps,
+				command,
+				fmt.Sprintf("check %s is still pending; run it and set status to pass, fail, or skipped; skipped requires a reason", check["name"]),
+			)
+		}
 		switch status {
 		case "pass", "fail", "skipped":
 		default:

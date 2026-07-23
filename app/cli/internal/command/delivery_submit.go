@@ -122,7 +122,8 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 					if peerErr != nil {
 						return localExitError(deps, spec.Operation, peerErr)
 					}
-					result = deriveLocalChangeStatus(work, &review, &report, peer)
+					status := deriveLocalChangeStatus(work, &review, &report, peer)
+					result = applyCheckoutFreshness(cmd.Context(), deps, status, mapGitReceipt(report.Body))
 				}
 				if deps.Printer.Mode() == output.ModeJSON {
 					deps.Printer.Success(spec.Operation, result)
@@ -201,7 +202,9 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 
 			if deps.Printer.Mode() == output.ModeJSON {
 				if spec.CompactJSON {
-					deps.Printer.Success(spec.Operation, deriveFullChangeStatus(work, ds))
+					status := deriveFullChangeStatus(work, ds)
+					status = applyCheckoutFreshness(cmd.Context(), deps, status, clientGitReceipt(ds.GitReceipt))
+					deps.Printer.Success(spec.Operation, status)
 				} else {
 					deps.Printer.Success(spec.Operation, map[string]any{
 						"report": report,

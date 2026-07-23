@@ -576,6 +576,50 @@ func TestInitPersistsRuntimePortAndComposeProject(t *testing.T) {
 	}
 }
 
+func TestInitPersistsScopedProjectForAlternateDeployment(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, ".env.example"), "SPECGATE_PORT=3000\nSPECGATE_COMPOSE_PROJECT=specgate\n")
+	project := deploy.ScopedProjectName(dir)
+
+	svc := newDeployTestService(dir)
+	if err := svc.Init(context.Background(), deploy.InitOptions{
+		Seed: deploy.SeedNo, ComposeProject: project,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got := readFile(t, filepath.Join(dir, ".env"))
+	if !strings.Contains(got, "SPECGATE_COMPOSE_PROJECT="+project) {
+		t.Fatalf(".env did not isolate alternate deployment %q:\n%s", project, got)
+	}
+	if project == "specgate" || project != deploy.ScopedProjectName(dir) {
+		t.Fatalf("scoped project name is not stable: %q", project)
+	}
+	other := deploy.ScopedProjectName(filepath.Join(dir, "other"))
+	if other == project {
+		t.Fatalf("different deployment directories share project %q", project)
+	}
+}
+
+func TestInitExplicitComposeProjectOverridesScopedDefault(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, ".env.example"), "SPECGATE_COMPOSE_PROJECT=specgate\n")
+	t.Setenv("SPECGATE_COMPOSE_PROJECT", "operator-selected")
+
+	svc := newDeployTestService(dir)
+	if err := svc.Init(context.Background(), deploy.InitOptions{
+		Seed: deploy.SeedNo, ComposeProject: deploy.ScopedProjectName(dir),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got := readFile(t, filepath.Join(dir, ".env"))
+	if !strings.Contains(got, "SPECGATE_COMPOSE_PROJECT=operator-selected") {
+		t.Fatalf("explicit project override lost:\n%s", got)
+	}
+}
+
 func TestInitPreservesExplicitAppBaseURLWithRuntimePortOverride(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, ".env"), "SPECGATE_PORT=3000\nAPP_BASE_URL=https://specgate.example\n")

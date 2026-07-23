@@ -122,7 +122,7 @@ Evidence: Ready for human review
 Assurance: Agent-reported; locally reproduced; second agent affirmed
 Decision: Awaiting human acceptance
 Receipt: commit a1b2c3d
-Freshness: The stored receipt was not checked against the current checkout.
+Freshness: Stored receipt matches the current checkout.
 Next (human_reviewer): specgate --yes change accept CR-123
 ```
 

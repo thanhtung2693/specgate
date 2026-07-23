@@ -345,7 +345,9 @@ func TestPortableImportMapsDeliveryEvidenceBySourceCriterionID(t *testing.T) {
 			{
 				WorkID: "local-work",
 				Report: map[string]any{
-					"event_type": "coding_agent.completed",
+					"event_type":        "coding_agent.completed",
+					"change_request_id": "local-work",
+					"context_digest":    "local-context",
 					"criteria": []any{
 						map[string]any{"criterion_id": "local-2", "claim": "satisfied"},
 						map[string]any{"criterion_id": "local-1", "claim": "satisfied"},
@@ -377,6 +379,16 @@ func TestPortableImportMapsDeliveryEvidenceBySourceCriterionID(t *testing.T) {
 	second, _ := rows[1].(map[string]any)
 	if first["criterion_id"] != "full-ac-2" || second["criterion_id"] != "full-ac-1" {
 		t.Fatalf("criterion mapping = %#v", rows)
+	}
+	if fc.lastFeedbackBody["change_request_id"] != "full-work" ||
+		fc.lastFeedbackBody["severity"] != "info" {
+		t.Fatalf("Full feedback envelope was not translated: %#v", fc.lastFeedbackBody)
+	}
+	if _, exists := fc.lastFeedbackBody["context_digest"]; exists {
+		t.Fatalf("Local-only context_digest leaked into Full feedback: %#v", fc.lastFeedbackBody)
+	}
+	if fc.deliveryReviewCalls != 1 {
+		t.Fatalf("delivery review calls = %d, want 1", fc.deliveryReviewCalls)
 	}
 }
 
@@ -773,7 +785,16 @@ func TestPortableImportDoesNotDuplicateMatchingHumanDeliveryDecision(t *testing.
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
 	}
+	if fc.reportFeedbackCalls != 0 {
+		t.Fatalf("matching accepted delivery replayed feedback %d time(s)", fc.reportFeedbackCalls)
+	}
+	if fc.deliveryReviewCalls != 0 {
+		t.Fatalf("matching accepted delivery reran review %d time(s)", fc.deliveryReviewCalls)
+	}
 	if fc.deliveryDecisionCalls != 0 {
 		t.Fatalf("matching human decision was recorded %d additional time(s)", fc.deliveryDecisionCalls)
+	}
+	if !strings.Contains(out.String(), `"imported_delivery":0`) {
+		t.Fatalf("idempotent receipt claimed a delivery write: %s", out.String())
 	}
 }

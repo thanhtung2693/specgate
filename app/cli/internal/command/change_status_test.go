@@ -372,15 +372,40 @@ func TestChangeStatusFullPlainIncludesActionableTrustFields(t *testing.T) {
 	}
 }
 
-func TestChangeStatusFullStoredReceiptWasNotCheckedAgainstCheckout(t *testing.T) {
+func TestChangeStatusFullDetectsStoredReceiptMismatchAgainstCheckout(t *testing.T) {
 	t.Parallel()
 	deps, fc, _, out := newFakeDeps(t)
 	fc.resolvedWork = &client.ResolvedWork{ChangeRequestID: "cr-1", ChangeRequestKey: "CR-101", Title: "Add change status"}
 	fc.deliveryStatusResult = &client.DeliveryStatusResult{Found: true, Verdict: "pass", GitReceipt: &client.GitReceipt{HeadRevision: "abc123def456"}}
 
 	got := runChangeStatusJSON(t, deps, out, "CR-101")
-	if strings.Contains(strings.ToLower(got.Freshness), "is current") || !strings.Contains(strings.ToLower(got.Freshness), "not checked against the current checkout") {
+	if !got.Stale || !strings.Contains(strings.ToLower(got.Freshness), "differs from the stored receipt") ||
+		!strings.Contains(got.StaleReason, "Checkout differs") {
 		t.Fatalf("freshness = %q", got.Freshness)
+	}
+}
+
+func TestChangeStatusFullConfirmsStoredReceiptAgainstCheckout(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	dir := t.TempDir()
+	deps.WorkingDir = dir
+	deps.DeployRunner = deliveryGitRunner(dir, nil)
+	fc.resolvedWork = &client.ResolvedWork{ChangeRequestID: "cr-1", ChangeRequestKey: "CR-101", Title: "Add change status"}
+	fc.deliveryStatusResult = &client.DeliveryStatusResult{
+		Found: true, Verdict: "pass",
+		GitReceipt: &client.GitReceipt{
+			Availability: "available",
+			Repository:   "https://github.com/acme/project.git",
+			Branch:       "main",
+			BaseRevision: "base-revision",
+			HeadRevision: "head-revision",
+		},
+	}
+
+	got := runChangeStatusJSON(t, deps, out, "CR-101")
+	if got.Stale || got.StaleReason != "" || got.Freshness != "Stored receipt matches the current checkout." {
+		t.Fatalf("status = %#v, want confirmed current checkout", got)
 	}
 }
 

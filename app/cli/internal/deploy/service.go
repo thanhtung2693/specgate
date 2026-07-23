@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -34,6 +35,10 @@ type InitOptions struct {
 	// BundleBaseURL overrides where the bundle is fetched from; empty uses the
 	// GitHub release download URL for the configured version.
 	BundleBaseURL string
+	// ComposeProject isolates a newly created alternate deployment from the
+	// default appliance's containers, network, and data volume. Existing .env
+	// files retain their recorded project so upgrades cannot orphan data.
+	ComposeProject string
 }
 
 // UpdateOptions carries parameters for refreshing an existing deployment.
@@ -98,6 +103,11 @@ func (s *Service) Init(ctx context.Context, opts InitOptions) error {
 	if err := os.Chmod(s.dir, 0700); err != nil {
 		return fmt.Errorf("secure deployment dir: %w", err)
 	}
+	_, composeEnvErr := os.Lstat(filepath.Join(s.dir, ".env"))
+	newComposeEnv := os.IsNotExist(composeEnvErr)
+	if composeEnvErr != nil && !newComposeEnv {
+		return fmt.Errorf("inspect compose env: %w", composeEnvErr)
+	}
 
 	if err := s.ensureBundle(ctx, opts); err != nil {
 		return err
@@ -108,6 +118,11 @@ func (s *Service) Init(ctx context.Context, opts InitOptions) error {
 
 	if err := s.setupComposeEnv(); err != nil {
 		return fmt.Errorf("compose env setup: %w", err)
+	}
+	if newComposeEnv && strings.TrimSpace(opts.ComposeProject) != "" {
+		if err := s.persistComposeProject(opts.ComposeProject); err != nil {
+			return fmt.Errorf("persist compose project: %w", err)
+		}
 	}
 	if err := s.persistRuntimeOverrides(); err != nil {
 		return fmt.Errorf("persist runtime overrides: %w", err)
@@ -139,6 +154,28 @@ func (s *Service) Init(ctx context.Context, opts InitOptions) error {
 	}
 
 	return nil
+}
+
+// ScopedProjectName returns a stable, path-private Compose project for an
+// alternate deployment directory.
+func ScopedProjectName(dir string) string {
+	absolute, err := filepath.Abs(dir)
+	if err != nil {
+		absolute = filepath.Clean(dir)
+	}
+	sum := sha256.Sum256([]byte(filepath.Clean(absolute)))
+	return fmt.Sprintf("specgate-%x", sum[:6])
+}
+
+func (s *Service) persistComposeProject(project string) error {
+	envPath := filepath.Join(s.dir, ".env")
+	lines, err := readEnvLines(envPath)
+	if os.IsNotExist(err) {
+		lines = nil
+	} else if err != nil {
+		return err
+	}
+	return setEnvVar(envPath, lines, projectEnvKey, strings.TrimSpace(project))
 }
 
 // Update refreshes an appliance deployment without ever starting the old and

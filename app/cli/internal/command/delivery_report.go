@@ -598,12 +598,19 @@ func completionTemplateChecks(bindings []string) []completionCheckTemplate {
 			continue
 		}
 		seen[binding] = true
-		checks = append(checks, completionCheckTemplate{Name: binding, Command: "", Status: "skipped", Detail: ""})
+		checks = append(checks, pendingCompletionCheck(binding))
 	}
 	if len(checks) == 0 {
-		checks = append(checks, completionCheckTemplate{Name: "tests", Command: "", Status: "skipped", Detail: ""})
+		checks = append(checks, pendingCompletionCheck("tests"))
 	}
 	return checks
+}
+
+func pendingCompletionCheck(name string) completionCheckTemplate {
+	return completionCheckTemplate{
+		Name: name, Command: "", Status: "pending",
+		Detail: "TODO: set command and observed status to pass, fail, or skipped",
+	}
 }
 
 // specgate delivery submit [work-ref] --file <completion.json>

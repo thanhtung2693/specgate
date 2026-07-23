@@ -601,7 +601,8 @@ test("coding-agent delivery ends with a truthful human-acceptance receipt", () =
   assert.match(workflow, /per-work\s+governance handoff/i);
   assert.match(workflow, /Evidence: Ready for human review/);
   assert.match(workflow, /Assurance: Agent-reported; locally reproduced; second agent affirmed/);
-  assert.match(workflow, /Freshness: The stored receipt was not checked against the current checkout\./);
+  assert.match(workflow, /Freshness: Stored receipt matches the current checkout\./);
+  assert.match(docs.cliReference, /pending[\s\S]{0,180}submission rejects/i);
   assert.match(workflow, /stale warning does not rewrite the reported state/i);
   assert.match(workflow, /separate `Stale:` line/);
   assert.match(workflow, /does not prove that SpecGate prevented bugs or saved\s+time/i);
