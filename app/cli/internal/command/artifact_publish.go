@@ -8,11 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/spf13/cobra"
 
+	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/interactive"
 	"github.com/specgate/specgate/app/cli/internal/local"
@@ -69,23 +71,48 @@ to compare explicit paths, roles, and hashes against one stored artifact.`,
 				preview := artifactPublishPreview(body, documentSources)
 				var comparison *artifactComparison
 				if compareArtifactID != "" {
-					previewCtx, err := artifactPublishPreviewContext(cmd.Context(), deps, body)
-					if err != nil {
-						return apiExitError(deps, "artifact.publish.preview", err)
-					}
-					base, err := deps.Client.GetArtifact(previewCtx, compareArtifactID)
-					if err != nil {
-						return apiExitError(deps, "artifact.publish.preview", err)
+					var base *client.Artifact
+					var baseFiles []client.ArtifactFile
+					if deps.Topology == config.ModeLocal {
+						store, err := openLocalStore(deps)
+						if err != nil {
+							return localExitError(deps, "artifact.publish.preview", err)
+						}
+						defer store.Close()
+						selection, err := localSelection(cmd.Context(), deps, store)
+						if err != nil {
+							return localExitError(deps, "artifact.publish.preview", err)
+						}
+						if workspaceID, _ := body["workspace_id"].(string); strings.TrimSpace(workspaceID) != "" {
+							selection.Workspace, err = store.Workspace(cmd.Context(), workspaceID)
+							if err != nil {
+								return localExitError(deps, "artifact.publish.preview", err)
+							}
+						}
+						localBase, err := store.GetArtifact(cmd.Context(), selection.Workspace.ID, compareArtifactID)
+						if err != nil {
+							return localExitError(deps, "artifact.publish.preview", err)
+						}
+						base, baseFiles = localArtifactComparisonBase(localBase)
+					} else {
+						previewCtx, err := artifactPublishPreviewContext(cmd.Context(), deps, body)
+						if err != nil {
+							return apiExitError(deps, "artifact.publish.preview", err)
+						}
+						base, err = deps.Client.GetArtifact(previewCtx, compareArtifactID)
+						if err != nil {
+							return apiExitError(deps, "artifact.publish.preview", err)
+						}
+						baseFiles, err = deps.Client.ListArtifactFiles(previewCtx, compareArtifactID)
+						if err != nil {
+							return apiExitError(deps, "artifact.publish.preview", err)
+						}
 					}
 					if requestedBase, _ := body["base_version"].(string); requestedBase != "" && requestedBase != base.Version {
 						err := fmt.Errorf("base_version %q does not match compared artifact version %q", requestedBase, base.Version)
 						payload := output.ErrorPayload{Code: "validation", Message: err.Error()}
 						code := deps.Printer.Error("artifact.publish.preview", payload)
 						return &output.ExitError{Code: code, Err: err}
-					}
-					baseFiles, err := deps.Client.ListArtifactFiles(previewCtx, compareArtifactID)
-					if err != nil {
-						return apiExitError(deps, "artifact.publish.preview", err)
 					}
 					built, err := buildArtifactComparison(body, base, baseFiles)
 					if err != nil {
@@ -205,6 +232,28 @@ func localArtifactInput(body map[string]any) (local.ArtifactInput, error) {
 		input.Documents = append(input.Documents, local.ArtifactDocumentInput{Path: path, Role: role, Content: []byte(content)})
 	}
 	return input, nil
+}
+
+func localArtifactComparisonBase(artifact local.Artifact) (*client.Artifact, []client.ArtifactFile) {
+	base := &client.Artifact{
+		ID:             artifact.ID,
+		WorkspaceID:    artifact.WorkspaceID,
+		Version:        "v" + strconv.Itoa(artifact.Version),
+		Status:         artifact.Status,
+		RequestType:    artifact.RequestType,
+		SnapshotDigest: artifact.SnapshotDigest,
+		CreatedAt:      artifact.CreatedAt,
+	}
+	files := make([]client.ArtifactFile, 0, len(artifact.Documents))
+	for _, document := range artifact.Documents {
+		files = append(files, client.ArtifactFile{
+			Path:          document.Path,
+			Role:          document.Role,
+			SizeBytes:     int64(document.SizeBytes),
+			ContentSHA256: document.Digest,
+		})
+	}
+	return base, files
 }
 
 func localArtifactView(artifact local.Artifact, includeContent bool) map[string]any {
