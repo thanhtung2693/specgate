@@ -1,6 +1,6 @@
 # Doc Registry
 
-Central artifact store for the AI-assisted development system. Stores governance artifacts, work items, delivery evidence, Knowledge context, and integration signals with versioning, lifecycle, conflict detection, and an event log. See [prd.md](prd.md) and [spec.md](spec.md).
+Central artifact store for the AI-assisted development system. Stores governance artifacts, work items, delivery evidence, Knowledge context, and integration signals with versioning, lifecycle, conflict detection, and an event log. See [prd.md](prd.md), [spec.md](spec.md), and the [REST API contract](api.md).
 
 ## Stack
 

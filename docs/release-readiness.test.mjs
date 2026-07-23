@@ -37,6 +37,7 @@ const docs = {
   gatesReference: read("docs/using-specgate/reference/gates.md"),
   deployReadme: read("deploy/README.md"),
   docRegistrySpec: read("app/doc-registry/docs/spec.md"),
+  docRegistryAPI: read("app/doc-registry/docs/api.md"),
   docRegistryReadme: read("app/doc-registry/docs/README.md"),
   agentsReadme: read("app/agents/docs/README.md"),
   architecture: read("docs/contributing/architecture.md"),
@@ -93,6 +94,7 @@ const releaseFacingDocs = [
   "app/doc-registry/README.md",
   "app/doc-registry/docs/README.md",
   "app/doc-registry/docs/spec.md",
+  "app/doc-registry/docs/api.md",
   "app/agents/README.md",
   "app/agents/docs/README.md",
   "app/ui/README.md",
@@ -352,6 +354,7 @@ test("release env examples document runtime config without requiring model secre
 });
 
 test("shared contracts are generated from current backend vocabulary", () => {
+  const docRegistryContract = `${docs.docRegistrySpec}\n${docs.docRegistryAPI}`;
   const warningCodes = uniqueMatches(
     files.workboardModel,
     /\bWarning[A-Za-z0-9_]+\s+WarningCode\s*=\s*"([^"]+)"/g,
@@ -360,10 +363,10 @@ test("shared contracts are generated from current backend vocabulary", () => {
   assert.ok(warningCodes.length > 0, "no WarningCode constants found");
   for (const code of warningCodes) {
     assert.match(docs.contracts, new RegExp(`\\\`${code}\\\``));
-    assert.match(docs.docRegistrySpec, new RegExp(`\\\`${code}\\\``));
+    assert.match(docRegistryContract, new RegExp(`\\\`${code}\\\``));
   }
 
-  assert.match(docs.docRegistrySpec, /workspace_id[\s\S]*scopes all reads and writes/);
+  assert.match(docRegistryContract, /workspace_id[\s\S]*scopes all reads and writes/);
   assert.match(docs.contracts, /workspace_id/);
 });
 

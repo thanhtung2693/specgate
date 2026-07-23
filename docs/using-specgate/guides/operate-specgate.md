@@ -11,9 +11,8 @@ specgate init --mode full
 ```
 
 The complete product runs in one Docker container with one public port and one
-named volume. The CLI manages the deployment directory, appliance bundle,
-settings encryption key, startup, and optional demo data. For the no-Docker
-Local CLI workflow, use the [quickstart](../quickstart.md).
+named volume. The CLI manages installation and lifecycle commands. For the
+no-Docker Local workflow, use the [quickstart](../quickstart.md).
 
 ## Operate the appliance
 
@@ -41,15 +40,13 @@ The default public origin is `http://localhost:3000`:
 | `/integrations/oauth-callback` | Provider OAuth return |
 | `/integrations/{integration}/resources/{resource}/{provider}/webhook` | Managed provider webhook receiver |
 
-Postgres and internal service listeners are not published. To choose a public
-port at first install, pass it to `init`; SpecGate stores it in the appliance
-deployment `.env` for later lifecycle commands:
+Only the public port is exposed. To choose it at first install:
 
 ```bash
 SPECGATE_PORT=13000 specgate init --mode full
 ```
 
-To change an existing appliance, edit its deployment `.env` before startup:
+To change it later, edit the port setting in the deployment `.env`:
 
 ```dotenv
 SPECGATE_PORT=13000
@@ -100,11 +97,8 @@ specgate cleanup --backups --dry-run
 specgate cleanup --backups --item <archive-name> --yes
 ```
 
-For a CLI-managed appliance, `doctor` can retrieve the same component report
-from inside the container when the public nginx gateway itself is unavailable.
-
-The current local-appliance release is a clean initialization boundary; it does
-not import data from the older multi-container local layout.
+For a CLI-managed appliance, `doctor` can still report component health when
+the public gateway is unavailable.
 
 ### Local logs
 
@@ -115,14 +109,7 @@ docker compose ps
 docker compose logs -f --tail=200 specgate
 ```
 
-The appliance log combines its supervised internal processes. Check it before
-changing port mappings or container configuration.
-
-Component startup and migration state is available from
-`/healthz/components`. The response also retains the last internal service
-failure reason across container restarts. After five consecutive failures of
-an essential service, the appliance exits and lets Compose restart the complete
-dependency unit.
+Check the appliance log before changing its port or configuration.
 
 ## Remove a local deployment safely
 
@@ -148,12 +135,9 @@ To purge the managed deployment and data in automation, back up first:
 specgate uninstall --purge-data --yes
 ```
 
-This removes the managed appliance container, volume, network, and deployment
-directory for the selected Compose project. Container images remain in Docker's
-cache. Cleanup is constrained by `org.specgate.managed=true` and
-`org.specgate.project=<project>` labels. Directory removal also requires
-SpecGate's ownership marker; an arbitrary directory, user home, filesystem root,
-or Git repository root is refused.
+This removes the managed appliance, its data volume, and its deployment
+directory. Container images remain in Docker's cache. SpecGate refuses to
+remove directories or Docker resources it does not own.
 
 Verify cleanup:
 
@@ -172,28 +156,21 @@ docker network ls --filter label=org.specgate.managed=true --filter label=org.sp
 - inspect `docker compose ps` and `docker compose logs specgate`;
 - confirm the configured server ends in `/api/doc-registry`.
 
-### An internal service is unhealthy
+### The appliance is unhealthy
 
-Inspect `/healthz/components` and the appliance log. A local installation
-should not expose an internal service port to work around a failed health
-check.
-
-For an appliance deployment, inspect the combined service log and its
-configuration before changing ports or storage settings.
+Run `specgate doctor`, then inspect the appliance log. Do not expose additional
+container ports to work around a failed health check.
 
 ### Artifact uploads fail
 
-- for appliance-managed storage, run `specgate doctor` and inspect the combined
-  appliance log;
-- for S3-compatible storage, verify endpoint, bucket, credentials, region, and
-  path-style settings.
+- run `specgate doctor`;
+- inspect the appliance log for the first storage error.
 
 ### Workspace-scoped Knowledge search returns no results
 
-- confirm `KNOWLEDGE_DRIVER=pgvector`;
 - configure embeddings — see [Configure models](configure-models.md);
-- check the embedding dimension matches the selected model;
-- reindex affected knowledge after changing model dimensions.
+- run `specgate doctor`;
+- retry indexing the affected document after correcting model settings.
 
 ## Continue
 

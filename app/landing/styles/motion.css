@@ -1,0 +1,105 @@
+/* ---------- Reveal animations ---------- */
+.reveal,
+.reveal-up {
+  opacity: 0;
+}
+.reveal {
+  transform: translateY(10px);
+  animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: var(--d, 0ms);
+}
+.reveal-up {
+  transform: translateY(16px);
+}
+.reveal-up.in {
+  animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes rise {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .reveal-up {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 900px) {
+  .hero {
+    min-height: auto;
+    grid-template-columns: 1fr;
+  }
+  .console {
+    order: 2;
+  }
+}
+
+@media (max-width: 768px) {
+  .band,
+  .hero,
+  .wordmarks,
+  .cta {
+    width: 100%;
+    padding-inline: 1rem;
+  }
+
+  .cast-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .nav {
+    gap: 0.75rem;
+    padding-inline: 0.9rem;
+  }
+  .theme-toggle {
+    display: none;
+  }
+  .nav-github {
+    padding: 0.58rem 0.68rem;
+  }
+  .nav-github span {
+    display: none;
+  }
+  .hero {
+    padding-top: 2.6rem;
+  }
+  .hero-copy h1 {
+    font-size: clamp(2.6rem, 11vw, 3.45rem);
+    line-height: 1.05;
+  }
+  .hero-copy h1 br {
+    display: none;
+  }
+  .hero .lede {
+    font-size: 1rem;
+  }
+  .hero-actions {
+    flex-direction: column;
+  }
+  .hero-actions .btn {
+    width: 100%;
+  }
+  .console {
+    padding: 1rem;
+  }
+  .console-top,
+  .console-foot {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .check-list li {
+    font-size: 0.86rem;
+  }
+  .termcast .term-body {
+    overflow-x: auto;
+  }
+}
