@@ -233,23 +233,19 @@ Use the safe uninstall path:
 specgate uninstall
 ```
 
-In Local CLI mode, `uninstall` removes CLI configuration and globally installed
-managed plugin files while preserving the selected SQLite store. Project-local
-plugin files in repositories are preserved; review and remove them through
-normal repository file cleanup when no longer needed. Native Codex and Claude
-Code plugins are preserved; remove them with their plugin manager. To delete
-the store too, run:
+In Local mode, `uninstall` removes CLI configuration and globally installed
+managed plugin files while preserving Local SpecGate data. Project-local plugin
+files are preserved, as are plugins installed by an IDE's own plugin manager.
+To delete Local SpecGate data too:
 
 ```bash
 specgate uninstall --purge-data --yes
 ```
 
-This Local cleanup warns first and removes only SpecGate's SQLite database and
-journal files, preserving other files in the selected directory. Local mode
-rejects the Full-only `--dir` flag and uses the configured SQLite state
-directory. It does not use Docker. In Full appliance mode, the same flag removes the managed deployment
-directory and SpecGate-managed Docker runtime/data. Container images stay in
-Docker's cache.
+Cleanup warns first and removes only SpecGate-owned data. In Full mode, the
+same flag removes the managed appliance and its data while leaving Docker image
+cache intact. See the [CLI reference](../reference/cli.md) for exact scope and
+flags.
 
 ## Troubleshooting
 

@@ -21,8 +21,9 @@ changes under `app/doc-registry/`.
 - Status transitions and their `artifact_events` row are one transaction.
 - Object bodies go through the configured storage driver. Do not bypass the
   workspace-scoped repository or construct unscoped object keys.
-- API changes use Huma operation definitions and update the OpenAPI-owning
-  contract in `docs/spec.md`.
+- API changes use Huma operation definitions and update the route contract in
+  `docs/api.md` plus the section 6 entry point in `docs/spec.md` when the
+  boundary changes.
 
 ## Database and migration rules
 
@@ -53,7 +54,7 @@ make migrate
 
 ## Documentation
 
-- Endpoint or payload change: update `docs/spec.md` §6.
+- Endpoint or payload change: update `docs/api.md`.
 - Status or event change: update the owning spec sections, domain enums, DTO
   enums, event writes, and `docs/contributing/contracts.md` when shared.
 - Environment change: update config code/tests, `.env.example`, and

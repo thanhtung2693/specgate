@@ -92,7 +92,7 @@ does not change the acceptance decision.
   `OAUTH_PUBLIC_CALLBACK_BASE_URL` and reprovision the selected resource's
   webhook.
 - Inspect the resource's recent webhook delivery state in Settings →
-  Integrations and the Doc Registry logs for the provider response.
+  Integrations and the appliance log for the provider response.
 
 ### A merged PR/MR is linked but does not corroborate delivery
 

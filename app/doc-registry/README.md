@@ -55,7 +55,7 @@ required through `POSTGRES_DSN`. Redis is needed only with
 `QUEUE_DRIVER=redis` (which drives both the inbound-webhook queue and async
 Knowledge ingestion); MinIO/S3 is needed only with `STORAGE_DRIVER=s3`.
 
-**`SETTINGS_ENCRYPTION_KEY`** (32-byte hex) is required; `make run`/`make dev` generate it into `.env` for you (set it manually only for non-Makefile runs: `openssl rand -hex 32`). Settings are shared across internal consumers and stored in the **`settings`** table; use `GET /settings` / `PUT /settings` for operator changes. Coding agents use the `specgate` CLI; see [Use SpecGate with a coding agent](../../docs/using-specgate/guides/coding-agent-workflow.md). See [docs/spec.md](docs/spec.md) section 6.
+**`SETTINGS_ENCRYPTION_KEY`** (32-byte hex) is required; `make run`/`make dev` generate it into `.env` for you (set it manually only for non-Makefile runs: `openssl rand -hex 32`). Settings are shared across internal consumers and stored in the **`settings`** table; use `GET /settings` / `PUT /settings` for operator changes. Coding agents use the `specgate` CLI; see [Use SpecGate with a coding agent](../../docs/using-specgate/guides/coding-agent-workflow.md). See the [REST API contract](docs/api.md).
 
 Governance Knowledge endpoints live under `/documents/*` and
 `/governance/context/search`. Markdown (`.md`) and plain text (`.txt`) uploads are

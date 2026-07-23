@@ -175,11 +175,7 @@ Confirm the agents service is running:
 specgate local-status
 ```
 
-Then check the Full appliance log from its deployment directory:
-
-```bash
-docker compose logs specgate
-```
+Then follow the log check in [Operate SpecGate](operate-specgate.md#local-logs).
 
 ### Model output is low confidence
 
