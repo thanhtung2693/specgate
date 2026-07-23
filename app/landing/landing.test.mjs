@@ -183,7 +183,7 @@ test("SEO metadata is canonical, crawlable, and structured", () => {
   assert.match(html, /<main id="top" aria-labelledby="page-title" tabindex="-1">/);
   assert.match(html, /<h1 id="page-title"/);
   assert.match(css, /\.skip-link:focus/);
-  assert.match(sitemap, /<lastmod>2026-07-03<\/lastmod>/);
+  assert.match(sitemap, /<lastmod>2026-07-23<\/lastmod>/);
 
   const jsonLd = html.match(/<script type="application\/ld\+json">\s*(?<json>[\s\S]*?)\s*<\/script>/)?.groups?.json;
   assert.ok(jsonLd);

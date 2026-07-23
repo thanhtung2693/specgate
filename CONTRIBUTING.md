@@ -56,7 +56,7 @@ uv run pytest                  # unit + harness (excludes live smoke by default)
 
 ```bash
 cd app/ui
-npm run lint            # ESLint
+npm run lint            # Oxlint
 npm run build           # TypeScript check + production build
 npm run test -- --run   # Vitest unit suite
 ```
