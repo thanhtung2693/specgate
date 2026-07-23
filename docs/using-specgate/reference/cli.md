@@ -736,6 +736,10 @@ previous image remains compatible with any migrations already applied;
 otherwise the command reports the recovery archive and does not restart the old
 image.
 
+On native Windows, `specgate update` downloads the matching release ZIP and
+published checksum, verifies SHA-256, and replaces the current executable
+without requiring `sh`.
+
 If the connected server does not recommend a newer CLI, released CLI builds also
 check GitHub releases in human/plain output and warn when a newer public release
 exists. The GitHub check prefers the latest stable release and considers the

@@ -49,6 +49,7 @@ const files = {
   rootMakefile: read("Makefile"),
   installCli: read("scripts/install-cli.sh"),
   releaseWorkflow: read(".github/workflows/release.yml"),
+  cliWorkflow: read(".github/workflows/cli.yml"),
   goreleaser: read(".goreleaser.yaml"),
   pagesWorkflow: read(".github/workflows/pages.yml"),
   readinessWorkflow: read(".github/workflows/release-readiness.yml"),
@@ -325,7 +326,10 @@ test("release workflow verifies every release-facing module before publishing", 
   assert.match(verifyJob, /npm run lint/);
   assert.match(verifyJob, /npm run build/);
   assert.match(verifyJob, /node --test docs\/release-readiness\.test\.mjs/);
-  assert.match(workflow, /release-cli:\n\s+needs: verify\n/);
+  assert.match(workflow, /verify-windows-cli:\n[\s\S]*runs-on: windows-latest/);
+  assert.match(workflow, /verify-windows-cli:[\s\S]*TestUpdateWindows\|TestSelfUpdateWindowsCLI/);
+  assert.match(workflow, /release-cli:\n\s+needs: \[verify, verify-windows-cli\]\n/);
+  assert.match(files.cliWorkflow, /windows-update:\n[\s\S]*runs-on: windows-latest/);
 });
 
 test("release env examples document runtime config without requiring model secrets", () => {

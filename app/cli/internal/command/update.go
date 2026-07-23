@@ -1,8 +1,12 @@
 package command
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,8 +14,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
+	selfupdate "github.com/contriboss/go-update"
 	"github.com/spf13/cobra"
 
 	"github.com/specgate/specgate/app/cli/internal/buildinfo"
@@ -20,11 +26,15 @@ import (
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
-const maxInstallerScriptBytes = 1 << 20
-
 const (
+	maxInstallerScriptBytes      = 1 << 20
+	maxReleaseChecksumBytes      = 1 << 20
+	maxWindowsUpdateArchiveBytes = 64 << 20
+	maxWindowsUpdateBinaryBytes  = 64 << 20
+
 	defaultPublicRegistryURL = "https://raw.githubusercontent.com/thanhtung2693/specgate/main"
 	defaultCLIInstallURL     = defaultPublicRegistryURL + "/scripts/install-cli.sh"
+	defaultCLIReleaseBaseURL = "https://github.com/thanhtung2693/specgate/releases/download"
 )
 
 type updateStepResult struct {
@@ -64,7 +74,8 @@ func newUpdateCmd(deps *Deps) *cobra.Command {
 				code := deps.Printer.Error("update", output.ErrorPayload{Code: "unavailable", Message: err.Error()})
 				return &output.ExitError{Code: code, Err: err}
 			}
-			installArgs := updateInstallerArgs()
+			executablePath, executableErr := updateExecutablePath(deps)
+			installArgs := updateInstallerArgsForExecutable(executablePath, executableErr)
 			steps := []updateStepResult{
 				{ID: "detect_target", Label: "Detect install target", Status: "pending"},
 				{ID: "install_cli", Label: "Install CLI", Status: "pending"},
@@ -85,17 +96,8 @@ func newUpdateCmd(deps *Deps) *cobra.Command {
 				fmt.Fprintf(deps.Stdout, "  %s %s\n\n", label(deps, "Using"), steps[0].Message)
 				fmt.Fprintf(deps.Stdout, "%s\n", title(deps, "Step 2/4 Install CLI"))
 			}
-			registryURL := publicRegistryURLForVersion(deps, resolvedVersion)
-			cliInstallURL := strings.TrimSpace(deps.CLIInstallURL)
-			if cliInstallURL == "" {
-				cliInstallURL = registryURL + "/scripts/install-cli.sh"
-			}
-			cliInstallArgs := append([]string(nil), installArgs...)
-			if resolvedVersion != "" {
-				cliInstallArgs = append(cliInstallArgs, "--version", resolvedVersion)
-			}
 			emitProgress(deps, "step_started", steps[1].ID, steps[1].Label)
-			if err := fetchAndRunScript(ctx, deps, cliInstallURL, cliInstallArgs...); err != nil {
+			if err := updateCLI(ctx, deps, resolvedVersion, executablePath, executableErr, installArgs); err != nil {
 				steps[1].Status = "fail"
 				steps[1].Message = err.Error()
 				steps[2].Status = "skipped"
@@ -281,18 +283,225 @@ func fetchAndRunScript(ctx context.Context, deps *Deps, url string, extraArgs ..
 }
 
 func updateInstallerArgs() []string {
-	exe, err := os.Executable()
+	exe, err := updateExecutablePath(nil)
+	return updateInstallerArgsForExecutable(exe, err)
+}
+
+func updateExecutablePath(deps *Deps) (string, error) {
+	executable := os.Executable
+	if deps != nil && deps.ExecutablePath != nil {
+		executable = deps.ExecutablePath
+	}
+	exe, err := executable()
 	if err != nil || strings.TrimSpace(exe) == "" {
-		return nil
+		if err == nil {
+			err = fmt.Errorf("executable path is empty")
+		}
+		return "", err
 	}
 	if resolved, resolveErr := filepath.EvalSymlinks(exe); resolveErr == nil && resolved != "" {
 		exe = resolved
+	}
+	return exe, nil
+}
+
+func updateInstallerArgsForExecutable(exe string, err error) []string {
+	if err != nil || strings.TrimSpace(exe) == "" {
+		return nil
 	}
 	dir := strings.TrimSpace(filepath.Dir(exe))
 	if dir == "" || dir == "." || dir == string(filepath.Separator) {
 		return nil
 	}
 	return []string{"--install-dir", dir}
+}
+
+func updateCLI(
+	ctx context.Context,
+	deps *Deps,
+	version string,
+	executablePath string,
+	executableErr error,
+	installArgs []string,
+) error {
+	goos := runtime.GOOS
+	if deps != nil && strings.TrimSpace(deps.RuntimeGOOS) != "" {
+		goos = strings.TrimSpace(deps.RuntimeGOOS)
+	}
+	if goos == "windows" {
+		if executableErr != nil {
+			return fmt.Errorf("locate current SpecGate executable: %w", executableErr)
+		}
+		if deps != nil && deps.SelfUpdateCLI != nil {
+			return deps.SelfUpdateCLI(ctx, version, executablePath)
+		}
+		return selfUpdateWindowsCLI(ctx, deps, version, executablePath, runtime.GOARCH)
+	}
+
+	registryURL := publicRegistryURLForVersion(deps, version)
+	cliInstallURL := strings.TrimSpace(deps.CLIInstallURL)
+	if cliInstallURL == "" {
+		cliInstallURL = registryURL + "/scripts/install-cli.sh"
+	}
+	cliInstallArgs := append([]string(nil), installArgs...)
+	if version != "" {
+		cliInstallArgs = append(cliInstallArgs, "--version", version)
+	}
+	return fetchAndRunScript(ctx, deps, cliInstallURL, cliInstallArgs...)
+}
+
+func selfUpdateWindowsCLI(ctx context.Context, deps *Deps, version, executablePath, arch string) error {
+	if err := validateReleaseVersion(version); err != nil {
+		return err
+	}
+	if arch != "amd64" {
+		return fmt.Errorf("windows %s updates are not published; install a supported release manually", arch)
+	}
+
+	releaseBaseURL := defaultCLIReleaseBaseURL
+	if deps != nil && strings.TrimSpace(deps.CLIReleaseBaseURL) != "" {
+		releaseBaseURL = strings.TrimRight(strings.TrimSpace(deps.CLIReleaseBaseURL), "/")
+	}
+	releaseVersion := strings.TrimPrefix(version, "v")
+	archiveName := fmt.Sprintf("specgate_%s_windows_%s.zip", releaseVersion, arch)
+	checksumName := fmt.Sprintf("specgate_%s_checksums.txt", releaseVersion)
+	releaseURL := releaseBaseURL + "/" + version + "/"
+
+	archive, err := downloadUpdateFile(ctx, deps, releaseURL+archiveName, maxWindowsUpdateArchiveBytes)
+	if err != nil {
+		return fmt.Errorf("download windows CLI archive: %w", err)
+	}
+	checksums, err := downloadUpdateFile(ctx, deps, releaseURL+checksumName, maxReleaseChecksumBytes)
+	if err != nil {
+		return fmt.Errorf("download windows CLI checksums: %w", err)
+	}
+	expectedChecksum, err := checksumForReleaseAsset(checksums, archiveName)
+	if err != nil {
+		return err
+	}
+	actualChecksum := sha256.Sum256(archive)
+	if subtle.ConstantTimeCompare(actualChecksum[:], expectedChecksum) != 1 {
+		return fmt.Errorf("checksum mismatch for %s", archiveName)
+	}
+
+	binary, err := windowsExecutableFromArchive(archive)
+	if err != nil {
+		return err
+	}
+	if err := selfupdate.Apply(bytes.NewReader(binary), selfupdate.Options{
+		TargetPath: executablePath,
+		TargetMode: 0o755,
+		Lock:       true,
+	}); err != nil {
+		if rollbackErr := selfupdate.RollbackError(err); rollbackErr != nil {
+			return fmt.Errorf("replace windows CLI: %w (rollback failed: %v)", err, rollbackErr)
+		}
+		return fmt.Errorf("replace windows CLI: %w", err)
+	}
+	return nil
+}
+
+func validateReleaseVersion(version string) error {
+	if version == "" || version == "." || version == ".." {
+		return fmt.Errorf("invalid release version %q", version)
+	}
+	for _, char := range version {
+		if (char >= 'a' && char <= 'z') ||
+			(char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') ||
+			strings.ContainsRune("._+-", char) {
+			continue
+		}
+		return fmt.Errorf("invalid release version %q", version)
+	}
+	return nil
+}
+
+func downloadUpdateFile(ctx context.Context, deps *Deps, url string, maxBytes int64) ([]byte, error) {
+	timeout := defaultTimeout
+	if deps != nil && deps.Timeout > 0 {
+		timeout = deps.Timeout
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := (&http.Client{Timeout: timeout}).Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server returned %d for %s", resp.StatusCode, url)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("download exceeds %d bytes", maxBytes)
+	}
+	return data, nil
+}
+
+func checksumForReleaseAsset(checksums []byte, assetName string) ([]byte, error) {
+	for _, line := range strings.Split(string(checksums), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 || strings.TrimPrefix(fields[1], "*") != assetName {
+			continue
+		}
+		checksum, err := hex.DecodeString(fields[0])
+		if err != nil || len(checksum) != sha256.Size {
+			return nil, fmt.Errorf("invalid checksum for %s", assetName)
+		}
+		return checksum, nil
+	}
+	return nil, fmt.Errorf("checksum for %s was not found", assetName)
+}
+
+func windowsExecutableFromArchive(archive []byte) ([]byte, error) {
+	reader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	if err != nil {
+		return nil, fmt.Errorf("open windows CLI archive: %w", err)
+	}
+	var (
+		binary []byte
+		found  bool
+	)
+	for _, file := range reader.File {
+		if file.Name != "specgate.exe" {
+			continue
+		}
+		if found {
+			return nil, fmt.Errorf("windows CLI archive contains duplicate specgate.exe")
+		}
+		found = true
+		if file.FileInfo().IsDir() || !file.Mode().IsRegular() {
+			return nil, fmt.Errorf("windows CLI archive contains invalid specgate.exe")
+		}
+		if file.UncompressedSize64 > maxWindowsUpdateBinaryBytes {
+			return nil, fmt.Errorf("windows CLI executable exceeds %d bytes", maxWindowsUpdateBinaryBytes)
+		}
+		contents, openErr := file.Open()
+		if openErr != nil {
+			return nil, fmt.Errorf("open specgate.exe: %w", openErr)
+		}
+		binary, err = io.ReadAll(io.LimitReader(contents, maxWindowsUpdateBinaryBytes+1))
+		closeErr := contents.Close()
+		if err != nil {
+			return nil, fmt.Errorf("read specgate.exe: %w", err)
+		}
+		if closeErr != nil {
+			return nil, fmt.Errorf("close specgate.exe: %w", closeErr)
+		}
+		if len(binary) > maxWindowsUpdateBinaryBytes {
+			return nil, fmt.Errorf("windows CLI executable exceeds %d bytes", maxWindowsUpdateBinaryBytes)
+		}
+	}
+	if !found || len(binary) == 0 {
+		return nil, fmt.Errorf("windows CLI archive does not contain specgate.exe")
+	}
+	return binary, nil
 }
 
 func emitProgress(deps *Deps, event, step, message string) {

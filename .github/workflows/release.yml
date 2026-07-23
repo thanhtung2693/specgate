@@ -82,8 +82,27 @@ jobs:
       - name: Verify release-facing contracts
         run: node --test docs/release-readiness.test.mjs
 
+  verify-windows-cli:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: app/cli/go.mod
+          cache-dependency-path: app/cli/go.sum
+
+      - name: Test native Windows updater
+        working-directory: app/cli
+        run: go test ./internal/command -run 'TestUpdateWindows|TestSelfUpdateWindowsCLI' -count=1
+
+      - name: Build native Windows CLI
+        working-directory: app/cli
+        run: go build -o "${{ runner.temp }}\specgate.exe" ./cmd/specgate
+
   release-cli:
-    needs: verify
+    needs: [verify, verify-windows-cli]
     runs-on: ubuntu-latest
     permissions:
       contents: write
