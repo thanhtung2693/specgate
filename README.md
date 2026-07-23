@@ -17,13 +17,13 @@
 </p>
 
 <p align="center">
-  <a href="docs/assets/readme/specgate-promo.mp4">
-    <img src="docs/assets/readme/specgate-promo-poster.jpg" alt="Watch the 15-second SpecGate product tour" width="960" />
+  <a href="https://thanhtung2693.github.io/specgate/#delivery-proof">
+    <img src="app/landing/media/specgate-promo-poster.jpg" alt="Watch the 15-second SpecGate product tour" width="960" />
   </a>
 </p>
 
 <p align="center">
-  <a href="docs/assets/readme/specgate-promo.mp4"><strong>Watch the 15-second product tour</strong></a>
+  <a href="https://thanhtung2693.github.io/specgate/#delivery-proof"><strong>Watch the 15-second product tour</strong></a>
 </p>
 
 SpecGate is a local-first governance layer for AI-assisted software delivery.

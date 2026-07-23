@@ -1,0 +1,126 @@
+/* ---------- Product proof ---------- */
+.proof {
+  padding-top: clamp(2rem, 4vw, 3.5rem);
+}
+
+.proof-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(18rem, 0.9fr);
+  gap: clamp(2rem, 6vw, 6rem);
+  align-items: end;
+  margin-bottom: clamp(1.7rem, 4vw, 2.8rem);
+}
+
+.proof-kicker {
+  margin: 0 0 0.8rem;
+  color: var(--accent-text);
+}
+
+.proof-head h2 {
+  max-width: 12ch;
+  font-size: clamp(2rem, 4.4vw, 3.1rem);
+}
+
+.proof-head > p {
+  max-width: 34rem;
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 1.05rem;
+}
+
+.proof-stage {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-md);
+  background: #050706;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
+}
+
+.proof-stage-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  background: #090b0a;
+  color: #aeb4b0;
+}
+
+.proof-stage-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #47d46b;
+}
+
+.proof-stage-state i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 12px currentColor;
+}
+
+.proof-video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #050706;
+}
+
+.proof-trace {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  background: #090b0a;
+  color: #d6d9d7;
+}
+
+.proof-trace span {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  min-width: 0;
+  padding: 1rem 1.1rem;
+  font-size: 0.9rem;
+}
+
+.proof-trace span + span {
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.proof-trace small {
+  flex: none;
+  color: #8d92ef;
+  font-weight: 500;
+}
+
+@media (max-width: 768px) {
+  .proof-head {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .proof-head h2 {
+    max-width: 14ch;
+  }
+
+  .proof-stage-bar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .proof-trace {
+    grid-template-columns: 1fr;
+  }
+
+  .proof-trace span + span {
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    border-left: 0;
+  }
+}

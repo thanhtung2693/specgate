@@ -10,6 +10,7 @@ const css = [...cssEntry.matchAll(/@import url\("([^"]+)"\);/g)]
   .join("\n");
 const js = readFileSync(new URL("script.js", here), "utf8");
 const sitemap = readFileSync(new URL("sitemap.xml", here), "utf8");
+const readme = readFileSync(new URL("../../README.md", here), "utf8");
 
 function cssBlock(selector) {
   return css.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{(?<body>[\\s\\S]*?)\\n\\}`))?.groups?.body ?? "";
@@ -147,6 +148,21 @@ test("governed loop copy does not overpromise format parsing", () => {
   assert.doesNotMatch(loop, /can't misread/);
 });
 
+test("product proof uses the published GitHub Pages media without autoplay", () => {
+  const proof = html.match(/<section class="band proof" id="delivery-proof">(?<body>[\s\S]*?)<\/section>/)?.groups?.body ?? "";
+
+  assert.match(proof, /When "done" is not delivered/);
+  assert.match(proof, /<video[^>]+controls[^>]+muted[^>]+playsinline[^>]+preload="metadata"/);
+  assert.match(proof, /poster="\.\/media\/specgate-promo-poster\.jpg"/);
+  assert.match(proof, /<source src="\.\/media\/specgate-promo\.mp4" type="video\/mp4"/);
+  assert.doesNotMatch(proof, /\bautoplay\b/);
+  assert.ok(existsSync(new URL("media/specgate-promo.mp4", here)));
+  assert.ok(existsSync(new URL("media/specgate-promo-poster.jpg", here)));
+  assert.match(readme, /href="https:\/\/thanhtung2693\.github\.io\/specgate\/#delivery-proof"/);
+  assert.match(readme, /src="app\/landing\/media\/specgate-promo-poster\.jpg"/);
+  assert.doesNotMatch(readme, /docs\/assets\/readme\/specgate-promo\.(?:mp4|jpg)/);
+});
+
 test("landing positions existing tools around the governed handoff", () => {
   assert.match(html, /Keep your stack\. Add the governed handoff/);
   assert.match(html, /SPEC TOOLS/);
@@ -257,8 +273,8 @@ test("landing fonts are self-hosted and preloaded without a remote stylesheet", 
   assert.ok(existsSync(new URL("fonts/commit-mono.woff2", here)));
   assert.ok(existsSync(new URL("fonts/OFL-host-grotesk.txt", here)));
   assert.ok(existsSync(new URL("fonts/OFL-commit-mono.txt", here)));
-  assert.match(css, /@font-face[\s\S]*host-grotesk-latin\.woff2/);
-  assert.match(css, /@font-face[\s\S]*commit-mono\.woff2/);
+  assert.match(css, /@font-face[\s\S]*url\("\.\.\/fonts\/host-grotesk-latin\.woff2"\)/);
+  assert.match(css, /@font-face[\s\S]*url\("\.\.\/fonts\/commit-mono\.woff2"\)/);
   assert.match(css, /--font-display:\s*"Host Grotesk"/);
   assert.match(css, /--font-body:\s*"Host Grotesk"/);
   assert.match(css, /--font-mono:\s*"Commit Mono"/);
