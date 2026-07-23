@@ -2,5 +2,6 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "project": ["src/**/*.{ts,tsx}", "scripts/*.mjs"],
   "ignore": ["src/api/schema.d.ts", "src/components/ui/**"],
+  "ignoreDependencies": ["@babel/core"],
   "ignoreBinaries": ["go"]
 }

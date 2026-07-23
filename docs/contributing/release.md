@@ -96,7 +96,7 @@ Validate Compose:
 Start the release by pushing the version tag:
 
 ```bash
-VERSION=v0.1.2
+VERSION=vX.Y.Z
 git tag -a "$VERSION" -m "SpecGate $VERSION"
 git push origin "$VERSION"
 ```

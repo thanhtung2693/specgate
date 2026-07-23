@@ -1,7 +1,7 @@
-"""In-process Doc Registry stub used by tests + LangGraph dev fallback.
+"""In-process Doc Registry stub used by tests.
 
-Hosts scratch bodies + artifact metadata in memory so a governance graph can
-build without a live Doc Registry connection.
+Hosts scratch bodies and artifact metadata in memory so tests can exercise a
+governance graph without a live Doc Registry connection.
 """
 
 from __future__ import annotations

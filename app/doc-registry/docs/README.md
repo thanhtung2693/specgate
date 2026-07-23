@@ -1,6 +1,13 @@
-# Doc Registry
+# Doc Registry developer reference
 
-Central artifact store for the AI-assisted development system. Stores governance artifacts, work items, delivery evidence, Knowledge context, and integration signals with versioning, lifecycle, conflict detection, and an event log. See [prd.md](prd.md), [spec.md](spec.md), and the [REST API contract](api.md).
+This is the authoritative module guide for contributors. Doc Registry is the
+SpecGate service that stores workspace-scoped governance artifacts, work items,
+delivery evidence, Knowledge context, integration signals, and their audit
+history. Product installation and coding-agent workflows belong in
+[`docs/using-specgate/`](../../../docs/using-specgate/README.md).
+
+Read the [PRD](prd.md), [technical specification](spec.md), and [REST API
+contract](api.md) before changing the corresponding behavior.
 
 ## Stack
 
@@ -217,12 +224,11 @@ is the cleanest pattern — the Job runs `command: ["doc-registry",
 
 ### When to seed
 
-Agent node configuration is seeded automatically at migrate time: the
-migration inserts a default `governance.node_config` settings row if absent. The
-`--seed-skills` subcommand is only needed when:
-
-- A new build adds skills missing from the running database
-- A new build updates the default governance skill/model/prompt settings
+Built-in gate-rubric Skills are installed automatically at server startup and
+when a workspace is bootstrapped. Use `--seed-skills` only to reconcile an
+existing database after a new build adds a missing starter Skill. Add
+`--seed-skills-overwrite` only when an operator intentionally wants to replace
+an edited starter Skill with the build's current default.
 
 Governance Knowledge API:
 
@@ -233,14 +239,10 @@ Governance Knowledge API:
 | `GET /documents` | List knowledge versions; `items` is the requested page and `total` is the full matching count before pagination |
 | `POST /governance/context/search` | Retrieve chunks for Governance |
 
-## Status
+## Schema compatibility
 
-Artifact publish/read APIs, Governance Knowledge APIs, workboard records,
-and governance-chat file uploads are implemented. The schema is defined by the
-embedded `migrations/postgres/0001_init.migration`. During development this is
-the complete fresh-install schema; dead tables (`integration_credentials`,
-`epics`, `cards`) are excluded.
-
-That collapsed development schema does not upgrade an older database. The
-registry checks compatibility at startup and exits before serving requests when
-an old database is mounted; reset the development database before retrying.
+The embedded `migrations/postgres/0001_init.migration` is the complete current
+fresh-install schema. It deliberately does not upgrade development databases
+created by discarded schema revisions. At startup, the registry checks the
+mounted database and exits before serving requests when its required schema is
+missing or incompatible. Create a fresh development database before retrying.
