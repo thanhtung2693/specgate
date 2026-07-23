@@ -14,8 +14,7 @@ from typing import Any
 # Importing here (before the ASGI event loop starts) ensures the scan runs
 # synchronously at startup so blockbuster never sees it during request handling.
 import jsonschema  # noqa: F401
-from fastapi import Depends, FastAPI, HTTPException, Query
-from langgraph_sdk import get_client
+from fastapi import FastAPI, HTTPException, Query
 from langsmith import traceable
 from pydantic import BaseModel, Field
 
@@ -33,49 +32,8 @@ from specgate_agents.governance.provider_keys import (
     set_provider_api_keys_from_settings,
 )
 from specgate_agents.governance.registry.client import DocRegistryClient
-from specgate_agents.governance.title_api import (
-    GenerateThreadTitleRequest,
-    GenerateThreadTitleResponse,
-    ThreadTitleNotFoundError,
-    ThreadTitleRequestError,
-    generate_thread_title_for_thread,
-)
 
 logger = logging.getLogger(__name__)
-
-
-async def _default_thread_values_provider(thread_id: str) -> dict[str, Any] | None:
-    """Production state provider: load thread state via in-process SDK loopback."""
-    client = get_client()
-    try:
-        state = await client.threads.get_state(thread_id)
-    except Exception as exc:
-        logger.warning("governance state: get_state failed for %s: %s", thread_id, exc)
-        return None
-    if not isinstance(state, dict):
-        return None
-    values = state.get("values")
-    if not isinstance(values, dict):
-        values = {}
-    try:
-        thread = await client.threads.get(thread_id)
-    except Exception as exc:
-        logger.warning("governance state: get thread failed for %s: %s", thread_id, exc)
-        return None
-    metadata = (
-        thread.get("metadata") if isinstance(thread, dict) else getattr(thread, "metadata", None)
-    )
-    workspace_id = (
-        metadata.get("workspace_id")
-        if isinstance(metadata, dict)
-        else getattr(metadata, "workspace_id", None)
-    )
-    return {**values, "_thread_workspace_id": str(workspace_id or "").strip()}
-
-
-async def get_thread_values_provider():
-    """FastAPI dependency seam — overridden in tests."""
-    return _default_thread_values_provider
 
 
 async def _hydrate_provider_keys_on_startup() -> None:
@@ -129,32 +87,13 @@ def _route_failure(operation: str, exc: Exception) -> HTTPException:
 async def chat_health() -> dict[str, Any]:
     """Report whether the governance chat model is configured.
 
-    Consumed by the web UI to show a capability placeholder with add-key
-    instructions instead of a dead composer. Never returns the key itself.
+    The web UI hides chat unless this route is reachable and reports configured.
+    Never returns the key itself.
     """
     provider = os.environ.get("GOVERNANCE_OPS_MODEL_PROVIDER", "openai").strip() or "openai"
     model_id = os.environ.get("GOVERNANCE_OPS_MODEL", "gpt-5.4-mini").strip() or "gpt-5.4-mini"
     configured = bool(os.environ.get("GOVERNANCE_OPS_API_KEY", "").strip())
     return {"configured": configured, "provider": provider, "model": model_id}
-
-
-@app.post("/governance/threads/{thread_id}/title")
-@_traced
-async def post_thread_title(
-    thread_id: str,
-    body: GenerateThreadTitleRequest,
-    provider=Depends(get_thread_values_provider),  # noqa: B008
-) -> GenerateThreadTitleResponse:
-    try:
-        return await generate_thread_title_for_thread(
-            thread_id,
-            body,
-            values_provider=provider,
-        )
-    except ThreadTitleRequestError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except ThreadTitleNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 class CreateQuickWorkItemBody(BaseModel):

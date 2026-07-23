@@ -274,25 +274,18 @@ def test_ensure_llm_env_respects_model_less_mode(monkeypatch) -> None:
     assert factories.ensure_llm_env() is False
 
 
-def test_workload_call_sites_use_the_single_builder() -> None:
-    """The judges / classifiers / drafters / gates all build the settings-backed governance model.
+def test_readiness_gates_use_the_settings_backed_builder() -> None:
+    """Readiness gates build the settings-backed governance model.
 
     The governance-ops chat model is isolated to the governance-chat agent; every
-    other workload — including the readiness quality gates — uses build_model().
+    verdict-producing workload uses build_model().
     """
     from specgate_agents.governance.board import quality_gates
-    from specgate_agents.governance.intent import title
 
-    # Modules that must use the standard build_model() builder.
-    for module in (title, quality_gates):
-        src = inspect.getsource(module)
-        assert "build_model()" in src, f"{module.__name__} should build the model"
-        assert "build_mini_model" not in src
-        assert "build_system_model" not in src
-
-    # Readiness gates use the settings-backed governance model, not the
-    # governance-ops chat model.
     qg_src = inspect.getsource(quality_gates)
+    assert "build_model()" in qg_src
+    assert "build_mini_model" not in qg_src
+    assert "build_system_model" not in qg_src
     assert "build_governance_ops_model()" not in qg_src, (
         "quality_gates must use the settings-backed build_model(), "
         "not the governance-chat support model"

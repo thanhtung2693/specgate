@@ -23,7 +23,6 @@ describe("SpecGate UI shell: navigation and agent", () => {
 
   it("renders Work as the primary app surface", async () => {
     renderApp()
-    const user = userEvent.setup()
 
     expect(screen.getByRole("heading", { name: "Work" })).toBeInTheDocument()
     expect(screen.getByText("Governance Board")).toBeInTheDocument()
@@ -34,151 +33,20 @@ describe("SpecGate UI shell: navigation and agent", () => {
     expect(screen.getByRole("button", { name: "Board" })).toHaveAttribute("aria-pressed", "false")
     expect(screen.getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true")
     expect(screen.getByText("SpecGate Core")).toBeInTheDocument()
-
-    await waitFor(() => {
-      const enabledTrigger = screen
-        .getAllByRole("button", { name: "Open governance agent" })
-        .find((button) => !button.hasAttribute("disabled"))
-      expect(enabledTrigger).toBeTruthy()
-    })
-    const agentTrigger = screen
-      .getAllByRole("button", { name: "Open governance agent" })
-      .find((button) => !button.hasAttribute("disabled"))
-
-    await user.click(agentTrigger!)
-
-    expect(await screen.findByRole("heading", { name: "Governance agent" })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "View agent threads" })).toBeInTheDocument()
-    await user.click(screen.getByRole("button", { name: "View agent threads" }))
-    expect(screen.getAllByText("Threads").length).toBeGreaterThan(0)
-    expect(screen.getByRole("button", { name: "New agent thread" })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Back to chat" })).toBeInTheDocument()
-    expect(screen.queryByText(/LangGraph/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/Local conversations/)).not.toBeInTheDocument()
-    await user.click(screen.getByRole("button", { name: "Back to chat" }))
-    const composer = screen.getByPlaceholderText("Ask about gate failures, blockers, or artifacts. Type / for commands")
-    expect(composer).toBeInTheDocument()
-
-    await user.type(composer, "@")
-    expect(screen.queryByText("Work items")).not.toBeInTheDocument()
-
-    await user.clear(composer)
-    await user.type(composer, "/")
-    expect(await screen.findByText("Prepare handoff")).toBeInTheDocument()
-    expect(screen.getByText("Evidence summary")).toBeInTheDocument()
   })
 
   it("requires an active workspace before opening the LangGraph governance agent", async () => {
     vi.stubEnv("VITE_LANGGRAPH_API_URL", "http://agents.test")
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(JSON.stringify({ configured: true }), {
+      headers: { "Content-Type": "application/json" },
+    }))))
 
     renderGovernanceAgent()
 
-    expect(screen.getByRole("heading", { name: "Select a workspace" })).toBeInTheDocument()
+    expect(await screen.findByRole("heading", { name: "Select a workspace" })).toBeInTheDocument()
     expect(screen.getByText("Choose a workspace before starting a governed conversation.")).toBeInTheDocument()
-    expect(screen.queryByPlaceholderText("Ask about gate failures, blockers, or artifacts. Type / for commands")).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText("Ask about artifacts, readiness results, or Governance Knowledge. Type / for prompts")).not.toBeInTheDocument()
     expect(langGraphClientMock.search).not.toHaveBeenCalled()
-  })
-
-  it("sends governance-agent messages with Enter", async () => {
-    renderApp("/work")
-    const user = userEvent.setup()
-
-    const agentTrigger = await screen.findAllByRole("button", { name: "Open governance agent" }).then((buttons) =>
-      buttons.find((button) => !button.hasAttribute("disabled")),
-    )
-    await user.click(agentTrigger!)
-
-    const composer = await screen.findByPlaceholderText("Ask about gate failures, blockers, or artifacts. Type / for commands")
-    await user.type(composer, "Check delivery gates{Enter}")
-
-    expect(await screen.findByText(/For this prompt, I would inspect: "Check delivery gates"/)).toBeInTheDocument()
-  })
-
-  it("manages governance-agent threads with search, rename, archive, and delete", async () => {
-    vi.stubEnv("VITE_LANGGRAPH_API_URL", "http://agents.test")
-    const threadFixtures = [
-      {
-        thread_id: "thread-delivery",
-        metadata: { source: "specgate-ui", surface: "governance-agent", workspace_id: "ws-a", title: "Delivery review" },
-        updated_at: "2026-06-30T00:00:00Z",
-      },
-      {
-        thread_id: "thread-cleanup",
-        metadata: { source: "specgate-ui", surface: "governance-agent", workspace_id: "ws-a", title: "Draft cleanup" },
-        updated_at: "2026-06-29T00:00:00Z",
-      },
-      {
-        thread_id: "thread-archived",
-        metadata: { source: "specgate-ui", surface: "governance-agent", workspace_id: "ws-a", title: "Archived delivery", archived: true },
-        updated_at: "2026-06-28T00:00:00Z",
-      },
-    ]
-    langGraphClientMock.search.mockImplementation(async () => threadFixtures)
-    langGraphClientMock.get.mockImplementation(async (threadId: string) => {
-      const thread = threadFixtures.find((item) => item.thread_id === threadId)
-      if (!thread) throw new Error(`missing thread ${threadId}`)
-      return thread
-    })
-    langGraphClientMock.update.mockImplementation(async (threadId: string, input: { metadata?: Record<string, unknown> }) => {
-      const thread = threadFixtures.find((item) => item.thread_id === threadId)
-      if (thread && input.metadata) {
-        thread.metadata = { ...thread.metadata, ...input.metadata }
-      }
-    })
-    renderGovernanceAgent("ws-a")
-    const user = userEvent.setup()
-
-    expect(await screen.findByRole("heading", { name: "Governance agent" })).toBeInTheDocument()
-    await user.click(await screen.findByRole("button", { name: "View agent threads" }))
-
-    const search = await screen.findByRole("searchbox", { name: "Search agent threads" })
-    await user.type(search, "delivery")
-
-    expect(await screen.findByText("Delivery review")).toBeInTheDocument()
-    expect(screen.queryByText("Draft cleanup")).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole("button", { name: "Rename thread Delivery review" }))
-    const titleInput = screen.getByRole("textbox", { name: "Thread title" })
-    await user.clear(titleInput)
-    await user.type(titleInput, "Release gates")
-    await user.click(screen.getByRole("button", { name: "Save thread title" }))
-
-    expect(langGraphClientMock.update).toHaveBeenCalledWith(
-      "thread-delivery",
-      expect.objectContaining({
-        metadata: expect.objectContaining({ title: "Release gates" }),
-        returnMinimal: true,
-      }),
-    )
-
-    await user.clear(search)
-    await user.click(screen.getByRole("button", { name: /Archive thread (Delivery review|Release gates)/ }))
-    expect(langGraphClientMock.update).toHaveBeenCalledWith(
-      "thread-delivery",
-      expect.objectContaining({
-        metadata: expect.objectContaining({ archived: true }),
-        returnMinimal: true,
-      }),
-    )
-
-    await user.click(screen.getByRole("button", { name: "Show archived threads" }))
-    expect(await screen.findByText("Archived delivery")).toBeInTheDocument()
-    expect(screen.queryByText("Draft cleanup")).not.toBeInTheDocument()
-    await user.click(screen.getByRole("button", { name: "Restore thread Archived delivery" }))
-    expect(langGraphClientMock.update).toHaveBeenCalledWith(
-      "thread-archived",
-      expect.objectContaining({
-        metadata: expect.objectContaining({ archived: false }),
-        returnMinimal: true,
-      }),
-    )
-    expect(await screen.findByText("Archived delivery")).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Archive thread Archived delivery" })).toBeInTheDocument()
-
-    await user.click(screen.getByRole("button", { name: "Delete thread Draft cleanup" }))
-    await user.click(screen.getByRole("button", { name: "Confirm delete Draft cleanup" }))
-
-    expect(langGraphClientMock.delete).toHaveBeenCalledWith("thread-cleanup")
   })
 
   it("switches work views and filters the list queue", async () => {
@@ -375,7 +243,7 @@ describe("SpecGate UI shell: navigation and agent", () => {
     expect(screen.queryByRole("button", { name: /Ask about review gaps|Ask review summary/ })).not.toBeInTheDocument()
   })
 
-  it("shows a capability placeholder when the chat model has no key", async () => {
+  it("hides governance chat when the chat model has no key", async () => {
     vi.stubEnv("VITE_LANGGRAPH_API_URL", "http://agents.test")
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input)
@@ -392,23 +260,60 @@ describe("SpecGate UI shell: navigation and agent", () => {
       return emptyRegistryResponse(input)
     })
     vi.stubGlobal("fetch", fetchMock)
-    langGraphClientMock.search.mockResolvedValue([])
+    renderApp("/work")
 
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      "http://agents.test/governance/chat/health",
+      expect.any(Object),
+    ))
+    expect(screen.queryByRole("button", { name: "Open governance agent" })).not.toBeInTheDocument()
+    expect(screen.queryByText(/GOVERNANCE_OPS_API_KEY/)).not.toBeInTheDocument()
+  })
+
+  it("hides governance chat when health is unreachable", async () => {
+    vi.stubEnv("VITE_LANGGRAPH_API_URL", "http://agents.test")
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "http://agents.test/governance/chat/health") {
+        return Promise.reject(new TypeError("network unavailable"))
+      }
+      return defaultRegistryResponse(input, init)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    renderApp("/work")
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      "http://agents.test/governance/chat/health",
+      expect.any(Object),
+    ))
+    expect(screen.queryByRole("button", { name: "Open governance agent" })).not.toBeInTheDocument()
+  })
+
+  it("shows only honest chat prompts and no durable-history controls", async () => {
+    vi.stubEnv("VITE_LANGGRAPH_API_URL", "http://agents.test")
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "http://agents.test/governance/chat/health") {
+        return Promise.resolve(new Response(JSON.stringify({ configured: true }), {
+          headers: { "Content-Type": "application/json" },
+        }))
+      }
+      return defaultRegistryResponse(input, init)
+    }))
     renderApp("/work")
     const user = userEvent.setup()
 
-    const agentTrigger = await screen.findAllByRole("button", { name: "Open governance agent" }).then((buttons) =>
-      buttons.find((button) => !button.hasAttribute("disabled")),
-    )
-    await user.click(agentTrigger!)
+    const trigger = await screen.findByRole("button", { name: "Open governance agent" })
+    await user.click(trigger)
 
-    expect(await screen.findByText("Chat model not configured")).toBeInTheDocument()
-    expect(screen.getByText(/GOVERNANCE_OPS_API_KEY/)).toBeInTheDocument()
-    expect(screen.getByText("Point to the CLI command that runs readiness checks")).toBeInTheDocument()
-    expect(screen.getByText(/separate from Settings → Models/)).toBeInTheDocument()
-    expect(
-      screen.queryByPlaceholderText("Ask about gate failures, blockers, or artifacts. Type / for commands"),
-    ).not.toBeInTheDocument()
+    expect(await screen.findByText("Artifacts, stored readiness, and Governance Knowledge.")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "View agent threads" })).not.toBeInTheDocument()
+    const composer = screen.getByPlaceholderText("Ask about artifacts, readiness results, or Governance Knowledge. Type / for prompts")
+    await user.type(composer, "/")
+    expect(await screen.findByText("Artifact summary")).toBeInTheDocument()
+    expect(screen.getByText("Readiness results")).toBeInTheDocument()
+    expect(screen.getByText("Knowledge search")).toBeInTheDocument()
+    expect(screen.queryByText("Prepare handoff")).not.toBeInTheDocument()
+    expect(screen.queryByText("Evidence summary")).not.toBeInTheDocument()
   })
 
   it("hides review filters when there is nothing to review", async () => {

@@ -3,40 +3,26 @@ import {
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
-  ThreadListItemPrimitive,
-  ThreadListPrimitive,
   unstable_useSlashCommandAdapter,
   type MessageState,
   useAui,
-  useAuiState,
-  useThreadListItemRuntime,
 } from "@assistant-ui/react"
-import { useEffect, useState, type FormEvent } from "react"
 import {
-  ArchiveIcon,
-  ArchiveRestoreIcon,
-  ArrowLeftIcon,
   ArrowUpIcon,
   BotIcon,
-  CheckCircle2Icon,
-  CheckIcon,
-  GitPullRequestArrowIcon,
-  PencilIcon,
-  MessageSquareTextIcon,
-  PackageCheckIcon,
-  PlusIcon,
+  FileTextIcon,
   SearchIcon,
+  ShieldCheckIcon,
   SquareIcon,
-  Trash2Icon,
   XIcon,
 } from "lucide-react"
 
 import { ComposerTriggerPopover } from "@/components/agent/composer-trigger-popover"
 import {
-  GOVERNANCE_AGENT_PROMPT_EVENT,
-  takePendingGovernanceAgentPrompts,
-} from "@/components/agent/governance-agent-events"
-import { getGovernanceRuntimeConfig, GovernanceRuntimeProvider, useGovernanceRuntimeStatus } from "@/components/agent/governance-runtime"
+  GovernanceRuntimeProvider,
+  useGovernanceChatAvailability,
+  useGovernanceRuntimeStatus,
+} from "@/components/agent/governance-runtime"
 import { Button } from "@/components/ui/button"
 import {
   Empty,
@@ -46,42 +32,11 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { ActionTooltip } from "@/components/layout/shared-ui"
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { cn } from "@/lib/utils"
-
-function formatThreadAge(value?: Date) {
-  if (!value) {
-    return "now"
-  }
-
-  const diffMs = Math.max(0, Date.now() - value.getTime())
-  const minutes = Math.max(1, Math.floor(diffMs / 60_000))
-  if (minutes < 60) {
-    return `${minutes}m`
-  }
-
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) {
-    return `${hours}h`
-  }
-
-  const days = Math.floor(hours / 24)
-  if (days < 30) {
-    return `${days}d`
-  }
-
-  const months = Math.floor(days / 30)
-  if (months < 12) {
-    return `${months}mo`
-  }
-
-  return `${Math.floor(months / 12)}y`
-}
 
 export function hasVisibleMessageContent(message: MessageState) {
   if (message.role === "user") return true
@@ -129,42 +84,42 @@ function Composer() {
   const commands = unstable_useSlashCommandAdapter({
     removeOnExecute: true,
     iconMap: {
-      evidence: CheckCircle2Icon,
-      gates: PackageCheckIcon,
-      handoff: GitPullRequestArrowIcon,
+      artifact: FileTextIcon,
+      knowledge: SearchIcon,
+      readiness: ShieldCheckIcon,
     },
     commands: [
       {
-        id: "handoff",
-        label: "Prepare handoff",
-        description: "Draft the next handoff question from selected context",
-        icon: "handoff",
+        id: "artifact",
+        label: "Artifact summary",
+        description: "Read one exact artifact and its documents",
+        icon: "artifact",
         execute: () =>
           aui.thread().append({
             role: "user",
-            content: [{ type: "text", text: "Prepare the governed handoff for this work." }],
+            content: [{ type: "text", text: "Ask me for an exact artifact ID, then summarize its metadata and documents." }],
           }),
       },
       {
-        id: "gates",
-        label: "Review gates",
-        description: "Check readiness and delivery review expectations",
-        icon: "gates",
+        id: "readiness",
+        label: "Readiness results",
+        description: "Explain stored readiness results for one artifact",
+        icon: "readiness",
         execute: () =>
           aui.thread().append({
             role: "user",
-            content: [{ type: "text", text: "Review the expected gates and any missing evidence." }],
+            content: [{ type: "text", text: "Ask me for an exact artifact ID, then explain its stored readiness results." }],
           }),
       },
       {
-        id: "evidence",
-        label: "Evidence summary",
-        description: "Create a concise delivery evidence outline",
-        icon: "evidence",
+        id: "knowledge",
+        label: "Knowledge search",
+        description: "Search active-workspace Governance Knowledge",
+        icon: "knowledge",
         execute: () =>
           aui.thread().append({
             role: "user",
-            content: [{ type: "text", text: "Create the delivery evidence summary for this change." }],
+            content: [{ type: "text", text: "Ask what governance topic I want to search for in this workspace's Governance Knowledge." }],
           }),
       },
     ],
@@ -178,7 +133,7 @@ function Composer() {
           <ComposerPrimitive.Input
             aria-label="Message governance agent"
             className="max-h-32 min-h-24 flex-1 resize-none bg-transparent px-2 py-1 text-sm outline-none placeholder:text-muted-foreground"
-            placeholder="Ask about gate failures, blockers, or artifacts. Type / for commands"
+            placeholder="Ask about artifacts, readiness results, or Governance Knowledge. Type / for prompts"
             submitMode="enter"
           />
           <ThreadPrimitive.If running={false}>
@@ -202,7 +157,7 @@ function Composer() {
                   </Button>
                 </ComposerPrimitive.Cancel>
               </TooltipTrigger>
-              <TooltipContent>Stop the current response</TooltipContent>
+              <TooltipContent>Stop current response</TooltipContent>
             </Tooltip>
           </ThreadPrimitive.If>
         </div>
@@ -213,7 +168,6 @@ function Composer() {
 
 function StreamErrorNotice() {
   const { clearStreamError, streamError } = useGovernanceRuntimeStatus()
-
   if (!streamError) return null
 
   return (
@@ -228,368 +182,6 @@ function StreamErrorNotice() {
       >
         <XIcon />
       </Button>
-    </div>
-  )
-}
-
-type GovernanceThreadListItemView = {
-  title?: string | undefined
-  lastMessageAt?: Date | undefined
-  status?: string | undefined
-}
-
-function getThreadTitle(threadListItem: GovernanceThreadListItemView) {
-  return threadListItem.title?.trim() || "Governance thread"
-}
-
-function GovernanceThreadListItem({
-  onThreadSelect,
-  onThreadRestore,
-  query,
-  threadListItem,
-}: {
-  onThreadSelect: () => void
-  onThreadRestore?: () => void
-  query: string
-  threadListItem: GovernanceThreadListItemView
-}) {
-  const aui = useAui()
-  const itemRuntime = useThreadListItemRuntime()
-  const [deleteRequested, setDeleteRequested] = useState(false)
-  const [isRenaming, setIsRenaming] = useState(false)
-  const [renameValue, setRenameValue] = useState(getThreadTitle(threadListItem))
-  const title = getThreadTitle(threadListItem)
-  const matchesQuery = !query || title.toLowerCase().includes(query)
-  const isArchived = threadListItem.status === "archived"
-
-  if (!matchesQuery) return null
-
-  async function handleRename(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const nextTitle = renameValue.trim()
-    if (!nextTitle) return
-    if (nextTitle !== title) {
-      await itemRuntime.rename(nextTitle)
-    }
-    setIsRenaming(false)
-  }
-
-  async function handleRestoreThread() {
-    await itemRuntime.unarchive()
-    await aui.threads().reload()
-    onThreadRestore?.()
-  }
-
-  return (
-    <ThreadListItemPrimitive.Root className="group flex items-center gap-1 rounded-md border bg-card/70 p-1 transition-colors data-active:bg-muted/60">
-      {isRenaming ? (
-        <form className="flex min-w-0 flex-1 items-center gap-1" onSubmit={handleRename}>
-          <input
-            aria-label="Thread title"
-            className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-            value={renameValue}
-            onChange={(event) => setRenameValue(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                setRenameValue(title)
-                setIsRenaming(false)
-              }
-            }}
-            autoFocus
-          />
-          <ActionTooltip content="Save title">
-            <Button type="submit" size="icon-sm" aria-label="Save thread title">
-              <CheckIcon />
-            </Button>
-          </ActionTooltip>
-          <ActionTooltip content="Cancel rename">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Cancel rename ${title}`}
-              onClick={() => {
-                setRenameValue(title)
-                setIsRenaming(false)
-              }}
-            >
-              <XIcon />
-            </Button>
-          </ActionTooltip>
-        </form>
-      ) : (
-        <>
-          {isArchived ? (
-            <div className="min-w-0 flex-1 rounded px-2 py-1.5">
-              <span className="block truncate text-xs font-medium">
-                <ThreadListItemPrimitive.Title fallback="Governance thread" />
-              </span>
-              <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                Archived {formatThreadAge(threadListItem.lastMessageAt)} ago
-              </span>
-            </div>
-          ) : (
-            <ThreadListItemPrimitive.Trigger
-              className="min-w-0 flex-1 rounded px-2 py-1.5 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-              onClick={onThreadSelect}
-            >
-              <span className="block truncate text-xs font-medium">
-                <ThreadListItemPrimitive.Title fallback="Governance thread" />
-              </span>
-              <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                {formatThreadAge(threadListItem.lastMessageAt)}
-              </span>
-            </ThreadListItemPrimitive.Trigger>
-          )}
-          {deleteRequested ? (
-            <div className="flex shrink-0 items-center gap-1">
-              <ThreadListItemPrimitive.Delete asChild>
-                <Button size="icon-sm" variant="destructive" aria-label={`Confirm delete ${title}`}>
-                  <CheckIcon />
-                </Button>
-              </ThreadListItemPrimitive.Delete>
-              <ActionTooltip content="Cancel delete">
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label={`Cancel delete ${title}`}
-                  onClick={() => setDeleteRequested(false)}
-                >
-                  <XIcon />
-                </Button>
-              </ActionTooltip>
-            </div>
-          ) : (
-            <div className="flex shrink-0 items-center gap-1">
-              {isArchived ? (
-                <ActionTooltip content="Restore thread to active history">
-                  <Button type="button" variant="ghost" size="icon-sm" aria-label={`Restore thread ${title}`} onClick={handleRestoreThread}>
-                    <ArchiveRestoreIcon />
-                  </Button>
-                </ActionTooltip>
-              ) : (
-                <>
-                  <ActionTooltip content="Rename thread">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Rename thread ${title}`}
-                      onClick={() => {
-                        setRenameValue(title)
-                        setIsRenaming(true)
-                      }}
-                    >
-                      <PencilIcon />
-                    </Button>
-                  </ActionTooltip>
-                  <ActionTooltip content="Archive thread">
-                    <ThreadListItemPrimitive.Archive asChild>
-                      <Button type="button" variant="ghost" size="icon-sm" aria-label={`Archive thread ${title}`}>
-                        <ArchiveIcon />
-                      </Button>
-                    </ThreadListItemPrimitive.Archive>
-                  </ActionTooltip>
-                </>
-              )}
-              <ActionTooltip content="Delete thread">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Delete thread ${title}`}
-                  onClick={() => setDeleteRequested(true)}
-                >
-                  <Trash2Icon />
-                </Button>
-              </ActionTooltip>
-            </div>
-          )}
-        </>
-      )}
-    </ThreadListItemPrimitive.Root>
-  )
-}
-
-function GovernanceThreadList({ onThreadSelect }: { onThreadSelect: () => void }) {
-  const { archivedThreadIds, isLoading, mainThreadId, newThreadId, threadIds } = useAuiState((state) => state.threads)
-  const [query, setQuery] = useState("")
-  const [showArchived, setShowArchived] = useState(false)
-  const isDraftThread = mainThreadId === newThreadId
-  const activeCount = threadIds.length
-  const archivedCount = archivedThreadIds.length
-  const visibleCount = showArchived ? archivedCount : activeCount
-  const hasVisibleThreads = visibleCount > 0
-  const normalizedQuery = query.trim().toLowerCase()
-
-  useEffect(() => {
-    if (showArchived && archivedCount === 0) {
-      setShowArchived(false)
-    }
-  }, [archivedCount, showArchived])
-
-  return (
-    <ThreadListPrimitive.Root className="flex min-h-0 flex-1 flex-col bg-background/70">
-      <div className="flex items-center justify-between gap-3 px-4 py-3">
-        <div>
-          <h3 className="text-sm font-semibold">Threads</h3>
-          <p className="text-xs text-muted-foreground">Recent governance conversations</p>
-        </div>
-        <ThreadListPrimitive.New
-          aria-label="New agent thread"
-          className="inline-flex h-7 items-center gap-1 rounded-md border bg-card px-2 text-xs font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50"
-          onClick={onThreadSelect}
-        >
-          <PlusIcon className="size-3.5" />
-          New thread
-        </ThreadListPrimitive.New>
-      </div>
-      <div className="px-4 pb-3">
-        <label className="relative block">
-          <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="search"
-            aria-label="Search agent threads"
-            className="h-8 w-full rounded-md border bg-background pl-8 pr-2 text-xs outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
-            placeholder="Search threads"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-        {archivedCount > 0 ? (
-          <div className="mt-2 grid grid-cols-2 gap-1 rounded-md border bg-card/70 p-1">
-            <Button
-              type="button"
-              variant={showArchived ? "ghost" : "secondary"}
-              size="sm"
-              className="h-7 rounded text-xs"
-              aria-label="Show active threads"
-              aria-pressed={!showArchived}
-              onClick={() => setShowArchived(false)}
-            >
-              Active {activeCount}
-            </Button>
-            <Button
-              type="button"
-              variant={showArchived ? "secondary" : "ghost"}
-              size="sm"
-              className="h-7 rounded text-xs"
-              aria-label="Show archived threads"
-              aria-pressed={showArchived}
-              onClick={() => setShowArchived(true)}
-            >
-              Archived {archivedCount}
-            </Button>
-          </div>
-        ) : null}
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-        <div className="grid gap-1">
-        {isLoading ? (
-          <p className="rounded-md border bg-card/70 px-3 py-2 text-xs text-muted-foreground">Loading threads...</p>
-        ) : null}
-        {!isLoading && !hasVisibleThreads ? (
-          <div className="rounded-md border bg-card/70 px-3 py-2">
-            <p className="text-xs font-medium">
-              {showArchived ? "No archived threads" : isDraftThread ? "Current draft" : "No saved threads yet"}
-            </p>
-            <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
-              {showArchived
-                ? "Archived governance conversations will appear here."
-                : "Send a message to make this conversation appear in the thread list."}
-            </p>
-          </div>
-        ) : null}
-        <ThreadListPrimitive.Items archived={showArchived}>
-          {({ threadListItem }) => (
-            <GovernanceThreadListItem
-              onThreadSelect={onThreadSelect}
-              onThreadRestore={() => setShowArchived(false)}
-              query={normalizedQuery}
-              threadListItem={threadListItem}
-            />
-          )}
-        </ThreadListPrimitive.Items>
-        <ThreadListPrimitive.LoadMore className="h-7 rounded-md border bg-card px-2 text-xs font-medium transition-colors hover:bg-muted disabled:hidden">
-          Load more
-        </ThreadListPrimitive.LoadMore>
-        {!showArchived && archivedCount > 0 ? (
-          <p className="px-1 pt-1 text-[11px] text-muted-foreground">{archivedCount} archived threads available.</p>
-        ) : null}
-        </div>
-      </div>
-    </ThreadListPrimitive.Root>
-  )
-}
-
-type ChatModelHealth = {
-  status: "loading" | "ready"
-  configured: boolean
-}
-
-// Probes GET /governance/chat/health on the agents service so an unconfigured
-// chat model shows a capability placeholder instead of a dead composer.
-// Fails open: probe errors (missing health route, network) keep the chat usable.
-function useChatModelHealth(): ChatModelHealth {
-  const [health, setHealth] = useState<ChatModelHealth>(() => {
-    const config = getGovernanceRuntimeConfig(import.meta.env)
-    return config.mode === "langgraph" ? { status: "loading", configured: true } : { status: "ready", configured: true }
-  })
-
-  useEffect(() => {
-    const config = getGovernanceRuntimeConfig(import.meta.env)
-    if (config.mode !== "langgraph") return
-
-    const controller = new AbortController()
-    void fetch(`${config.apiUrl}/governance/chat/health`, { signal: controller.signal })
-      .then((response) => (response.ok ? (response.json() as Promise<{ configured?: boolean }>) : Promise.reject(new Error(`chat health ${response.status}`))))
-      .then((payload) => setHealth({ status: "ready", configured: payload?.configured !== false }))
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return
-        setHealth({ status: "ready", configured: true })
-      })
-    return () => controller.abort()
-  }, [])
-
-  return health
-}
-
-const chatCapabilities = [
-  "Explain why a gate failed and what unblocks it",
-  "Summarize blockers and handoff readiness for a work item",
-  "Read and compare artifact documents",
-  "Point to the CLI command that runs readiness checks",
-]
-
-function ChatModelPlaceholder() {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4" data-testid="chat-model-placeholder">
-      <div>
-        <h3 className="text-sm font-semibold">Chat model not configured</h3>
-        <p className="mt-1 text-xs text-muted-foreground">
-          The governance agent can answer questions once its chat model has an API key.
-        </p>
-      </div>
-      <ul className="grid gap-1.5 text-xs text-muted-foreground">
-        {chatCapabilities.map((capability) => (
-          <li key={capability} className="flex items-start gap-2">
-            <BotIcon className="mt-0.5 size-3.5 shrink-0" />
-            <span>{capability}</span>
-          </li>
-        ))}
-      </ul>
-      <div className="rounded-md border bg-background/70 p-3 text-xs text-muted-foreground">
-        <p className="font-medium text-foreground">Add the key</p>
-        <p className="mt-1">
-          Set <code className="font-mono">GOVERNANCE_OPS_API_KEY</code> (and optionally{" "}
-          <code className="font-mono">GOVERNANCE_OPS_MODEL</code> /{" "}
-          <code className="font-mono">GOVERNANCE_OPS_MODEL_PROVIDER</code>) on the agents service, then restart it.
-        </p>
-        <p className="mt-2">
-          This is separate from Settings → Models, which configures the server-side model for readiness gates,
-          quick-work acceptance criteria, and delivery review.
-        </p>
-      </div>
     </div>
   )
 }
@@ -610,78 +202,39 @@ function GovernanceWorkspaceRequired() {
         </div>
       </header>
       <div className="flex flex-1 items-center p-5">
-        <p className="text-sm leading-6 text-muted-foreground">
-          Choose a workspace before starting a governed conversation.
-        </p>
+        <p className="text-sm leading-6 text-muted-foreground">Choose a workspace before starting a governed conversation.</p>
       </div>
     </section>
   )
 }
 
 function GovernanceAgentPanel({ workspaceId }: GovernanceAgentProps) {
-  const config = getGovernanceRuntimeConfig(import.meta.env)
-  const [view, setView] = useState<"chat" | "threads">("chat")
-  const chatModel = useChatModelHealth()
-  if (config.mode === "langgraph" && !workspaceId?.trim()) {
-    return <GovernanceWorkspaceRequired />
-  }
+  if (!workspaceId?.trim()) return <GovernanceWorkspaceRequired />
 
   return (
     <section
       className="flex h-[min(640px,calc(100vh-5rem))] min-h-0 flex-col rounded-lg border bg-card text-card-foreground shadow-xs"
       aria-label="Governance agent"
     >
-      <header className="flex items-center justify-between border-b px-4 py-3">
-        <div className="flex items-center gap-2">
-          {view === "threads" ? (
-            <ActionTooltip content="Back to chat">
-              <Button variant="ghost" size="icon-sm" aria-label="Back to chat" onClick={() => setView("chat")}>
-                <ArrowLeftIcon />
-              </Button>
-            </ActionTooltip>
-          ) : (
-            <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <BotIcon />
-            </span>
-          )}
-          <div>
-            <h2 className="text-sm font-semibold">{view === "threads" ? "Threads" : "Governance agent"}</h2>
-            <p className="text-xs text-muted-foreground">
-              {view === "threads" ? "Pick up a prior conversation" : "Context, gates, and delivery review"}
-            </p>
-          </div>
+      <header className="flex items-center gap-2 border-b px-4 py-3">
+        <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+          <BotIcon />
+        </span>
+        <div>
+          <h2 className="text-sm font-semibold">Governance agent</h2>
+          <p className="text-xs text-muted-foreground">Artifact and readiness advisor</p>
         </div>
-        {view === "chat" ? (
-          <ActionTooltip content="View governance threads">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="View agent threads"
-              onClick={() => setView("threads")}
-            >
-              <MessageSquareTextIcon />
-            </Button>
-          </ActionTooltip>
-        ) : null}
       </header>
-
-      {view === "threads" ? <GovernanceThreadList onThreadSelect={() => setView("chat")} /> : null}
-
-      {view === "chat" && chatModel.status === "ready" && !chatModel.configured ? <ChatModelPlaceholder /> : null}
-
-      {chatModel.status === "ready" && !chatModel.configured ? null : (
-      <ThreadPrimitive.Root className={cn("min-h-0 flex-1 flex-col", view === "threads" ? "hidden" : "flex")}>
+      <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
         <ThreadPrimitive.Viewport className="min-h-0 flex-1">
           <ScrollArea className="h-full">
             <div className="flex min-h-[320px] flex-col gap-4 p-4">
               <ThreadPrimitive.Empty>
                 <Empty className="min-h-[280px] border-0">
                   <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <BotIcon />
-                    </EmptyMedia>
-                    <EmptyTitle>Governance path</EmptyTitle>
-                    <EmptyDescription>Readiness, Context Packs, evidence, and review outcomes.</EmptyDescription>
+                    <EmptyMedia variant="icon"><BotIcon /></EmptyMedia>
+                    <EmptyTitle>Governance reference</EmptyTitle>
+                    <EmptyDescription>Artifacts, stored readiness, and Governance Knowledge.</EmptyDescription>
                   </EmptyHeader>
                 </Empty>
               </ThreadPrimitive.Empty>
@@ -697,36 +250,8 @@ function GovernanceAgentPanel({ workspaceId }: GovernanceAgentProps) {
           <Composer />
         </div>
       </ThreadPrimitive.Root>
-      )}
     </section>
   )
-}
-
-function GovernanceAgentPromptBridge() {
-  const aui = useAui()
-
-  useEffect(() => {
-    function appendPendingPrompts() {
-      for (const prompt of takePendingGovernanceAgentPrompts()) {
-        const text = prompt.trim()
-        if (!text) continue
-        aui.thread().append({
-          role: "user",
-          content: [{ type: "text", text }],
-        })
-      }
-    }
-
-    function handlePrompt(_event: Event) {
-      appendPendingPrompts()
-    }
-
-    appendPendingPrompts()
-    window.addEventListener(GOVERNANCE_AGENT_PROMPT_EVENT, handlePrompt)
-    return () => window.removeEventListener(GOVERNANCE_AGENT_PROMPT_EVENT, handlePrompt)
-  }, [aui])
-
-  return null
 }
 
 type GovernanceAgentProps = {
@@ -734,6 +259,9 @@ type GovernanceAgentProps = {
 }
 
 export function GovernanceAgent({ workspaceId }: GovernanceAgentProps = {}) {
+  const available = useGovernanceChatAvailability()
+  if (!available) return null
+
   return (
     <GovernanceRuntimeProvider key={workspaceId ?? "no-workspace"} workspaceId={workspaceId}>
       <GovernanceAgentPanel workspaceId={workspaceId} />
@@ -742,10 +270,12 @@ export function GovernanceAgent({ workspaceId }: GovernanceAgentProps = {}) {
 }
 
 export function GovernanceAssistantModal({ workspaceId }: GovernanceAgentProps = {}) {
+  const available = useGovernanceChatAvailability()
+  if (!available) return null
+
   return (
     <GovernanceRuntimeProvider key={workspaceId ?? "no-workspace"} workspaceId={workspaceId}>
-      <AssistantModalPrimitive.Root unstable_openOnRunStart>
-        {workspaceId?.trim() ? <GovernanceAgentPromptBridge /> : null}
+      <AssistantModalPrimitive.Root>
         <Tooltip>
           <TooltipTrigger asChild>
             <AssistantModalPrimitive.Trigger asChild>

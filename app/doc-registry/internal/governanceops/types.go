@@ -59,7 +59,6 @@ type AuditTrail struct {
 // GovernanceStatusCounts is the phase breakdown in GovernanceStatusResult.
 type GovernanceStatusCounts struct {
 	Intake    int `json:"intake"`
-	Draft     int `json:"draft"`
 	Review    int `json:"review"`
 	Ready     int `json:"ready"`
 	Delivered int `json:"delivered"`
@@ -180,34 +179,37 @@ type PeerReviewState struct {
 
 // DeliveryStatusResult is the output of DeliveryStatus.
 type DeliveryStatusResult struct {
-	ChangeRequestID  string            `json:"change_request_id"`
-	GateRunID        string            `json:"gate_run_id,omitempty"`
-	Found            bool              `json:"found"`
-	Verdict          string            `json:"verdict,omitempty"`
-	EvidenceVerdict  string            `json:"evidence_verdict,omitempty"`
-	ReasonCode       string            `json:"reason_code,omitempty"`
-	Hint             string            `json:"hint,omitempty"`
-	Confidence       *float64          `json:"confidence,omitempty"`
-	JudgeModel       string            `json:"judge_model,omitempty"`
-	EvalSuite        string            `json:"eval_suite_version,omitempty"`
-	ReviewedAt       string            `json:"reviewed_at,omitempty"`
-	Executor         string            `json:"executor,omitempty"`
-	Actor            string            `json:"actor,omitempty"`
-	Note             string            `json:"note,omitempty"`
-	Summary          string            `json:"summary,omitempty"`
-	OutstandingMD    string            `json:"outstanding_md,omitempty"`
-	AssuranceSources []string          `json:"assurance_sources,omitempty" doc:"Server-observed repository corroboration from a merged PR/MR."`
-	PerCriterion     []CriterionReview `json:"per_criterion,omitempty"`
-	Checks           []CheckResult     `json:"checks,omitempty"`
-	GitReceipt       *GitReceipt       `json:"git_receipt,omitempty"`
-	PeerReview       PeerReviewState   `json:"peer_review,omitempty"`
+	ChangeRequestID           string            `json:"change_request_id"`
+	GateRunID                 string            `json:"gate_run_id,omitempty"`
+	CompletionFeedbackEventID string            `json:"completion_feedback_event_id,omitempty"`
+	Found                     bool              `json:"found"`
+	Verdict                   string            `json:"verdict,omitempty"`
+	EvidenceVerdict           string            `json:"evidence_verdict,omitempty"`
+	ReasonCode                string            `json:"reason_code,omitempty"`
+	Hint                      string            `json:"hint,omitempty"`
+	Confidence                *float64          `json:"confidence,omitempty"`
+	JudgeModel                string            `json:"judge_model,omitempty"`
+	EvalSuite                 string            `json:"eval_suite_version,omitempty"`
+	ReviewedAt                string            `json:"reviewed_at,omitempty"`
+	Executor                  string            `json:"executor,omitempty"`
+	Actor                     string            `json:"actor,omitempty"`
+	Note                      string            `json:"note,omitempty"`
+	Summary                   string            `json:"summary,omitempty"`
+	OutstandingMD             string            `json:"outstanding_md,omitempty"`
+	AssuranceSources          []string          `json:"assurance_sources,omitempty" doc:"Server-observed repository corroboration from a merged PR/MR."`
+	PerCriterion              []CriterionReview `json:"per_criterion,omitempty"`
+	Checks                    []CheckResult     `json:"checks,omitempty"`
+	GitReceipt                *GitReceipt       `json:"git_receipt,omitempty"`
+	PeerReview                PeerReviewState   `json:"peer_review,omitempty"`
 }
 
 type DeliveryDecisionInput struct {
-	ChangeRequestID string `json:"change_request_id"`
-	Decision        string `json:"decision"`
-	Actor           string `json:"actor"`
-	Note            string `json:"note,omitempty"`
+	ChangeRequestID           string `json:"change_request_id"`
+	Decision                  string `json:"decision"`
+	Actor                     string `json:"actor"`
+	Note                      string `json:"note,omitempty"`
+	ReviewedGateRunID         string `json:"reviewed_gate_run_id,omitempty"`
+	CompletionFeedbackEventID string `json:"completion_feedback_event_id,omitempty"`
 }
 
 type DeliveryDecisionResult struct {

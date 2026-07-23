@@ -556,12 +556,12 @@ func (r *WorkBoardRepository) RecordDeliveryDecision(
 			integrations.FeedbackEventCodingAgentCompleted,
 		).Order("created_at DESC, id DESC").First(&latestCompletion).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return workboard.ErrValidation
+				return workboard.ErrConflict
 			}
 			return err
 		}
 		if latestCompletion.ID != completionFeedbackEventID {
-			return workboard.ErrValidation
+			return workboard.ErrConflict
 		}
 		var previous workboard.GateRun
 		err := tx.
@@ -577,7 +577,7 @@ func (r *WorkBoardRepository) RecordDeliveryDecision(
 			).
 			First(&previous).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return workboard.ErrValidation
+			return workboard.ErrConflict
 		}
 		if err != nil {
 			return err
@@ -591,11 +591,13 @@ func (r *WorkBoardRepository) RecordDeliveryDecision(
 			governanceprofile.DeliveryReviewGateKey,
 			workboard.GateRunExecutorHuman,
 			completionFeedbackEventID,
-		).Order("created_at DESC, id DESC").First(&latestPlatform).Error; err != nil {
+		).Order("created_at DESC, id DESC").First(&latestPlatform).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+			return workboard.ErrConflict
+		} else if err != nil {
 			return err
 		}
 		if latestPlatform.ID != reviewedGateRunID {
-			return workboard.ErrValidation
+			return workboard.ErrConflict
 		}
 		var humanCount int64
 		if err := tx.Model(&workboard.GateRun{}).Where(
@@ -610,7 +612,7 @@ func (r *WorkBoardRepository) RecordDeliveryDecision(
 			return err
 		}
 		if humanCount > 0 {
-			return workboard.ErrValidation
+			return workboard.ErrConflict
 		}
 		var previousEvidence struct {
 			Evidence                  string   `json:"evidence"`

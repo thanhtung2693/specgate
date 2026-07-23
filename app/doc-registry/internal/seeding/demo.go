@@ -58,7 +58,6 @@ type demoCR struct {
 	Title                string
 	WorkType             workboard.WorkType
 	IntentMD             string
-	GovernanceThreadID   string
 	AC                   []map[string]any
 	WithLead             bool
 	LeadVersion          string
@@ -273,7 +272,6 @@ func seedDemoFeature(ctx context.Context, deps DemoDeps, seed demoFeature, resul
 			IntentMD:           crSeed.IntentMD,
 			AcceptanceCriteria: mustJSONString(crSeed.AC),
 			LeadArtifactID:     leadID,
-			GovernanceThreadID: crSeed.GovernanceThreadID,
 			WorkspaceID:        workspaceID,
 			CreatedBy:          createdBy,
 		})
@@ -450,9 +448,6 @@ func demoFeaturesForWorkspace(workspaceID string) []demoFeature {
 					features[i].CRs[j].AC[k]["id"] = demoScopedID(workspaceID, "acceptance-criterion:"+id)
 				}
 			}
-			if features[i].CRs[j].GovernanceThreadID != "" {
-				features[i].CRs[j].GovernanceThreadID = demoScopedID(workspaceID, "thread:"+features[i].CRs[j].GovernanceThreadID)
-			}
 		}
 	}
 	return features
@@ -619,10 +614,9 @@ func demoFeatures() []demoFeature {
 						{"id": "demo-103-ac-1", "text": "Draft spec reflects the latest legal language.", "done": false, "source": "human"},
 						{"id": "demo-103-ac-2", "text": "Product review confirms the customer-facing tone before handoff.", "done": false, "source": "human"},
 					},
-					WithLead:           true,
-					LeadVersion:        "draft-review",
-					LeadStatus:         artifact.StatusSuperseded,
-					GovernanceThreadID: "demo-thread-checkout-review",
+					WithLead:    true,
+					LeadVersion: "draft-review",
+					LeadStatus:  artifact.StatusSuperseded,
 					GateEvals: []workboard.GateEvaluation{
 						llmGate("scope_clear", workboard.NextActionStateWarn, "Needs product approval before engineering sees the update.", 0.72),
 					},
@@ -657,12 +651,11 @@ func demoFeatures() []demoFeature {
 			Status:      workboard.FeatureStatusCandidate,
 			ServiceName: "onboarding",
 			CRs: []demoCR{{
-				ID:                 "demo-cr-201",
-				Key:                "DEMO-201",
-				Title:              "Draft first-run checklist",
-				WorkType:           workboard.WorkTypeNewFeature,
-				IntentMD:           "Help new workspace owners finish the first-run checklist.",
-				GovernanceThreadID: "demo-thread-onboarding-draft",
+				ID:       "demo-cr-201",
+				Key:      "DEMO-201",
+				Title:    "Draft first-run checklist",
+				WorkType: workboard.WorkTypeNewFeature,
+				IntentMD: "Help new workspace owners finish the first-run checklist.",
 				AC: []map[string]any{
 					{"id": "demo-201-ac-1", "text": "Checklist shows three setup steps with completion state.", "done": false, "source": "llm"},
 					{"id": "demo-201-ac-2", "text": "Incomplete setup keeps the handoff action secondary.", "done": false, "source": "llm"},

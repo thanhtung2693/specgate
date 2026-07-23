@@ -42,9 +42,9 @@ diagnostic operations — there are no gated or irreversible tool interrupts.
 When the LangGraph runtime has durable checkpoints, per-thread `values` plus
 the `messages` channel form the persistable chat audit trail. The alpha
 appliance uses in-memory checkpoints, so its chat transcript is available only
-until the appliance restarts. The chat surface (thread title) is served by
-`webapp.py` over the LangGraph SDK loopback; the UI rehydrates the transcript
-via the LangGraph SDK (`getState`). See `title_api.py`.
+until the appliance restarts. The UI creates the active workspace-tagged
+thread directly and rehydrates its transcript via the LangGraph SDK
+(`getState`); it exposes no history-management surface.
 
 ## References
 

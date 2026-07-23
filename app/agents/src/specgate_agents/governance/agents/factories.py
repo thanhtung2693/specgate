@@ -1,7 +1,6 @@
 """Shared model builders for governance support surfaces.
 
-Used by the governance board surface, the governance-chat node, and the
-thread-title generator.
+Used by the governance board surface and the governance-chat node.
 """
 
 from __future__ import annotations

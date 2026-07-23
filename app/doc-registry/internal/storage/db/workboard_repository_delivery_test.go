@@ -12,7 +12,6 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/specgate/doc-registry/internal/artifact"
-	"github.com/specgate/doc-registry/internal/governancethreads"
 	"github.com/specgate/doc-registry/internal/integrations"
 	"github.com/specgate/doc-registry/internal/workboard"
 )
@@ -170,43 +169,6 @@ func TestWorkBoardRepository_CreateChangeRequestValidatesLeadArtifactBinding(t *
 					t.Fatalf("CreateChangeRequest: %v", err)
 				}
 			})
-		}
-	})
-}
-
-func TestWorkBoardRepository_UpdateChangeRequestRejectsCrossWorkspaceGovernanceThread(t *testing.T) {
-	forEachDriver(t, func(t *testing.T, _ string, gdb *gorm.DB) {
-		repo := NewWorkBoardRepository(gdb)
-		ctx := workboard.WithWorkspace(context.Background(), "ws-a")
-		now := time.Now().UTC()
-		if err := gdb.Create(&governancethreads.Thread{
-			ThreadID:    "thread-ws-b",
-			WorkspaceID: "ws-b",
-			Title:       "Other workspace thread",
-			CreatedAt:   now,
-			UpdatedAt:   now,
-		}).Error; err != nil {
-			t.Fatal(err)
-		}
-		cr, err := repo.CreateChangeRequest(ctx, workboard.ChangeRequest{
-			ID: "cr-thread-ws-a", Key: "CR-THREAD-WS-A", WorkType: workboard.WorkTypeBugFix, Title: "Scoped CR",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, err = repo.UpdateChangeRequest(ctx, workboard.ChangeRequest{
-			ID: cr.ID, GovernanceThreadID: "thread-ws-b",
-		})
-		if !errors.Is(err, workboard.ErrNotFound) {
-			t.Fatalf("UpdateChangeRequest error = %v, want ErrNotFound", err)
-		}
-		stored, err := repo.GetChangeRequest(ctx, cr.ID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if stored.GovernanceThreadID != "" {
-			t.Fatalf("GovernanceThreadID = %q, cross-workspace link persisted", stored.GovernanceThreadID)
 		}
 	})
 }
@@ -543,8 +505,8 @@ func TestWorkBoardRepository_RecordDeliveryDecisionRejectsSecondHumanDecisionFor
 			CompletionFeedbackEventID: "completion-1",
 			Decision:                  workboard.DeliveryDecisionReject, Actor: "second-reviewer",
 		})
-		if !errors.Is(err, workboard.ErrValidation) {
-			t.Fatalf("second decision error = %v, want validation", err)
+		if !errors.Is(err, workboard.ErrConflict) {
+			t.Fatalf("second decision error = %v, want conflict", err)
 		}
 		var humanRuns int64
 		if err := gdb.Model(&workboard.GateRun{}).

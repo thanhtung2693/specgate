@@ -3,22 +3,12 @@ import { useEffect, useId, useMemo, useState, type ReactNode } from "react"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 
-import { requestGovernanceAgentPrompt } from "@/components/agent/governance-agent-events"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { GovernancePolicySummary } from "@/data/workboard"
 import { cn } from "@/lib/utils"
 import { applyRunExecutor, parseGateEvidence, readableKey, stateText, statusTone, toneClass, type GateEvidenceDetails } from "./shared"
-
-export function openGovernanceAgentModal() {
-  document.querySelector<HTMLButtonElement>('[aria-label="Open governance agent"]:not([disabled])')?.click()
-}
-
-export function runGovernanceAgentPrompt(prompt: string) {
-  openGovernanceAgentModal()
-  requestGovernanceAgentPrompt(prompt)
-}
 
 export async function copyText(text: string): Promise<boolean> {
   try {

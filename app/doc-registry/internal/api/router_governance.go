@@ -30,31 +30,6 @@ func (rt *Router) registerGovernanceRoutes(api huma.API) {
 	}, h.UpdateGovernanceFeedbackEventStatus)
 
 	huma.Register(api, huma.Operation{
-		OperationID: "list_governance_threads",
-		Method:      http.MethodGet,
-		Path:        "/governance/threads",
-		Summary:     "List lightweight governance-chat thread summaries",
-		Tags:        []string{"governance"},
-	}, h.ListGovernanceThreads)
-
-	huma.Register(api, huma.Operation{
-		OperationID: "upsert_governance_thread",
-		Method:      http.MethodPut,
-		Path:        "/governance/threads/{thread_id}",
-		Summary:     "Upsert a lightweight governance-chat thread summary",
-		Tags:        []string{"governance"},
-	}, h.UpsertGovernanceThread)
-
-	huma.Register(api, huma.Operation{
-		OperationID:   "delete_governance_thread",
-		Method:        http.MethodDelete,
-		Path:          "/governance/threads/{thread_id}",
-		Summary:       "Archive a lightweight governance-chat thread summary",
-		Tags:          []string{"governance"},
-		DefaultStatus: 204,
-	}, h.DeleteGovernanceThread)
-
-	huma.Register(api, huma.Operation{
 		OperationID: "governance_presign_file",
 		Method:      http.MethodPost,
 		Path:        "/governance/files/presign",

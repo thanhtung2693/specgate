@@ -134,17 +134,13 @@ instead of mutating an existing body. Humans review, approve, reject, request
 changes, and inspect history; they do not author artifact bodies through the
 registry.
 
-Governance chat follows the same boundary. UI-created LangGraph threads carry
-`workspace_id` metadata, thread lists filter by that value, and thread fetch,
-rename, archive, restore, and delete reject a different workspace. Each run
-also receives `workspace_id` and `thread_workspace_id` through trusted runtime
-configuration; the model cannot choose either value. Switching workspaces
-remounts the UI runtime, so new runs use the new workspace while an existing
-run remains pinned to its original thread context.
-
-The Doc Registry thread projection follows the same boundary: list and delete
-carry `workspace_id` in the query and upsert carries it in the body. Missing or
-different workspace context is rejected.
+Governance chat follows the same boundary. The UI creates one LangGraph thread
+for the active workspace and tags it with `workspace_id`; it exposes no thread
+history or management surface, and Doc Registry stores none of this chat state.
+Each run also receives `workspace_id` and `thread_workspace_id` through trusted
+runtime configuration; the model cannot choose either value. Switching
+workspaces remounts the UI runtime, so new runs use the new workspace while an
+existing run remains pinned to its original thread context.
 
 Governance Skills are workspace-owned settings. Skill catalog and mutation
 calls carry the selected `workspace_id`; a Skill from another workspace is
@@ -330,8 +326,10 @@ evaluation version, and confidence so authority changes do not erase or
 mislabel the delivery projection. The decision write compare-and-swaps the
 exact reviewed gate run and latest completion while completion and review
 writes share the change-request lock. One completion accepts at most one human
-decision. After human acceptance, further completion reports require a new work
-item.
+decision. Interactive clients send the `gate_run_id` and
+`completion_feedback_event_id` returned by delivery status with the decision;
+the server rejects the write if either changed while confirmation was open.
+After human acceptance, further completion reports require a new work item.
 
 Delivery-status responses separate the authoritative `verdict` from optional
 `evidence_verdict` when the authority is human. They may also include an

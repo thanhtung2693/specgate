@@ -13,8 +13,7 @@ describe("SpecGate UI shell: work detail", () => {
     expect(screen.getByRole("heading", { name: "Work" })).toBeInTheDocument()
     expect((await screen.findAllByRole("heading", { name: "Doc Registry migration cleanup" })).length).toBeGreaterThan(0)
     expect(await screen.findByRole("tab", { name: "Handoff" })).toBeInTheDocument()
-    expect(screen.getByText("Governance agent context")).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Ask about review gaps" })).toBeInTheDocument()
+    expect(screen.queryByText("Governance agent context")).not.toBeInTheDocument()
     expect(screen.getByText("Resume in CLI")).toBeInTheDocument()
   })
 
@@ -333,6 +332,8 @@ describe("SpecGate UI shell: work detail", () => {
           new Response(
             JSON.stringify({
               change_request_id: "SG-155",
+              gate_run_id: "platform-review-sg-155",
+              completion_feedback_event_id: "completion-sg-155",
               found: true,
               verdict: "pass",
               hint: "All acceptance criteria are satisfied.",
@@ -629,8 +630,12 @@ describe("SpecGate UI shell: work detail", () => {
           new Response(
             JSON.stringify({
               change_request_id: "SG-155",
+              gate_run_id: "platform-review-sg-155",
+              completion_feedback_event_id: "completion-sg-155",
               found: true,
               verdict: "needs_human_review",
+              executor: "platform",
+              reviewed_at: "2026-07-03T14:10:28Z",
               hint: "One criterion is still unclear.",
               per_criterion: [
                 { criterion_id: "ac-1", text: "Delivered work leaves the attention list", verdict: "unclear", why: "Needs proof." },
@@ -645,12 +650,17 @@ describe("SpecGate UI shell: work detail", () => {
     })
     vi.stubGlobal("fetch", fetchMock)
     renderApp("/work/SG-155")
+    const user = userEvent.setup()
 
     expect(await screen.findByText("Delivered work leaves the attention list")).toBeInTheDocument()
     expect(screen.getByText("Needs review")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /Inspect gaps/ })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: /Ask about review gaps/ })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /Ask about review gaps/ })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /View handoff/ })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("tab", { name: "Verification" }))
+    expect(screen.getByRole("button", { name: "Accept delivery" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Request changes" })).toBeInTheDocument()
   })
 
   it("surfaces delivered work in a dedicated queue chip instead of the action queue", async () => {
@@ -701,7 +711,186 @@ describe("SpecGate UI shell: work detail", () => {
     expect(screen.getAllByText("Acceptance-ready delivery").length).toBeGreaterThan(0)
   })
 
-  it("shows a View verdict action and review-summary prompt for delivered work", async () => {
+  it("records a workspace-scoped human delivery acceptance and refreshes the work item", async () => {
+    const readyForDecision = {
+      id: "cr-ready",
+      key: "CR-READY",
+      title: "Acceptance-ready delivery",
+      phase: "Review",
+      delivery_review: {
+        verdict: "pass",
+        hint: "Delivery evidence is ready for human review.",
+        reviewed_at: "2026-07-19T12:00:00Z",
+      },
+    }
+    let workboardReads = 0
+    let deliveryReads = 0
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input))
+      if (url.pathname === "/workboard/change-requests" && init?.method !== "PATCH") {
+        workboardReads += 1
+        return Promise.resolve(new Response(JSON.stringify({ items: [readyForDecision] }), {
+          headers: { "Content-Type": "application/json" },
+        }))
+      }
+      if (url.pathname === "/api/v1/work-items/cr-ready/delivery-status") {
+        deliveryReads += 1
+        return Promise.resolve(new Response(JSON.stringify({
+          change_request_id: "cr-ready",
+          gate_run_id: "platform-review-1",
+          completion_feedback_event_id: "completion-1",
+          found: true,
+          verdict: "pass",
+          executor: "platform",
+          reviewed_at: "2026-07-19T12:00:00Z",
+          git_receipt: { head_revision: "abc123def456" },
+        }), { headers: { "Content-Type": "application/json" } }))
+      }
+      if (url.pathname === "/api/v1/work-items/cr-ready/delivery-decision") {
+        return Promise.resolve(new Response(JSON.stringify({
+          change_request_id: "cr-ready",
+          verdict: "pass",
+          executor: "human",
+          actor: "thanhtung",
+        }), { headers: { "Content-Type": "application/json" } }))
+      }
+      return emptyRegistryResponse(input)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/work/CR-READY")
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("tab", { name: "Verification" }))
+    await user.click(await screen.findByRole("button", { name: "Accept delivery" }))
+
+    const dialog = screen.getByRole("dialog", { name: "Accept delivery" })
+    expect(within(dialog).getByText(/CR-READY · Acceptance-ready delivery/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/abc123def456/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/completion-1/)).toBeInTheDocument()
+    await user.click(within(dialog).getByRole("button", { name: "Accept delivery" }))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://registry.test/api/v1/work-items/cr-ready/delivery-decision?workspace_id=workspace-main",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            decision: "approve",
+            actor: "thanhtung",
+            reviewed_gate_run_id: "platform-review-1",
+            completion_feedback_event_id: "completion-1",
+          }),
+        }),
+      )
+    })
+    await waitFor(() => {
+      expect(workboardReads).toBeGreaterThan(1)
+      expect(deliveryReads).toBeGreaterThan(1)
+    })
+  })
+
+  it("requires useful request-changes feedback and shows backend rejection", async () => {
+    let decisionCalls = 0
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      if (url.pathname === "/workboard/change-requests") {
+        return Promise.resolve(new Response(JSON.stringify({ items: [{
+          id: "cr-ready",
+          key: "CR-READY",
+          title: "Acceptance-ready delivery",
+          phase: "Review",
+          delivery_review: { verdict: "pass" },
+        }] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      if (url.pathname === "/api/v1/work-items/cr-ready/delivery-status") {
+        return Promise.resolve(new Response(JSON.stringify({
+          found: true,
+          gate_run_id: "platform-review-1",
+          completion_feedback_event_id: "completion-1",
+          verdict: "pass",
+          executor: "platform",
+          reviewed_at: "2026-07-19T12:00:00Z",
+        }), { headers: { "Content-Type": "application/json" } }))
+      }
+      if (url.pathname === "/api/v1/work-items/cr-ready/delivery-decision") {
+        decisionCalls += 1
+        return Promise.resolve(new Response(JSON.stringify({
+          detail: "the latest completion has not been reviewed; run delivery review before recording a human decision",
+        }), { status: 422, headers: { "Content-Type": "application/problem+json" } }))
+      }
+      return emptyRegistryResponse(input)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/work/CR-READY")
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("tab", { name: "Verification" }))
+    await user.click(await screen.findByRole("button", { name: "Request changes" }))
+    const dialog = screen.getByRole("dialog", { name: "Request changes" })
+    expect(within(dialog).getByText(/Completion completion-1/)).toBeInTheDocument()
+    await user.click(within(dialog).getByRole("button", { name: "Request changes" }))
+
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("Describe what must change before resubmission.")
+    expect(decisionCalls).toBe(0)
+
+    await user.type(within(dialog).getByPlaceholderText(/Describe specific evidence/), "Add narrow viewport evidence.")
+    await user.click(within(dialog).getByRole("button", { name: "Request changes" }))
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("the latest completion has not been reviewed")
+    expect(decisionCalls).toBe(1)
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://registry.test/api/v1/work-items/cr-ready/delivery-decision?workspace_id=workspace-main",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          decision: "reject",
+          actor: "thanhtung",
+          reviewed_gate_run_id: "platform-review-1",
+          completion_feedback_event_id: "completion-1",
+          note: "Add narrow viewport evidence.",
+        }),
+      }),
+    )
+  })
+
+  it("clears delivery feedback when cancelling a decision", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      if (url.pathname === "/workboard/change-requests") {
+        return Promise.resolve(new Response(JSON.stringify({ items: [{
+          id: "cr-ready",
+          key: "CR-READY",
+          title: "Acceptance-ready delivery",
+          phase: "Review",
+          delivery_review: { verdict: "pass" },
+        }] }), { headers: { "Content-Type": "application/json" } }))
+      }
+      if (url.pathname === "/api/v1/work-items/cr-ready/delivery-status") {
+        return Promise.resolve(new Response(JSON.stringify({
+          found: true,
+          gate_run_id: "platform-review-1",
+          completion_feedback_event_id: "completion-1",
+          verdict: "pass",
+          executor: "platform",
+        }), { headers: { "Content-Type": "application/json" } }))
+      }
+      return emptyRegistryResponse(input)
+    }))
+    renderApp("/work/CR-READY")
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole("tab", { name: "Verification" }))
+    await user.click(await screen.findByRole("button", { name: "Request changes" }))
+    let dialog = screen.getByRole("dialog", { name: "Request changes" })
+    await user.type(within(dialog).getByRole("textbox"), "Old rejection note")
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+
+    await user.click(screen.getByRole("button", { name: "Accept delivery" }))
+    dialog = screen.getByRole("dialog", { name: "Accept delivery" })
+    expect(within(dialog).getByRole("textbox")).toHaveValue("")
+  })
+
+  it("shows a View verdict action without an unsupported review-summary prompt for delivered work", async () => {
     vi.stubGlobal("fetch", vi.fn(deliveredRegistryResponse))
     renderApp("/work/SG-160")
     const user = userEvent.setup()
@@ -709,7 +898,7 @@ describe("SpecGate UI shell: work detail", () => {
     expect((await screen.findAllByRole("heading", { name: "Delivered settings polish" })).length).toBeGreaterThan(0)
     expect(screen.queryByRole("button", { name: "View handoff" })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Ask about handoff blockers" })).not.toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Ask for review summary" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Ask for review summary" })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole("button", { name: "View verdict" }))
 

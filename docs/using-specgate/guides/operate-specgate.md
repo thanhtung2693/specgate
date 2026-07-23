@@ -72,10 +72,10 @@ Keep the copied `specgate.env` beside the archive. The appliance briefly pauses
 its application services while it captures a consistent state, then starts them
 again.
 
-Governance-chat threads are ephemeral in the v0.1 appliance: they are
-available while the appliance is running, but reset when it restarts. Artifacts,
-work items, approvals, delivery evidence, settings, and Knowledge live in the
-managed volume and are included in backups.
+Governance-chat threads are ephemeral in the v0.1 appliance and reset when it
+restarts. The Full UI does not expose chat history. Artifacts, work items,
+approvals, delivery evidence, settings, and Knowledge live in the managed
+volume and are included in backups.
 
 Before an upgrade:
 

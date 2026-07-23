@@ -43,7 +43,6 @@ type SchemaStatus struct {
 // match the doc-registry GovernanceStatusCounts response.
 type PhaseCounts struct {
 	Intake    int `json:"intake"`
-	Draft     int `json:"draft"`
 	Review    int `json:"review"`
 	Ready     int `json:"ready"`
 	Delivered int `json:"delivered"`

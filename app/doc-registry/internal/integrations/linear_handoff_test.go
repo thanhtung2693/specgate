@@ -90,7 +90,7 @@ func TestHandoffLinear_CreatesOneSelectedTeamIssueForReadyWork(t *testing.T) {
 
 func TestHandoffLinear_RejectsPersistedNonReadyPhase(t *testing.T) {
 	t.Setenv(SecretKeyEnvVar, "0000000000000000000000000000000000000000000000000000000000000001")
-	for _, phase := range []workboard.BoardPhase{workboard.BoardPhaseDelivered, workboard.BoardPhaseDraft, workboard.BoardPhaseReview} {
+	for _, phase := range []workboard.BoardPhase{workboard.BoardPhaseDelivered, workboard.BoardPhaseReview} {
 		t.Run(string(phase), func(t *testing.T) {
 			store := &handoffStore{integration: &Integration{ID: "int-linear", WorkspaceID: "ws-a", Provider: ProviderLinear, Status: StatusConnected, APITokenEncrypted: encryptedSecretForTest(t, "token")}, resource: &Resource{ID: "team-resource", IntegrationID: "int-linear", ResourceType: ResourceTypeTeam, ExternalID: "selected-team"}}
 			board := &fakeWorkBoard{cr: &workboard.ChangeRequest{ID: "cr-1", Key: "SG-123", WorkspaceID: "ws-a", Title: "work", LeadArtifactID: "artifact-1", Phase: phase}}

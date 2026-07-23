@@ -49,7 +49,6 @@ var requiredSchemaColumns = []requiredColumn{
 	{"gate_tasks", "workspace_id", true},
 	{"governance_feedback_events", "workspace_id", true},
 	{"governance_files", "workspace_id", true},
-	{"governance_threads", "workspace_id", true},
 	{"integration_delivery_links", "head_sha", true},
 	{"tracker_links", "resource_id", true},
 	{"tracker_links", "change_request_id", true},
@@ -62,7 +61,7 @@ var requiredSchemaColumns = []requiredColumn{
 var requiredWorkspaceConstraintTables = []string{
 	"artifacts", "artifact_attachments", "change_requests", "documents",
 	"features", "gate_runs", "gate_tasks", "governance_feedback_events",
-	"governance_files", "governance_threads",
+	"governance_files",
 	"integration_oauth_states", "integrations", "skills", "workboard_lifecycle_events",
 }
 

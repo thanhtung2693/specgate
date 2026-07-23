@@ -39,8 +39,8 @@ that implies unsupported behavior.
 
 ## Governance-chat regression discipline
 
-- The deterministic local adapter is for isolated layout/component work, not
-  evidence that real LangGraph streaming works.
+- There is no deterministic product runtime fallback. Tests may use explicit
+  fixtures, but they are not evidence that real LangGraph streaming works.
 - For delayed, blank, duplicated, or all-at-once responses, inspect the browser
   assistant-ui state and the matching LangSmith trace for the same `thread_id`.
 - Probe the live `/runs/stream` modes before deciding whether the defect belongs

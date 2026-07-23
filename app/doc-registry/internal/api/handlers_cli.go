@@ -30,10 +30,12 @@ func mapGovernanceError(op string, err error) error {
 		{sentinel: governanceops.ErrNotFound, fn: huma.Error404NotFound},
 		{sentinel: workboard.ErrNotFound, fn: huma.Error404NotFound},
 		{sentinel: governanceops.ErrVersionConflict, fn: huma.Error409Conflict},
+		{sentinel: workboard.ErrConflict, fn: huma.Error409Conflict},
 		{sentinel: governanceprofile.ErrUnsupportedSnapshot, fn: huma.Error409Conflict},
 		{sentinel: governanceprofile.ErrInvalidSnapshot, fn: huma.Error409Conflict},
 		{sentinel: governanceops.ErrUnavailable, fn: huma.Error503ServiceUnavailable},
 		{sentinel: governanceops.ErrValidation, fn: huma.Error400BadRequest},
+		{sentinel: workboard.ErrValidation, fn: huma.Error400BadRequest},
 	})
 }
 
@@ -333,10 +335,12 @@ func (h *Handlers) CLIDeliveryDecision(ctx context.Context, in *CLIDeliveryDecis
 		return nil, err
 	}
 	result, err := svc.DecideDelivery(ctx, governanceops.DeliveryDecisionInput{
-		ChangeRequestID: in.ID,
-		Decision:        in.Body.Decision,
-		Actor:           in.Body.Actor,
-		Note:            in.Body.Note,
+		ChangeRequestID:           in.ID,
+		Decision:                  in.Body.Decision,
+		Actor:                     in.Body.Actor,
+		Note:                      in.Body.Note,
+		ReviewedGateRunID:         in.Body.ReviewedGateRunID,
+		CompletionFeedbackEventID: in.Body.CompletionFeedbackEventID,
 	})
 	if err != nil {
 		return nil, mapGovernanceError("delivery-decision", err)

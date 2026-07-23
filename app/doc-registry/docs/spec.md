@@ -156,7 +156,6 @@ Document `path` is caller-provided and validated: no empty path, absolute path,
 | `change_requests` | Work items; phase is derived, not persisted |
 | `acceptance_criteria` | Normalized AC rows, including optional `verification_binding` |
 | `workboard_lifecycle_events` | Workspace-owned Feature/CR lifecycle audit rows |
-| `governance_threads` | Lightweight governance-chat sidebar index |
 | `governance_files` | Internal upload blobs for explicit feature attachments |
 | `documents`, `document_chunks`, `document_links`, `knowledge_chunks` | Governance Knowledge relational and vector stores |
 | `integrations`, `integration_resources`, `integration_webhook_events`, `integration_delivery_links`, `tracker_links` | Native provider integration state |
@@ -384,6 +383,9 @@ change-request lock. Review persistence and completion persistence take the same
 lock, so a newer cycle cannot land between validation and the decision write.
 The governance operation rejects a decision without a current platform review,
 against an older completion, or after another decision for the same completion.
+Interactive clients bind confirmation to the status response's `gate_run_id`
+and `completion_feedback_event_id`; if supplied on the decision request, either
+mismatch is a conflict that requires refresh and reconfirmation.
 
 `GET /api/v1/work-items/{id}/delivery-status` returns the authoritative
 decision in `verdict` and, for human runs, the reviewed platform assessment in
@@ -514,8 +516,7 @@ Phase derivation:
 
 | Phase | Condition |
 | --- | --- |
-| `Intake` | No governance thread and no lead artifact, except quick-route bug-fix work |
-| `Draft` | Governance thread exists but no lead artifact |
+| `Intake` | No lead artifact, except quick-route bug-fix work |
 | `Review` | Lead artifact exists but is not approved |
 | `Ready` | Approved lead artifact, or quick-route bug-fix work with no lead artifact |
 | `Delivered` | Current completion has an authoritative human delivery approval |
@@ -523,10 +524,6 @@ Phase derivation:
 `Delivered` overrides artifact-derived phase. Human delivery decisions outrank
 platform reruns for the same completion. A later completion starts a new cycle;
 within one executor tier and cycle, newest wins.
-
-When a ChangeRequest points to a known governance-chat thread, that thread must
-belong to the same workspace on both create and update. A not-yet-indexed thread
-ID remains valid so LangGraph can create its sidebar entry after the work item.
 
 ChangeRequest list/read DTOs expose derived fields:
 

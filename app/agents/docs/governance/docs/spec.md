@@ -102,7 +102,15 @@ With a single node there is no sub-agent namespace fan-out and no async-task cha
 
 The assistant narrates inline in its own reply. The wire shapes the UI consumes — stream modes, transcript hydration, and any companion / status surfaces — are defined in [`event-contract.md`](event-contract.md); this document does not restate them.
 
-The chat surface (thread title) is served by `webapp.py` via the LangGraph SDK loopback (`langgraph_sdk.get_client`), so it is independent of which graph is served; transcript hydration is the UI's job via the LangGraph SDK (`getState`). The title request carries the selected workspace, and the route compares it with the thread metadata before reading or generating a title. Missing request context returns `400`; absent or cross-workspace threads return `404`. The adapter maps these outcomes from typed service errors, never from exception-message text. See `title_api.py`.
+The Full UI exposes chat only after its health route confirms the service is
+configured and reachable. It does not expose the alpha appliance's ephemeral
+thread history. Missing configuration and failed health checks hide the
+launcher without affecting core Full-mode routes.
+
+The UI creates a workspace-tagged LangGraph thread directly for the active
+modal session and hydrates its transcript with the LangGraph SDK (`getState`).
+SpecGate exposes no custom title, listing, archive, or deletion endpoint for
+chat threads.
 
 ## 5. Multi-language + LLM-driven control flow
 

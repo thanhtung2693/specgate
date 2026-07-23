@@ -362,7 +362,7 @@ func TestDeliveryStatusProjectsLatestCompletionGitReceipt(t *testing.T) {
 			State:        workboard.NextActionStatePass,
 			Hint:         "delivery passed",
 			Executor:     workboard.GateRunExecutorPlatform,
-			EvidenceJSON: `{"verdict":"pass"}`,
+			EvidenceJSON: `{"verdict":"pass","completion_feedback_event_id":"feedback-1"}`,
 			CreatedAt:    time.Unix(100, 0).UTC(),
 		}},
 	}
@@ -404,6 +404,9 @@ func TestDeliveryStatusProjectsLatestCompletionGitReceipt(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got.GitReceipt, receipt) {
 		t.Fatalf("GitReceipt = %#v, want %#v", got.GitReceipt, receipt)
+	}
+	if got.GateRunID != "run-platform" || got.CompletionFeedbackEventID != "feedback-1" {
+		t.Fatalf("confirmation binding = %#v, want exact review and completion IDs", got)
 	}
 }
 

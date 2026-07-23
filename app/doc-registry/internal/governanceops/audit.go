@@ -137,14 +137,21 @@ func (s *Service) AuditTrail(ctx context.Context, in ResolveWorkRefInput, verify
 				if cr.DeliveryReview != nil && run.CreatedAt.Equal(cr.DeliveryReview.ReviewedAt) {
 					continue // owned by source 5 (richer actor/note)
 				}
+				actor := run.Executor
+				detail := run.Hint
+				if run.Executor == workboard.GateRunExecutorHuman {
+					decisionActor, _, summary := deliveryRunAuditFields(run)
+					actor = firstNonEmpty(decisionActor, run.Executor)
+					detail = firstNonEmpty(summary, run.Hint)
+				}
 				add(run.CreatedAt, AuditEvent{
-					Actor:     run.Executor,
+					Actor:     actor,
 					ActorKind: deriveActorKind(run.Executor),
 					Action:    "delivery_review",
 					Subject:   cr.Key,
 					Verdict:   string(run.State),
 					Trust:     deriveTrust(run.Executor),
-					Detail:    run.Hint,
+					Detail:    detail,
 				})
 				continue
 			}

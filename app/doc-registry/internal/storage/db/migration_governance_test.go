@@ -80,7 +80,7 @@ func TestWorkspaceOwnershipColumnsAreRequired(t *testing.T) {
 			"artifacts", "artifact_attachments", "change_requests", "documents",
 			"features", "gate_runs", "gate_tasks", "governance_files",
 			"governance_feedback_events",
-			"governance_threads", "integration_oauth_states",
+			"integration_oauth_states",
 			"integrations", "skills", "workboard_lifecycle_events",
 		} {
 			var nullable string
@@ -246,11 +246,16 @@ func TestPostgresFreshSchemaIncludesGovernanceTables(t *testing.T) {
 			t.Fatalf("gate_tasks missing column workspace_id on %s (have %v)", name, cols)
 		}
 
+		if cols := tableColumns(t, "governance_threads", gdb, name); len(cols) != 0 {
+			t.Fatalf("obsolete governance_threads table remains in fresh schema on %s", name)
+		}
+
 		cols := tableColumns(t, "change_requests", gdb, name)
-		for _, want := range []string{"governance_thread_id", "workspace_id"} {
-			if !cols[want] {
-				t.Fatalf("change_requests missing column %q in fresh schema on %s", want, name)
-			}
+		if !cols["workspace_id"] {
+			t.Fatalf("change_requests missing column workspace_id in fresh schema on %s", name)
+		}
+		if cols["governance_thread_id"] {
+			t.Fatalf("change_requests retains obsolete governance_thread_id on %s", name)
 		}
 		if cols["epic_id"] {
 			t.Fatalf("change_requests retains removed epic_id on %s", name)

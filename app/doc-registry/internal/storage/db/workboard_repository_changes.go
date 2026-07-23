@@ -13,7 +13,6 @@ import (
 
 	"github.com/specgate/doc-registry/internal/artifact"
 	"github.com/specgate/doc-registry/internal/governanceprofile"
-	"github.com/specgate/doc-registry/internal/governancethreads"
 	"github.com/specgate/doc-registry/internal/integrations"
 	"github.com/specgate/doc-registry/internal/workboard"
 )
@@ -69,31 +68,7 @@ func validateChangeRequestWorkspaceLinks(tx *gorm.DB, in workboard.ChangeRequest
 			return mapWorkBoardNotFound(err)
 		}
 	}
-	if err := validateGovernanceThreadWorkspace(tx, workspaceID, in.GovernanceThreadID); err != nil {
-		return err
-	}
 	return nil
-}
-
-// validateGovernanceThreadWorkspace permits a not-yet-indexed LangGraph thread,
-// but never allows a known thread from a different workspace to be linked.
-func validateGovernanceThreadWorkspace(tx *gorm.DB, workspaceID, threadID string) error {
-	threadID = strings.TrimSpace(threadID)
-	if threadID == "" {
-		return nil
-	}
-	var thread governancethreads.Thread
-	err := tx.Where("thread_id = ?", threadID).First(&thread).Error
-	if err == nil {
-		if thread.WorkspaceID != workspaceID {
-			return workboard.ErrNotFound
-		}
-		return nil
-	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil
-	}
-	return err
 }
 
 func (r *WorkBoardRepository) ListChangeRequests(ctx context.Context, includeArchived bool) ([]workboard.ChangeRequest, error) {
@@ -243,9 +218,6 @@ func (r *WorkBoardRepository) derivedChangeRequestPhase(
 			return workboard.BoardPhaseReady, nil
 		}
 		return workboard.BoardPhaseReview, nil
-	}
-	if strings.TrimSpace(cr.GovernanceThreadID) != "" {
-		return workboard.BoardPhaseDraft, nil
 	}
 	return workboard.BoardPhaseIntake, nil
 }
@@ -426,9 +398,6 @@ func (r *WorkBoardRepository) UpdateChangeRequest(
 	if in.WorkType != "" {
 		updates["work_type"] = in.WorkType
 	}
-	if in.GovernanceThreadID != "" {
-		updates["governance_thread_id"] = in.GovernanceThreadID
-	}
 	if in.Archived {
 		updates["archived"] = true
 		updates["archived_at"] = in.UpdatedAt
@@ -446,9 +415,6 @@ func (r *WorkBoardRepository) UpdateChangeRequest(
 		var existing workboard.ChangeRequest
 		if err := scopeWorkBoardQuery(tx, ctx).First(&existing, "id = ?", in.ID).Error; err != nil {
 			return mapWorkBoardNotFound(err)
-		}
-		if err := validateGovernanceThreadWorkspace(tx, existing.WorkspaceID, in.GovernanceThreadID); err != nil {
-			return err
 		}
 		res := scopeWorkBoardQuery(tx.Model(&workboard.ChangeRequest{}), ctx).Where("id = ?", in.ID).Updates(updates)
 		if res.Error != nil {

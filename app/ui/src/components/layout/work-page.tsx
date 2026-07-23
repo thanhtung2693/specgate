@@ -1,6 +1,5 @@
 import {
   ArrowLeftIcon,
-  BotIcon,
   ChevronRightIcon,
   KanbanSquareIcon,
   ListIcon,
@@ -36,7 +35,7 @@ import {
   toneClass,
   type Tone,
 } from "./shared"
-import { ActionTooltip, copyText, openGovernanceAgentModal, runGovernanceAgentPrompt } from "./shared-ui"
+import { copyText } from "./shared-ui"
 import { isReviewItem } from "./reviews"
 
 function governanceSignalKindLabel(kind: string) {
@@ -485,11 +484,6 @@ function WorkQueueTable({
   )
 }
 
-type ContextualAgentPrompt = {
-  label: string
-  prompt: string
-}
-
 export function WorkItemNotFound({ itemKey, source }: { itemKey: string; source: WorkboardView["source"] }) {
   const sourceLabel = source === "registry" ? "current workspace" : "local workspace"
 
@@ -531,49 +525,6 @@ export function WorkItemRouteLoading({ itemKey }: { itemKey: string }) {
           </p>
         </div>
       </div>
-    </section>
-  )
-}
-
-export function ContextualGovernancePanel({
-  contextLabel,
-  prompts,
-}: {
-  contextLabel: string
-  prompts: ContextualAgentPrompt[]
-}) {
-  return (
-    <section className="min-w-0 overflow-hidden rounded-lg border bg-card/85 p-4">
-      <div className="flex items-start gap-3">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
-          <BotIcon className="size-4" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-semibold">Governance agent context</h3>
-          <p className="mt-1 truncate text-xs text-muted-foreground">{contextLabel}</p>
-        </div>
-      </div>
-      <div className="mt-4 grid gap-2">
-        {prompts.map((item) => (
-          <ActionTooltip key={item.label} content="Opens governance agent. Does not change workflow state.">
-            <Button
-              variant="outline"
-              size="sm"
-              className="min-w-0 justify-start rounded-md"
-              onClick={() => runGovernanceAgentPrompt(item.prompt)}
-            >
-              <BotIcon data-icon="inline-start" />
-              <span className="min-w-0 truncate">{item.label}</span>
-            </Button>
-          </ActionTooltip>
-        ))}
-      </div>
-      <ActionTooltip content="Open governance chat without sending a prompt.">
-        <Button variant="secondary" size="sm" className="mt-3 w-full min-w-0 rounded-md" onClick={openGovernanceAgentModal}>
-          <BotIcon data-icon="inline-start" />
-          Open agent
-        </Button>
-      </ActionTooltip>
     </section>
   )
 }

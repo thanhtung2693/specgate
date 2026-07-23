@@ -76,3 +76,7 @@ async def test_custom_webapp_does_not_shadow_langgraph_thread_search() -> None:
         )
 
     assert res.status_code == 404
+
+
+def test_custom_webapp_does_not_expose_thread_title_management() -> None:
+    assert "/governance/threads/{thread_id}/title" not in {route.path for route in app.routes}

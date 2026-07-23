@@ -156,6 +156,43 @@ func TestDeliveryDecisionAllowsDifferentHumanReviewer(t *testing.T) {
 	}
 }
 
+func TestDeliveryDecisionRejectsConfirmationForDifferentReviewCycle(t *testing.T) {
+	t.Parallel()
+	workBoard := &fakeDeliveryDecisionWorkBoard{runs: reviewedDeliveryRun(workboard.NextActionStatePass)}
+	feedback := &fakeDeliveryDecisionFeedbackStore{rows: []integrations.GovernanceFeedbackEvent{{
+		ID: "completion-1", ChangeRequestID: "cr-1",
+		EventType:   integrations.FeedbackEventCodingAgentCompleted,
+		PayloadJSON: `{"agent":{"name":"codex"},"summary":"done"}`,
+		CreatedAt:   time.Unix(100, 0).UTC(),
+	}}}
+	svc := &Service{WorkBoard: workBoard, FeedbackStore: feedback}
+
+	for _, tc := range []struct {
+		name         string
+		gateRunID    string
+		completionID string
+	}{
+		{name: "review changed", gateRunID: "run-platform-older", completionID: "completion-1"},
+		{name: "completion changed", gateRunID: "run-platform", completionID: "completion-older"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := svc.DecideDelivery(context.Background(), DeliveryDecisionInput{
+				ChangeRequestID:           "cr-1",
+				Decision:                  "approve",
+				Actor:                     "lead@example.com",
+				ReviewedGateRunID:         tc.gateRunID,
+				CompletionFeedbackEventID: tc.completionID,
+			})
+			if err == nil || !strings.Contains(err.Error(), "reviewed delivery changed") {
+				t.Fatalf("error = %v, want stale-confirmation validation", err)
+			}
+			if workBoard.in.ChangeRequestID != "" {
+				t.Fatalf("RecordDeliveryDecision called for stale confirmation: %+v", workBoard.in)
+			}
+		})
+	}
+}
+
 func TestDeliveryDecisionRejectsUnboundPlatformReviewWhenCompletionExists(t *testing.T) {
 	t.Parallel()
 	workBoard := &fakeDeliveryDecisionWorkBoard{runs: []workboard.GateRun{{

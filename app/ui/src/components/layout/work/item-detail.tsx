@@ -12,7 +12,7 @@ import type { WorkItem } from "@/data/workspace"
 import { cn } from "@/lib/utils"
 import { isDeliveredWorkItem, stateText, statusTone, toneClass } from "../shared"
 import { copyText, PolicyExplanationSection } from "../shared-ui"
-import { ContextualGovernancePanel, workItemStatusBadge } from "../work-page"
+import { workItemStatusBadge } from "../work-page"
 
 import {
   AcceptanceCriteriaSummary,
@@ -31,11 +31,15 @@ export function WorkItemDetail({
   workspaceId,
   hydrateDetail,
   refreshGeneration,
+  reviewer,
+  onDeliveryDecided,
 }: {
   item: WorkItem
   workspaceId: string
   hydrateDetail: boolean
   refreshGeneration: number
+  reviewer: string
+  onDeliveryDecided: () => void
 }) {
   const [handoffRefreshGeneration, setHandoffRefreshGeneration] = useState(0)
   const detail = useWorkItemDetail(item, workspaceId, hydrateDetail, refreshGeneration + handoffRefreshGeneration)
@@ -73,23 +77,6 @@ export function WorkItemDetail({
         : detail.contextPack
           ? "View handoff"
           : "Prepare handoff"
-  const agentPrompt = delivered || deliveryPassed
-    ? {
-        label: "Ask for review summary",
-        prompt: `Summarize the delivery review outcome for ${item.key}.`,
-      }
-    : deliveryNeedsReview || item.delivery === "needs_changes" || item.gate === "fail"
-    ? {
-        label: "Ask about review gaps",
-        prompt: `For ${item.key}, summarize the missing evidence, failed gates, or acceptance criteria that block delivery review.`,
-      }
-    : {
-        label: "Ask about handoff blockers",
-        prompt: detail.contextPack
-          ? `For ${item.key}, inspect the Context Pack and summarize any remaining handoff risk before an IDE coding agent picks it up.`
-          : `For ${item.key}, explain what blocks a governed coding-agent handoff. Check scope, acceptance criteria, route, gate state, and whether a Context Pack or approved source artifact is available.`,
-      }
-
   return (
     <div className="grid min-w-0 gap-5 2xl:grid-cols-[minmax(0,1fr)_minmax(0,320px)]">
       <div className="min-w-0 rounded-lg border bg-card p-5">
@@ -131,7 +118,7 @@ export function WorkItemDetail({
           <TabsContent value="verification" className="mt-4">
             {/* Verdict first: Reviews deep-links here to read the delivery outcome. */}
             <div className="grid gap-3">
-              <DeliverySummary item={item} detail={detail} />
+              <DeliverySummary item={item} detail={detail} reviewer={reviewer} workspaceId={workspaceId} onDecided={onDeliveryDecided} />
               <RepositoryObservationSummary detail={detail} />
               <GateSummary item={item} detail={detail} />
               <PolicyExplanationSection policy={detail.policy} status={detail.readback.policy} context="work" />
@@ -143,7 +130,6 @@ export function WorkItemDetail({
         </Tabs>
       </div>
       <aside className="grid min-w-0 content-start gap-4">
-        <ContextualGovernancePanel contextLabel={`${item.key} · ${item.title}`} prompts={[agentPrompt]} />
         <section className="min-w-0 overflow-hidden rounded-lg border bg-card/85 p-4">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold">Resume in CLI</h3>
