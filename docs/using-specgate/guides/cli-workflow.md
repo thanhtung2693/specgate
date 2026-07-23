@@ -118,8 +118,10 @@ specgate delivery report <work-ref> --init
 ```
 
 Fill in the coding agent name, summary, affected files, checks, and evidence for
-each acceptance criterion. The generated file is intentionally incomplete so
-an agent cannot claim delivery without adding evidence.
+each acceptance criterion. Replace every generated `pending` check with an
+observed `pass`, `fail`, or an explained `skipped`. The generated file is
+intentionally incomplete, and SpecGate rejects untouched pending checks before
+recording anything.
 
 For machine-readable setup:
 

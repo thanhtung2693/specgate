@@ -271,6 +271,7 @@ func TestDeliveryReportInitScaffoldsCompletionTemplate(t *testing.T) {
 			Name    string `json:"name"`
 			Command string `json:"command"`
 			Status  string `json:"status"`
+			Detail  string `json:"detail"`
 		} `json:"checks"`
 		Criteria []struct {
 			CriterionID         string            `json:"criterion_id"`
@@ -308,8 +309,9 @@ func TestDeliveryReportInitScaffoldsCompletionTemplate(t *testing.T) {
 		t.Fatalf("expected empty affected_files and one check per unique binding:\n%s", data)
 	}
 	if tpl.Checks[0].Name != "integration" || tpl.Checks[1].Name != "audit" ||
-		tpl.Checks[0].Command != "" || tpl.Checks[0].Status != "skipped" {
-		t.Fatalf("check examples = %+v, want unique bindings with blank commands and skipped status", tpl.Checks)
+		tpl.Checks[0].Command != "" || tpl.Checks[0].Status != "pending" ||
+		!strings.Contains(tpl.Checks[0].Detail, "pass, fail, or skipped") {
+		t.Fatalf("check examples = %+v, want an explicit pending placeholder with next-action guidance", tpl.Checks)
 	}
 	if !strings.Contains(out.String(), path) {
 		t.Fatalf("output should mention where the template was written:\n%s", out.String())

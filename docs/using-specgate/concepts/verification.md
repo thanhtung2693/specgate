@@ -161,6 +161,11 @@ the prior receipt base only if it is still an ancestor of `HEAD`; this preserves
 the delivered commit range instead of treating an up-to-date tracking branch as
 an empty change. Unrelated dirty files remain warnings.
 
+`specgate change status` compares that stored receipt with the current
+repository, branch, HEAD, and working-tree digest. A match is reported
+explicitly. A mismatch is a stale warning; unavailable Git metadata is reported
+as unverified rather than guessed.
+
 ## Corroborated evidence
 
 Webhook events from git integrations are matched to the specific work item and

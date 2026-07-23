@@ -42,16 +42,15 @@ repository-doc update.
 
 ## 2. Resume safely
 
-Only when resuming an existing delivery attempt, inspect its persisted receipt:
+When resuming, check the persisted receipt:
 
 ```bash
-specgate delivery status "$WORK_REF" --detail --json
+specgate change status "$WORK_REF" --json
 ```
 
-Compare `git_receipt.repository`, branch, head revision, and changed files with
-`git remote get-url origin`, `git branch --show-current`, `git rev-parse HEAD`,
-and `git status --short`. Stop on any mismatch. Receipt metadata is not source,
-a patch, or cryptographic proof.
+Continue only when `freshness` confirms a match. Stop on any mismatch signaled
+by `stale: true`. Treat an unavailable comparison as a blocker. Receipt metadata
+is not source, a patch, or cryptographic proof.
 
 Completion criterion: the receipt matches this checkout, or mismatch is a
 human-owned blocker.
@@ -101,13 +100,14 @@ an existing regular scaffold, reuse exact `error.details.path` only when
 must match the Context Pack. Never overwrite automatically. Stop when an
 existing file cannot be attributed safely.
 
-Fill `agent.name`, `summary`, `affected_files`, `checks[]`, and exactly one
-`criteria[]` entry per canonical criterion using scaffold enum values. Each
-criterion needs an independently reviewable claim and evidence path, line,
-heading, file key, or URL; a command name alone is not evidence. Each check needs
-`pass`, `fail`, or `skipped` plus observed detail. Evidence paths must exist;
-`satisfied` cannot depend on a failed, missing, or skipped required check. Every
-non-skipped `checks[].command` must be non-interactive and valid for `sh -c`.
+Fill `agent.name`, `summary`, `affected_files`, `checks[]`, and exactly one `criteria[]`
+entry per canonical criterion. Give each criterion an independently reviewable
+claim and evidence path, line, heading, file key, or URL; a command name alone
+is not evidence. Replace every `pending` check with `pass`, `fail`, or `skipped` plus
+observed detail; submission rejects untouched placeholders. Evidence paths must
+exist. `satisfied` cannot depend on a failed, missing, or skipped required check.
+Every non-skipped `checks[].command` must be non-interactive and valid for
+`sh -c`.
 
 Review the completion file, especially its shell commands, then submit:
 

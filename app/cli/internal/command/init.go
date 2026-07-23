@@ -117,7 +117,13 @@ func newInitCmd(deps *Deps) *cobra.Command {
 				initSeed = deploy.SeedNo
 			}
 			svc := makeDeployService(deps, dir)
-			if err := svc.Init(ctx, deploy.InitOptions{Seed: initSeed, BundleVersion: version}); err != nil {
+			composeProject := ""
+			if !sameDeploymentDir(dir, defaultDeployDir()) {
+				composeProject = deploy.ScopedProjectName(dir)
+			}
+			if err := svc.Init(ctx, deploy.InitOptions{
+				Seed: initSeed, BundleVersion: version, ComposeProject: composeProject,
+			}); err != nil {
 				code := deps.Printer.Error("init", output.ErrorPayload{Code: "unavailable", Message: err.Error()})
 				return &output.ExitError{Code: code, Err: err}
 			}
@@ -264,6 +270,15 @@ func newInitCmd(deps *Deps) *cobra.Command {
 	f.StringVar(&email, "email", "", "Optional email address for local identity setup")
 	cmd.MarkFlagsMutuallyExclusive("seed", "no-seed")
 	return cmd
+}
+
+func sameDeploymentDir(left, right string) bool {
+	leftAbs, leftErr := filepath.Abs(left)
+	rightAbs, rightErr := filepath.Abs(right)
+	if leftErr == nil && rightErr == nil {
+		return filepath.Clean(leftAbs) == filepath.Clean(rightAbs)
+	}
+	return filepath.Clean(left) == filepath.Clean(right)
 }
 
 func validateInitModeFlags(cmd *cobra.Command, mode string) error {

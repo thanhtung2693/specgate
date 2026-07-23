@@ -425,7 +425,11 @@ func changeStatusFull(cmd *cobra.Command, deps *Deps, ref string) (changeStatusR
 	if err != nil {
 		return changeStatusResult{}, err
 	}
-	return deriveFullChangeStatus(work, delivery), nil
+	result := deriveFullChangeStatus(work, delivery)
+	if delivery != nil {
+		result = applyCheckoutFreshness(cmd.Context(), deps, result, clientGitReceipt(delivery.GitReceipt))
+	}
+	return result, nil
 }
 
 type changeStatusResolveError struct {
@@ -466,7 +470,8 @@ func changeStatusLocal(cmd *cobra.Command, deps *Deps, ref string) (changeStatus
 	if err != nil {
 		return changeStatusResult{}, err
 	}
-	return deriveLocalChangeStatus(work, &review, &report, peer), nil
+	result := deriveLocalChangeStatus(work, &review, &report, peer)
+	return applyCheckoutFreshness(cmd.Context(), deps, result, mapGitReceipt(report.Body)), nil
 }
 
 func deriveFullChangeStatus(work *client.ResolvedWork, delivery *client.DeliveryStatusResult) changeStatusResult {

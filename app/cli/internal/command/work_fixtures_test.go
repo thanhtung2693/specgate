@@ -104,9 +104,11 @@ type fakeClient struct {
 	lastGateFilter          string
 	lastGateLimit           int
 	lastFeedbackBody        map[string]any
+	reportFeedbackCalls     int
 	lastDetailFlag          bool
 	lastDeliveryDecisionID  string
 	lastDeliveryDecision    client.DeliveryDecisionInput
+	deliveryReviewCalls     int
 	deliveryDecisionCalls   int
 	lastACWorkID            string
 	lastACWorkspaceID       string
@@ -489,6 +491,7 @@ func (f *fakeClient) GateHistory(_ context.Context, id, gate string, limit int) 
 
 func (f *fakeClient) ReportFeedback(_ context.Context, id string, body map[string]any) (map[string]any, error) {
 	f.calls++
+	f.reportFeedbackCalls++
 	f.lastGatesID = id
 	f.lastFeedbackBody = body
 	return map[string]any{"feedback_event_id": "evt-1", "status": "accepted"}, nil
@@ -508,6 +511,7 @@ func (f *fakeClient) ListAcceptanceCriteria(ctx context.Context, id string) ([]c
 
 func (f *fakeClient) TriggerDeliveryReview(_ context.Context, id string) (map[string]any, error) {
 	f.calls++
+	f.deliveryReviewCalls++
 	f.lastGatesID = id
 	return map[string]any{"status": "queued"}, nil
 }
