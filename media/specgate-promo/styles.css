@@ -233,6 +233,8 @@ main {
 }
 
 .proof-lane {
+  --lane-center-y: 128px;
+  --node-top: 72px;
   position: relative;
   height: 258px;
   margin: 0 38px;
@@ -263,7 +265,7 @@ main {
   stroke-width: 3;
   stroke-linecap: round;
   filter: drop-shadow(0 0 8px rgba(137, 147, 255, 0.55));
-  transform-origin: 47px 124px;
+  transform-origin: 47px var(--lane-center-y);
 }
 
 .peer-connector {
@@ -276,7 +278,7 @@ main {
 .lane-runner {
   position: absolute;
   z-index: 5;
-  top: 117px;
+  top: calc(var(--lane-center-y) - 7.5px);
   left: 45px;
   width: 15px;
   height: 15px;
@@ -288,14 +290,14 @@ main {
 
 .proof-node {
   position: absolute;
-  top: 72px;
+  top: var(--node-top);
   width: 220px;
   color: var(--quiet);
 }
 
 .proof-node .node-dot {
   position: absolute;
-  top: 45px;
+  top: calc(var(--lane-center-y) - var(--node-top) - 8.5px);
   left: 0;
   z-index: 4;
   width: 17px;

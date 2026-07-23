@@ -107,7 +107,7 @@ tl.to(".state-dot", {
   boxShadow: "0 0 18px rgba(75, 209, 120, 0.65)",
   duration: 0.18,
 }, 9.34);
-tl.to("#result-copy", { textContent: "AC-02 reproduced · peer affirmed", color: "#4bd178", duration: 0.01 }, 9.34);
+tl.to("#result-copy", { textContent: "Evidence reproduced · peer affirmed", color: "#4bd178", duration: 0.01 }, 9.34);
 tl.to(".lane-runner", { x: 1122, duration: 0.76, ease: "power2.inOut" }, 9.64);
 tl.to("#lane-progress", { scaleX: 1, stroke: "#4bd178", duration: 0.76, ease: "power2.inOut" }, 9.64);
 tl.to(".node-human .node-dot", {

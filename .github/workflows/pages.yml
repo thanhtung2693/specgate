@@ -29,6 +29,7 @@ jobs:
       - name: Validate landing page
         run: |
           node --test app/landing/landing.test.mjs
+          node --test media/specgate-promo/promo.test.mjs
           node -c app/landing/script.js
 
       - name: Upload GitHub Pages artifact
