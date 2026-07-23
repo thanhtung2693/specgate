@@ -1,8 +1,8 @@
 # Configuration
 
-Use this reference to find where a SpecGate setting lives and how it is applied.
-It is organized by operator surface. Module `.env.example` files remain
-canonical for exhaustive environment variable lists.
+Use this reference to find user-facing SpecGate settings and how they are
+applied. It covers the CLI, project configuration, the Full appliance, and
+workspace settings—not the internal environment of a source checkout.
 
 For task steps, use [Configure models](../guides/configure-models.md) or
 [Operate SpecGate](../guides/operate-specgate.md).
@@ -25,7 +25,8 @@ specgate init --mode full --no-input
 
 Switching topology clears the other mode's server/deployment or Local-only
 identity and project bindings. Create or select an identity after setup in the
-new mode.
+new mode. It does not delete Local SQLite state; use a portable export before
+moving Local history into Full mode.
 
 Local state defaults to the OS SpecGate config location. Use `--local-dir` at
 initialization to select another store, or `SPECGATE_LOCAL_DIR` for a
@@ -198,53 +199,25 @@ non-default port or Compose project; those selections are then durable in
 `.env`. The CLI names the conflicting port; it never exposes internal service
 ports for this recovery.
 
-The appliance keeps its internal services private to the container. Redis and
-MinIO are not used by this local path. Source-checkout multi-container settings
-belong to the [contributor setup guide](../../contributing/setup.md).
-
-## Doc Registry
-
-| Variable | Purpose |
-|---|---|
-| `APP_BASE_URL` | Web UI origin used in generated links |
-| `UI_PORT` | Source-checkout Compose fallback used by Doc Registry when `APP_BASE_URL` is unset |
-| `HTTP_ADDR` | Doc Registry listen address |
-| `DELIVERY_SLA_DAYS` | Days before a failing delivery review appears as `delivery_stale`; default `7` |
-| `POSTGRES_DSN` | PostgreSQL connection |
-| `SETTINGS_ENCRYPTION_KEY` | required encryption key for stored secrets |
-| `SENTRY_DSN` | optional error reporting |
-
-HTTP access logs use the socket peer address. SpecGate does not trust or rewrite
-client IPs from `X-Forwarded-*` headers; terminate and log trusted proxy client
-identity at the proxy layer when needed.
-
-## Queue and storage
-
-| Variable | Values | Purpose |
-|---|---|---|
-| `QUEUE_DRIVER` | `sync`, `redis` | inline or asynchronous webhook processing |
-| `REDIS_URL` | URL | Redis connection when queue driver is Redis |
-| `STORAGE_DRIVER` | `local`, `s3` | blob storage |
-| `BLOB_DATA_ROOT` | path | local blob root |
-| `S3_ENDPOINT` and related `S3_*` | provider values | S3/MinIO storage |
-| `KNOWLEDGE_DRIVER` | `pgvector`, `none` | knowledge indexing |
-| `KNOWLEDGE_EMBEDDING_DIM` | integer | vector width matching embedding model |
+The appliance keeps its implementation services private to the container. Its
+data and credentials are managed by `specgate init`, `specgate update`, and the
+Settings UI. Do not add database, storage, queue, or service-runtime variables
+to project configuration. Those source-checkout concerns belong to the
+[contributor setup guide](../../contributing/setup.md).
 
 ## Models and embeddings
 
 The Web UI stores the server-side model that powers platform readiness and
-delivery review. The governance chat agent's model is configured separately via
-environment. Stored settings:
+delivery review. Settings include:
 
 - server-side model provider and model (defaults to `openai` / `gpt-5.4-mini`);
 - default reasoning effort;
-- embedding provider and model;
+- embedding provider and model for experimental Knowledge;
 - OpenAI, Google, Anthropic, and OpenRouter API keys.
 
-Keys are encrypted at rest and masked on normal reads.
-
-The agents environment may provide runtime fallback keys, but the UI settings
-are the normal operator path.
+Keys are encrypted at rest and masked on normal reads. Governance chat is a
+separate Full-appliance capability; ask the appliance operator to configure it
+when it is unavailable.
 
 ## Governance thresholds and retention
 
@@ -268,78 +241,12 @@ neither terminal effect.
 These are workspace-wide behavior where indicated by the UI. Review the
 Settings consequence note before changing them.
 
-## OAuth and integrations
+## Integrations
 
-Provider OAuth apps use:
-
-- `GITHUB_OAUTH_CLIENT_ID`
-- `GITHUB_OAUTH_CLIENT_SECRET`
-- `GITLAB_OAUTH_CLIENT_ID`
-- `GITLAB_OAUTH_CLIENT_SECRET`
-- `LINEAR_OAUTH_CLIENT_ID`
-- `LINEAR_OAUTH_CLIENT_SECRET`
-
-`OAUTH_PUBLIC_CALLBACK_BASE_URL` overrides callback origin only when a reverse
-proxy makes request-derived origin incorrect.
-
-Each selected provider resource owns its managed webhook credential. Operators
-do not configure an integration-level webhook secret.
-
-## Agents service boundary
-
-Relevant values:
-
-- `AGENTS_BASE_URL`;
-- `DOC_REGISTRY_BASE_URL`.
-
-Coding IDE agents use the CLI. The Agents service uses Doc Registry REST. Both
-assume the trusted network described in the security guidance.
-
-## LangGraph runtime
-
-The v0.1 appliance deliberately uses the local in-memory runtime so it can
-run without LangSmith deployment credentials. Governance-chat threads therefore
-reset when the appliance restarts; governed artifacts, work, delivery evidence,
-and settings remain durable in the appliance volume.
-
-Durable/self-hosted runtime settings may include:
-
-- `DATABASE_URI`;
-- `REDIS_URI`;
-- `LANGSMITH_API_KEY`;
-- `LANGSMITH_PROJECT`;
-- `LANGSMITH_HIDE_INPUTS` and `LANGSMITH_HIDE_OUTPUTS` (both default to
-  `true`; explicitly set `false` only when trace payload content is intended);
-- governance-ops chat model — `GOVERNANCE_OPS_MODEL_PROVIDER`,
-  `GOVERNANCE_OPS_MODEL`, `GOVERNANCE_OPS_API_KEY`, and
-  `GOVERNANCE_OPS_THINKING_LEVEL` configure the model the governance-ops chat
-  agent runs on, isolated from the configured server-side model. The provider
-  defaults to `openai`, the model id defaults to `gpt-5.4-mini`, and an API key
-  is still required before chat can call the provider.
-  Server-side workloads other than chat — including the readiness quality gates —
-  use the configured server-side model, not this one.
-
-Requirements depend on the selected LangGraph deployment mode and image.
-
-## Vite UI
-
-Common build-time variables:
-
-- `VITE_DOC_REGISTRY_URL`;
-- `VITE_LANGGRAPH_API_URL`.
-
-Vite variables are compiled into the static bundle. Runtime container
-environment changes do not rewrite an already-built UI. The release UI image
-uses same-origin defaults (`/api/doc-registry` and `/api/agents`) and the nginx
-runtime proxies those paths to the Doc Registry and agents services inside the
-Compose network.
-
-## Exhaustive module references
-
-- [Doc Registry environment template](../../../app/doc-registry/.env.example)
-- [Agents environment](../../../app/agents/README.md)
-- [UI environment](../../../app/ui/README.md)
-- [Full appliance bundle](../../../deploy/local/)
+Integrations are Full-mode only. Connect a provider in the browser UI, choose
+the repository or work-tracking resource it may manage, and let SpecGate create
+the resource-specific webhook credential. See [Connect delivery
+integrations](../guides/connect-integrations.md) for the workflow.
 
 ## Related
 

@@ -51,7 +51,7 @@ service starts.
 | --- | --- | --- |
 | Best for | One person using a terminal and IDE agent | Teams and browser-based workflows |
 | Runtime | CLI only; no Docker, server, browser, or TCP service | One local Docker appliance container |
-| Durable state | SQLite on this machine | Appliance-managed database and object storage; Governance-chat threads reset when the appliance restarts |
+| Durable state | SQLite on this machine | Appliance-managed durable data; Governance-chat threads reset when the appliance restarts |
 | Core workflow | Immutable artifacts, readiness tasks, Context Packs, delivery evidence, and human decisions | Everything in Local, backed by shared services and a browser UI |
 | Additional capabilities | Local users, workspaces, and Codex, Claude Code, or Cursor plugins | Governance chat, Knowledge, integrations, model-backed checks, and shared workspaces |
 

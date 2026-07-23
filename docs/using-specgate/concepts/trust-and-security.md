@@ -69,15 +69,9 @@ reports the first broken link. This evidences direct database edits; it does not
 detect deletion of the newest events (no external anchor) and it does not defend
 against a compromised server binary.
 
-Encryption at rest is infra-level in the self-hosted stack: use Postgres with
-encrypted storage, S3-compatible server-side encryption, and OS-level disk
-encryption for the Full appliance volume. Settings
-secrets (provider API keys) are additionally application-encrypted via
-`SETTINGS_ENCRYPTION_KEY`. Application-level, per-workspace artifact encryption
-is deferred — see
-[the artifact-encryption ADR](../../contributing/adr/2026-07-10-artifact-encryption-at-rest.md)
-for the decision, constraints (presigned URLs, embeddings), and revisit
-trigger.
+Use encrypted storage and OS-level disk encryption for Full-appliance data.
+Settings secrets (provider API keys) are additionally application-encrypted.
+Application-level, per-workspace artifact encryption is not yet available.
 
 ## Safe deployment checklist
 

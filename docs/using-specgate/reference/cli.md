@@ -300,7 +300,12 @@ Portable bundles are an explicit one-way move, not synchronization:
 # While Local mode is selected:
 specgate portable export --file ~/specgate-local.json
 
-# After selecting Full mode and the exact destination workspace:
+# Initialize Full mode, then select the exact destination workspace.
+# This changes the active CLI topology; it does not delete Local SQLite state.
+specgate init --mode full
+specgate workspace select <destination-workspace-slug>
+
+# Preview first. This writes nothing:
 specgate portable import --file ~/specgate-local.json --dry-run
 specgate portable import --file ~/specgate-local.json --yes
 ```

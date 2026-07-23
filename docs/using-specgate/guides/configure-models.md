@@ -24,19 +24,17 @@ it does not silently upgrade the trust of an IDE result.
 | Delivery semantic review | different review-only agent or human | different review-only agent or human | platform review; human authority unchanged |
 | Explanations and summaries | ephemeral IDE answer | ephemeral IDE answer or governance chat | ephemeral IDE answer or governance chat |
 | Governance chat | unavailable | requires chat model | requires chat model |
-| Semantic Knowledge | repository context, not Governance Knowledge | requires embeddings/pgvector | requires embeddings/pgvector |
+| Semantic Knowledge | repository context, not Governance Knowledge | requires configured embeddings | requires configured embeddings |
 
 The IDE agent is the natural executor for repository-grounded evidence because
 it can re-run checkout commands locally. A different review-only agent may add
 delivery evidence, but human approval remains separate.
 
-Two model configurations exist and are independent: the **governance ops
-model** for gates, delivery review, and Full-mode quick-work AC drafting (set
-via `specgate model set`, stored encrypted in server settings) and the
-**governance chat model** (set via
-`GOVERNANCE_OPS_MODEL_PROVIDER` / `GOVERNANCE_OPS_MODEL` /
-`GOVERNANCE_OPS_API_KEY` env vars on the agents service). Configuring one does
-not configure the other.
+Two model configurations are independent: the **governance model** for gates,
+delivery review, and Full-mode quick-work AC drafting (set with `specgate model
+set` and stored encrypted in server settings), and the **governance chat
+model**. Configuring one does not configure the other. Ask the Full-appliance
+operator to configure chat when it is unavailable.
 
 The coding IDE agent can still perform scoping and implementation work through
 SpecGate skills without a server-side model.
@@ -137,20 +135,16 @@ To deliberately use this path, select **Model-less** in Settings → Models or
 run `specgate model off`. This preserves the selected provider, model, and API
 key for a one-step return with `specgate model on`.
 
-## Configure embeddings for workspace-scoped Knowledge
+## Use workspace-scoped Knowledge
 
-Workspace-scoped Knowledge search is available as an experimental v0.1 foundation. It needs:
+Knowledge search is an experimental Full-mode capability. It needs a configured
+embedding model and is not available in Local mode. Upload, ingest, search,
+citations, and Context Pack provenance are usable for evaluation; authoring and
+Knowledge-aware readiness gates remain experimental.
 
-- a knowledge driver such as `pgvector`;
-- embedding provider settings;
-- consistent embedding dimensions across indexed content.
-
-Knowledge upload, ingest, search, citations, and Context Pack
-provenance are usable for local evaluation, but retrieval-backed authoring and
-Knowledge-aware readiness gates are still experimental.
-
-See [Configuration reference](../reference/configuration.md) for environment and
-settings keys.
+Configure the embedding provider and model in Settings → Models. `specgate
+doctor` reports whether Knowledge is ready. Ask the appliance operator for help
+instead of adding internal storage settings to your repository or shell.
 
 ## Troubleshooting
 
