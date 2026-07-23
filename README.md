@@ -16,6 +16,16 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License"></a>
 </p>
 
+<p align="center">
+  <a href="docs/assets/readme/specgate-promo.mp4">
+    <img src="docs/assets/readme/specgate-promo-poster.jpg" alt="Watch the 15-second SpecGate product tour" width="960" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="docs/assets/readme/specgate-promo.mp4"><strong>Watch the 15-second product tour</strong></a>
+</p>
+
 SpecGate is a local-first governance layer for AI-assisted software delivery.
 It remembers exactly which version your team approved, gives the coding agent a
 focused Context Pack, and checks the returned evidence against your acceptance

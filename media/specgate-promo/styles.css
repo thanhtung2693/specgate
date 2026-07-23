@@ -1,0 +1,589 @@
+@font-face {
+  font-family: "Host Grotesk";
+  src: url("./assets/host-grotesk.woff2") format("woff2");
+  font-weight: 400 800;
+}
+
+@font-face {
+  font-family: "Commit Mono";
+  src: url("./assets/commit-mono.woff2") format("woff2");
+  font-weight: 400 700;
+}
+
+:root {
+  --canvas: #050506;
+  --surface: #0d0e10;
+  --surface-raised: #131419;
+  --line: #2a2c32;
+  --line-soft: #1d1f24;
+  --ink: #f5f6f7;
+  --muted: #b9bec8;
+  --quiet: #818690;
+  --accent: #8993ff;
+  --accent-soft: #272b58;
+  --ok: #4bd178;
+  --ok-soft: #142d1d;
+  --warn: #f0ae46;
+  --warn-soft: #342613;
+  --fail: #ee7269;
+}
+
+* { box-sizing: border-box; }
+
+html,
+body {
+  width: 1920px;
+  height: 1080px;
+  margin: 0;
+  overflow: hidden;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: "Host Grotesk", sans-serif;
+}
+
+h1,
+p { margin: 0; }
+
+.scene {
+  position: absolute;
+  inset: 0;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  padding: 48px 78px 64px;
+  background: var(--canvas);
+}
+
+.field-grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.7;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 72px 72px;
+}
+
+.field-index {
+  position: absolute;
+  z-index: 0;
+  color: #0b0c0e;
+  font-size: 300px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.08em;
+  user-select: none;
+}
+
+.field-index-left {
+  top: 92px;
+  left: -44px;
+}
+
+.field-index-right {
+  right: -70px;
+  bottom: -60px;
+}
+
+.product-bar,
+main {
+  position: relative;
+  z-index: 2;
+}
+
+.product-bar {
+  display: flex;
+  height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 26px;
+  font-weight: 760;
+  letter-spacing: -0.04em;
+}
+
+.brand img {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+}
+
+.story-position {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--quiet);
+  font: 600 15px/1 "Commit Mono", monospace;
+}
+
+.story-position strong {
+  color: var(--ink);
+  font-size: 20px;
+}
+
+.position-rule {
+  width: 84px;
+  height: 1px;
+  margin-right: 8px;
+  background: var(--line);
+}
+
+main {
+  height: calc(100% - 58px);
+  padding-top: 30px;
+}
+
+.headline-stage {
+  position: relative;
+  height: 218px;
+  padding-left: 4px;
+}
+
+.eyebrow {
+  color: var(--accent);
+  font: 700 15px/1 "Commit Mono", monospace;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.headline-stack {
+  position: relative;
+  height: 116px;
+  margin-top: 13px;
+  overflow: hidden;
+}
+
+.headline-stack h1 {
+  position: absolute;
+  inset: 0;
+  font-size: 92px;
+  font-weight: 780;
+  line-height: 1.04;
+  letter-spacing: -0.061em;
+  white-space: nowrap;
+}
+
+.headline-stack h1:not(:first-child) { opacity: 0; }
+.headline-stack h1 span { color: var(--accent); }
+
+#headline-note {
+  color: var(--muted);
+  font-size: 22px;
+  line-height: 1.3;
+  letter-spacing: -0.018em;
+}
+
+.proof-surface {
+  position: relative;
+  height: 650px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: 0 38px 110px rgba(0, 0, 0, 0.48);
+}
+
+.surface-top {
+  display: flex;
+  height: 74px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px 0 30px;
+  border-bottom: 1px solid var(--line-soft);
+  background: #101115;
+}
+
+.surface-top > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.surface-kicker {
+  color: var(--quiet);
+  font: 700 12px/1 "Commit Mono", monospace;
+  letter-spacing: 0.13em;
+}
+
+.surface-top strong {
+  font-size: 21px;
+  letter-spacing: -0.02em;
+}
+
+.surface-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font: 600 14px/1 "Commit Mono", monospace;
+}
+
+.state-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 18px rgba(137, 147, 255, 0.65);
+}
+
+.proof-lane {
+  position: relative;
+  height: 258px;
+  margin: 0 38px;
+}
+
+.lane-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.lane-base,
+.lane-progress,
+.peer-connector {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.lane-base {
+  stroke: #2a2c32;
+  stroke-width: 2;
+}
+
+.lane-progress {
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 8px rgba(137, 147, 255, 0.55));
+  transform-origin: 47px 124px;
+}
+
+.peer-connector {
+  opacity: 0;
+  stroke: var(--warn);
+  stroke-width: 2;
+  stroke-dasharray: 5 7;
+}
+
+.lane-runner {
+  position: absolute;
+  z-index: 5;
+  top: 117px;
+  left: 45px;
+  width: 15px;
+  height: 15px;
+  border: 3px solid var(--canvas);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 7px rgba(137, 147, 255, 0.14), 0 0 24px rgba(137, 147, 255, 0.9);
+}
+
+.proof-node {
+  position: absolute;
+  top: 72px;
+  width: 220px;
+  color: var(--quiet);
+}
+
+.proof-node .node-dot {
+  position: absolute;
+  top: 45px;
+  left: 0;
+  z-index: 4;
+  width: 17px;
+  height: 17px;
+  border: 4px solid var(--surface);
+  border-radius: 50%;
+  background: #464951;
+  box-shadow: 0 0 0 2px #464951;
+}
+
+.proof-node .node-index {
+  display: block;
+  color: inherit;
+  font: 700 13px/1 "Commit Mono", monospace;
+  letter-spacing: 0.1em;
+}
+
+.proof-node strong {
+  display: block;
+  margin-top: 74px;
+  color: var(--muted);
+  font-size: 21px;
+  letter-spacing: -0.025em;
+}
+
+.proof-node small {
+  display: block;
+  margin-top: 6px;
+  color: var(--quiet);
+  font: 500 13px/1.3 "Commit Mono", monospace;
+}
+
+.node-claim { left: 44px; color: var(--accent); }
+.node-ac1 { left: 415px; }
+.node-ac2 { left: 790px; }
+.node-human { left: 1165px; }
+
+.node-claim .node-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent), 0 0 18px rgba(137, 147, 255, 0.55);
+}
+
+.finding-stage {
+  position: relative;
+  height: 244px;
+  margin: 0 38px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.evidence-gap,
+.peer-note,
+.human-decision,
+.revision-proof {
+  position: absolute;
+  opacity: 0;
+}
+
+.evidence-gap {
+  top: 28px;
+  left: 790px;
+  display: grid;
+  width: 530px;
+  grid-template-columns: 150px 1fr;
+  gap: 0 26px;
+  padding-left: 22px;
+  border-left: 4px solid var(--warn);
+}
+
+.gap-label {
+  align-self: center;
+  color: var(--warn);
+  font: 800 16px/1.1 "Commit Mono", monospace;
+  letter-spacing: 0.08em;
+}
+
+.gap-values {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--line);
+}
+
+.gap-values > div {
+  padding: 12px 16px;
+  background: var(--surface-raised);
+}
+
+.gap-values span {
+  display: block;
+  color: var(--quiet);
+  font: 700 11px/1 "Commit Mono", monospace;
+  letter-spacing: 0.11em;
+}
+
+.gap-values strong {
+  display: block;
+  margin-top: 5px;
+  font: 700 30px/1 "Commit Mono", monospace;
+}
+
+.gap-values .actual strong { color: var(--warn); }
+
+.evidence-gap p {
+  grid-column: 2;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 17px;
+}
+
+.peer-note {
+  top: 24px;
+  left: 905px;
+  display: grid;
+  width: 520px;
+  grid-template-columns: 54px 1fr;
+  gap: 18px;
+}
+
+.peer-marker {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  color: var(--canvas);
+  background: var(--warn);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.peer-note span,
+.human-decision span,
+.revision-proof > div span {
+  display: block;
+  color: var(--warn);
+  font: 700 12px/1 "Commit Mono", monospace;
+  letter-spacing: 0.11em;
+}
+
+.peer-note strong,
+.human-decision strong,
+.revision-proof strong {
+  display: block;
+  margin-top: 7px;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+
+.peer-note code {
+  display: block;
+  margin-top: 14px;
+  padding: 13px 15px;
+  color: var(--fail);
+  border-left: 2px solid var(--warn);
+  background: #090a0c;
+  font: 600 16px/1 "Commit Mono", monospace;
+}
+
+.peer-note code b { color: var(--ok); }
+
+.human-decision {
+  top: 28px;
+  left: 70px;
+  width: 520px;
+  padding: 18px 21px;
+  border: 1px solid var(--accent);
+  background: #11132a;
+}
+
+.human-decision span { color: var(--accent); }
+.human-decision small {
+  display: block;
+  margin-top: 7px;
+  color: var(--muted);
+  font: 500 14px/1.3 "Commit Mono", monospace;
+}
+
+.revision-proof {
+  top: 30px;
+  left: 780px;
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  align-items: center;
+  gap: 18px;
+}
+
+.revision-check {
+  display: grid;
+  width: 62px;
+  height: 62px;
+  place-items: center;
+  color: var(--canvas);
+  background: var(--ok);
+  font-size: 31px;
+  font-weight: 800;
+}
+
+.revision-proof > div span { color: var(--ok); }
+
+.terminal-strip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  height: 74px;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 0 29px;
+  border-top: 1px solid var(--line);
+  background: #090a0c;
+  font: 560 15px/1 "Commit Mono", monospace;
+}
+
+.prompt { color: var(--accent); }
+
+.command-stack {
+  position: relative;
+  height: 20px;
+}
+
+.command-stack code {
+  position: absolute;
+  inset: 0;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.command-stack code:not(:first-child) { opacity: 0; }
+
+.terminal-result {
+  color: var(--muted);
+  padding-left: 22px;
+  border-left: 1px solid var(--line);
+}
+
+.delivered-state {
+  position: absolute;
+  z-index: 10;
+  inset: 74px 0 74px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  opacity: 0;
+  background: #0d1410;
+}
+
+.delivered-orbit {
+  position: absolute;
+  width: 820px;
+  height: 320px;
+  border: 1px solid rgba(75, 209, 120, 0.18);
+  border-radius: 50%;
+  transform: rotate(-8deg);
+}
+
+.delivered-mark {
+  display: grid;
+  width: 92px;
+  height: 92px;
+  place-items: center;
+  color: var(--canvas);
+  background: var(--ok);
+  font-size: 48px;
+  font-weight: 800;
+}
+
+.delivered-state span,
+.delivered-state strong,
+.delivered-state small { display: block; }
+
+.delivered-state span {
+  color: var(--ok);
+  font: 700 13px/1 "Commit Mono", monospace;
+  letter-spacing: 0.12em;
+}
+
+.delivered-state strong {
+  margin-top: 8px;
+  color: var(--ok);
+  font-size: 78px;
+  line-height: 0.9;
+  letter-spacing: -0.06em;
+}
+
+.delivered-state small {
+  margin-top: 13px;
+  color: var(--muted);
+  font: 520 16px/1 "Commit Mono", monospace;
+}
