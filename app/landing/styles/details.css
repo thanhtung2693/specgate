@@ -1,0 +1,251 @@
+/* ---------- Where it fits: your stack vs the gate ---------- */
+.fit-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: clamp(1rem, 2.5vw, 1.8rem);
+  align-items: stretch;
+}
+.fit-side {
+  display: grid;
+  gap: clamp(1rem, 2.5vw, 1.8rem);
+  align-content: stretch;
+}
+.fit-card {
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--surface-1) 88%, transparent);
+  padding: clamp(1.25rem, 2.5vw, 1.65rem);
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+.fit-card:hover {
+  border-color: var(--hairline-strong);
+  background: var(--surface-1);
+}
+.fit-card h3 {
+  font-size: clamp(1.25rem, 2.4vw, 1.5rem);
+  margin-bottom: 0.6rem;
+}
+.fit-card p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.97rem;
+}
+.cmp-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--ink-subtle);
+  margin-bottom: 1rem;
+}
+.cmp-tag .ic {
+  width: 14px;
+  height: 14px;
+  vertical-align: -0.18em;
+  margin-right: 0.1rem;
+}
+/* the SpecGate panel is the gate itself: framed, elevated, and
+   carrying the contract list */
+.fit-card-hero {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 12%, transparent), transparent 60%),
+    var(--surface-1);
+  padding: clamp(1.6rem, 3.2vw, 2.4rem);
+}
+.fit-card-hero h3 {
+  font-size: clamp(1.6rem, 3vw, 2.1rem);
+  color: var(--accent-text);
+}
+.fit-card-hero p {
+  font-size: 1.02rem;
+  max-width: 32rem;
+}
+.fit-owns {
+  list-style: none;
+  margin: 1.2rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem 1.2rem;
+}
+.fit-owns li {
+  position: relative;
+  padding-left: 1.35rem;
+  color: var(--ink-muted);
+  font-size: 0.92rem;
+}
+.fit-owns li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.42em;
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid var(--accent-text);
+  transform: rotate(45deg);
+}
+.cmp-note {
+  margin: clamp(1.4rem, 3vw, 2rem) 0 0;
+  color: var(--ink-faint);
+  line-height: 1.55;
+  max-width: 46rem;
+}
+@media (max-width: 860px) {
+  .fit-grid {
+    grid-template-columns: 1fr;
+  }
+  .fit-owns {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- FAQ ---------- */
+.faq-list {
+  max-width: 48rem;
+}
+.faq-item {
+  break-inside: avoid;
+  margin-bottom: 0.8rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  padding: 0 1.3rem;
+  transition: border-color 0.2s ease;
+}
+.faq-item[open] {
+  border-color: var(--hairline-strong);
+}
+.faq-item summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 1.05rem 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+.faq-item summary span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.faq-item summary::after {
+  content: "+";
+  flex: none;
+  font-family: var(--font-mono);
+  color: var(--accent-text);
+  font-size: 1.3rem;
+  transition: transform 0.2s ease;
+}
+.faq-item[open] summary::after {
+  transform: rotate(45deg);
+}
+.faq-item p {
+  margin: 0 0 1.2rem;
+  color: var(--ink-muted);
+  font-size: 0.96rem;
+}
+.faq-item code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--surface-3);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 0.08em 0.35em;
+}
+@media (max-width: 860px) {
+  .faq-list {
+    columns: 1;
+  }
+}
+
+/* ---------- CTA: the last gate ---------- */
+.cta {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: clamp(5rem, 9vw, 8rem) var(--pad-x);
+  text-align: left;
+  border-top: 1px solid var(--hairline);
+}
+.cta h2 {
+  font-size: clamp(2.2rem, 5.5vw, 4rem);
+  font-weight: 800;
+}
+.cta-sub {
+  color: var(--ink-muted);
+  font-size: 1.1rem;
+  max-width: 34rem;
+  margin: 1.3rem 0 0;
+}
+.cta .hero-actions {
+  justify-content: flex-start;
+}
+
+/* ---------- Footer ---------- */
+.footer {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 2.2rem var(--pad-x) 3.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-top: 1px solid var(--hairline);
+  flex-wrap: wrap;
+}
+.footer-links {
+  display: flex;
+  gap: 1.3rem;
+}
+.footer-links a {
+  color: var(--ink-subtle);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+.footer-links a:hover {
+  color: var(--ink);
+}
+
+/* ---------- Icons ---------- */
+.sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+.ic {
+  width: 1.1em;
+  height: 1.1em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+}
+.ic-btn {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.18s ease;
+}
+.btn:hover .ic-btn {
+  transform: translateX(3px);
+}
+.nav-github .ic {
+  fill: currentColor;
+  stroke: none;
+  width: 16px;
+  height: 16px;
+}

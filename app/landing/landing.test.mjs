@@ -4,7 +4,10 @@ import assert from "node:assert/strict";
 
 const here = new URL(".", import.meta.url);
 const html = readFileSync(new URL("index.html", here), "utf8");
-const css = readFileSync(new URL("styles.css", here), "utf8");
+const cssEntry = readFileSync(new URL("styles.css", here), "utf8");
+const css = [...cssEntry.matchAll(/@import url\("([^"]+)"\);/g)]
+  .map(([, path]) => readFileSync(new URL(path, here), "utf8"))
+  .join("\n");
 const js = readFileSync(new URL("script.js", here), "utf8");
 const sitemap = readFileSync(new URL("sitemap.xml", here), "utf8");
 

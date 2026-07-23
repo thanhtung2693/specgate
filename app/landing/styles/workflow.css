@@ -1,0 +1,460 @@
+/* ---------- Works-with strip ---------- */
+.wordmarks {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: clamp(2.5rem, 5vw, 4rem) var(--pad-x);
+  display: grid;
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
+  gap: clamp(2.5rem, 6vw, 5.5rem);
+  align-items: start;
+  border-block: 1px solid var(--hairline);
+}
+.wordmarks-intro h2 {
+  max-width: 10ch;
+  font-size: clamp(2rem, 3.8vw, 3.1rem);
+}
+.wordmarks-intro p {
+  max-width: 30rem;
+  margin: 1rem 0 0;
+  color: var(--ink-muted);
+}
+.tool-routes {
+  border-top: 1px solid var(--hairline-strong);
+}
+.tool-route {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: clamp(1.5rem, 4vw, 3rem);
+  align-items: center;
+  padding: clamp(1.4rem, 3vw, 2rem) 0;
+  border-bottom: 1px solid var(--hairline-strong);
+}
+.tool-route-kicker {
+  margin: 0 0 0.65rem;
+  color: var(--accent-text);
+}
+.tool-route h3 {
+  font-size: clamp(1.2rem, 2vw, 1.55rem);
+}
+.tool-route-copy > p:last-child {
+  max-width: 34rem;
+  margin: 0.55rem 0 0;
+  color: var(--ink-muted);
+  font-size: 0.96rem;
+}
+.tool-mark-group {
+  display: grid;
+  justify-items: end;
+  gap: 0.65rem;
+}
+.tool-mark-label {
+  color: var(--ink-faint);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.tool-marks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+.tool-marks li {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+}
+.tool-marks img {
+  --mark-scale: 1;
+  display: block;
+  max-height: 32px;
+  max-width: 34px;
+  height: auto;
+  width: auto;
+  filter: brightness(0) invert(1);
+  opacity: 0.72;
+  transform: scale(var(--mark-scale));
+  transition: filter 0.25s ease, opacity 0.25s ease, transform 0.25s ease;
+}
+.tool-marks li[data-tool="cursor"] img {
+  --mark-scale: 1.65;
+}
+.tool-marks li[data-tool="claude"] img {
+  --mark-scale: 1.8;
+}
+.tool-marks img:hover {
+  filter: none;
+  opacity: 1;
+  transform: translateY(-3px) scale(var(--mark-scale));
+}
+.tool-team-marks {
+  display: flex;
+  align-items: center;
+  gap: 1.4rem;
+}
+.tool-team-marks .tool-mark-group + .tool-mark-group {
+  padding-left: 1.4rem;
+  border-left: 1px solid var(--hairline-strong);
+}
+html[data-theme="light"] .tool-marks img {
+  filter: brightness(0);
+  opacity: 0.68;
+}
+html[data-theme="light"] .tool-marks img:hover {
+  filter: none;
+  opacity: 1;
+}
+@media (max-width: 900px) {
+  .wordmarks {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+  .wordmarks-intro h2 {
+    max-width: 14ch;
+  }
+}
+@media (max-width: 620px) {
+  .tool-route {
+    grid-template-columns: 1fr;
+  }
+  .tool-mark-group {
+    justify-items: start;
+  }
+  .tool-team-marks {
+    justify-content: flex-start;
+  }
+}
+
+/* ---------- Bands + the governance rail ----------
+   Every section from #how to #cta is a gate on one continuous
+   rail. The rail is drawn per-band at the same x so adjacent
+   bands read as a single line; each band carries a gate node
+   that stamps PASS when the reader crosses it. */
+.band {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: var(--section-y) var(--pad-x);
+  position: relative;
+}
+.band-rail::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--rail-x);
+  width: 1px;
+  background: var(--rail);
+}
+.band-rail {
+  padding-left: calc(var(--rail-x) + clamp(1.6rem, 3.5vw, 3rem));
+}
+
+/* One checkpoint marker anchors the workflow explanation. */
+.gate-node {
+  position: absolute;
+  top: clamp(3.8rem, 6.9vw, 5.8rem);
+  left: var(--rail-x);
+  transform: translateX(-50%);
+  z-index: 1;
+}
+.gate-node::before {
+  content: "";
+  width: 11px;
+  height: 11px;
+  display: block;
+  border: 1.5px solid var(--accent-text);
+  background: color-mix(in srgb, var(--accent) 16%, var(--canvas));
+  transform: rotate(45deg);
+}
+
+.band-head {
+  max-width: 46rem;
+  margin-bottom: clamp(2.2rem, 5vw, 3.4rem);
+}
+.band-head h2,
+.cta h2 {
+  font-size: clamp(2rem, 4.4vw, 3.1rem);
+}
+.band-sub {
+  color: var(--ink-muted);
+  font-size: 1.08rem;
+  margin: 1.1rem 0 0;
+  max-width: 40rem;
+}
+
+@media (max-width: 720px) {
+  .band-rail::before,
+  .gate-node {
+    display: none;
+  }
+  .band-rail {
+    padding-left: var(--pad-x);
+  }
+}
+
+/* ---------- The governed loop: three stages on the rail ---------- */
+.loop-stages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: clamp(1.8rem, 4vw, 2.8rem);
+}
+.loop-stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: clamp(1.2rem, 3vw, 2.6rem);
+  align-items: center;
+  padding: clamp(1.2rem, 2.5vw, 1.8rem) 0;
+}
+/* stage marker sits out on the rail */
+.loop-stage::before {
+  content: "";
+  position: absolute;
+  left: calc(-1 * clamp(1.6rem, 3.5vw, 3rem));
+  top: 50%;
+  width: clamp(1rem, 2.4vw, 2.1rem);
+  height: 1px;
+  background: var(--rail);
+}
+.loop-verb {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+  margin-bottom: 0.75rem;
+}
+.loop-stage h3 {
+  font-size: clamp(1.5rem, 3vw, 2.05rem);
+  margin-bottom: 0.65rem;
+}
+.loop-stage > div > p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 1rem;
+  max-width: 30rem;
+}
+
+/* each stage carries its artifact: what actually moves through
+   the gate at that step */
+.loop-artifact {
+  justify-self: end;
+  width: min(100%, 21rem);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  padding: 1rem 1.1rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  line-height: 1.8;
+  color: var(--ink-subtle);
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+.loop-artifact .la-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  color: var(--ink-faint);
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding-bottom: 0.55rem;
+  margin-bottom: 0.55rem;
+  border-bottom: 1px solid var(--hairline);
+}
+.loop-artifact .la-ok {
+  color: var(--ok);
+}
+.loop-artifact .la-acc {
+  color: var(--accent-text);
+}
+.loop-artifact .la-dim {
+  color: var(--ink-faint);
+}
+
+@media (max-width: 860px) {
+  .loop-stage {
+    grid-template-columns: 1fr;
+  }
+  .loop-artifact {
+    justify-self: start;
+  }
+}
+
+/* ---------- See it run: cast carousel ---------- */
+.cast-carousel {
+  max-width: 820px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.cast-stage {
+  position: relative;
+  isolation: isolate;
+}
+.cast-stage::before {
+  content: "";
+  position: absolute;
+  inset: -14% -8% -22%;
+  z-index: -1;
+  background: radial-gradient(
+    60% 55% at 50% 42%,
+    color-mix(in srgb, var(--accent) 22%, transparent),
+    transparent 70%
+  );
+  filter: blur(36px);
+  opacity: 0.5;
+  pointer-events: none;
+}
+.termcast {
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  padding: 6px;
+  box-shadow:
+    0 40px 70px -45px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.term-bar {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-2);
+  border-radius: calc(var(--r-md) - 5px) calc(var(--r-md) - 5px) 0 0;
+  align-items: center;
+}
+.term-title {
+  width: auto;
+  height: auto;
+  max-width: min(22rem, 62vw);
+  border-radius: 0;
+  background: none;
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+}
+.term-body {
+  margin: 0;
+  padding: 1.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.85;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink-muted);
+  white-space: pre-wrap;
+  background: var(--surface-1);
+  border-radius: 0 0 calc(var(--r-md) - 5px) calc(var(--r-md) - 5px);
+  min-height: 22rem;
+  overflow-wrap: anywhere;
+}
+.cast-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+.cast-tabs button {
+  min-height: 42px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink-subtle);
+  font: 500 0.82rem/1 var(--font-body);
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+}
+.cast-tabs button:hover {
+  color: var(--ink);
+  border-color: var(--hairline-strong);
+}
+.cast-tabs button[aria-selected="true"] {
+  color: var(--accent-text);
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--hairline));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.cast-tabs button:active {
+  transform: translateY(1px);
+}
+.cast-caption {
+  text-align: center;
+  max-width: 60ch;
+  margin: 0 auto;
+  font-size: 0.96rem;
+  line-height: 1.55;
+  color: var(--ink-faint);
+  transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.cast-caption-lead {
+  color: var(--ink);
+  font-weight: 600;
+}
+/* line reveal + typing */
+.tl {
+  opacity: 1;
+  transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.termcast[data-armed] .tl {
+  opacity: 0;
+}
+.tl.show,
+.termcast[data-armed] .tl.show {
+  opacity: 1;
+}
+.tl[data-k="cmd"] {
+  color: var(--ink);
+}
+.tl[data-k="dim"] {
+  color: var(--ink-faint);
+}
+.tl[data-k="out"] {
+  color: var(--ink-muted);
+}
+.tl[data-k="ok"] {
+  color: var(--ok);
+  font-weight: 500;
+}
+.tl[data-k="pass"] {
+  color: var(--ok);
+  font-weight: 600;
+}
+.tl.cur::after {
+  content: "";
+  display: inline-block;
+  width: 0.55ch;
+  height: 1.05em;
+  margin-left: 1px;
+  vertical-align: -0.18em;
+  background: var(--accent-text);
+  animation: termblink 1s steps(2, start) infinite;
+}
+@keyframes termblink {
+  50% {
+    opacity: 0;
+  }
+}
+@media (max-width: 800px) {
+  .cast-stage::before {
+    inset: -10% 0 -16%;
+  }
+  .cast-stage .term-body {
+    min-height: 18rem;
+    font-size: 0.75rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .termcast[data-armed] .tl {
+    opacity: 1;
+  }
+  .tl.cur::after {
+    animation: none;
+  }
+}
