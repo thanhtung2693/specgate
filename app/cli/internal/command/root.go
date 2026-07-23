@@ -166,9 +166,19 @@ type Deps struct {
 	CheckLatestRelease   func(ctx context.Context, timeout time.Duration, cachePath string) (string, error)
 	UpdateCheckCachePath string
 	CLIInstallURL        string
+	CLIReleaseBaseURL    string
 	PluginRegistryURL    string
 	PublicRegistryURL    string
 	BundleBaseURL        string
+
+	// RuntimeGOOS and ExecutablePath isolate the platform-specific updater in
+	// tests. Empty/nil values use runtime.GOOS and os.Executable.
+	RuntimeGOOS    string
+	ExecutablePath func() (string, error)
+
+	// SelfUpdateCLI replaces the running Windows executable. Nil uses the
+	// checksum-verified GitHub release updater.
+	SelfUpdateCLI func(ctx context.Context, version, executablePath string) error
 
 	// Resolved by PersistentPreRunE; safe to read in any subcommand RunE.
 	Printer      *output.Printer

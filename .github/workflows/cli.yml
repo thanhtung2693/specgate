@@ -23,3 +23,19 @@ jobs:
           cache-dependency-path: app/cli/go.sum
       - run: go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...
       - run: make test
+
+  windows-update:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: app/cli
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: app/cli/go.mod
+          cache-dependency-path: app/cli/go.sum
+      - name: Test native Windows updater
+        run: go test ./internal/command -run 'TestUpdateWindows|TestSelfUpdateWindowsCLI' -count=1
+      - name: Build native Windows CLI
+        run: go build -o "${{ runner.temp }}\specgate.exe" ./cmd/specgate

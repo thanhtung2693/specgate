@@ -32,6 +32,18 @@ The CLI suite covers command behavior, JSON envelopes, exit codes, local
 configuration, user/workspace selection, plugin installation, and uninstall
 cleanup.
 
+Native Windows updater changes also require the Windows-target build check:
+
+```bash
+cd app/cli
+GOOS=windows GOARCH=amd64 go build -o /tmp/specgate.exe ./cmd/specgate
+GOOS=windows GOARCH=amd64 go test -c ./internal/command -o /tmp/specgate-command.test.exe
+```
+
+The CLI and release workflows run the updater regression tests on
+`windows-latest`; the release job cannot build assets until that native check
+passes.
+
 With a local stack running, the CLI also has opt-in new-user e2e smokes:
 
 ```bash
@@ -128,7 +140,7 @@ need for packages, releases, or Pages deployments.
 
 | Change | Minimum useful proof |
 |---|---|
-| CLI command behavior | Targeted CLI tests, then `make test` in `app/cli` |
+| CLI command behavior | Targeted CLI tests, then `make test` in `app/cli`; add the Windows-target build for platform-specific updater changes |
 | Plugin installer or uninstall cleanup | CLI tests plus a scratch HOME run when behavior touches real files |
 | Docker or Compose release files | `docker compose config --quiet`, release-readiness gate, affected CLI deploy tests |
 | Doc Registry API or schema | Targeted Go tests, then `make test` in `app/doc-registry` |

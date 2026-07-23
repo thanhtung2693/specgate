@@ -10,6 +10,7 @@ Release only when:
 
 - release-readiness passes;
 - every release-facing module passes its test and static-analysis checks;
+- the native Windows CLI build and updater regression tests pass;
 - public install works from a clean machine or scratch `HOME`;
 - no secrets, local config, or generated machine files are staged;
 - release images and local appliance bundle match the tag.
@@ -61,7 +62,9 @@ For cross-module contract changes, also run release-readiness.
 The tag-triggered `release.yml` repeats the Doc Registry, CLI, governance
 operations, UI, and release-readiness checks in its `verify` job. No publishing
 job starts unless that verification gate succeeds; local results remain useful
-for iteration but never replace the tag's own evidence.
+for iteration but never replace the tag's own evidence. A separate
+`windows-latest` job builds the native executable and runs the updater
+regressions before GoReleaser may publish CLI assets.
 
 ## Packaging
 

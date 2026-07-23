@@ -3695,6 +3695,55 @@ func TestLocalStatusCmdPlainUsesFullApplianceTerminology(t *testing.T) {
 	}
 }
 
+func TestUpdateWindowsUsesNativeSelfUpdaterWithoutShell(t *testing.T) {
+	installerHits := 0
+	cliSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		installerHits++
+		http.Error(w, "shell installer must not run on Windows", http.StatusInternalServerError)
+	}))
+	defer cliSrv.Close()
+
+	deps, out := newTestDeps(t, "")
+	deps.CLIInstallURL = cliSrv.URL
+	deps.RuntimeGOOS = "windows"
+	deps.ExecutablePath = func() (string, error) {
+		return `C:\Users\test\AppData\Local\bin\specgate.exe`, nil
+	}
+	var (
+		updatedVersion string
+		updatedPath    string
+	)
+	deps.SelfUpdateCLI = func(_ context.Context, version, executablePath string) error {
+		updatedVersion = version
+		updatedPath = executablePath
+		return nil
+	}
+	deps.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	if err := (config.Config{
+		Mode:  config.ModeLocal,
+		Local: config.LocalStore{Path: t.TempDir()},
+	}).SaveTo(deps.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+
+	code := command.ExecuteForCode(
+		command.NewRootCommand(deps),
+		"--json", "update", "--version", "v9.9.9",
+	)
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if installerHits != 0 {
+		t.Fatalf("Windows update fetched shell installer %d time(s)", installerHits)
+	}
+	if updatedVersion != "v9.9.9" {
+		t.Fatalf("updated version = %q, want v9.9.9", updatedVersion)
+	}
+	if updatedPath != `C:\Users\test\AppData\Local\bin\specgate.exe` {
+		t.Fatalf("updated path = %q", updatedPath)
+	}
+}
+
 func TestUpdateJSONProgressEmitsEventsAndFinalEnvelope(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/cli/install.sh", func(w http.ResponseWriter, _ *http.Request) {

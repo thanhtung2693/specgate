@@ -7,15 +7,17 @@ the final delivery.
 
 ## Before you start
 
-- macOS, Linux, or Windows with WSL2.
+- macOS, Linux, WSL2, or native Windows.
 - Network access for installation.
 - A repository with an IDE agent you can restart.
 
 You do not need Docker, a source checkout of SpecGate, or a model API key. After
 installation, Local mode works without a server or network connection.
 
-> **Windows:** run the install script and CLI from WSL2. Native Windows binaries
-> are also available on the GitHub releases page.
+> **Native Windows:** download the `windows_amd64.zip` asset from the
+> [latest GitHub release](https://github.com/thanhtung2693/specgate/releases/latest),
+> extract `specgate.exe` into a directory on `PATH`, and run
+> `specgate --version`. The shell installer below is for macOS, Linux, and WSL2.
 
 ## 1. Install
 
