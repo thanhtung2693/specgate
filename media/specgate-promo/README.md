@@ -7,6 +7,7 @@ without audio.
 ## Validate
 
 ```bash
+npm test
 npm run check
 ```
 
