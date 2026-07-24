@@ -41,7 +41,6 @@ internal/
 migrations/postgres/  # Postgres schema (spec §3.2) — authoritative
 ../../docker/Dockerfile.doc-registry
                       # container image (monorepo root)
-docker-compose.yml    # optional Redis queue and MinIO for S3 mode
 .env.example
 docs/                 # this folder — PRD, spec
 ```
@@ -90,22 +89,23 @@ docs/                 # this folder — PRD, spec
 | `GITLAB_OAUTH_CLIENT_ID` / `GITLAB_OAUTH_CLIENT_SECRET` | _(empty)_ | GitLab.com OAuth app credentials. Blank = GitLab OAuth not configured; self-hosted GitLab keeps token-based setup and does not reuse these credentials. |
 | `LINEAR_OAUTH_CLIENT_ID` / `LINEAR_OAUTH_CLIENT_SECRET` | _(empty)_ | Linear OAuth app credentials. Blank = Linear OAuth not configured. |
 
-## Local development
+## Native module development
 
 From the **Doc Registry root** (`doc-registry/`):
 
 ```bash
 make setup          # first time only: creates .env, generates SETTINGS_ENCRYPTION_KEY
-# Edit .env: set POSTGRES_DSN (and other optional vars)
-make docker-up      # starts optional MinIO for STORAGE_DRIVER=s3
+# Edit .env: point POSTGRES_DSN at a disposable development database
 make tidy           # resolve dependencies
 make run            # starts server on :8080
 # optional: go install github.com/air-verse/air@latest  →  make dev  (hot reload)
 ```
 
-Local mode needs no S3/MinIO. The app creates the S3 bucket on startup only when
-`STORAGE_DRIVER=s3` and `S3_ENSURE_BUCKET=true`; disable that flag when the
-bucket is provisioned out of band.
+For normal repository-level development, run the single-container appliance
+from the repository root with `make setup`. Native module development is useful
+for a focused Go loop and expects its PostgreSQL dependency to be managed
+separately. Filesystem storage is the default; S3-compatible storage is an
+optional self-host/cloud configuration.
 
 | URL | Purpose |
 |---|---|
@@ -113,7 +113,6 @@ bucket is provisioned out of band.
 | `http://localhost:8080/docs` | Scalar API reference (generated from Huma's OpenAPI document) |
 | `http://localhost:8080/openapi.json` | OpenAPI 3.1 spec |
 | `http://localhost:8080/settings` | Settings (GET/PUT) |
-| `http://localhost:9001` | MinIO console |
 
 ## Docker image
 
@@ -133,8 +132,6 @@ docker build -f ../../docker/Dockerfile.doc-registry -t doc-registry:local ../..
 | `make lint` | `go vet` |
 | `make fmt` | gofmt |
 | `make migrate` | Apply migrations and exit |
-| `make docker-up` | Start optional MinIO (bucket creation is handled by the app when enabled) |
-| `make docker-down` | Stop supporting services |
 
 ### `make test` and the Postgres subtests
 
@@ -190,16 +187,16 @@ go run ./cmd/doc-registry --seed-skills # seeds each existing workspace
 go run ./cmd/doc-registry --seed-demo --seed-demo-workspace-id ws-1 --seed-demo-created-by thanhtung2693
 ```
 
-### Docker Compose
+### Container deployment
+
+From the repository root:
 
 ```bash
-# One-shot at deploy time (fresh container):
-docker compose run --rm doc-registry doc-registry --migrate-only
-docker compose run --rm doc-registry doc-registry --seed-skills # seeds each existing workspace
+# Single-container contributor appliance:
+make seed-skills
 
-# Or against an already-running container:
-docker compose exec doc-registry doc-registry --migrate-only
-docker compose exec doc-registry doc-registry --seed-skills # seeds each existing workspace
+# Separable self-host/cloud topology:
+docker compose -f docker-compose.yml exec doc-registry doc-registry --migrate-only
 ```
 
 ### Kubernetes

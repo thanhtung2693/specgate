@@ -46,3 +46,24 @@ func TestGateRunsFreshSchema(t *testing.T) {
 		}
 	})
 }
+
+func TestGateRunsMigrationRepairsMissingDeliveryCycleColumn(t *testing.T) {
+	forEachDriver(t, func(t *testing.T, name string, gdb *gorm.DB) {
+		if err := gdb.Exec("DROP INDEX IF EXISTS idx_gate_runs_delivery_cycle").Error; err != nil {
+			t.Fatalf("%s drop delivery-cycle index: %v", name, err)
+		}
+		if err := gdb.Exec("ALTER TABLE gate_runs DROP COLUMN completion_feedback_event_id").Error; err != nil {
+			t.Fatalf("%s drop delivery-cycle column: %v", name, err)
+		}
+
+		if err := Migrate(gdb); err != nil {
+			t.Fatalf("%s migrate schema without delivery-cycle column: %v", name, err)
+		}
+		if !tableColumns(t, "gate_runs", gdb, name)["completion_feedback_event_id"] {
+			t.Fatalf("%s migration did not restore gate_runs.completion_feedback_event_id", name)
+		}
+		if !gdb.Migrator().HasIndex("gate_runs", "idx_gate_runs_delivery_cycle") {
+			t.Fatalf("%s migration did not restore delivery-cycle index", name)
+		}
+	})
+}

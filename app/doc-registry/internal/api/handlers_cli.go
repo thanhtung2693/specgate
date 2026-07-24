@@ -40,17 +40,17 @@ func mapGovernanceError(op string, err error) error {
 }
 
 // CLIMeta handles GET /api/v1/meta — returns build information and server capabilities.
-func (h *Handlers) CLIMeta(_ context.Context, _ *struct{}) (*CLIMetaOutput, error) {
+func (h *Handlers) CLIMeta(ctx context.Context, _ *struct{}) (*CLIMetaOutput, error) {
 	out := &CLIMetaOutput{}
 	out.Body.APIVersion = "specgate.api/v1"
 	out.Body.ServerVersion = buildinfo.Version
 	out.Body.RecommendedCLIVersion = buildinfo.Version
 	out.Body.WebURL = strings.TrimSpace(h.AppBaseURL)
-	out.Body.CapabilityDetails = h.cliCapabilityDetails()
+	out.Body.CapabilityDetails = h.cliCapabilityDetails(ctx)
 	return out, nil
 }
 
-func (h *Handlers) cliCapabilityDetails() map[string]CapabilityDetail {
+func (h *Handlers) cliCapabilityDetails(ctx context.Context) map[string]CapabilityDetail {
 	hasAgents := h.Governance != nil && h.Governance.AgentsRunner != nil
 	details := map[string]CapabilityDetail{
 		"core":         {State: CapabilityStateAvailable},
@@ -59,6 +59,7 @@ func (h *Handlers) cliCapabilityDetails() map[string]CapabilityDetail {
 		"integrations": capabilityPresence(h.Integrations != nil, "integration service is not configured"),
 		"knowledge":    capabilityPresence(h.Knowledge != nil, "knowledge service is not configured"),
 	}
+	details["governance_chat"] = h.governanceChatCapability(ctx)
 	if !hasAgents {
 		details["platform_model"] = CapabilityDetail{
 			State:  CapabilityStateUnavailable,
@@ -69,6 +70,23 @@ func (h *Handlers) cliCapabilityDetails() map[string]CapabilityDetail {
 	}
 	details["semantic_search"] = h.embeddingCapability()
 	return details
+}
+
+func (h *Handlers) governanceChatCapability(ctx context.Context) CapabilityDetail {
+	if h.GovernanceChatHealth == nil {
+		return CapabilityDetail{State: CapabilityStateUnavailable, Reason: "governance chat service is not configured"}
+	}
+	configured, err := h.GovernanceChatHealth(ctx)
+	if err != nil {
+		return CapabilityDetail{State: CapabilityStateUnavailable, Reason: "governance chat health is unavailable"}
+	}
+	if !configured {
+		return CapabilityDetail{
+			State:  CapabilityStateConfigurationRequired,
+			Reason: "governance chat support model is not configured",
+		}
+	}
+	return CapabilityDetail{State: CapabilityStateAvailable}
 }
 
 func capabilityPresence(present bool, reason string) CapabilityDetail {

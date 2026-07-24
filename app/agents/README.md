@@ -59,49 +59,17 @@ thread metadata live in memory and disappear when the process stops. Long dev
 sessions with large agent state (markdown fields, message history) can push
 memory high — restart the server or prune threads when that happens.
 
-### Postgres persistence (recommended for long sessions)
+### Work with the local appliance
 
-`langgraph dev` does **not** use Postgres. To store checkpoints and threads in
-the shared Postgres container instead:
+Run `make setup` from the repository root to start the complete Full-mode
+backend in one container. For native Agents iteration, point
+`DOC_REGISTRY_BASE_URL` at
+`http://localhost:3000/api/doc-registry` (or the selected appliance port), then
+run `uv run langgraph dev`. Rebuild the embedded appliance with `make build &&
+make up` before validating the packaged runtime.
 
-1. Start deps (Postgres at minimum; Doc Registry if publishing; Redis only for
-   durable LangGraph / queue drivers that require it; MinIO only for S3 storage):
-
-   ```bash
-   docker compose up -d postgres doc-registry
-   docker compose --profile redis up -d redis   # optional
-   docker compose --profile s3 up -d minio      # optional
-   ```
-
-2. Ensure the `langgraph` database exists (fresh volumes get it from
-   `docker/postgres-init/`; existing volumes: `docker exec <pg> createdb -U docreg langgraph`).
-
-3. Set `LANGSMITH_API_KEY` in `app/agents/.env` (required by the self-hosted API image).
-
-4. Run the Postgres-backed API (Docker) on the same port the UI expects:
-
-   ```bash
-   uv run langgraph up --port 2024 \
-     --postgres-uri postgres://docreg:docreg@host.docker.internal:5432/langgraph?sslmode=disable
-   ```
-
-   `langgraph.json` loads `app/agents/.env`. Use `host.docker.internal` (not
-   `127.0.0.1`) for `DATABASE_URI`, `REDIS_URI`, and Doc Registry URLs so the
-   API container can reach services on the host. On macOS/OrbStack those hostnames
-   also work from the host shell.
-
-   Or use the compose `agents` service (`docker compose up agents`), which sets
-   `DATABASE_URI` / `REDIS_URI` and maps `2024:8000`.
-
-   For live iteration on the compose service, pair it with `docker compose
-   watch agents` — the service declares a `develop.watch` block that syncs
-   `agents/src/` into `/deps/agents/src/`. The LangGraph process imports the
-   graph once at startup, so synced `.py` edits are not live until you restart
-   the container (`docker restart specgate-agents-1`). Edits to
-   `pyproject.toml` / `uv.lock` trigger a full rebuild. Without `compose
-   watch`, a bare restart still uses the baked image source; rebuild/recreate or
-   use `langgraph up --watch` / native `langgraph dev` for that mode. See
-   [`/docs/contributing/testing.md` §Docker reload rule for agents](../../docs/contributing/testing.md#docker-reload-rule-for-agents).
+The root `docker-compose.yml` is reserved for separable self-host/cloud
+deployment validation. It is not part of the normal local development loop.
 
 ### Prune all threads
 

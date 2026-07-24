@@ -371,7 +371,7 @@ Important facades:
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/v1/meta` | Server version, recommended CLI version, configured `web_url`, and typed `capability_details` states (`available`, `unavailable`, `configuration_required`) with no secret values |
+| `GET` | `/api/v1/meta` | Server version, recommended CLI version, configured `web_url`, and typed `capability_details` states (`available`, `unavailable`, `configuration_required`) with no secret values; `governance_chat` probes the optional Agents chat-health route and reports missing model configuration separately from service absence |
 | `GET` | `/api/v1/status` | Governance status counts and attention |
 | `GET` | `/api/v1/stats` | Rolling governance-value metrics |
 | `POST` | `/api/v1/identity/bootstrap` | Create/reuse local user and workspace, then idempotently install missing built-in rubric Skills before returning |

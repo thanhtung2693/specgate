@@ -59,6 +59,9 @@ func (e *deliveryScaffoldUsageError) Error() string {
 }
 
 func writeDeliveryScaffold(path string, data []byte, force bool) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
 	info, err := os.Lstat(path)
 	switch {
 	case err == nil:

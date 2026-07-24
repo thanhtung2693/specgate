@@ -11,12 +11,13 @@ checks, and how we expect changes to be shaped.
 ## Local setup
 
 ```bash
-make setup     # creates .env files, generates encryption key, starts all services
-make seed      # optional: load demo governance data to explore the UI
+make setup     # builds and starts the single-container local appliance
+make seed DEMO_WORKSPACE_ID=<workspace-id>  # optional demo data
 ```
 
-`make setup` is idempotent. LLM provider keys are configured **in the app** after boot
-(Settings → Model) — no API keys are needed to start.
+`make setup` is idempotent and uses `deploy/local/compose.yml`. LLM provider
+keys are configured **in the app** after boot (Settings → Model); no API keys
+are needed to start.
 
 ## Branch and PR workflow
 

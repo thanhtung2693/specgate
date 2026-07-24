@@ -336,6 +336,8 @@ CREATE INDEX IF NOT EXISTS idx_gate_runs_subject_created
     ON gate_runs (subject_kind, subject_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_gate_runs_workspace_subject
     ON gate_runs (workspace_id, subject_kind, subject_id, created_at DESC);
+ALTER TABLE gate_runs
+    ADD COLUMN IF NOT EXISTS completion_feedback_event_id TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_gate_runs_delivery_cycle
     ON gate_runs (
         workspace_id,

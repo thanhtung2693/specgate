@@ -45,6 +45,7 @@ const docs = {
   uiReadme: read("app/ui/README.md"),
   uiSpec: read("app/ui/docs/spec.md"),
   architecture: read("docs/contributing/architecture.md"),
+  contributorSetup: read("docs/contributing/setup.md"),
   testing: read("docs/contributing/testing.md"),
   release: read("docs/contributing/release.md"),
 };
@@ -216,8 +217,15 @@ test("release distribution is the single local appliance", () => {
   assert.match(files.rootIgnore, /^AGENTS\.specgate\.md$/m);
 
   assert.ok(!existsSync(new URL("deploy/compose/compose.yml", root)), "legacy multi-service release bundle remains");
+  assert.ok(!existsSync(new URL("docker-compose.dev.yml", root)), "legacy local development override remains");
+  assert.ok(!existsSync(new URL("app/doc-registry/docker-compose.yml", root)), "legacy module Compose file remains");
   assert.doesNotMatch(docs.deployReadme, /multi-service Compose/i);
-  assert.match(files.rootMakefile, /Contributor source integration:/);
+  assert.match(files.rootMakefile, /LOCAL_DEPLOY_DIR := deploy\/local/);
+  assert.match(files.rootMakefile, /LOCAL_PROJECT \?= specgate-dev/);
+  assert.match(files.rootMakefile, /SPECGATE_COMPOSE_PROJECT=\$\(LOCAL_PROJECT\)/);
+  assert.match(files.rootMakefile, /-f \$\(LOCAL_DEPLOY_DIR\)\/compose\.yml/);
+  assert.doesNotMatch(files.rootMakefile, /docker-compose\.dev\.yml/);
+  assert.match(docs.contributorSetup, /single-container appliance/i);
   assert.doesNotMatch(files.rootMakefile, /Onboarding \(self-host\):/);
 });
 

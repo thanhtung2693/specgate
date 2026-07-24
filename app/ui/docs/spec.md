@@ -71,6 +71,8 @@ replaces the submitted PR/MR `head_sha` in that comparison.
 Evidence readiness alone never renders as human acceptance. Model-reviewed
 evidence carries a persistent reminder that the model did not inspect the code,
 replace CI, or make the human decision.
+Deterministic-check evidence is labelled as deterministic and never receives
+that model-review disclaimer.
 For a current platform review, Work detail exposes **Accept** and **Request
 changes** regardless of its advisory evidence verdict. A deliberate
 confirmation identifies the exact work item and exact reviewed completion and

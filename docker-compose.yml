@@ -1,6 +1,6 @@
-# Root compose — self-hosted/cloud topology: builds and runs all three modules
-# plus their infrastructure dependencies. This is not the user local-install
-# path; users should install the single-container appliance with `specgate init`.
+# Root Compose is the separable self-hosted/cloud topology. It is not the
+# contributor-local path; `make setup` uses deploy/local/compose.yml and the
+# single-container appliance.
 #
 # Usage:
 #   cp .env.example .env                                      # optional: override host ports if you have conflicts
@@ -77,13 +77,9 @@ services:
     restart: unless-stopped
 
   doc-registry:
-    # Runs the Air `dev` target: the source is bind-mounted below, so a `.go`
-    # edit recompiles in place (~1-2s) with no image rebuild. CI builds the prod
-    # image from the Dockerfile's default (final) stage, not this target.
     build:
       context: .
       dockerfile: docker/Dockerfile.doc-registry
-      target: dev
     env_file:
       - ./app/doc-registry/.env
     environment:
@@ -117,36 +113,16 @@ services:
       - "${DOC_REGISTRY_PORT:-8080}:8080"
     volumes:
       - doc-registry-data:/data
-      # Live source for Air hot reload. Edit app/doc-registry/*.go on the host and
-      # Air rebuilds inside the container.
-      - ./app/doc-registry:/src/doc-registry
-      # Canonical plugin sources live at repo root. Air watches this read-only
-      # mount and syncs the relevant files into internal/agentpackages/plugins
-      # before rebuilding the embedded-assets binary.
-      - ./plugins:/src/doc-registry/watch/plugins:ro
-      # Keep the module cache + Air's build output off the host bind mount
-      # (persistence + speed).
-      - doc-registry-go-pkg:/go/pkg/mod
-      - doc-registry-air-tmp:/src/doc-registry/tmp
     healthcheck:
-      # Air (dev mode) compiles the Go binary on first boot (~45-90s on a cold
-      # module cache). start_period covers that window so `docker compose up
-      # --wait` blocks until the HTTP server is actually accepting requests,
-      # not just until the container process started.
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 24
-      start_period: 90s
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
-    develop:
-      watch:
-        - action: sync+restart
-          path: ./app/doc-registry/.env
-          target: /tmp/.env.watch
 
   agents:
     build:
@@ -174,41 +150,6 @@ services:
       postgres:
         condition: service_healthy
     restart: unless-stopped
-    # Dev-loop ergonomics. The base image installs the governance package with
-    # `uv pip install -e` so Python changes under src/ become live as soon as
-    # the file lands in /deps/agents. `docker compose watch` syncs host edits
-    # into the container and restarts the langgraph workers (whose process
-    # caches imports) on changes that need a fresh process — currently
-    # langgraph.json, pyproject.toml, and the .env file.
-    #
-    # Usage:
-    #   docker compose up -d agents
-    #   docker compose watch agents
-    #
-    # `docker compose up --build agents` is still required when the base
-    # image, Dockerfile, or installed dependency set changes (uv lock /
-    # pyproject change). Plain edits to src/ do NOT require a rebuild.
-    develop:
-      watch:
-        - action: sync
-          path: ./app/agents/src
-          target: /deps/agents/src
-          ignore:
-            - "**/__pycache__"
-            - "**/*.pyc"
-        - action: sync
-          path: ./app/agents/scripts
-          target: /deps/agents/scripts
-        - action: sync+restart
-          path: ./app/agents/langgraph.json
-          target: /deps/agents/langgraph.json
-        - action: rebuild
-          path: ./app/agents/pyproject.toml
-        - action: rebuild
-          path: ./app/agents/uv.lock
-        - action: sync+restart
-          path: ./app/agents/.env
-          target: /tmp/.env.watch
 
   ui:
     build:
@@ -231,6 +172,4 @@ volumes:
   redis-data:
   minio-data:
   doc-registry-data:
-  doc-registry-go-pkg:
-  doc-registry-air-tmp:
   postgres-data:

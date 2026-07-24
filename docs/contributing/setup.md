@@ -23,38 +23,35 @@ Read the repository rules before editing:
 - [Agent rules](../../AGENTS.md)
 - [Contributing](../../CONTRIBUTING.md)
 
-## Start the source integration stack
+## Start the local appliance
 
 ```bash
 make setup
 ```
 
-`make setup` starts the multi-container topology used to develop and validate
-self-hosted/cloud deployments. It is for contributors; product users should use
-the single-container appliance from the [Quickstart](../using-specgate/quickstart.md).
+`make setup` builds the current checkout into the single-container appliance
+and starts it with `deploy/local/compose.yml`. This is the only Compose path for
+local development and matches the Full-mode topology users install. Its
+`specgate-dev` Compose project keeps contributor containers and data separate
+from an appliance installed through the released CLI.
 
 It:
 
-- checks common host-port conflicts;
-- creates missing environment files;
-- generates local secrets;
-- starts the source integration Compose stack;
-- uses the local LangGraph development runtime.
+- chooses one free gateway port;
+- creates mode-`0600` appliance environment files and an encryption key;
+- builds `docker/Dockerfile.local` as the `dev` appliance image;
+- starts PostgreSQL, Doc Registry, Agents, the UI, and the gateway in one
+  container with one named data volume.
 
-The source stack defaults to synchronous queues and local file storage, so
-setup does not ask infrastructure questions most contributors do not need.
-Advanced Redis and S3/MinIO overrides remain available in the root
-`.env.example` and `app/doc-registry/.env.example`, respectively.
+After source changes, rebuild and recreate the appliance:
 
-Optional source-stack services use Compose profiles:
+```bash
+make build
+make up
+```
 
-| Profile | Starts | Use when |
-|---|---|---|
-| `redis` | Redis | `QUEUE_DRIVER=redis` or the durable LangGraph runtime needs Redis |
-| `s3` | MinIO | `STORAGE_DRIVER=s3` and no external S3 endpoint is configured |
-
-Changing source-stack API ports may require rebuilding the Vite UI because its
-public API URLs are compiled into the static bundle.
+Use `make logs` for combined service logs and `make down` to stop without
+deleting the named data volume.
 
 Seed representative data:
 
@@ -67,20 +64,15 @@ The seed is idempotent. It creates the fixed demo features, artifacts, work
 items, readiness states, stale context, and delivery-review data in the chosen
 workspace.
 
-To smoke-test the appliance from the current checkout, build its `dev` image
-and initialize the checked-in local bundle:
-
-```bash
-docker build -f docker/Dockerfile.local -t ghcr.io/thanhtung2693/specgate:dev .
-specgate init --mode full --dir deploy/local --bundle-version dev --no-seed
-```
-
 This is a contributor-only source build: it embeds PostgreSQL/pgvector, the Go
 registry, the Python/LangGraph runtime, and the UI, so the first build is
 substantially larger and slower than a normal install. The Dockerfile caches
 Go, npm, and uv dependency layers; after that first build, source-only edits
 reuse those layers. Normal released installs pull the prebuilt, multi-arch
 appliance image selected by the CLI; they do not compile the bundle locally.
+
+The root `docker-compose.yml` remains the separable self-host/cloud deployment
+topology. It is not layered into local development.
 
 ## Understand the repository layout
 

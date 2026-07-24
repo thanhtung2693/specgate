@@ -103,6 +103,7 @@ function isModelReviewed(status: DeliveryStatusSummary): boolean {
   return Boolean(
     judgeModel &&
     judgeModel !== "agent_attested" &&
+    judgeModel !== "deterministic_checks" &&
     judgeModel !== "deterministic_policy_guard",
   )
 }
@@ -131,6 +132,8 @@ function reviewerLabel(status: DeliveryStatusSummary): string {
       return "Implementing agent"
     case "deterministic_policy_guard":
       return "Deterministic policy guard"
+    case "deterministic_checks":
+      return "Deterministic checks"
     case "":
     case undefined:
       return status.executor?.trim() === "human"

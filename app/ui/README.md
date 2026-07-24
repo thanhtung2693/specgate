@@ -85,16 +85,15 @@ npm run docker:build
 npm run docker:run
 ```
 
-The source-development Compose stack already includes the UI service:
+Repository-level Compose development uses the single-container appliance:
 
 ```bash
-docker compose up --build ui
+make setup
 ```
 
-In the dev Compose override, `node_modules` lives in a named Docker volume so
-the source bind mount does not hide container-installed packages. The dev UI
-container refreshes that volume on startup when `package.json` or
-`package-lock.json` changes.
+For UI-only iteration, run `npm run dev` and proxy both API paths to the
+appliance gateway as shown above. Rebuild the appliance with `make build &&
+make up` when validating its embedded production bundle.
 
 Vite `VITE_*` values are baked into the production image at build time. The release image uses `app/ui/.env.production`, which points the browser at the same-origin nginx proxy paths.
 

@@ -86,6 +86,12 @@ type Verdict struct {
 	DispatchedToIDEAgent *GateTaskDispatchReceipt `json:"dispatched_to_ide_agent,omitempty"`
 }
 
+type ChatHealth struct {
+	Configured bool   `json:"configured"`
+	Provider   string `json:"provider"`
+	Model      string `json:"model"`
+}
+
 // GateTaskDispatchReceipt is the no-model task dispatch receipt returned by Agents.
 type GateTaskDispatchReceipt struct {
 	CreatedTaskIDs  []string `json:"created_task_ids"`
@@ -153,6 +159,38 @@ func New(baseURL string) *Client {
 		baseURL: baseURL,
 		http:    &http.Client{Timeout: DefaultTimeout},
 	}
+}
+
+func (c *Client) ChatHealth(ctx context.Context) (ChatHealth, error) {
+	if c == nil {
+		return ChatHealth{}, fmt.Errorf("governance chat unavailable: agents service not configured")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/governance/chat/health", nil)
+	if err != nil {
+		return ChatHealth{}, fmt.Errorf("governance chat unavailable: build request: %w", err)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return ChatHealth{}, fmt.Errorf("governance chat unavailable: agents request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return ChatHealth{}, fmt.Errorf("governance chat unavailable: read agents response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return ChatHealth{}, &ResponseError{
+			Operation: "governance chat unavailable", StatusCode: resp.StatusCode,
+			Body: strings.TrimSpace(string(body)),
+		}
+	}
+	var health ChatHealth
+	if err := json.Unmarshal(body, &health); err != nil {
+		return ChatHealth{}, fmt.Errorf("governance chat unavailable: decode agents response: %w", err)
+	}
+	return health, nil
 }
 
 // RunReadiness runs the artifact's readiness gates via the agents service and

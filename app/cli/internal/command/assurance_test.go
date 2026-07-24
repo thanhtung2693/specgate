@@ -76,6 +76,10 @@ func TestCapabilitiesFullJSONPreservesConfigurationRequired(t *testing.T) {
 		WebURL:     "https://specgate.test",
 		CapabilityDetails: map[string]client.CapabilityDetail{
 			"agents": {State: "available"},
+			"governance_chat": {
+				State:  "configuration_required",
+				Reason: "configure the governance chat support model",
+			},
 			"platform_model": {
 				State:       "configuration_required",
 				Reason:      "choose a model provider and API key",
@@ -103,7 +107,9 @@ func TestCapabilitiesFullJSONPreservesConfigurationRequired(t *testing.T) {
 		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
 	}
 	states := capabilityStates(env.Data.Capabilities)
-	if env.Data.Mode != "full" || states["platform_model"] != "configuration_required" {
+	if env.Data.Mode != "full" ||
+		states["governance_chat"] != "configuration_required" ||
+		states["platform_model"] != "configuration_required" {
 		t.Fatalf("unexpected manifest: mode=%q states=%#v", env.Data.Mode, states)
 	}
 }

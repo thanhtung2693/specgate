@@ -1,4 +1,4 @@
-.PHONY: help build run run-only dev test lint fmt tidy clean docker-up docker-down docker-status migrate dev-secrets setup
+.PHONY: help build run run-only dev test lint fmt tidy clean migrate dev-secrets setup
 
 BINARY := bin/doc-registry
 PKG    := ./...
@@ -14,9 +14,6 @@ help:
 	@echo "  lint         Run go vet"
 	@echo "  fmt          Run gofmt"
 	@echo "  tidy         go mod tidy"
-	@echo "  docker-up    Start optional MinIO dev service"
-	@echo "  docker-down  Stop supporting services"
-	@echo "  docker-status Show optional MinIO service status"
 	@echo "  migrate      Apply PostgreSQL migrations"
 	@echo "  setup        First-time setup: generate all required secrets into .env (idempotent)"
 	@echo "  dev-secrets  Generate SETTINGS_ENCRYPTION_KEY into .env if missing (idempotent)"
@@ -34,9 +31,9 @@ build:
 dev-secrets:
 	@./scripts/dev-secrets.sh
 
-# `make run` starts Doc Registry in the foreground.
-# Run `make docker-up` separately when using S3 storage through local MinIO.
-# PostgreSQL remains required through POSTGRES_DSN.
+# `make run` starts Doc Registry in the foreground. PostgreSQL remains required
+# through POSTGRES_DSN; use the root single-container appliance for normal
+# repository-level development.
 run: dev-secrets
 	@echo "==> doc-registry ready."
 	go run ./cmd/doc-registry
@@ -61,15 +58,6 @@ tidy:
 
 clean:
 	rm -rf bin dist coverage.out
-
-docker-up:
-	docker compose up -d minio
-
-docker-down:
-	docker compose down
-
-docker-status:
-	docker compose ps minio
 
 migrate:
 	go run ./cmd/doc-registry --migrate-only
