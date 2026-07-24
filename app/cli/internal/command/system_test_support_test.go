@@ -191,6 +191,7 @@ func newTestDeps(t *testing.T, srvURL string) (*command.Deps, *bytes.Buffer) {
 		// ~/.config/specgate/config.json when the suite runs. Tests that need a
 		// specific path may override deps.ConfigPath after this call.
 		ConfigPath: filepath.Join(t.TempDir(), "config.json"),
+		WorkingDir: t.TempDir(),
 		UserHomeDir: func() (string, error) {
 			return homeDir, nil
 		},

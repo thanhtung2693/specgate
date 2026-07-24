@@ -315,12 +315,20 @@ func newWorkspaceCurrentCmd(deps *Deps) *cobra.Command {
 					return localExitError(deps, "workspace.current", err)
 				}
 				workspace := localWorkspaceConfig(selection.Workspace)
+				resolved := currentWorkspaceSelection(deps)
 				if deps.Printer.Mode() == output.ModeJSON {
-					deps.Printer.Success("workspace.current", map[string]any{"workspace": workspace, "source": "local store"})
+					deps.Printer.Success("workspace.current", map[string]any{
+						"workspace":    workspace,
+						"source":       "local store",
+						"scope":        resolved.Source,
+						"project_root": resolved.ProjectRoot,
+					})
 					return nil
 				}
 				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "workspace:"), styled(deps, output.StyleBold, formatWorkspaceLabel(workspace)))
 				fmt.Fprintln(deps.Stdout, label(deps, "source: local store"))
+				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "scope:"), formatWorkspaceSource(resolved))
+				printWorkspaceProjectContext(deps, resolved)
 				return nil
 			}
 			selection := currentWorkspaceSelection(deps)
@@ -335,24 +343,29 @@ func newWorkspaceCurrentCmd(deps *Deps) *cobra.Command {
 			}
 			fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "workspace:"), styled(deps, output.StyleBold, formatWorkspaceLabel(selection.Workspace)))
 			fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "source:"), formatWorkspaceSource(selection))
-			if selection.Source == config.WorkspaceSourceProject && selection.ProjectRoot != "" {
-				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "project:"), selection.ProjectRoot)
-			}
-			if selection.Source == config.WorkspaceSourceGlobal {
-				if projectRoot, ok := config.FindProjectRoot(deps.WorkingDir); ok {
-					fmt.Fprintf(deps.Stdout, "%s %s (not bound)\n", label(deps, "project:"), projectRoot)
-					if selection.Workspace.Slug != "" {
-						if humanVisuals(deps) {
-							fmt.Fprintln(deps.Stdout, nextStep(deps, "use this workspace automatically in this checkout:", "specgate workspace bind"))
-						} else {
-							fmt.Fprintln(deps.Stdout, "next: run `specgate workspace bind` to use this workspace automatically in this checkout")
-						}
-					}
-				}
-			}
+			printWorkspaceProjectContext(deps, selection)
 			return nil
 		},
 	}
+}
+
+func printWorkspaceProjectContext(deps *Deps, selection config.ResolvedWorkspace) {
+	if selection.ProjectRoot == "" {
+		return
+	}
+	if selection.Source != config.WorkspaceSourceGlobal {
+		fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "project:"), selection.ProjectRoot)
+		return
+	}
+	fmt.Fprintf(deps.Stdout, "%s %s (not bound)\n", label(deps, "project:"), selection.ProjectRoot)
+	if selection.Workspace.Slug == "" {
+		return
+	}
+	if humanVisuals(deps) {
+		fmt.Fprintln(deps.Stdout, nextStep(deps, "use this workspace automatically in this checkout:", "specgate workspace bind"))
+		return
+	}
+	fmt.Fprintln(deps.Stdout, "next: run `specgate workspace bind` to use this workspace automatically in this checkout")
 }
 
 func newWorkspaceMembersCmd(deps *Deps) *cobra.Command {

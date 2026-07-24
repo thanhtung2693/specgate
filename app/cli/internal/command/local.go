@@ -39,20 +39,15 @@ func localSelection(ctx context.Context, deps *Deps, store *local.Store) (local.
 	if err != nil {
 		return selection, err
 	}
-	ref := strings.TrimSpace(deps.WorkspaceOverride)
-	if ref == "" {
-		cfg, _ := config.LoadFrom(deps.ConfigPath)
-		if root, ok := config.FindProjectRoot(deps.WorkingDir); ok {
-			if project, ok := cfg.Projects[root]; ok {
-				ref = project.Workspace.ID
-				if ref == "" {
-					ref = project.Workspace.Slug
-				}
-			}
-		}
-	}
-	if ref == "" {
+	cfg, _ := config.LoadFrom(deps.ConfigPath)
+	resolved := resolveWorkspaceSelection(deps, cfg)
+	if resolved.Source == config.WorkspaceSourceNone ||
+		resolved.Source == config.WorkspaceSourceGlobal {
 		return selection, nil
+	}
+	ref := strings.TrimSpace(resolved.Workspace.ID)
+	if ref == "" {
+		ref = strings.TrimSpace(resolved.Workspace.Slug)
 	}
 	workspace, err := store.Workspace(ctx, ref)
 	if err != nil {

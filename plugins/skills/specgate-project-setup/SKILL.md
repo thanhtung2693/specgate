@@ -89,13 +89,18 @@ command and its recovery action are reported.
 ```bash
 specgate user current --json
 specgate workspace current --json
-specgate workspace bind
 ```
 
 If identity or workspace selection is missing or ambiguous, stop for the user
-to choose it. Bind only when the current repository binding is missing,
-incorrect, or explicitly requested; a plugin-only refresh leaves a correct
-binding unchanged.
+to choose it. `specgate init` binds the checkout where it runs. If
+`workspace current` reports this checkout as unbound, bind it with:
+
+```bash
+specgate workspace bind
+```
+
+Bind only when the current repository binding is missing, incorrect, or
+explicitly requested; a plugin-only refresh leaves a correct binding unchanged.
 
 Completion criterion: `specgate workspace current --json` identifies the
 intended workspace and the repository binding is correct or deliberately left

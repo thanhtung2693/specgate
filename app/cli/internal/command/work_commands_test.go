@@ -36,6 +36,7 @@ func newFakeDeps(t *testing.T) (*command.Deps, *fakeClient, *fakePrompter, *byte
 		Opener:     func(_ string) error { return nil },
 		Printer:    printer,
 		ConfigPath: filepath.Join(t.TempDir(), "config.json"),
+		WorkingDir: t.TempDir(),
 		UserHomeDir: func() (string, error) {
 			return homeDir, nil
 		},

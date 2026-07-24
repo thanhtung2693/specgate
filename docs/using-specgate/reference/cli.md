@@ -430,7 +430,8 @@ the default `work list` attention view may make an explicit aggregate read with
 Product commands, including gate-task operations, require a selected
 workspace; no unscoped compatibility path exists in development.
 
-For multi-project use, run `specgate workspace bind` inside a Git checkout to
+`specgate init` automatically binds the Git checkout where initialization
+runs. For another project, run `specgate workspace bind` inside its checkout to
 bind that checkout to the currently selected workspace. Use
 `specgate workspace bind <slug>` to bind a named workspace directly. The CLI
 records that workspace in the user config under the checkout's Git root path.
@@ -443,6 +444,13 @@ when one exists. Plain, JSON, and no-input `workspace select <slug>` commands
 do not prompt; from inside a Git checkout, they save the global workspace and
 clear that checkout's binding. Use `workspace bind` when automation or an IDE
 agent should bind the current project.
+
+Workspace-scoped commands refuse to run from a Git checkout that has only a
+global workspace fallback. The error shows `specgate workspace bind`; no Local
+store or Full API operation runs first. An explicit `--workspace`,
+`SPECGATE_WORKSPACE`, project binding, or repo `.specgate/config` default
+satisfies the boundary. Outside Git checkouts, the global workspace remains
+available for administrative commands.
 
 Use `specgate workspace current` to see the active workspace and whether it
 came from an override, project binding, repo default, or global selection. When

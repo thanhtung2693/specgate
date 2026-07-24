@@ -49,8 +49,11 @@ Users, workspaces, and workspace members support attribution and filtering.
 They do not grant access.
 
 - CLI user and workspace selection live in local user config.
-- A Git checkout can be bound to a workspace with `specgate workspace bind`; the
-  binding remains local and is not committed.
+- `specgate init` binds its current Git checkout. Other checkouts can be bound
+  with `specgate workspace bind`; bindings remain local and are not committed.
+- Workspace-scoped CLI operations in a Git checkout must resolve through an
+  explicit override, project binding, or repo default. They fail before Local
+  storage or Full API access when only a global fallback exists.
 - Repo `.specgate/config` may carry shared server/workspace defaults; user
   identity must stay outside the repo.
 - Identity bootstrap idempotently installs missing built-in rubric Skills in
