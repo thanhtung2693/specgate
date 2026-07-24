@@ -370,6 +370,9 @@ func TestCLI_MetaEndpoint(t *testing.T) {
 	if got.CapabilityDetails["agents"].State != CapabilityStateUnavailable {
 		t.Errorf("meta.capability_details.agents = %+v", got.CapabilityDetails["agents"])
 	}
+	if got.CapabilityDetails["governance_chat"].State != CapabilityStateUnavailable {
+		t.Errorf("meta.capability_details.governance_chat = %+v", got.CapabilityDetails["governance_chat"])
+	}
 	if got.CapabilityDetails["platform_model"].State != CapabilityStateUnavailable {
 		t.Errorf("meta.capability_details.platform_model = %+v", got.CapabilityDetails["platform_model"])
 	}
@@ -378,6 +381,32 @@ func TestCLI_MetaEndpoint(t *testing.T) {
 	}
 	if body := rec.Body.String(); strings.Contains(body, `"capabilities":`) || strings.Contains(body, `"minimum_cli_version":`) {
 		t.Fatalf("meta retained alpha compatibility fields: %s", body)
+	}
+}
+
+func TestCLI_MetaEndpointReportsGovernanceChatConfiguration(t *testing.T) {
+	t.Parallel()
+	handlers := &Handlers{
+		GovernanceChatHealth: func(context.Context) (bool, error) {
+			return false, nil
+		},
+	}
+	srv := (&Router{Handlers: handlers, Config: testConfig()}).Build()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/meta", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
+	}
+	var got CLIMetaDTO
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	chat := got.CapabilityDetails["governance_chat"]
+	if chat.State != CapabilityStateConfigurationRequired {
+		t.Fatalf("governance_chat = %+v, want configuration_required", chat)
 	}
 }
 

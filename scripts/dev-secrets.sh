@@ -1,45 +1,36 @@
 #!/usr/bin/env bash
-# dev-secrets.sh — make `make run` work from a clean checkout without manual key
-# setup. Idempotent: only fills in what is missing.
-#
-#   - SETTINGS_ENCRYPTION_KEY must exist BEFORE the server boots (it encrypts the
-#     settings store), so it cannot live in the DB — this script generates it
-#     into .env.
+# Create the private environment consumed by the contributor appliance.
 set -euo pipefail
 
-cd "$(dirname "$0")/../app/doc-registry" # doc-registry module root
-
-ENV_FILE=".env"
-EXAMPLE=".env.example"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ENV_FILE="$ROOT/deploy/local/specgate.env"
+EXAMPLE="$ROOT/deploy/local/specgate.env.example"
 
 if [[ ! -f "$ENV_FILE" ]]; then
-  if [[ -f "$EXAMPLE" ]]; then
-    cp "$EXAMPLE" "$ENV_FILE"
-    echo "==> created $ENV_FILE from $EXAMPLE"
-  else
-    touch "$ENV_FILE"
-  fi
+  cp "$EXAMPLE" "$ENV_FILE"
+  chmod 0600 "$ENV_FILE"
+  echo "Created deploy/local/specgate.env."
 fi
 
 current="$(grep -E '^SETTINGS_ENCRYPTION_KEY=' "$ENV_FILE" | head -n1 | cut -d= -f2- || true)"
 if [[ -n "${current//[[:space:]]/}" ]]; then
-  echo "==> SETTINGS_ENCRYPTION_KEY already set; leaving it."
+  chmod 0600 "$ENV_FILE"
+  echo "SETTINGS_ENCRYPTION_KEY already set; leaving it unchanged."
   exit 0
 fi
 
-# 32-byte hex key (prefer openssl; fall back to /dev/urandom).
 if command -v openssl >/dev/null 2>&1; then
   key="$(openssl rand -hex 32)"
 else
   key="$(head -c32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 fi
 
-if grep -qE '^SETTINGS_ENCRYPTION_KEY=' "$ENV_FILE"; then
-  tmp="$(mktemp)"
-  awk -v k="$key" '/^SETTINGS_ENCRYPTION_KEY=/{print "SETTINGS_ENCRYPTION_KEY=" k; next} {print}' "$ENV_FILE" >"$tmp"
-  mv "$tmp" "$ENV_FILE"
-else
-  printf '\nSETTINGS_ENCRYPTION_KEY=%s\n' "$key" >>"$ENV_FILE"
-fi
-
-echo "==> generated SETTINGS_ENCRYPTION_KEY into $ENV_FILE"
+tmp="$(mktemp)"
+awk -v key="$key" '
+  /^SETTINGS_ENCRYPTION_KEY=/ { print "SETTINGS_ENCRYPTION_KEY=" key; found=1; next }
+  { print }
+  END { if (!found) print "SETTINGS_ENCRYPTION_KEY=" key }
+' "$ENV_FILE" >"$tmp"
+chmod 0600 "$tmp"
+mv "$tmp" "$ENV_FILE"
+echo "Generated SETTINGS_ENCRYPTION_KEY in deploy/local/specgate.env."

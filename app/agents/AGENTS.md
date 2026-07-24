@@ -66,8 +66,6 @@ uv run ruff format --check src tests
 
 For streaming changes, use the live SSE probe and reload rules in
 [`docs/contributing/testing.md`](../../docs/contributing/testing.md#langgraph-streaming-probe).
-Synced source in `docker compose watch agents` is not loaded until the running
-agents container restarts.
 
 ## Documentation
 

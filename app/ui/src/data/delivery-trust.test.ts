@@ -140,6 +140,22 @@ describe("delivery trust summary", () => {
     expect(trustTierLabel("verified")).toBe("Unrecognized trust tier")
   })
 
+  it("labels deterministic checks without claiming a model reviewed them", () => {
+    expect(
+      summarizeDeliveryTrust({
+        found: true,
+        verdict: "pass",
+        judgeModel: "deterministic_checks",
+        executor: "platform",
+        criteria: [],
+        checks: [],
+      }),
+    ).toMatchObject({
+      reviewer: "Deterministic checks",
+      modelReviewed: false,
+    })
+  })
+
   it("does not rewrite a human rejection as failed evidence", () => {
     expect(
       summarizeDeliveryTrust({

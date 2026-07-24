@@ -138,7 +138,7 @@ underlying detail.
 |---|---|
 | `status` | Show selected-workspace board counts, attention count, and next action; `--all-workspaces` makes a cross-workspace read explicit |
 | `stats` | Show a governance-value readout — reviewed items, first-pass yield, pre/post-build governance signals, rework, blocked-ambiguity reports, cycle time, and a recent signal ledger. These counts are projections from recorded gate, review, and blocked-ambiguity events; they are signals for human interpretation, not adjudicated proof that SpecGate prevented a defect or saved ambiguity. `--days N` sets the window; `--all-workspaces` makes a cross-workspace read explicit |
-| `capabilities` | Print the stable Local/Full capability manifest. Each capability is `available`, `unavailable`, or `configuration_required`; `--json` is suitable for IDE agents and automation |
+| `capabilities` | Print the stable Local/Full capability manifest. Each capability is `available`, `unavailable`, or `configuration_required`; Full-mode governance chat reflects its own live health/configuration rather than merely the presence of the Agents service. `--json` is suitable for IDE agents and automation |
 | `coverage` | Classify every canonical specification in the selected workspace as `uncovered`, `unfinished`, `stale`, or `delivered`, including the governing artifact, related work refs, and a next command for every non-delivered state |
 | `portable` | `portable export --file <path>` writes the selected Local workspace to a private, checksummed `specgate.portable/v1` bundle. Export and import both enforce a 64 MiB bundle limit; an oversized export does not replace an existing destination, and export refuses the active Local SQLite database or journal paths. In Full mode, `portable import --file <path> --dry-run` reports every destination conflict without writing; re-run with `--yes` only after reviewing an empty conflict list. A retry reuses only exact prior imports proven by source workspace, record IDs, and digests |
 | `verify` | Produce one read-only closeout verdict for a work ref: artifact-backed work includes the exact artifact version and digest, while artifact-free work sets `quick_route=true`; both include criterion evidence, checks, authoritative delivery verdict, cleanup eligibility, and the next command. A non-closeable result exits `1` |
@@ -658,7 +658,8 @@ or summaries:
   already exists, the command refuses to overwrite it and returns the same path
   in `error.details.path`; reuse it only after verifying its work and context.
   It also accepts an explicit `--init=<path>` or `--init <path>` to write a
-  specific file elsewhere; add `--force` to overwrite an existing scaffold.
+  specific file elsewhere, creating missing parent directories privately; add
+  `--force` to overwrite an existing scaffold.
 
 ## Compatibility
 

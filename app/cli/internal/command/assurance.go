@@ -45,7 +45,7 @@ var capabilityCatalog = []capabilityDefinition{
 	{ID: "portable_transfer", Name: "Portable Local-to-Full transfer", LocalState: "available"},
 	{ID: "ide_agent_gates", Name: "IDE-agent gate tasks", LocalState: "available"},
 	{ID: "web_ui", Name: "Browser UI", LocalState: "unavailable", LocalReason: "Local mode has no server or browser UI", FullDetailKey: "web_ui"},
-	{ID: "governance_chat", Name: "Governance chat", LocalState: "unavailable", LocalReason: "Local mode has no agents service", FullDetailKey: "agents"},
+	{ID: "governance_chat", Name: "Governance chat", LocalState: "unavailable", LocalReason: "Local mode has no agents service", FullDetailKey: "governance_chat"},
 	{ID: "platform_model", Name: "Server-side governance model", LocalState: "unavailable", LocalReason: "Local mode delegates model work to the IDE agent", FullDetailKey: "platform_model"},
 	{ID: "integrations", Name: "Team integrations", LocalState: "unavailable", LocalReason: "Local mode has no integration service", FullDetailKey: "integrations"},
 	{ID: "knowledge", Name: "Workspace knowledge registry", LocalState: "unavailable", LocalReason: "Local mode stores governed specs, not a knowledge service", FullDetailKey: "knowledge"},

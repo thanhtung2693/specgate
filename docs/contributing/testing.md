@@ -47,9 +47,9 @@ passes.
 With a local stack running, the CLI also has opt-in new-user e2e smokes:
 
 ```bash
-SPECGATE_SERVER=http://localhost:8080 bash app/cli/test/e2e/handoff.sh
-SPECGATE_SERVER=http://localhost:8080 bash app/cli/test/e2e/artifact-readiness.sh
-SPECGATE_SERVER=http://localhost:8080 bash app/cli/test/e2e/delivery-outcomes.sh
+SPECGATE_SERVER=http://localhost:3000/api/doc-registry bash app/cli/test/e2e/handoff.sh
+SPECGATE_SERVER=http://localhost:3000/api/doc-registry bash app/cli/test/e2e/artifact-readiness.sh
+SPECGATE_SERVER=http://localhost:3000/api/doc-registry bash app/cli/test/e2e/delivery-outcomes.sh
 ```
 
 The handoff smoke uses a temporary `HOME`, logs in to a disposable workspace, installs
@@ -70,12 +70,6 @@ without a configured key so the agents service takes the deterministic
 coding-agent-claim fallback. It proves `needs_human_review` for partial
 evidence, then proves a platform pass remains pending until explicit human
 approval triggers auto-archive. It restores model and archive settings on exit.
-
-For cloud-dependency e2e runs, layer `docker-compose.cloud.local.yml` after the
-base and dev files. The override points Doc Registry at cloud Postgres, Redis,
-and S3, and enables `KNOWLEDGE_DRIVER=pgvector` with the default 1024-dimension
-Knowledge index so Governance Knowledge upload/search exercises the same
-Postgres-backed vector path as a multi-machine deployment.
 
 ### Doc Registry
 
@@ -160,9 +154,9 @@ When a UI bug may be caused by backend state, verify both sides:
 Useful endpoints:
 
 ```bash
-curl -s http://localhost:2024/threads/<thread-id>/state
-curl -s http://localhost:8080/api/v1/status
-curl -s http://localhost:8080/api/v1/work-items
+curl -s http://localhost:3000/api/agents/threads/<thread-id>/state
+curl -s http://localhost:3000/api/doc-registry/api/v1/status
+curl -s http://localhost:3000/api/doc-registry/api/v1/work-items
 ```
 
 If state is correct and the browser is wrong, test the UI path. If state is
@@ -199,23 +193,6 @@ done
 `messages-tuple` should emit message chunks. `values` and `updates` should emit
 state snapshots or partial writes. Empty `messages-tuple` output points to the
 backend stream path, not the browser renderer.
-
-## Docker reload rule for agents
-
-The self-hosted `specgate-agents-1` server imports Python modules once at
-startup. `docker compose watch agents` syncs files into the container but does
-not reload the running process.
-
-After Python changes:
-
-```bash
-docker restart specgate-agents-1
-docker inspect --format '{{.State.Health.Status}}' specgate-agents-1
-```
-
-Do not treat `inspect.getsource` from a fresh `docker exec python -c ...`
-process as proof that the running server reloaded. Exercise the live API path or
-restart first.
 
 ## Live smoke
 

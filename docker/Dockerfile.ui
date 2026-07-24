@@ -29,23 +29,9 @@ ENV VITE_LANGGRAPH_API_URL=$VITE_LANGGRAPH_API_URL
 COPY app/ui/ .
 RUN npm run build -- --mode ${BUILD_MODE}
 
-# --- dev (Vite HMR dev server) ---
-# Used by docker-compose.dev.yml. Source is bind-mounted at runtime; the deps
-# stage provides node_modules (preserved by a named volume so the bind mount
-# doesn't shadow it). On startup, refresh the named node_modules volume only
-# when package.json or package-lock.json changed after the volume was created.
-# VITE_* env vars are supplied at runtime, not baked in.
-# Listens on port 80 so the same host:3000 mapping from docker-compose.yml works.
-FROM deps AS dev
-WORKDIR /app
-COPY app/ui/scripts/dev-entrypoint.sh /usr/local/bin/specgate-ui-dev-entrypoint
-RUN chmod +x /usr/local/bin/specgate-ui-dev-entrypoint
-EXPOSE 80
-CMD ["specgate-ui-dev-entrypoint"]
-
 # --- static SPA ---
 # Keep this as the final stage so plain `docker build -f docker/Dockerfile.ui .`
-# produces the production image. docker-compose.dev.yml explicitly targets `dev`.
+# produces the production image.
 FROM nginx:1.27-alpine AS runtime
 ARG VERSION=dev
 ARG COMMIT=unknown

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # e2e handoff smoke test — requires a running SpecGate stack.
 # Usage:
-#   SPECGATE_SERVER=http://localhost:8080 bash app/cli/test/e2e/handoff.sh
+#   SPECGATE_SERVER=http://localhost:3000/api/doc-registry bash app/cli/test/e2e/handoff.sh
 #
 # The script uses a temporary HOME, logs in as a disposable local user, creates
 # a quick work item, verifies the handoff/readiness CLI path, and archives the
 # item before exiting. It intentionally leaves no dependency on seeded demo data.
 set -euo pipefail
 
-SPECGATE_SERVER="${SPECGATE_SERVER:-http://localhost:8080}"
+SPECGATE_SERVER="${SPECGATE_SERVER:-http://localhost:3000/api/doc-registry}"
 export SPECGATE_SERVER
 
 RUN_ID="${SPECGATE_E2E_RUN_ID:-$(date +%s)}"

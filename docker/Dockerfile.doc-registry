@@ -18,18 +18,6 @@ RUN --mount=type=cache,target=/go/pkg/mod \
   -ldflags "-X github.com/specgate/doc-registry/internal/buildinfo.Version=${VERSION}" \
   -o /out/doc-registry ./cmd/doc-registry
 
-# Dev stage — hot reload via Air. docker-compose runs this target with the
-# source bind-mounted at /src/doc-registry, so a `.go` edit recompiles in place
-# (no image rebuild). Not for prod; the default (final) build target stays the
-# slim runtime below.
-FROM golang:1.26.5-alpine AS dev
-RUN apk add --no-cache git python3 \
-    && go install github.com/air-verse/air@latest
-ENV CGO_ENABLED=0
-WORKDIR /src/doc-registry
-EXPOSE 8080
-CMD ["air", "-c", ".air.toml"]
-
 FROM alpine:3
 ARG VERSION=dev
 ARG COMMIT=unknown

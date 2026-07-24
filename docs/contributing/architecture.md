@@ -65,6 +65,8 @@ specgate container
 
 It publishes one port and uses one named volume. Postgres and internal APIs bind
 inside the container. Redis and MinIO are not part of the local appliance.
+Repository-level local development uses this same appliance and
+`deploy/local/compose.yml`; it does not layer module-specific Compose files.
 
 Self-hosted and cloud deployments may run the same Full-mode services as
 separate containers. `specgate init` is the explicit mode boundary: `local`

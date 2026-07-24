@@ -59,3 +59,25 @@ func TestWriteDeliveryScaffoldForceReplacesRegularFile(t *testing.T) {
 		t.Fatalf("body = %q, want new", body)
 	}
 }
+
+func TestWriteDeliveryScaffoldCreatesMissingParentDirectory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", "reports", "completion.json")
+
+	if err := writeDeliveryScaffold(path, []byte("new"), false); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "new" {
+		t.Fatalf("body = %q, want new", body)
+	}
+	info, err := os.Stat(filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o700 {
+		t.Fatalf("parent mode = %04o, want 0700", got)
+	}
+}

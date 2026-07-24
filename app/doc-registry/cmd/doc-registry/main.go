@@ -376,6 +376,13 @@ func main() {
 	}
 
 	agentsClient := agentsclient.New(cfg.AgentsBaseURL)
+	var governanceChatHealth func(context.Context) (bool, error)
+	if agentsClient != nil {
+		governanceChatHealth = func(ctx context.Context) (bool, error) {
+			health, err := agentsClient.ChatHealth(ctx)
+			return health.Configured, err
+		}
+	}
 
 	govSvc := &governanceops.Service{
 		WorkBoard:       workBoardRepo,
@@ -502,6 +509,7 @@ func main() {
 		},
 		OAuthCallbackBaseURL:    cfg.OAuth.PublicCallbackBaseURL,
 		Governance:              govSvc,
+		GovernanceChatHealth:    governanceChatHealth,
 		GateTaskStore:           gateTaskStore,
 		Config:                  cfg,
 		MaintenanceCleanupFn:    maintenanceCleanup,

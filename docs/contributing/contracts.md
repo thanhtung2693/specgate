@@ -37,6 +37,12 @@ Doc Registry serves two HTTP dialects:
 New user-facing commands should prefer `/api/v1`. UI-only workflows may use the
 unversioned surface because UI and server ship together.
 
+`GET /api/v1/meta` exposes typed capability details. `governance_chat` is
+derived from the Agents chat-health route: a reachable service without its
+support-model key is `configuration_required`, an absent or unreachable route
+is `unavailable`, and only configured chat is `available`. Generic Agents
+service presence must not be used as a substitute.
+
 ## Identity and Workspace
 
 Users, workspaces, and workspace members support attribution and filtering.

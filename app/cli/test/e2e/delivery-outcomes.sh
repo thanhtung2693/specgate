@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # e2e delivery outcome smoke test — requires a running SpecGate stack.
 # Usage:
-#   SPECGATE_SERVER=http://localhost:8080 bash app/cli/test/e2e/delivery-outcomes.sh
+#   SPECGATE_SERVER=http://localhost:3000/api/doc-registry bash app/cli/test/e2e/delivery-outcomes.sh
 #
 # The script temporarily points the delivery reviewer at Anthropic without
 # changing any provider secret. In the local e2e stack there is no Anthropic env
@@ -9,7 +9,7 @@
 # coding-agent-claim fallback. It restores model + auto-archive settings on exit.
 set -euo pipefail
 
-SPECGATE_SERVER="${SPECGATE_SERVER:-http://localhost:8080}"
+SPECGATE_SERVER="${SPECGATE_SERVER:-http://localhost:3000/api/doc-registry}"
 export SPECGATE_SERVER
 
 RUN_ID="${SPECGATE_E2E_RUN_ID:-$(date +%s)}"

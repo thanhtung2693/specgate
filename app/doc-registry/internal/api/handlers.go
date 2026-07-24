@@ -75,6 +75,9 @@ type Handlers struct {
 	// Governance is the shared application layer for governance operations,
 	// consumed by the /api/v1/ CLI REST facades. nil disables those routes.
 	Governance *governanceops.Service
+	// GovernanceChatHealth reports whether the optional env-configured support
+	// model is usable. Nil means the chat service is not present.
+	GovernanceChatHealth func(context.Context) (bool, error)
 
 	// GateTaskStore manages IDE-agent gate task lifecycle (pull/submit). Nil disables the routes.
 	GateTaskStore policy.GateTaskStore

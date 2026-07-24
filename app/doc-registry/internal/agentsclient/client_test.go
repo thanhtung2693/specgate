@@ -28,6 +28,25 @@ func TestNew_EmptyBaseURLDisabled(t *testing.T) {
 	}
 }
 
+func TestChatHealthGetsConfigurationWithoutExposingSecrets(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/governance/chat/health" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"configured":true,"provider":"openai","model":"gpt-5.4-mini"}`))
+	}))
+	defer srv.Close()
+
+	health, err := New(srv.URL).ChatHealth(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !health.Configured || health.Provider != "openai" || health.Model != "gpt-5.4-mini" {
+		t.Fatalf("health = %+v", health)
+	}
+}
+
 func TestRunReadiness_PostsToEndpointAndDecodes(t *testing.T) {
 	t.Parallel()
 

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # e2e artifact readiness smoke test — requires a running SpecGate stack.
 # Usage:
-#   SPECGATE_SERVER=http://localhost:8080 bash app/cli/test/e2e/artifact-readiness.sh
+#   SPECGATE_SERVER=http://localhost:3000/api/doc-registry bash app/cli/test/e2e/artifact-readiness.sh
 #
 # The script uses a temporary HOME, logs in as a disposable local user, publishes
 # a full role-tagged artifact package, verifies stored files, runs artifact
 # readiness, and exercises IDE-agent gate task preview/dispatch.
 set -euo pipefail
 
-SPECGATE_SERVER="${SPECGATE_SERVER:-http://localhost:8080}"
+SPECGATE_SERVER="${SPECGATE_SERVER:-http://localhost:3000/api/doc-registry}"
 export SPECGATE_SERVER
 
 RUN_ID="${SPECGATE_E2E_RUN_ID:-$(date +%s)}"
