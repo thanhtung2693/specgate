@@ -340,6 +340,9 @@ func NewRootCommand(deps *Deps) *cobra.Command {
 		} else {
 			deps.Topology = config.ResolveMode(cfg)
 		}
+		if err := enforceProjectWorkspaceBoundary(cmd, deps, cfg); err != nil {
+			return err
+		}
 		if deps.Topology == config.ModeLocal {
 			if strings.TrimSpace(serverURL) != "" {
 				payload := output.ErrorPayload{Code: "incompatible", Message: "--server cannot be used with Local mode; run `specgate init --mode full` for a server-backed setup"}

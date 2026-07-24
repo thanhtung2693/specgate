@@ -41,7 +41,8 @@ specgate user current
 specgate workspace current
 ```
 
-Select or bind a workspace when needed:
+`specgate init` binds the repository where setup runs. In another repository,
+select or bind a workspace before starting its workflow:
 
 ```bash
 specgate workspace list
@@ -50,8 +51,9 @@ specgate workspace bind <slug>
 ```
 
 `workspace bind` associates the current Git checkout with that workspace
-without writing a project file. Use a one-command override to inspect another
-workspace:
+without writing a project file. SpecGate stops workspace-scoped commands in an
+unbound Git checkout instead of silently using the global default. Use a
+one-command override to inspect another workspace:
 
 ```bash
 specgate --workspace platform status

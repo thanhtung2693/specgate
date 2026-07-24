@@ -98,10 +98,13 @@ specgate config server http://localhost:3000/api/doc-registry
 
 CLI config stores connection preferences and the selected local user/workspace,
 not general product credentials. It may also store project-scoped workspace
-bindings keyed by a local Git root path. When a command runs from a bound
+bindings keyed by a local Git root path. `specgate init` creates the binding
+for the Git checkout where initialization runs. When a command runs from a bound
 checkout, that workspace overrides the global workspace for attribution and
-default filtering; outside that checkout, the global workspace remains the
-fallback. A malformed global config fails closed before operational commands
+default filtering. In a different Git checkout, workspace-scoped commands stop
+until it is bound, given a repo default, or run with an explicit workspace
+override. Outside Git checkouts, the global workspace remains available. A
+malformed global config fails closed before operational commands
 contact a server or modify local state; repair or move that file aside and run
 `specgate init` again. `specgate version` and help remain available for
 diagnosis. Use `specgate workspace bind` from a checkout to bind the currently
@@ -115,6 +118,10 @@ Effective workspace selection uses this precedence:
 4. repo `.specgate/config` default workspace (committed, optional);
 5. global workspace;
 6. no workspace selected.
+
+Step 5 is not accepted implicitly by workspace-scoped commands inside a Git
+checkout. Run `specgate workspace bind`, commit an appropriate repo default, or
+use an explicit one-command override.
 
 The repo default workspace is honored only when no per-user project binding
 exists — a binding always outranks it. When the repo default is used, `specgate

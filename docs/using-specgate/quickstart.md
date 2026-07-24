@@ -38,11 +38,8 @@ specgate init
 ```
 
 Choose **Local CLI**, the default. The prompts create a local user and workspace
-and print the plugin-install command. Bind this repository to that workspace:
-
-```bash
-specgate workspace bind
-```
+and bind the current repository to that workspace. They also print the
+plugin-install command.
 
 Local state uses SQLite on your machine; no Docker container, browser, or TCP
 service starts.
@@ -65,6 +62,13 @@ specgate init --mode local --no-input \
 ```
 
 Email is optional: add `--email jane@example.com` when needed.
+
+When you start using SpecGate in another repository, bind that checkout before
+running its workflow:
+
+```bash
+specgate workspace bind
+```
 
 ## 3. Install the IDE plugin
 

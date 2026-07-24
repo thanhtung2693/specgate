@@ -307,6 +307,9 @@ func TestLocalWorkspaceOverrideScopesArtifactWithoutChangingSelection(t *testing
 
 func TestLocalReadinessThenHumanApprovalNeedNoHTTP(t *testing.T) {
 	deps, out := newTestDeps(t, "")
+	repoDir := t.TempDir()
+	deps.WorkingDir = repoDir
+	deps.DeployRunner = deliveryGitRunner(repoDir, nil)
 	stateDir := filepath.Join(t.TempDir(), "local")
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--no-input", "init", "--mode", "local", "--local-dir", stateDir, "--workspace-name", "Alpha", "--display-name", "Human", "--username", "human"); code != output.ExitOK {
 		t.Fatalf("init exit = %d; output=%s", code, out.String())

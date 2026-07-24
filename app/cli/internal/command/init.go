@@ -155,6 +155,7 @@ func newInitCmd(deps *Deps) *cobra.Command {
 			}
 
 			var selection *client.IdentitySelection
+			projectRoot := ""
 			if bootstrapInput != nil {
 				selection, err = deps.Client.BootstrapIdentity(ctx, *bootstrapInput)
 				if err != nil {
@@ -174,6 +175,17 @@ func newInitCmd(deps *Deps) *cobra.Command {
 					return apiExitError(deps, "init", err)
 				}
 				if err := saveIdentitySelection(deps, *selection); err != nil {
+					code := deps.Printer.Error("init", output.ErrorPayload{Code: "unavailable", Message: err.Error()})
+					return &output.ExitError{Code: code, Err: err}
+				}
+			}
+			if selection != nil {
+				projectRoot, err = bindInitializedProject(deps, config.CurrentWorkspace{
+					ID:   selection.Workspace.ID,
+					Slug: selection.Workspace.Slug,
+					Name: selection.Workspace.Name,
+				})
+				if err != nil {
 					code := deps.Printer.Error("init", output.ErrorPayload{Code: "unavailable", Message: err.Error()})
 					return &output.ExitError{Code: code, Err: err}
 				}
@@ -227,6 +239,9 @@ func newInitCmd(deps *Deps) *cobra.Command {
 					result["user"] = selection.User
 					result["workspace"] = selection.Workspace
 				}
+				if projectRoot != "" {
+					result["project_root"] = projectRoot
+				}
 				if pluginResult != nil {
 					result["plugins"] = pluginResult
 				}
@@ -239,7 +254,13 @@ func newInitCmd(deps *Deps) *cobra.Command {
 			fmt.Fprintf(deps.Stdout, "%s %s\n\n", label(deps, "Local files:"), dir)
 			if selection != nil {
 				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Current user:"), selection.User.Username)
-				fmt.Fprintf(deps.Stdout, "%s %s\n\n", label(deps, "Workspace:"), selection.Workspace.Slug)
+				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Workspace:"), selection.Workspace.Slug)
+			}
+			if projectRoot != "" {
+				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Project:"), projectRoot)
+			}
+			if selection != nil || projectRoot != "" {
+				fmt.Fprintln(deps.Stdout)
 			}
 			fmt.Fprintln(deps.Stdout, title(deps, "Next steps:"))
 			fmt.Fprintf(deps.Stdout, "  %s  verify services are healthy\n", styled(deps, output.StyleAction, "specgate doctor"))
@@ -375,6 +396,11 @@ func runLocalInit(cmd *cobra.Command, deps *Deps, cfg config.Config, stateDir, w
 		code := deps.Printer.Error("init", output.ErrorPayload{Code: "unavailable", Message: err.Error()})
 		return &output.ExitError{Code: code, Err: err}
 	}
+	projectRoot, err := bindInitializedProject(deps, cfg.Workspace)
+	if err != nil {
+		code := deps.Printer.Error("init", output.ErrorPayload{Code: "unavailable", Message: err.Error()})
+		return &output.ExitError{Code: code, Err: err}
+	}
 	var pluginResult *pluginInstallResult
 	if installPlugins {
 		installed, err := runPluginInstall(cmd.Context(), deps, pluginInstallOptions{Agent: pluginAgentList})
@@ -390,6 +416,9 @@ func runLocalInit(cmd *cobra.Command, deps *Deps, cfg config.Config, stateDir, w
 		next = "specgate plugins doctor --agent " + strings.Join(pluginResult.Agents, ",")
 	}
 	result := map[string]any{"mode": config.ModeLocal, "state_dir": stateDir, "user": cfg.CurrentUser, "workspace": cfg.Workspace, "next": next}
+	if projectRoot != "" {
+		result["project_root"] = projectRoot
+	}
 	if pluginResult != nil {
 		result["plugins"] = pluginResult
 	}
@@ -401,12 +430,37 @@ func runLocalInit(cmd *cobra.Command, deps *Deps, cfg config.Config, stateDir, w
 	fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Workspace:"), cfg.Workspace.Slug)
 	fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "User:"), cfg.CurrentUser.Username)
 	fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "State:"), stateDir)
+	if projectRoot != "" {
+		fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Project:"), projectRoot)
+	}
 	if pluginResult != nil {
 		fmt.Fprintln(deps.Stdout, nextStep(deps, "Verify installed IDE plugins with", next))
 	} else {
 		fmt.Fprintln(deps.Stdout, nextStep(deps, "Install IDE integration files with", "specgate plugins install"))
 	}
 	return nil
+}
+
+func bindInitializedProject(deps *Deps, workspace config.CurrentWorkspace) (string, error) {
+	if workspace == (config.CurrentWorkspace{}) {
+		return "", nil
+	}
+	projectRoot, ok := config.FindProjectRoot(deps.WorkingDir)
+	if !ok {
+		return "", nil
+	}
+	if err := config.EnsureSpecgateDirGitignore(filepath.Join(projectRoot, ".specgate")); err != nil {
+		return "", err
+	}
+	cfg, err := config.LoadFrom(deps.ConfigPath)
+	if err != nil {
+		return "", err
+	}
+	cfg.SetProjectWorkspace(projectRoot, workspace)
+	if err := saveConfig(deps, cfg); err != nil {
+		return "", err
+	}
+	return projectRoot, nil
 }
 
 func inferLocalServerURL(dir string) string {

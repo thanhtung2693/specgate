@@ -142,7 +142,8 @@ func ResolveWorkspaceSource(cfg Config, repo RepoConfig, cwd, override string) R
 		}
 	}
 
-	if root, ok := FindProjectRoot(cwd); ok && cfg.Projects != nil {
+	root, hasProjectRoot := FindProjectRoot(cwd)
+	if hasProjectRoot && cfg.Projects != nil {
 		if project, ok := cfg.Projects[root]; ok && project.Workspace != (CurrentWorkspace{}) {
 			return ResolvedWorkspace{
 				Workspace:   project.Workspace,
@@ -154,15 +155,17 @@ func ResolveWorkspaceSource(cfg Config, repo RepoConfig, cwd, override string) R
 
 	if slug := strings.TrimSpace(repo.Workspace); slug != "" {
 		return ResolvedWorkspace{
-			Workspace: CurrentWorkspace{Slug: slug},
-			Source:    WorkspaceSourceRepo,
+			Workspace:   CurrentWorkspace{Slug: slug},
+			Source:      WorkspaceSourceRepo,
+			ProjectRoot: root,
 		}
 	}
 
 	if cfg.Workspace != (CurrentWorkspace{}) {
 		return ResolvedWorkspace{
-			Workspace: cfg.Workspace,
-			Source:    WorkspaceSourceGlobal,
+			Workspace:   cfg.Workspace,
+			Source:      WorkspaceSourceGlobal,
+			ProjectRoot: root,
 		}
 	}
 

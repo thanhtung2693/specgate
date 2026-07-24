@@ -375,6 +375,9 @@ func TestChangeStatusFullPlainIncludesActionableTrustFields(t *testing.T) {
 func TestChangeStatusFullDetectsStoredReceiptMismatchAgainstCheckout(t *testing.T) {
 	t.Parallel()
 	deps, fc, _, out := newFakeDeps(t)
+	dir := t.TempDir()
+	deps.WorkingDir = dir
+	deps.DeployRunner = deliveryGitRunner(dir, nil)
 	fc.resolvedWork = &client.ResolvedWork{ChangeRequestID: "cr-1", ChangeRequestKey: "CR-101", Title: "Add change status"}
 	fc.deliveryStatusResult = &client.DeliveryStatusResult{Found: true, Verdict: "pass", GitReceipt: &client.GitReceipt{HeadRevision: "abc123def456"}}
 
