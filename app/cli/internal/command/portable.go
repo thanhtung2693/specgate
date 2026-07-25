@@ -106,7 +106,7 @@ func newPortableExportCmd(deps *Deps) *cobra.Command {
 				SourceMode:    config.ModeLocal,
 				ExportedAt:    time.Now().UTC().Format(time.RFC3339),
 				Payload:       payload,
-				Checksum:      portableChecksum(payload),
+				Checksum:      jsonChecksum(payload),
 			}
 			if err := writePortableBundle(filePath, bundle); err != nil {
 				return localExitError(deps, "portable.export", err)
@@ -264,7 +264,9 @@ func incompatibleCommand(deps *Deps, commandName, message string) error {
 	return &output.ExitError{Code: code}
 }
 
-func portableChecksum(payload local.PortableWorkspace) string {
+// jsonChecksum is the digest format shared by every checksummed bundle the CLI
+// writes, so an exported file and its verifier can never disagree on it.
+func jsonChecksum(payload any) string {
 	data, _ := json.Marshal(payload)
 	sum := sha256.Sum256(data)
 	return "sha256:" + hex.EncodeToString(sum[:])
@@ -319,7 +321,7 @@ func readPortableBundle(path string) (portableBundle, error) {
 	if bundle.Payload.Workspace.ID == "" || bundle.Payload.Workspace.Slug == "" {
 		return bundle, fmt.Errorf("portable bundle has no source workspace mapping")
 	}
-	if got := portableChecksum(bundle.Payload); got != bundle.Checksum {
+	if got := jsonChecksum(bundle.Payload); got != bundle.Checksum {
 		return bundle, fmt.Errorf("portable bundle checksum mismatch")
 	}
 	if err := validatePortableRelationships(bundle.Payload); err != nil {

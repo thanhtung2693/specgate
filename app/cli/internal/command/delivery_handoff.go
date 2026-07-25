@@ -2,9 +2,7 @@ package command
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -271,8 +269,7 @@ func printDeliveryHandoff(
 }
 
 func deliveryHandoffAgent(bundle deliveryHandoffBundle) string {
-	agent, _ := bundle.Report.Body["agent"].(map[string]any)
-	if name := strings.TrimSpace(fmt.Sprint(agent["name"])); name != "" && name != "<nil>" {
+	if name := completionAgentName(bundle.Report.Body); name != "" {
 		return name
 	}
 	return "unknown agent"
@@ -307,9 +304,7 @@ func redactHandoffEvidence(report local.DeliveryReport) (local.DeliveryReport, e
 // cleared, so recording the result never changes it.
 func deliveryHandoffChecksum(bundle deliveryHandoffBundle) string {
 	bundle.Checksum = ""
-	data, _ := json.Marshal(bundle)
-	sum := sha256.Sum256(data)
-	return "sha256:" + hex.EncodeToString(sum[:])
+	return jsonChecksum(bundle)
 }
 
 // gitIgnoresPath reports whether Git would ignore path. A directory that is not
