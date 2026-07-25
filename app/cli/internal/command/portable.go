@@ -148,7 +148,7 @@ func rejectPortableStateDestination(deps *Deps, destination string) error {
 			samePath = strings.EqualFold(target, protected)
 		}
 		if samePath || sameExistingFile(destination, protectedPath) {
-			return fmt.Errorf("portable export destination cannot be the active Local SQLite file %s; choose a different --file path", protectedPath)
+			return fmt.Errorf("export destination cannot be the active Local SQLite file %s; choose a different --file path", protectedPath)
 		}
 	}
 	return nil

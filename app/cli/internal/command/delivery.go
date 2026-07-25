@@ -30,6 +30,7 @@ func registerDeliveryCommands(root *cobra.Command, deps *Deps) {
 	del.AddCommand(newDeliveryApproveCmd(deps))
 	del.AddCommand(newDeliveryRejectCmd(deps))
 	del.AddCommand(newDeliveryStatusCmd(deps))
+	del.AddCommand(newDeliveryHandoffCmd(deps))
 	root.AddCommand(del)
 }
 

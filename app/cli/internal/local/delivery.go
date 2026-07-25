@@ -67,7 +67,7 @@ func (s *Store) SubmitDelivery(ctx context.Context, workspaceID, ref string, bod
 		return DeliveryReview{}, err
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	verdict, summary := localDeliveryVerdict(body, work.AcceptanceCriteria)
+	verdict, summary := DeliveryVerdict(body, work.AcceptanceCriteria)
 	reviewID, err := newID()
 	if err != nil {
 		return DeliveryReview{}, err
@@ -391,7 +391,10 @@ func validateLocalPeerCriteria(body map[string]any, requiredCriteria []string) e
 	return nil
 }
 
-func localDeliveryVerdict(body map[string]any, requiredCriteria []string) (string, string) {
+// DeliveryVerdict derives the Local review verdict and its summary from a
+// completion body and the work item's acceptance criteria. It is exported so a
+// handoff bundle can be re-derived away from the store that produced it.
+func DeliveryVerdict(body map[string]any, requiredCriteria []string) (string, string) {
 	satisfied := make(map[string]bool, len(requiredCriteria))
 	criteria, _ := body["criteria"].([]any)
 	for _, raw := range criteria {

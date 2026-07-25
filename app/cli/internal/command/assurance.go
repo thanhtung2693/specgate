@@ -91,6 +91,8 @@ var localCommandCapabilities = map[string]string{
 	"delivery review":           "governed_delivery",
 	"delivery status":           "governed_delivery",
 	"delivery submit":           "governed_delivery",
+	"delivery handoff export":   "governed_delivery",
+	"delivery handoff show":     "governed_delivery",
 	"change accept":             "governed_delivery",
 	"change approve":            "artifact_versions",
 	"change request-changes":    "governed_delivery",

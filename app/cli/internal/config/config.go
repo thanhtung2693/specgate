@@ -300,8 +300,11 @@ func EnsureSpecgateDirGitignore(dir string) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
+	// `*` matches at every level, so re-including a directory takes both the
+	// directory entry and its contents.
 	const content = "# SpecGate working dir: ignore transient delivery scaffolds,\n" +
-		"# keep the committed config and this file.\n*\n!.gitignore\n!config\n"
+		"# keep the committed config, review handoffs, and this file.\n" +
+		"*\n!.gitignore\n!config\n!handoffs/\n!handoffs/**\n"
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if os.IsExist(err) {
 		return nil
