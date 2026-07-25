@@ -170,14 +170,6 @@ def corroboration_evidence(
     return []
 
 
-def latest_event_payload(
-    events: list[dict[str, Any]], change_request_id: str, event_type: str
-) -> dict[str, Any] | None:
-    """The newest payload for ``event_type`` on this CR, or None."""
-    event = latest_event(events, change_request_id, event_type)
-    return _event_payload(event) if event else None
-
-
 def _event_payload(event: dict[str, Any] | None) -> dict[str, Any]:
     if not event:
         return {}
@@ -245,13 +237,6 @@ def latest_valid_peer_review_payload(
         if payload := valid_bound_peer_review_payload(peer, completed_event):
             return payload
     return None
-
-
-def latest_completed_payload(
-    events: list[dict[str, Any]], change_request_id: str
-) -> dict[str, Any] | None:
-    """The newest ``coding_agent.completed`` payload for this CR, or None."""
-    return latest_event_payload(events, change_request_id, _COMPLETED_EVENT)
 
 
 def _peer_satisfied_ids(peer_payload: dict[str, Any] | None) -> set[str]:

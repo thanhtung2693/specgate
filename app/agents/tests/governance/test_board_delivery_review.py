@@ -11,9 +11,10 @@ import json
 import pytest
 
 from specgate_agents.governance.board.delivery_review import (
+    _event_payload,
     apply_peer_review_tiers,
     corroboration_evidence,
-    latest_completed_payload,
+    latest_event,
     latest_valid_peer_review_payload,
     peer_review_covers_attested_met_criteria,
     resolve_evidence_policy_from_snapshot,
@@ -22,6 +23,12 @@ from specgate_agents.governance.board.delivery_review import (
 )
 from specgate_agents.governance.quality_gates.delivery_review import CriterionReview
 from specgate_agents.governance.quality_gates.profile_snapshot import UnsupportedSnapshotVersion
+
+
+def latest_completed_payload(events: list[dict], change_request_id: str) -> dict | None:
+    """Compose the production idiom: newest completion event, then its payload."""
+    event = latest_event(events, change_request_id, "coding_agent.completed")
+    return _event_payload(event) if event else None
 
 
 def test_latest_completed_payload_picks_newest_for_this_cr() -> None:
