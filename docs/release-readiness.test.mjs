@@ -690,7 +690,10 @@ test("delivery skill follows the authoritative SpecGate actor without crossing p
   assert.doesNotMatch(skill, /specgate --yes change approve|specgate artifact publish|specgate work list|specgate status --json/);
   assert.doesNotMatch(skill, /completion-\$WORK_REF|peer-review-\$WORK_REF|--force/);
   assert.doesNotMatch(skill, /coding_agent\.blocked_ambiguity|coding_agent\.docs_updated/);
-  assert.ok(words <= 950, `delivery skill is ${words} words; expected at most 950`);
+  // Same ceiling as the preparation skill. Every word here is paid on each IDE
+  // agent session, so raise it only for a capability an agent cannot otherwise
+  // discover — the repository review handoff was the last one.
+  assert.ok(words <= 1000, `delivery skill is ${words} words; expected at most 1000`);
 });
 
 test("delivery examples capture the scaffold path before submitting", () => {

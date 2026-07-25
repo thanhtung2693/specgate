@@ -15,12 +15,16 @@ sync_dir() {
   if [ ! -d "$src" ]; then
     return 0
   fi
-  if [ -d "$dest" ] && diff -qr "$src" "$dest" >/dev/null 2>&1; then
+  if [ -d "$dest" ] && diff -qr -x .DS_Store "$src" "$dest" >/dev/null 2>&1; then
     return 0
   fi
   rm -rf "$dest"
   mkdir -p "$(dirname "$dest")"
   cp -R "$src" "$dest"
+  # `cp -R` copies OS metadata a contributor's file manager left behind. It is
+  # gitignored, so it cannot be committed, but it must not land in embedded
+  # assets either.
+  find "$dest" -name .DS_Store -exec rm -f {} +
 }
 
 sync_file() {

@@ -131,6 +131,14 @@
                   "@type": "Answer",
                   "text": "Each acceptance criterion is checked against reported evidence and automated checks such as tests, types, and lint. Failed criteria stay visible for the next handoff."
                 }
+              },
+              {
+                "@type": "Question",
+                "name": "How should we roll this out?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Start with the Local CLI: one binary, no Docker, no server, and your governance data stays on your machine. Add the appliance when you want the browser UI, governance chat, or shared workspaces. It is built for a trusted machine or private network, so put authentication and TLS in front of it before exposing it beyond that."
+                }
               }
             ]
           }
@@ -459,6 +467,10 @@ $ specgate --yes artifact approve &lt;artifact-id&gt;
           <details class="faq-item reveal-up">
             <summary><span>What does the delivery review check?</span></summary>
             <p>Each acceptance criterion is checked against reported evidence and automated checks such as tests, types, and lint. Failed criteria stay visible for the next handoff.</p>
+          </details>
+          <details class="faq-item reveal-up">
+            <summary><span>How should we roll this out?</span></summary>
+            <p>Start with the Local CLI: one binary, no Docker, no server, and your governance data stays on your machine. Add the appliance when you want the browser UI, governance chat, or shared workspaces. It is built for a trusted machine or private network, so put authentication and TLS in front of it before exposing it beyond that.</p>
           </details>
         </div>
       </section>

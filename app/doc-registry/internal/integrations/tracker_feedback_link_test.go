@@ -88,14 +88,15 @@ func TestLinearWebhookRetainsResourceOwnershipOnAuditAndFeedback(t *testing.T) {
 	svc := NewService(store)
 	payload := `{"type":"Issue","webhookId":"linear-event-1","data":{"id":"issue-1","identifier":"ENG-1","title":"Ready work","url":"https://linear.app/acme/issue/ENG-1","state":{"id":"state-1","name":"In Progress","type":"started"}}}`
 
-	_, err := svc.processLinearWebhookPayload(
+	_, err := svc.processLinearWebhookPayloadWithDeliveryID(
 		context.Background(),
 		&Integration{ID: "integration-1", Provider: ProviderLinear},
 		&Resource{ID: "team-resource-1", IntegrationID: "integration-1"},
 		payload,
+		"",
 	)
 	if err != nil {
-		t.Fatalf("processLinearWebhookPayload: %v", err)
+		t.Fatalf("processLinearWebhookPayloadWithDeliveryID: %v", err)
 	}
 	if store.webhook == nil || store.webhook.ResourceID != "team-resource-1" {
 		t.Fatalf("webhook resource ownership lost: %#v", store.webhook)
@@ -111,14 +112,15 @@ func TestLinearWebhookFailedAuditRetainsResourceOwnership(t *testing.T) {
 	svc := NewService(store)
 	payload := `{"type":"Issue","webhookId":"linear-event-1","data":{"id":"issue-1","identifier":"ENG-1","title":"Ready work","url":"https://linear.app/acme/issue/ENG-1","state":{"id":"state-1","name":"In Progress","type":"started"}}}`
 
-	_, err := svc.processLinearWebhookPayload(
+	_, err := svc.processLinearWebhookPayloadWithDeliveryID(
 		context.Background(),
 		&Integration{ID: "integration-1", Provider: ProviderLinear},
 		&Resource{ID: "team-resource-failed", IntegrationID: "integration-1"},
 		payload,
+		"",
 	)
 	if !errors.Is(err, txErr) {
-		t.Fatalf("processLinearWebhookPayload error = %v, want %v", err, txErr)
+		t.Fatalf("processLinearWebhookPayloadWithDeliveryID error = %v, want %v", err, txErr)
 	}
 	if store.webhook == nil || store.webhook.Status != WebhookStatusFailed {
 		t.Fatalf("failed audit not recorded: %#v", store.webhook)

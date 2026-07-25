@@ -18,7 +18,7 @@ async def test_startup_hydrates_provider_keys(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(webapp_mod, "provider_has_api_key", lambda _provider: False)
 
     class FakeClient:
-        def __init__(self, base_url: str) -> None:
+        def __init__(self, base_url: str, **_kwargs) -> None:
             assert base_url == "http://registry.test"
 
         async def aget_settings_unmasked_for_governance(self) -> dict[str, str]:

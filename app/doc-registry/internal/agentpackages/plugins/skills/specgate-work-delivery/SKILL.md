@@ -63,12 +63,12 @@ Skip when no artifact exists. Otherwise dispatch tasks, locate
 ```bash
 specgate gates tasks dispatch "$ARTIFACT_ID" --json
 specgate gates tasks list "$ARTIFACT_ID" --json
-specgate gates tasks show <task-id> --json
 specgate gates tasks submit-result <task-id> \
   --file .specgate/work/gate-<task-id>.json --json
 ```
 
-Use exact task digests. Put `examined_docs` and `repo_commit` under `evidence`;
+`tasks list` returns `skill_content` and both digests; never call `tasks show`.
+Copy digests exactly. Put `examined_docs` and `repo_commit` under `evidence`;
 keep `findings` top-level. Report out-of-scope drift without editing it.
 
 Completion criterion: the exact drift task has a result, or no artifact exists.
@@ -114,13 +114,13 @@ Review the completion file, especially its shell commands, then submit:
 ```bash
 specgate change submit "$WORK_REF" \
   --file "$COMPLETION_PATH" --run-checks --yes --json
-specgate change status "$WORK_REF" --json
 ```
 
+`change submit` returns the same status payload; use its `data`, do not refetch.
 `--run-checks` replaces self-reported results with observed results. Fix failures
 before claiming completion.
 
-Completion criterion: submission succeeded and fresh Change status was read.
+Completion criterion: submission succeeded and its returned status was read.
 
 ## 6. Follow the authoritative actor
 
@@ -140,11 +140,19 @@ specgate delivery peer-review "$WORK_REF" \
   --file "$PEER_REVIEW_PATH" --json
 ```
 
-Keep its returned `data.path` verbatim as `$PEER_REVIEW_PATH`; apply the same
-existing-file rule.
+Keep `data.path` as `$PEER_REVIEW_PATH`; same existing-file rule.
 
 A pass means ready for human review, not accepted. Implementing agent never runs
 accept, request-changes, or another human-decision command.
+
+Export a teammate-readable review request only when the human requests one:
+
+```bash
+specgate delivery handoff export "$WORK_REF" --json
+```
+
+Report `data.path` to commit, and `data.git_ignored` when true — an ignored
+bundle never reaches the reviewer. Never commit or decide.
 
 Completion criterion: the implementing agent has no remaining authoritative
 action, or one exact blocker is reported.
@@ -161,11 +169,13 @@ Assurance: <assurance>
 Decision: <decision>
 Receipt: <receipt>
 Freshness: <freshness>
+[<verdict>] <criterion text> — <why>   (one line per data.criteria entry)
 [Stale: <stale_reason> — only when stale]
 Next (<next_actor>): <next_command>
 ```
 
-Preserve values verbatim. Stale is a warning, not a state override. For any
+Preserve values verbatim, including every criterion line. Stale is a warning,
+not a state override. For any
 other state, show a compact `SpecGate delivery handoff` with state, missing,
 `next_actor`, and `next_command`; do not use success wording. If status fails,
 report failure. If state is `accepted`, echo it without claiming this agent

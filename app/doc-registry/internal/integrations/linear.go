@@ -158,13 +158,10 @@ func validateLinearWebhookTimestamp(payloadJSON string, now time.Time) error {
 	return nil
 }
 
-// processLinearWebhookPayload normalizes the Linear webhook payload and runs the
-// shared tracker-status / comment-scope-drift commit pipeline after
-// resource-scoped signature verification.
-func (s *Service) processLinearWebhookPayload(ctx context.Context, integration *Integration, resource *Resource, payloadJSON string) (*LinearWebhookResult, error) {
-	return s.processLinearWebhookPayloadWithDeliveryID(ctx, integration, resource, payloadJSON, "")
-}
-
+// processLinearWebhookPayloadWithDeliveryID normalizes the Linear webhook
+// payload and runs the shared tracker-status / comment-scope-drift commit
+// pipeline after resource-scoped signature verification. An empty deliveryID
+// means the payload did not arrive through the async delivery queue.
 func (s *Service) processLinearWebhookPayloadWithDeliveryID(ctx context.Context, integration *Integration, resource *Resource, payloadJSON, deliveryID string) (*LinearWebhookResult, error) {
 	nd, err := linear.ParseAndNormalize(payloadJSON)
 	if err != nil {

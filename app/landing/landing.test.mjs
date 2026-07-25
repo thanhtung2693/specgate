@@ -249,6 +249,7 @@ test("FAQ is concise and JSON-LD matches the visible questions", () => {
     "Do we have to leave our coding agent?",
     "Do I need an LLM API key?",
     "What does the delivery review check?",
+    "How should we roll this out?",
   ]);
   assert.deepEqual(structuredQuestions, visibleQuestions);
 });

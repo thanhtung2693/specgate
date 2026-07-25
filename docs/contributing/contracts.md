@@ -325,6 +325,13 @@ deterministically:
 Agents must not invent authoritative bindings. Model-emitted bindings are
 ignored for deterministic trust.
 
+Both modes resolve bindings from the stored acceptance criterion, not from the
+submitted completion body, so omitting `verification_binding` from a report does
+not bypass the table above. The two modes differ only in how they express
+`unclear`: Full mode returns `needs_human_review`, while Local review has only
+`passed` and `failed` and therefore fails the review, naming the criterion and
+the check. Local peer review applies the same resolution.
+
 Delivery review verdicts are stored as `delivery_review` gate runs. Human
 delivery decisions written by `specgate delivery approve|reject` outrank later
 platform reruns for the same `completion_feedback_event_id`. A newly reported
@@ -351,6 +358,28 @@ the coding agent's claims. Older delivery-review envelopes have no reason code
 and remain readable. `delivery_review_outdated` means the latest completion has
 not yet received its own review; a human decision against the older review is
 rejected.
+
+### Delivery handoff bundles
+
+`specgate delivery handoff export` writes a Local review request as a single
+committable file carrying `schema_version`, `exported_at`, `source_mode`, the
+work item, its delivery review, the bound completion report, peer-review status,
+and a `checksum` computed over the bundle with the checksum field cleared. The
+current version is `specgate.delivery-handoff/v1`; a reader that does not
+recognize the value refuses the file rather than guessing.
+
+Export drops every `criteria[].evidence.grounding.excerpt`. Grounding cites any
+path the agent read, including files outside the checkout, and the bundle is
+committed; the retained `status` and `digest` still prove the citation was
+grounded without republishing file contents. Export also refuses the active
+Local SQLite file as a destination.
+
+The bundle is a transport for review, never an authority. `handoff show`
+re-derives the verdict from the report and acceptance criteria it carries and
+reports any disagreement with the recorded verdict, so a bundle written under
+weaker enforcement cannot present a stale pass as current. Reviewer decisions do
+not travel in the bundle: human decisions stay with the owning store through
+`change accept` / `change request-changes`.
 
 ## Gate Runs and Trust
 

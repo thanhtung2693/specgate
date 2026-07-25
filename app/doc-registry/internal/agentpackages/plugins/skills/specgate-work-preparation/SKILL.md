@@ -138,11 +138,13 @@ that rubric, and write `.specgate/work/gate-<task-id>.json`:
 
 ```bash
 specgate gates tasks list "$ARTIFACT_ID" --json
-specgate gates tasks show <task-id> --json
 specgate gates tasks submit-result <task-id> \
   --file .specgate/work/gate-<task-id>.json --json
-specgate gates results "$ARTIFACT_ID" --json
 ```
+
+`tasks list` already returns each task's `skill_content`, `gate_digest`, and
+`artifact_digest`; do not call `tasks show` for a task it listed. Copy both
+digests exactly — a mismatched digest leaves the gate `not_run`.
 
 `aggregate=not_run` means work remains; it is never a pass. Stale digests require
 a fresh task. Readiness errors preserve the artifact and become explicit
@@ -167,8 +169,19 @@ Show the exact immutable snapshot and readiness evidence:
 
 ```bash
 specgate artifact show "$ARTIFACT_ID" --json
-specgate gates results "$ARTIFACT_ID" --json
 ```
+
+Reuse the readiness rows already read in section 3; do not refetch them. Render
+every gate before asking, preserving each state and hint verbatim:
+
+```text
+SpecGate readiness — <artifact-id> <version> (<aggregate>)
+[<state>] <gate> — <hint>
+Not yet judged: <count>
+```
+
+Never summarize a `fail`, `warn`, `needs_human_review`, or `not_run` gate as
+acceptable, and never present an aggregate without its per-gate lines.
 
 Stop for the human decision. After the human explicitly approves and authorizes
 that exact snapshot, run the normal handoff with every confirmed criterion:

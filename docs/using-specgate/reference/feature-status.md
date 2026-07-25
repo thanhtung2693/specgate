@@ -14,9 +14,9 @@ stability beyond the classifications below.
 - Artifact publication, versioning, status, and Context Pack handoff.
 - Automatic governance resolution across the built-in `light`, `standard`, and
   `enhanced` tiers.
-- Delivery report scaffolding, deterministic check bindings,
-  evidence-grounded citations, human delivery approve/reject, and
-  `delivery submit`.
+- Delivery report scaffolding, deterministic check bindings enforced in both
+  Local and Full review, evidence-grounded citations, human delivery
+  approve/reject, and `delivery submit`.
 - Delivery-trust readback separates evidence, assurance source, human decision,
   and recorded Git receipt; agent-reported evidence remains explicit whether or
   not a platform model reviews the submitted claims.
@@ -33,7 +33,8 @@ stability beyond the classifications below.
   a registry; the same IDE targets are available in Full mode.
 - Safe uninstall that keeps data by default.
 - `specgate stats` governance-value reporting from real gate and delivery
-  history, including first-pass yield and pre/post-build governance signals.
+  history in both modes, including first-pass yield, pre/post-build governance
+  signals, rework, and cycle time.
 - Full-mode GitHub/GitLab **Repositories** with selected-resource managed
   webhooks and exact-head merged PR/MR observation.
 - Optional Full-mode Linear **Work tracking** handoff to one selected team;
@@ -49,6 +50,10 @@ stability beyond the classifications below.
   citations, Context Pack Knowledge provenance, and
   linked-Knowledge freshness warnings.
 - Platform-model readiness checks and delivery review.
+- Committable delivery handoffs: `delivery handoff export` writes a review
+  request into the repository and `delivery handoff show` renders it read-only
+  without a workspace or server. Reviewer decisions are not carried in the file,
+  and the bundle format is new enough that its schema may still change.
 
 These surfaces are usable in local evaluation, but they may change during
 v0.1 and still need more real team use before they become stable

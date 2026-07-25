@@ -22,6 +22,7 @@ from specgate_agents.governance.prompt_budget import (
     cap_document_bundle,
     cap_model_text,
 )
+from specgate_agents.governance.provider_keys import governance_registry_timeout_seconds
 from specgate_agents.governance.registry.client import DocRegistryClient
 
 GOVERNANCE_CHAT_SYSTEM = """\
@@ -46,7 +47,9 @@ before answering."""
 
 
 def _client() -> DocRegistryClient:
-    return DocRegistryClient(doc_registry_base_url())
+    return DocRegistryClient(
+        doc_registry_base_url(), timeout_s=governance_registry_timeout_seconds()
+    )
 
 
 _CHAT_ARTIFACT_FIELDS = (

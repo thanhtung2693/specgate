@@ -103,28 +103,6 @@ class DocRegistryClient:
             raw = r.json()
             return _unwrap_huma_body(raw) if isinstance(raw, dict) else raw
 
-    def list_feature_attachments(
-        self, feature_id: str, *, workspace_id: str | None = None
-    ) -> list[dict[str, Any]]:
-        """GET /features/{id}/attachments — feature-scoped reference attachments.
-
-        Returns the raw attachment DTO list (``kind``, ``url`` /
-        ``governance_file_id``, ``title``, ``note``, ``audience``). Audience filtering
-        for a specific consumer (gate vs coding agent) is the caller's job.
-        """
-        fid = str(feature_id or "").strip()
-        if not fid:
-            return []
-        with self._client() as client:
-            r = client.get(
-                f"/features/{fid}/attachments", params=self._workspace_params(workspace_id)
-            )
-            r.raise_for_status()
-            raw = r.json()
-        body = _unwrap_huma_body(raw) if isinstance(raw, dict) else {}
-        items = body.get("items") if isinstance(body, dict) else None
-        return [i for i in items if isinstance(i, dict)] if isinstance(items, list) else []
-
     async def alist_feature_attachments(
         self, feature_id: str, *, workspace_id: str | None = None
     ) -> list[dict[str, Any]]:
@@ -206,25 +184,6 @@ class DocRegistryClient:
             r.raise_for_status()
             return _parse_items_payload(r.json())
 
-    def list_workboard_stale_warnings(
-        self,
-        *,
-        feature_id: str | None = None,
-        change_request_id: str | None = None,
-        workspace_id: str | None = None,
-    ) -> list[dict[str, Any]]:
-        """GET /workboard/stale-warnings."""
-        params: dict[str, str] = {}
-        if feature_id:
-            params["feature_id"] = feature_id
-        if change_request_id:
-            params["change_request_id"] = change_request_id
-        params.update(self._workspace_params(workspace_id))
-        with self._client() as client:
-            r = client.get("/workboard/stale-warnings", params=params)
-            r.raise_for_status()
-            return _parse_items_payload(r.json())
-
     def refresh_change_request_gate_runs(
         self,
         change_request_id: str,
@@ -248,22 +207,6 @@ class DocRegistryClient:
                 f"/workboard/change-requests/{change_request_id}/gate-runs/refresh",
                 json=body,
                 params=self._workspace_params(workspace_id),
-            )
-            r.raise_for_status()
-            return _parse_items_payload(r.json())
-
-    def list_change_request_gate_runs(
-        self,
-        change_request_id: str,
-        limit: int = 50,
-        *,
-        workspace_id: str | None = None,
-    ) -> list[dict[str, Any]]:
-        """GET /workboard/change-requests/{id}/gate-runs?limit=."""
-        with self._client() as client:
-            r = client.get(
-                f"/workboard/change-requests/{change_request_id}/gate-runs",
-                params={"limit": str(limit), **self._workspace_params(workspace_id)},
             )
             r.raise_for_status()
             return _parse_items_payload(r.json())
@@ -370,17 +313,6 @@ class DocRegistryClient:
             data = _unwrap_huma_body(raw) if isinstance(raw, dict) else {}
             settings = data.get("settings") if isinstance(data, dict) else None
             return settings if isinstance(settings, dict) else {}
-
-    async def aget_skills(self, *, workspace_id: str) -> list[dict[str, Any]]:
-        """Async workspace-scoped GET /skills — for LangGraph async nodes."""
-        workspace = str(workspace_id or "").strip()
-        if not workspace:
-            raise ValueError("workspace_id is required")
-        async with self._aclient() as client:
-            r = await client.get("/skills", params={"workspace_id": workspace})
-            r.raise_for_status()
-            payload = r.json()
-        return _parse_items_payload(payload)
 
     async def alist_governance_feedback_events(
         self,

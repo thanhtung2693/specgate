@@ -78,6 +78,10 @@ seed-skills:
 # Run after editing plugin files. Commit the result; check-plugins (CI) guards drift.
 AGENTPKG_PLUGINS := app/doc-registry/internal/agentpackages/plugins
 LOCAL_PLUGIN_ASSETS := app/cli/internal/command/local_plugin_assets
+# Compare plugin trees ignoring OS metadata. A stray .DS_Store is untracked and
+# globally gitignored, so it must not fail the drift guard on a contributor's
+# machine while CI, which never has one, passes.
+PLUGIN_DIFF := diff -r -x .DS_Store
 
 generate-plugins:
 	@python3 app/doc-registry/scripts/generate-plugin-metadata.py --plugin-dir plugins
@@ -100,25 +104,25 @@ check-plugins:
 			echo "ERROR: required embedded plugin asset is not tracked: $$file" >&2; exit 1; \
 		fi; \
 	done
-	@diff -r plugins/skills $(AGENTPKG_PLUGINS)/skills >/dev/null
-	@diff -r plugins/hooks $(AGENTPKG_PLUGINS)/hooks >/dev/null
-	@diff -r plugins/assets $(AGENTPKG_PLUGINS)/assets >/dev/null
-	@diff -r plugins/rules $(AGENTPKG_PLUGINS)/rules >/dev/null
-	@diff -r plugins/.agents $(AGENTPKG_PLUGINS)/.agents >/dev/null
-	@diff -r plugins/.codex-plugin $(AGENTPKG_PLUGINS)/.codex-plugin >/dev/null
-	@diff -r plugins/.claude-plugin $(AGENTPKG_PLUGINS)/.claude-plugin >/dev/null
-	@diff -r plugins/.cursor-plugin $(AGENTPKG_PLUGINS)/.cursor-plugin >/dev/null
+	@$(PLUGIN_DIFF) plugins/skills $(AGENTPKG_PLUGINS)/skills >/dev/null
+	@$(PLUGIN_DIFF) plugins/hooks $(AGENTPKG_PLUGINS)/hooks >/dev/null
+	@$(PLUGIN_DIFF) plugins/assets $(AGENTPKG_PLUGINS)/assets >/dev/null
+	@$(PLUGIN_DIFF) plugins/rules $(AGENTPKG_PLUGINS)/rules >/dev/null
+	@$(PLUGIN_DIFF) plugins/.agents $(AGENTPKG_PLUGINS)/.agents >/dev/null
+	@$(PLUGIN_DIFF) plugins/.codex-plugin $(AGENTPKG_PLUGINS)/.codex-plugin >/dev/null
+	@$(PLUGIN_DIFF) plugins/.claude-plugin $(AGENTPKG_PLUGINS)/.claude-plugin >/dev/null
+	@$(PLUGIN_DIFF) plugins/.cursor-plugin $(AGENTPKG_PLUGINS)/.cursor-plugin >/dev/null
 	@diff plugins/README.md $(AGENTPKG_PLUGINS)/README.md >/dev/null
 	@diff plugins/README.md.tmpl $(AGENTPKG_PLUGINS)/README.md.tmpl >/dev/null
 	@diff plugins/package.json $(AGENTPKG_PLUGINS)/package.json >/dev/null
-	@diff -r plugins/skills $(LOCAL_PLUGIN_ASSETS)/skills >/dev/null
-	@diff -r plugins/hooks $(LOCAL_PLUGIN_ASSETS)/hooks >/dev/null
-	@diff -r plugins/assets $(LOCAL_PLUGIN_ASSETS)/assets >/dev/null
-	@diff -r plugins/rules $(LOCAL_PLUGIN_ASSETS)/rules >/dev/null
-	@diff -r plugins/.agents $(LOCAL_PLUGIN_ASSETS)/.agents >/dev/null
-	@diff -r plugins/.codex-plugin $(LOCAL_PLUGIN_ASSETS)/.codex-plugin >/dev/null
-	@diff -r plugins/.claude-plugin $(LOCAL_PLUGIN_ASSETS)/.claude-plugin >/dev/null
-	@diff -r plugins/.cursor-plugin $(LOCAL_PLUGIN_ASSETS)/.cursor-plugin >/dev/null
+	@$(PLUGIN_DIFF) plugins/skills $(LOCAL_PLUGIN_ASSETS)/skills >/dev/null
+	@$(PLUGIN_DIFF) plugins/hooks $(LOCAL_PLUGIN_ASSETS)/hooks >/dev/null
+	@$(PLUGIN_DIFF) plugins/assets $(LOCAL_PLUGIN_ASSETS)/assets >/dev/null
+	@$(PLUGIN_DIFF) plugins/rules $(LOCAL_PLUGIN_ASSETS)/rules >/dev/null
+	@$(PLUGIN_DIFF) plugins/.agents $(LOCAL_PLUGIN_ASSETS)/.agents >/dev/null
+	@$(PLUGIN_DIFF) plugins/.codex-plugin $(LOCAL_PLUGIN_ASSETS)/.codex-plugin >/dev/null
+	@$(PLUGIN_DIFF) plugins/.claude-plugin $(LOCAL_PLUGIN_ASSETS)/.claude-plugin >/dev/null
+	@$(PLUGIN_DIFF) plugins/.cursor-plugin $(LOCAL_PLUGIN_ASSETS)/.cursor-plugin >/dev/null
 	@diff plugins/README.md $(LOCAL_PLUGIN_ASSETS)/README.md >/dev/null
 	@diff plugins/README.md.tmpl $(LOCAL_PLUGIN_ASSETS)/README.md.tmpl >/dev/null
 	@diff plugins/package.json $(LOCAL_PLUGIN_ASSETS)/package.json >/dev/null

@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from specgate_agents.governance.agents.factories import build_model, ensure_llm_env
 from specgate_agents.governance.config import doc_registry_base_url
 from specgate_agents.governance.llm_structured import structured_output_ainvoke
+from specgate_agents.governance.provider_keys import governance_registry_timeout_seconds
 from specgate_agents.governance.registry.client import DocRegistryClient
 
 logger = logging.getLogger(__name__)
@@ -111,7 +112,9 @@ async def create_quick_work_item(
     if not workspace_id:
         raise ValueError("workspace_id is required")
 
-    client = DocRegistryClient(doc_registry_base_url())
+    client = DocRegistryClient(
+        doc_registry_base_url(), timeout_s=governance_registry_timeout_seconds()
+    )
 
     acs = _normalize_acceptance_criteria(acceptance_criteria)
     if not acs:

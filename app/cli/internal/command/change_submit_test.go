@@ -240,7 +240,7 @@ func TestChangeSubmitLocalUsesStoreWithoutHTTP(t *testing.T) {
 		"summary":        "All done",
 		"context_digest": work.ContextDigest,
 		"criteria": []map[string]any{{
-			"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"summary": "targeted test passed"},
+			"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"heading": "targeted test passed"},
 		}},
 	})
 
@@ -316,7 +316,7 @@ func submitLocalChangeDelivery(t *testing.T, store *local.Store, workspaceID str
 		"agent":          map[string]any{"name": agent},
 		"git_receipt":    map[string]any{"head_revision": receipt},
 		"criteria": []any{map[string]any{
-			"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"summary": "targeted test passed"},
+			"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"heading": "targeted test passed"},
 		}},
 	})
 	if err != nil {

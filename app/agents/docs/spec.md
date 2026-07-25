@@ -286,6 +286,12 @@ Server-side governance operations read model/provider settings from Doc Registry
 where applicable. Reasoning effort maps to provider-native controls when
 supported and no-ops otherwise.
 
+Hydrated runtime policy applies to the operation that reads it: the gate
+confidence threshold, the reasoning effort, and `governance.registry_timeout_seconds`,
+which every operation passes to its Doc Registry client. Fetching the settings
+that carry these values necessarily precedes hydration, so those two requests use
+the client default.
+
 ## 11. Multi-language and Control Flow
 
 User input may be any language. Intent, route, and entity extraction must go

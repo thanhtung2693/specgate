@@ -10,6 +10,9 @@ from typing import Any
 from specgate_agents.governance.agents.factories import build_model, ensure_llm_env
 from specgate_agents.governance.config import doc_registry_base_url
 from specgate_agents.governance.provider_keys import (
+    governance_registry_timeout_seconds,
+)
+from specgate_agents.governance.provider_keys import (
     hydrate_governance_model_settings as _hydrate_model_settings,
 )
 from specgate_agents.governance.quality_gates.judge import GateEvaluation, evaluate_all_gates
@@ -90,7 +93,9 @@ async def run_llm_gates_for_artifact(
 ) -> dict[str, Any]:
     """Fetch one artifact, run its configured readiness gates, persist artifact-scoped rows."""
     workspace_kw = _workspace_kw(workspace_id)
-    client = DocRegistryClient(doc_registry_base_url())
+    client = DocRegistryClient(
+        doc_registry_base_url(), timeout_s=governance_registry_timeout_seconds()
+    )
     artifact = await client.aget_artifact(artifact_id, **workspace_kw)
 
     # Parse once; every non-empty corrupt or unsupported snapshot fails closed.
@@ -201,7 +206,9 @@ async def run_llm_gates_for_change_request(
     configured so the deterministic gates still refresh.
     """
     workspace_kw = _workspace_kw(workspace_id)
-    client = DocRegistryClient(doc_registry_base_url())
+    client = DocRegistryClient(
+        doc_registry_base_url(), timeout_s=governance_registry_timeout_seconds()
+    )
     change_request = await asyncio.to_thread(
         client.get_change_request, change_request_id, **workspace_kw
     )

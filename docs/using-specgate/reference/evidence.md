@@ -84,6 +84,29 @@ when the proof is in the checkout; optional `line`, `heading`, `url`, and
 `file_key` make a citation more precise. The CLI verifies local evidence paths
 and records a digest/excerpt unless `--skip-evidence-check` is explicitly used.
 
+Those field names are the whole contract: `kind`, `path`, `line`, `heading`,
+`url`, `file_key`, and the CLI-stamped `grounding`. Any other field is rejected
+before submission in both modes, so a completion accepted in Local mode is not
+refused later by a Full appliance.
+
+## Bound criteria
+
+An acceptance criterion ending in `@check:<name>` is verified from the named
+`checks[]` row rather than from its prose claim, in both Local and Full mode.
+The stored acceptance criterion is the authority for the binding, so a
+completion cannot escape enforcement by omitting `verification_binding`.
+
+| Bound check | Result |
+|---|---|
+| `pass` | criterion met |
+| `fail` | criterion unmet |
+| `skipped` or absent from `checks[]` | not verifiable — Full mode returns `needs_human_review`, Local mode fails the review and names the criterion and check |
+
+Enforcement covers a missing or skipped check. It does not detect a falsely
+claimed `pass`: `checks[].status` is agent-reported unless the submission ran
+with `change submit --run-checks`, which re-executes each non-skipped command
+and records the superseded value in `checks[].claimed_status`.
+
 ## Evidence quality
 
 Good evidence is concrete:

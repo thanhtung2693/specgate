@@ -107,12 +107,22 @@ func localDeliveryDecisionLabel(decision string) string {
 func localDeliveryAssuranceLabel(body map[string]any, peer local.PeerReviewStatus) string {
 	labels := []string{"Agent-reported"}
 	checks, _ := body["checks"].([]any)
+	reproduced := false
+	corrected := 0
 	for _, raw := range checks {
 		entry, _ := raw.(map[string]any)
 		if strings.TrimSpace(fmt.Sprint(entry["source"])) == "specgate_cli" {
-			labels = append(labels, "locally reproduced")
-			break
+			reproduced = true
 		}
+		if claimed, _ := entry["claimed_status"].(string); strings.TrimSpace(claimed) != "" {
+			corrected++
+		}
+	}
+	if reproduced {
+		labels = append(labels, "locally reproduced")
+	}
+	if corrected > 0 {
+		labels = append(labels, fmt.Sprintf("corrected %d agent-reported check %s", corrected, pluralize(corrected, "result", "results")))
 	}
 	switch strings.TrimSpace(peer.State) {
 	case "passed":

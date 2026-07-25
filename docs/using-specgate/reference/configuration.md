@@ -132,6 +132,10 @@ removed cleanly when a checkout-specific selection is cleared. `specgate
 workspace select <slug>` in non-interactive mode saves the global workspace;
 use `workspace bind` when automation should bind a project. `specgate user
 logout` clears both the global workspace and project-scoped workspace bindings.
+`specgate user login` records the user and global workspace and leaves existing
+project bindings alone, so signing in never unbinds other checkouts; a binding
+whose workspace no longer resolves fails in that project with its own recovery
+command.
 Full appliance `specgate init` writes the deployment directory and saves the
 gateway API URL inferred from `SPECGATE_PORT`, so the next CLI command targets the appliance it
 just started. Supply `SPECGATE_PORT` or `SPECGATE_COMPOSE_PROJECT` before the
@@ -152,6 +156,7 @@ CLI environment variables:
 | `SPECGATE_LOCAL_DIR` | Overrides the selected Local SQLite state directory for one command session. |
 | `SPECGATE_CONFIG_PATH` | Overrides the per-user CLI config path for an isolated session. |
 | `SPECGATE_NO_UPDATE_CHECK` | Set to `1`, `true`, `yes`, or `on` to disable the public GitHub release freshness check. |
+| `SPECGATE_ACCESSIBLE` | Set to `1` to render interactive prompts in accessible mode, which screen readers can follow. |
 | `CI` | When truthy, suppresses human-facing public update checks. |
 
 ### Repo-level `.specgate/` directory
@@ -231,6 +236,9 @@ when it is unavailable.
 Settings include:
 
 - quality-gate confidence threshold;
+- governance model reasoning effort (`low`, `medium`, `high`);
+- `governance.registry_timeout_seconds`, the request timeout governance
+  operations use when calling Doc Registry (default `30`, maximum `600`);
 - work-item lifecycle behavior;
 - governance file retention.
 

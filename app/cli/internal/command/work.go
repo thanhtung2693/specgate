@@ -728,29 +728,11 @@ func acceptanceCriteriaBody(criteria []string) any {
 	return out
 }
 
+// parseAcceptanceCriterionBinding splits an acceptance criterion into its text
+// and any trailing `@check:<name>` binding. The parser lives in the local
+// package because Local delivery review resolves bound criteria against it.
 func parseAcceptanceCriterionBinding(raw string) (string, string) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return "", ""
-	}
-	fields := strings.Fields(trimmed)
-	if len(fields) == 0 {
-		return "", ""
-	}
-	last := fields[len(fields)-1]
-	const prefix = "@check:"
-	if !strings.HasPrefix(last, prefix) {
-		return trimmed, ""
-	}
-	binding := strings.TrimSpace(strings.TrimPrefix(last, prefix))
-	if binding == "" {
-		return trimmed, ""
-	}
-	text := strings.TrimSpace(strings.TrimSuffix(trimmed, last))
-	if text == "" {
-		return trimmed, ""
-	}
-	return text, binding
+	return local.ParseAcceptanceCriterionBinding(raw)
 }
 
 // specgate work policy <work-ref>

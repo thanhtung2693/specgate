@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -225,6 +226,7 @@ gates results for read-only access to stored detailed evidence.`,
 					return nil
 				}
 				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Spec quality:"), styledStatus(deps, run.Aggregate))
+				printReadinessGates(deps, evaluations)
 				if len(run.Dispatch.PendingTaskIDs) > 0 {
 					fmt.Fprintf(deps.Stdout, "%s %d semantic checks need your IDE agent.\n", styled(deps, output.StyleWarning, "No external model configured —"), len(run.Dispatch.PendingTaskIDs))
 					fmt.Fprintln(deps.Stdout, nextStep(deps, "inspect the rubrics with", "specgate gates tasks list "+args[0]))
@@ -609,6 +611,30 @@ func localDispatchResult(result local.DispatchGateTasksResult) client.DispatchGa
 
 func localDispatchPayload(result local.DispatchGateTasksResult) map[string]any {
 	return map[string]any{"artifact_id": result.ArtifactID, "created_task_ids": result.CreatedTaskIDs, "skipped_gate_keys": result.SkippedGateKeys, "pending_task_ids": result.PendingTaskIDs}
+}
+
+// printReadinessGates names every gate, its state, and its trust origin. An
+// aggregate word alone cannot be judged: "warn" reads the same whether one gate
+// raised a soft hint or four are still waiting on a result.
+func printReadinessGates(deps *Deps, evaluations []map[string]any) {
+	if len(evaluations) == 0 {
+		return
+	}
+	for _, evaluation := range evaluations {
+		gate := strings.TrimSpace(fmt.Sprint(evaluation["gate"]))
+		state := strings.TrimSpace(fmt.Sprint(evaluation["state"]))
+		line := fmt.Sprintf("  [%s] %s", state, gate)
+		// A dispatched-but-unanswered task carries a trust field for the result it
+		// will eventually hold; printing it before then would claim an attestation
+		// nobody has made.
+		if trust := strings.TrimSpace(fmt.Sprint(evaluation["trust"])); trust != "" && trust != "<nil>" && state != "not_run" {
+			line += styled(deps, output.StyleMuted, " ("+trust+")")
+		}
+		if hint := strings.TrimSpace(fmt.Sprint(evaluation["hint"])); hint != "" && hint != "<nil>" {
+			line += " — " + hint
+		}
+		fmt.Fprintln(deps.Stdout, line)
+	}
 }
 
 func localReadinessEvaluations(checks map[string]any) []map[string]any {

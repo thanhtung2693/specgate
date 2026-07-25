@@ -32,6 +32,11 @@ type changeStatusResult struct {
 	Stale       bool        `json:"stale"`
 	StaleReason string      `json:"stale_reason,omitempty"`
 	NextCommand string      `json:"next_command"`
+	// Criteria carries each acceptance criterion's verdict and the reason for it,
+	// including the check that decided a bound criterion. A human accepting or
+	// rejecting delivery decides from this payload and must not need the
+	// completion file to learn which criterion is weak.
+	Criteria []client.CriterionReview `json:"criteria,omitempty"`
 }
 
 func newChangeCmd(deps *Deps) *cobra.Command {
@@ -486,6 +491,7 @@ func deriveFullChangeStatus(work *client.ResolvedWork, delivery *client.Delivery
 	result.Assurance = deliveryAssuranceLabel(delivery)
 	result.Decision = deliveryDecisionLabel(delivery)
 	result.Receipt = deliveryReceiptLabel(delivery.GitReceipt)
+	result.Criteria = delivery.PerCriterion
 	hasReceipt := deliveryGitReceiptAvailable(delivery.GitReceipt)
 	result.Freshness, result.Stale, result.StaleReason = changeFreshness(hasReceipt, delivery.PeerReview.State)
 	if strings.TrimSpace(delivery.Executor) == "human" {
@@ -532,6 +538,7 @@ func deriveLocalChangeStatus(work local.WorkItem, review *local.DeliveryReview, 
 	result.Assurance = localDeliveryAssuranceLabel(report.Body, peer)
 	result.Decision = localDeliveryDecisionLabel(review.HumanDecision)
 	result.Receipt = localDeliveryReceiptLabel(report.Body)
+	result.Criteria, _ = localReportEvidence(work.AcceptanceCriteria, *report)
 	result.Freshness, result.Stale, result.StaleReason = changeFreshness(localDeliveryReceiptAvailable(report.Body), peer.State)
 	if review.HumanDecision == "approve" {
 		return acceptedChangeStatus(result)
@@ -652,6 +659,14 @@ func printChangeStatus(deps *Deps, result changeStatusResult) {
 	fmt.Fprintf(deps.Stdout, "Decision: %s\n", result.Decision)
 	fmt.Fprintf(deps.Stdout, "Receipt: %s\n", result.Receipt)
 	fmt.Fprintf(deps.Stdout, "Freshness: %s\n", result.Freshness)
+	// Same shape as `verify`: the criterion text and the reason, so a human can
+	// see which one is weak without opening the completion file.
+	if len(result.Criteria) > 0 {
+		fmt.Fprintln(deps.Stdout, "Criteria:")
+		for _, criterion := range result.Criteria {
+			fmt.Fprintf(deps.Stdout, "  [%s] %s — %s\n", criterion.Verdict, criterion.Text, criterion.Why)
+		}
+	}
 	fmt.Fprintf(deps.Stdout, "Next actor: %s\n", result.NextActor)
 	missing := strings.Join(result.Missing, ", ")
 	if missing == "" {

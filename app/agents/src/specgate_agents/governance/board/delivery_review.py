@@ -18,6 +18,9 @@ from specgate_agents.governance.agents.factories import build_model, ensure_llm_
 from specgate_agents.governance.board.quality_gates import _frozen_gate_rubrics
 from specgate_agents.governance.config import doc_registry_base_url
 from specgate_agents.governance.provider_keys import (
+    governance_registry_timeout_seconds,
+)
+from specgate_agents.governance.provider_keys import (
     hydrate_governance_model_settings as _hydrate_model_settings,
 )
 from specgate_agents.governance.quality_gates.delivery_review import (
@@ -167,14 +170,6 @@ def corroboration_evidence(
     return []
 
 
-def latest_event_payload(
-    events: list[dict[str, Any]], change_request_id: str, event_type: str
-) -> dict[str, Any] | None:
-    """The newest payload for ``event_type`` on this CR, or None."""
-    event = latest_event(events, change_request_id, event_type)
-    return _event_payload(event) if event else None
-
-
 def _event_payload(event: dict[str, Any] | None) -> dict[str, Any]:
     if not event:
         return {}
@@ -244,13 +239,6 @@ def latest_valid_peer_review_payload(
     return None
 
 
-def latest_completed_payload(
-    events: list[dict[str, Any]], change_request_id: str
-) -> dict[str, Any] | None:
-    """The newest ``coding_agent.completed`` payload for this CR, or None."""
-    return latest_event_payload(events, change_request_id, _COMPLETED_EVENT)
-
-
 def _peer_satisfied_ids(peer_payload: dict[str, Any] | None) -> set[str]:
     if not peer_payload:
         return set()
@@ -309,7 +297,9 @@ async def review_change_request_delivery(
     workspace_id = workspace_id.strip()
     if not workspace_id:
         raise ValueError("workspace_id is required")
-    client = DocRegistryClient(doc_registry_base_url())
+    client = DocRegistryClient(
+        doc_registry_base_url(), timeout_s=governance_registry_timeout_seconds()
+    )
     workspace_kw = {"workspace_id": workspace_id}
     change_request = await asyncio.to_thread(
         client.get_change_request, change_request_id, **workspace_kw

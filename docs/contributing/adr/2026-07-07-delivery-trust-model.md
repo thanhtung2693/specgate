@@ -80,6 +80,15 @@ Bindings are human-authored or human-confirmed. An IDE/model suggestion must not
 silently create an authoritative binding, because selecting a check that does
 not exercise the criterion would create a confident but invalid pass.
 
+Both modes resolve a binding from the stored acceptance criterion rather than the
+submitted report, so omitting `verification_binding` from a completion does not
+bypass the table. The verdict vocabulary differs: Full review carries `unclear`
+into `needs_human_review`, while Local review has only `passed` and `failed` and
+therefore fails an undecidable binding, naming the criterion and the check. Local
+enforcement covers a missing or skipped check; it cannot detect a falsely claimed
+`pass`, because `checks[].status` is agent-reported unless the submission ran
+`change submit --run-checks`.
+
 ## Evidence grounding and peer review
 
 The CLI opens each cited local evidence path before report submission and stores

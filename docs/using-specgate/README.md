@@ -43,6 +43,7 @@ outside that boundary.
 - [Use SpecGate with a coding agent](guides/coding-agent-workflow.md)
 - [Install SpecGate in your coding IDE](guides/install-ide-plugins.md)
 - [Configure models](guides/configure-models.md)
+- [Customize governance](guides/customize-governance.md)
 - [Respond to gate failures](guides/respond-to-gate-failures.md)
 - [Connect delivery integrations](guides/connect-integrations.md)
 - [Operate SpecGate](guides/operate-specgate.md)

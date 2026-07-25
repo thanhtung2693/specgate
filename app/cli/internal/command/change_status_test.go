@@ -154,7 +154,7 @@ func TestChangeSubmitRunChecksMarksLocalAssuranceAsReproduced(t *testing.T) {
 			"name": "tests", "command": "go test ./...", "status": "pass",
 		}},
 		"criteria": []map[string]any{{
-			"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"summary": "verified"},
+			"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"heading": "verified"},
 		}},
 	})
 
@@ -169,6 +169,42 @@ func TestChangeSubmitRunChecksMarksLocalAssuranceAsReproduced(t *testing.T) {
 	got := runChangeStatusJSON(t, deps, out, work.Key)
 	if got.Assurance != "Agent-reported; locally reproduced" {
 		t.Fatalf("stored assurance = %q", got.Assurance)
+	}
+}
+
+// A claimed check status that re-execution contradicts must survive in the
+// stored report so the delivery receipt reports what SpecGate corrected.
+func TestChangeSubmitRunChecksRecordsCorrectedClaimInAssurance(t *testing.T) {
+	t.Parallel()
+	deps, _, _, out := newFakeDeps(t)
+	stateDir, store, _, work := newLocalChangeWork(t, deps)
+	closeLocalChangeStore(t, deps, stateDir, store)
+	deps.RunCheckCommand = func(_ context.Context, _ string) (int, string) {
+		return 1, "FAIL: TestRetryStops"
+	}
+	f := writeDeliveryJSON(t, map[string]any{
+		"event_type":     "coding_agent.completed",
+		"summary":        "done",
+		"context_digest": work.ContextDigest,
+		"checks": []map[string]any{{
+			"name": "tests", "command": "go test ./...", "status": "pass",
+		}},
+		"criteria": []map[string]any{{
+			"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"heading": "verified"},
+		}},
+	})
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "change", "submit", work.Key, "--file", f, "--run-checks")
+	if code != output.ExitGovernanceFailed {
+		t.Fatalf("submit exit = %d, want governance failure; output = %s", code, out.String())
+	}
+	out.Reset()
+	got := runChangeStatusJSON(t, deps, out, work.Key)
+	if !strings.Contains(got.Assurance, "corrected 1 agent-reported check result") {
+		t.Fatalf("assurance = %q, want the corrected claim reported", got.Assurance)
+	}
+	if !strings.Contains(got.Assurance, "locally reproduced") {
+		t.Fatalf("assurance = %q, want local reproduction retained", got.Assurance)
 	}
 }
 
@@ -636,7 +672,7 @@ func TestChangeStatusLocalReceiptSurfacesAvailabilityWarnings(t *testing.T) {
 		"criteria": []any{map[string]any{
 			"criterion_id": "local-1",
 			"claim":        "satisfied",
-			"evidence":     map[string]any{"summary": "targeted test passed"},
+			"evidence":     map[string]any{"heading": "targeted test passed"},
 		}},
 	})
 	if err != nil {
@@ -699,7 +735,7 @@ func TestChangeStatusLocalStalePeerEvidenceIsSeparateFromAuthority(t *testing.T)
 			"git_receipt":                  map[string]any{"head_revision": "receipt-1"},
 		},
 		"criteria": []any{map[string]any{
-			"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"summary": "reviewed"},
+			"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"heading": "reviewed"},
 		}},
 	}); err != nil {
 		t.Fatal(err)

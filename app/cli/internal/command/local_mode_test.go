@@ -397,7 +397,7 @@ func TestLocalReadinessThenHumanApprovalNeedNoHTTP(t *testing.T) {
 		t.Fatalf("empty delivery status output = %s", out.String())
 	}
 	completionPath := filepath.Join(t.TempDir(), "completion.json")
-	completion := fmt.Sprintf(`{"event_type":"coding_agent.completed","context_digest":%q,"agent":{"name":"builder"},"criteria":[{"criterion_id":"local-1","claim":"satisfied","evidence":{"summary":"implemented"}}],"checks":[{"name":"unit","status":"skipped"}]}`, contextPack.Data.Digest)
+	completion := fmt.Sprintf(`{"event_type":"coding_agent.completed","context_digest":%q,"agent":{"name":"builder"},"criteria":[{"criterion_id":"local-1","claim":"satisfied","evidence":{"heading":"implemented"}}],"checks":[{"name":"unit","status":"skipped"}]}`, contextPack.Data.Digest)
 	if err := os.WriteFile(completionPath, []byte(completion), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -438,7 +438,7 @@ func TestLocalReadinessThenHumanApprovalNeedNoHTTP(t *testing.T) {
 	peer["agent"] = map[string]any{"name": "reviewer"}
 	criteria, _ := peer["criteria"].([]any)
 	criteria[0].(map[string]any)["claim"] = "satisfied"
-	criteria[0].(map[string]any)["evidence"] = map[string]any{"summary": "reviewed implementation"}
+	criteria[0].(map[string]any)["evidence"] = map[string]any{"heading": "reviewed implementation"}
 	data, err = json.Marshal(peer)
 	if err != nil {
 		t.Fatal(err)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/config"
+	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
@@ -41,7 +42,7 @@ func newStatsCmd(deps *Deps) *cobra.Command {
 				if err != nil {
 					return localExitError(deps, "stats", err)
 				}
-				stats, err := store.Stats(cmd.Context(), selection.Workspace.ID)
+				stats, err := store.Stats(cmd.Context(), selection.Workspace.ID, days)
 				if err != nil {
 					return localExitError(deps, "stats", err)
 				}
@@ -49,10 +50,7 @@ func newStatsCmd(deps *Deps) *cobra.Command {
 					deps.Printer.Success("stats", stats)
 					return nil
 				}
-				fmt.Fprintln(deps.Stdout, title(deps, "SpecGate Stats (Local workspace)"))
-				fmt.Fprintf(deps.Stdout, "%s %d\n", label(deps, "Work items:"), stats.WorkItems)
-				fmt.Fprintf(deps.Stdout, "%s %d\n", label(deps, "Delivered:"), stats.Delivered)
-				fmt.Fprintf(deps.Stdout, "%s %d\n", label(deps, "Delivery reviews:"), stats.DeliveryReviews)
+				printLocalStats(deps, stats)
 				return nil
 			}
 			workspaceID := ""
@@ -96,6 +94,34 @@ func statsScopeLabel(selection config.ResolvedWorkspace) string {
 		return "all workspaces (none selected)"
 	}
 	return fmt.Sprintf("workspace %q", selection.Workspace.Slug)
+}
+
+// printLocalStats mirrors the Full-mode readout, including its honesty rule:
+// derived ratios appear only once something has actually been reviewed. The
+// workspace totals above them are all-time and always safe to show.
+func printLocalStats(deps *Deps, st local.Statistics) {
+	fmt.Fprintln(deps.Stdout, title(deps, "SpecGate Stats (Local workspace)"))
+	fmt.Fprintf(deps.Stdout, "%s %d\n", label(deps, "Work items:"), st.WorkItems)
+	fmt.Fprintf(deps.Stdout, "%s %d\n", label(deps, "Delivered:"), st.Delivered)
+	fmt.Fprintf(deps.Stdout, "%s %d\n", label(deps, "Delivery reviews:"), st.DeliveryReviews)
+
+	fmt.Fprintln(deps.Stdout)
+	fmt.Fprintln(deps.Stdout, styled(deps, output.StyleInfo, fmt.Sprintf("Governance signals (last %d days)", st.WindowDays)))
+	if st.ReviewedItems == 0 {
+		fmt.Fprintln(deps.Stdout, "Not enough data yet — run a few governed work items first.")
+		if st.GateCatchesPreBuild > 0 {
+			printStatsRow(deps, "Pre-build signals", fmt.Sprintf("%d pre-build gate %s before handoff", st.GateCatchesPreBuild, pluralize(st.GateCatchesPreBuild, "signal", "signals")))
+		}
+		return
+	}
+	printStatsRow(deps, "Reviewed", fmt.Sprintf("%d work %s", st.ReviewedItems, pluralize(st.ReviewedItems, "item", "items")))
+	printStatsRow(deps, "First-pass yield", fmt.Sprintf("%d%% (%d/%d passed first review)", percent(st.FirstPass, st.ReviewedItems), st.FirstPass, st.ReviewedItems))
+	printStatsRow(deps, "Pre-build signals", fmt.Sprintf("%d pre-build gate %s before handoff", st.GateCatchesPreBuild, pluralize(st.GateCatchesPreBuild, "signal", "signals")))
+	printStatsRow(deps, "Post-build signals", fmt.Sprintf("%d post-build review %s (%d later passed review)", st.ReviewCatchesPostBuild, pluralize(st.ReviewCatchesPostBuild, "signal", "signals"), st.ReviewCatchesFixed))
+	printStatsRow(deps, "Rework", fmt.Sprintf("%d %s across %d %s", st.Rework, pluralize(st.Rework, "resubmit", "resubmits"), st.ItemsWithRework, pluralize(st.ItemsWithRework, "item", "items")))
+	if st.CycleTimeItems > 0 {
+		printStatsRow(deps, "Cycle time", fmt.Sprintf("avg %.1fh create → pass (%d %s)", st.CycleTimeAvgHours, st.CycleTimeItems, pluralize(st.CycleTimeItems, "item", "items")))
+	}
 }
 
 func printStats(deps *Deps, st *client.StatsResult, scope string) {

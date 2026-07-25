@@ -242,6 +242,35 @@ func scanWork(scanner workScanner, work *WorkItem, criteria *string) error {
 	return nil
 }
 
+// ParseAcceptanceCriterionBinding splits a stored acceptance criterion into its
+// text and any trailing `@check:<name>` binding. The stored criterion is the
+// authority for a binding: Local delivery review resolves bound criteria
+// against this parse, never against the agent-supplied completion body.
+func ParseAcceptanceCriterionBinding(raw string) (string, string) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", ""
+	}
+	fields := strings.Fields(trimmed)
+	if len(fields) == 0 {
+		return "", ""
+	}
+	last := fields[len(fields)-1]
+	const prefix = "@check:"
+	if !strings.HasPrefix(last, prefix) {
+		return trimmed, ""
+	}
+	binding := strings.TrimSpace(strings.TrimPrefix(last, prefix))
+	if binding == "" {
+		return trimmed, ""
+	}
+	text := strings.TrimSpace(strings.TrimSuffix(trimmed, last))
+	if text == "" {
+		return trimmed, ""
+	}
+	return text, binding
+}
+
 func cleanCriteria(input []string) []string {
 	seen := make(map[string]struct{}, len(input))
 	criteria := make([]string, 0, len(input))

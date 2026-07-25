@@ -18,19 +18,12 @@ def test_doc_registry_client_gate_runs_refresh_posts_evaluations() -> None:
             return httpx.Response(
                 200, json={"body": {"items": [{"gate": "rollback_plan_present", "state": "pass"}]}}
             )
-        if request.url.path == "/workboard/change-requests/cr-1/gate-runs":
-            return httpx.Response(
-                200, json={"body": {"items": [{"gate": "rollback_plan_present", "state": "pass"}]}}
-            )
         return httpx.Response(404)
 
     client = DocRegistryClient("http://registry.test", transport=httpx.MockTransport(handler))
     evals = [{"gate": "rollback_plan_present", "state": "needs_human_review", "confidence": 0.5}]
     rows = client.refresh_change_request_gate_runs("cr-1", evals)
     assert rows and rows[0]["gate"] == "rollback_plan_present"
-
-    listed = client.list_change_request_gate_runs("cr-1", limit=10)
-    assert listed and listed[0]["state"] == "pass"
 
     post = next(s for s in seen if s[1].endswith("/gate-runs/refresh"))
     assert post[0] == "POST"
