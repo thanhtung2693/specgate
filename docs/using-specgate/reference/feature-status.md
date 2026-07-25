@@ -26,9 +26,6 @@ stability beyond the classifications below.
   Change entity.
 - Local and Full model-less semantic readiness through frozen IDE gate tasks;
   results are `agent_attested` and human approval remains separate.
-- Committable delivery handoffs: `delivery handoff export` writes a review
-  request into the repository and `delivery handoff show` renders it read-only
-  without a workspace or server. Reviewer decisions are not carried in the file.
 - Workspace peer governance: local users/workspaces, workspace member readback,
   same-agent delivery-approval guard, completion-bound human decisions, and
   peer-reviewed delivery evidence.
@@ -53,6 +50,10 @@ stability beyond the classifications below.
   citations, Context Pack Knowledge provenance, and
   linked-Knowledge freshness warnings.
 - Platform-model readiness checks and delivery review.
+- Committable delivery handoffs: `delivery handoff export` writes a review
+  request into the repository and `delivery handoff show` renders it read-only
+  without a workspace or server. Reviewer decisions are not carried in the file,
+  and the bundle format is new enough that its schema may still change.
 
 These surfaces are usable in local evaluation, but they may change during
 v0.1 and still need more real team use before they become stable
