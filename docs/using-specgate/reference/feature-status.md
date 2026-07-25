@@ -14,9 +14,9 @@ stability beyond the classifications below.
 - Artifact publication, versioning, status, and Context Pack handoff.
 - Automatic governance resolution across the built-in `light`, `standard`, and
   `enhanced` tiers.
-- Delivery report scaffolding, deterministic check bindings,
-  evidence-grounded citations, human delivery approve/reject, and
-  `delivery submit`.
+- Delivery report scaffolding, deterministic check bindings enforced in both
+  Local and Full review, evidence-grounded citations, human delivery
+  approve/reject, and `delivery submit`.
 - Delivery-trust readback separates evidence, assurance source, human decision,
   and recorded Git receipt; agent-reported evidence remains explicit whether or
   not a platform model reviews the submitted claims.

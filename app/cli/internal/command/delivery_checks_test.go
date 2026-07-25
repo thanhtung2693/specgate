@@ -238,6 +238,35 @@ func TestDeliverySubmitRunChecksUsesCommandFieldAsExecutable(t *testing.T) {
 	}
 }
 
+// claimed_status is a Local readback field. The Full completion contract does
+// not carry it, so it must never reach the server.
+func TestDeliverySubmitKeepsCorrectedClaimOffTheFullWireContract(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	deps.RunCheckCommand = func(_ context.Context, _ string) (int, string) {
+		return 1, "FAIL"
+	}
+	f := writeDeliveryJSON(t, map[string]any{
+		"event_type": "coding_agent.completed",
+		"summary":    "done",
+		"checks":     []map[string]any{{"name": "tests", "command": "go test ./...", "status": "pass"}},
+		"criteria":   []map[string]any{},
+	})
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--yes", "delivery", "submit", "CR-101", "--file", f, "--run-checks")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	checks, _ := fc.lastFeedbackBody["checks"].([]any)
+	submitted := checks[0].(map[string]any)
+	if _, ok := submitted["claimed_status"]; ok {
+		t.Fatalf("claimed_status must not be submitted to Full mode: %#v", submitted)
+	}
+	if submitted["status"] != "fail" {
+		t.Fatalf("observed status must still be submitted: %#v", submitted)
+	}
+}
+
 func TestDeliverySubmitChecksNotExecutedWithoutFlag(t *testing.T) {
 	t.Parallel()
 	deps, fc, _, out := newFakeDeps(t)

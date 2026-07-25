@@ -394,6 +394,14 @@ func localReportEvidence(criteria []string, report local.DeliveryReport) ([]clie
 	for index, review := range reviews {
 		byID[review.CriterionID] = index
 	}
+	rawChecks, _ := report.Body["checks"].([]any)
+	checks := make([]client.CheckResult, 0, len(rawChecks))
+	for _, raw := range rawChecks {
+		row, _ := raw.(map[string]any)
+		checks = append(checks, client.CheckResult{
+			Name: strings.TrimSpace(fmt.Sprint(row["name"])), Status: strings.TrimSpace(fmt.Sprint(row["status"])), Detail: strings.TrimSpace(fmt.Sprint(row["detail"])),
+		})
+	}
 	rawCriteria, _ := report.Body["criteria"].([]any)
 	for _, raw := range rawCriteria {
 		row, _ := raw.(map[string]any)
@@ -412,15 +420,32 @@ func localReportEvidence(criteria []string, report local.DeliveryReport) ([]clie
 		reviews[index].Verdict = verdict
 		reviews[index].Why = evidenceSummary(row)
 	}
-	rawChecks, _ := report.Body["checks"].([]any)
-	checks := make([]client.CheckResult, 0, len(rawChecks))
-	for _, raw := range rawChecks {
-		row, _ := raw.(map[string]any)
-		checks = append(checks, client.CheckResult{
-			Name: strings.TrimSpace(fmt.Sprint(row["name"])), Status: strings.TrimSpace(fmt.Sprint(row["status"])), Detail: strings.TrimSpace(fmt.Sprint(row["detail"])),
-		})
+	// A bound criterion reads its verdict from the named check, matching the
+	// review that produced the stored verdict; the claim never overrides it.
+	for index, review := range reviews {
+		if review.VerificationBinding == "" {
+			continue
+		}
+		reviews[index].Verdict, reviews[index].Why = boundCriterionOutcome(review.VerificationBinding, checks)
 	}
 	return reviews, checks
+}
+
+func boundCriterionOutcome(binding string, checks []client.CheckResult) (string, string) {
+	for _, check := range checks {
+		if check.Name != binding {
+			continue
+		}
+		switch check.Status {
+		case "pass":
+			return "pass", fmt.Sprintf("check %q passed (deterministic)", binding)
+		case "fail":
+			return "fail", fmt.Sprintf("check %q failed (deterministic)", binding)
+		default:
+			return "fail", fmt.Sprintf("check %q reported %q — cannot verify deterministically", binding, check.Status)
+		}
+	}
+	return "fail", fmt.Sprintf("check %q not found in report — cannot verify deterministically", binding)
 }
 
 func evidenceSummary(row map[string]any) string {

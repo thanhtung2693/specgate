@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/specgate/specgate/app/cli/internal/client"
@@ -407,6 +408,73 @@ func TestVerifyLocalSupportsAcceptedQuickWorkWithoutArtifact(t *testing.T) {
 	}
 	if !envelope.Data.CleanupEligible || envelope.Data.NextCommand != "specgate cleanup --work --dry-run" {
 		t.Fatalf("accepted quick closeout is not actionable: %s", out.String())
+	}
+}
+
+// verify must not report a bound criterion as met while the stored delivery
+// verdict failed on that same binding.
+func TestVerifyLocalReportsBoundCriterionFromItsCheckNotItsClaim(t *testing.T) {
+	deps, _, _, out := newFakeDeps(t)
+	stateDir := t.TempDir()
+	store, err := local.Open(filepath.Join(stateDir, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection, err := store.Initialize(t.Context(), local.InitInput{
+		WorkspaceName: "Local workspace", DisplayName: "Local developer", Username: "local",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	work, err := store.CreateQuickWork(t.Context(), selection.Workspace.ID, local.QuickWorkInput{
+		Title: "Fix timeout", AcceptanceCriteria: []string{"Retries stop @check:unit"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	review, err := store.SubmitDelivery(t.Context(), selection.Workspace.ID, work.Key, map[string]any{
+		"context_digest": work.ContextDigest,
+		"agent":          map[string]any{"name": "builder"},
+		"criteria": []any{map[string]any{
+			"criterion_id": "local-1", "claim": "satisfied",
+			"evidence": map[string]any{"summary": "checked by hand"},
+		}},
+		"checks": []any{map[string]any{"name": "unit", "status": "skipped", "detail": "no runner"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if review.Verdict != "failed" {
+		t.Fatalf("stored verdict = %q, want failed", review.Verdict)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: stateDir}}).SaveTo(deps.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "verify", work.Key)
+	if code != output.ExitGovernanceFailed {
+		t.Fatalf("exit = %d, want governance failure; output = %s", code, out.String())
+	}
+	var envelope struct {
+		Data struct {
+			Criteria []client.CriterionReview `json:"criteria"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if len(envelope.Data.Criteria) != 1 {
+		t.Fatalf("criteria = %#v", envelope.Data.Criteria)
+	}
+	criterion := envelope.Data.Criteria[0]
+	if criterion.Verdict != "fail" {
+		t.Fatalf("bound criterion verdict = %q, want fail to match the stored review", criterion.Verdict)
+	}
+	if !strings.Contains(criterion.Why, "unit") {
+		t.Fatalf("why = %q, want the bound check named", criterion.Why)
 	}
 }
 

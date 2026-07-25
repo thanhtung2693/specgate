@@ -333,7 +333,7 @@ func (s *Store) PeerReviewDelivery(ctx context.Context, workspaceID, ref string,
 	if completionReceipt == nil || peerReceipt == nil || !reflect.DeepEqual(completionReceipt, peerReceipt) {
 		return PeerReview{}, fmt.Errorf("peer review git_receipt must match the latest completion receipt")
 	}
-	if err := validateLocalPeerCriteria(body, len(work.AcceptanceCriteria)); err != nil {
+	if err := validateLocalPeerCriteria(body, work.AcceptanceCriteria); err != nil {
 		return PeerReview{}, err
 	}
 	encoded, err := json.Marshal(body)
@@ -360,7 +360,8 @@ func feedbackAgentName(body map[string]any) string {
 	return strings.TrimSpace(name)
 }
 
-func validateLocalPeerCriteria(body map[string]any, count int) error {
+func validateLocalPeerCriteria(body map[string]any, requiredCriteria []string) error {
+	count := len(requiredCriteria)
 	seen := make(map[string]struct{}, count)
 	criteria, _ := body["criteria"].([]any)
 	for _, raw := range criteria {
@@ -383,6 +384,9 @@ func validateLocalPeerCriteria(body map[string]any, count int) error {
 	}
 	if len(seen) != count {
 		return fmt.Errorf("peer review must cover every acceptance criterion exactly once")
+	}
+	if unmet := unmetBoundCriteria(body, requiredCriteria); unmet != "" {
+		return fmt.Errorf("peer review %s", unmet)
 	}
 	return nil
 }
@@ -411,7 +415,48 @@ func localDeliveryVerdict(body map[string]any, requiredCriteria []string) (strin
 	if len(satisfied) != len(requiredCriteria) {
 		return "failed", "completion needs one evidence-backed satisfied claim for each acceptance criterion"
 	}
+	if unmet := unmetBoundCriteria(body, requiredCriteria); unmet != "" {
+		return "failed", unmet
+	}
 	return "passed", "delivery evidence and reported checks satisfy the Local review"
+}
+
+// unmetBoundCriteria reports the first acceptance criterion whose `@check:<name>`
+// binding is not backed by a passing check of that name, or "" when every bound
+// criterion is deterministically met. This mirrors the Full-mode deterministic
+// binding path: a bound check that failed, was skipped, or is absent must never
+// pass on the strength of a prose claim. Full mode routes the undecidable cases
+// to needs_human_review; Local has only passed/failed, so they fail here.
+//
+// ponytail: enforcement is against skip/absence, not against a false `pass` —
+// `status` is agent-supplied unless the submission ran with --run-checks.
+func unmetBoundCriteria(body map[string]any, requiredCriteria []string) string {
+	checks, _ := body["checks"].([]any)
+	for index, criterion := range requiredCriteria {
+		_, binding := ParseAcceptanceCriterionBinding(criterion)
+		if binding == "" {
+			continue
+		}
+		status, found := boundCheckStatus(checks, binding)
+		switch {
+		case !found:
+			return fmt.Sprintf("criterion local-%d is bound to check %q, which the completion does not report", index+1, binding)
+		case status == "pass":
+		default:
+			return fmt.Sprintf("criterion local-%d is bound to check %q, which reported %q instead of pass", index+1, binding, status)
+		}
+	}
+	return ""
+}
+
+func boundCheckStatus(checks []any, binding string) (string, bool) {
+	for _, raw := range checks {
+		check, _ := raw.(map[string]any)
+		if strings.TrimSpace(fmt.Sprint(check["name"])) == binding {
+			return strings.TrimSpace(fmt.Sprint(check["status"])), true
+		}
+	}
+	return "", false
 }
 
 func isLocalCriterionID(id string, count int) bool {

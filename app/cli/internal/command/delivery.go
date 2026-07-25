@@ -353,6 +353,11 @@ func executeCompletionChecks(ctx context.Context, deps *Deps, body map[string]an
 		entry["status"] = observed
 		entry["detail"] = detail
 		entry["source"] = "specgate_cli"
+		// Keep the superseded claim so the stored report — and the delivery
+		// receipt read back from it — shows what re-execution corrected.
+		if claimed = strings.TrimSpace(claimed); claimed != "" && observed != claimed {
+			entry["claimed_status"] = claimed
+		}
 		if deps.Printer.Mode() != output.ModeJSON {
 			note := ""
 			if observed != claimed {
@@ -414,6 +419,9 @@ func normalizeCompletionChecksForSubmit(body map[string]any) {
 		if entry == nil {
 			continue
 		}
+		// claimed_status is a Local readback field; the Full completion contract
+		// does not carry it, and the server derives its own assurance.
+		delete(entry, "claimed_status")
 		name, _ := entry["name"].(string)
 		command, _ := entry["command"].(string)
 		if strings.TrimSpace(name) == "" && strings.TrimSpace(command) != "" {

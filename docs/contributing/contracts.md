@@ -325,6 +325,13 @@ deterministically:
 Agents must not invent authoritative bindings. Model-emitted bindings are
 ignored for deterministic trust.
 
+Both modes resolve bindings from the stored acceptance criterion, not from the
+submitted completion body, so omitting `verification_binding` from a report does
+not bypass the table above. The two modes differ only in how they express
+`unclear`: Full mode returns `needs_human_review`, while Local review has only
+`passed` and `failed` and therefore fails the review, naming the criterion and
+the check. Local peer review applies the same resolution.
+
 Delivery review verdicts are stored as `delivery_review` gate runs. Human
 delivery decisions written by `specgate delivery approve|reject` outrank later
 platform reruns for the same `completion_feedback_event_id`. A newly reported
