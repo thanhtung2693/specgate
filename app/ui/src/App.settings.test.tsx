@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { MemoryRouter, useNavigate } from "react-router-dom"
+import { MemoryRouter, useNavigate } from "react-router"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { cleanupAppTest, defaultRegistryResponse, emptyRegistryResponse, openSettings, renderApp, setupAppTest } from "./app-test-support"
 import App from "./App"
