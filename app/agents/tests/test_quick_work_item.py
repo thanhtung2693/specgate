@@ -38,7 +38,7 @@ async def test_create_quick_work_item_uses_supplied_acceptance_criteria(monkeypa
     created_cr_body = {}
 
     class FakeClient:
-        def __init__(self, _base_url: str):
+        def __init__(self, _base_url: str, **_kwargs):
             pass
 
         async def aupsert_feature_by_key(self, key: str, name: str, *, workspace_id: str):
@@ -83,7 +83,7 @@ async def test_create_quick_work_item_requires_acceptance_criteria_without_model
     import specgate_agents.governance.board.quick_work_item as quick
 
     class FakeClient:
-        def __init__(self, _base_url: str):
+        def __init__(self, _base_url: str, **_kwargs):
             pass
 
         async def acreate_change_request(self, _body):
@@ -107,7 +107,7 @@ async def test_create_quick_work_item_rejects_an_empty_draft(monkeypatch):
     import specgate_agents.governance.board.quick_work_item as quick
 
     class FakeClient:
-        def __init__(self, _base_url: str):
+        def __init__(self, _base_url: str, **_kwargs):
             pass
 
         async def acreate_change_request(self, _body, *, workspace_id: str):
@@ -136,7 +136,7 @@ async def test_create_quick_work_item_preserves_human_authored_bindings(monkeypa
     created_cr_body = {}
 
     class FakeClient:
-        def __init__(self, _base_url: str):
+        def __init__(self, _base_url: str, **_kwargs):
             pass
 
         async def aupsert_feature_by_key(self, _key: str, _name: str, *, workspace_id: str):
@@ -182,7 +182,7 @@ async def test_create_quick_work_item_without_feature_key_stays_featureless(monk
     created_cr_body = {}
 
     class FakeClient:
-        def __init__(self, _base_url: str):
+        def __init__(self, _base_url: str, **_kwargs):
             pass
 
         async def aupsert_feature_by_key(self, _key: str, _name: str, *, workspace_id: str):
@@ -216,7 +216,7 @@ async def test_create_quick_work_item_is_ready_without_a_persisted_pack(monkeypa
     import specgate_agents.governance.board.quick_work_item as quick
 
     class FakeClient:
-        def __init__(self, _base_url: str):
+        def __init__(self, _base_url: str, **_kwargs):
             pass
 
         async def acreate_change_request(self, _body, *, workspace_id: str):

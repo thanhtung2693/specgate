@@ -18,6 +18,9 @@ from specgate_agents.governance.agents.factories import build_model, ensure_llm_
 from specgate_agents.governance.board.quality_gates import _frozen_gate_rubrics
 from specgate_agents.governance.config import doc_registry_base_url
 from specgate_agents.governance.provider_keys import (
+    governance_registry_timeout_seconds,
+)
+from specgate_agents.governance.provider_keys import (
     hydrate_governance_model_settings as _hydrate_model_settings,
 )
 from specgate_agents.governance.quality_gates.delivery_review import (
@@ -309,7 +312,9 @@ async def review_change_request_delivery(
     workspace_id = workspace_id.strip()
     if not workspace_id:
         raise ValueError("workspace_id is required")
-    client = DocRegistryClient(doc_registry_base_url())
+    client = DocRegistryClient(
+        doc_registry_base_url(), timeout_s=governance_registry_timeout_seconds()
+    )
     workspace_kw = {"workspace_id": workspace_id}
     change_request = await asyncio.to_thread(
         client.get_change_request, change_request_id, **workspace_kw

@@ -152,6 +152,7 @@ CLI environment variables:
 | `SPECGATE_LOCAL_DIR` | Overrides the selected Local SQLite state directory for one command session. |
 | `SPECGATE_CONFIG_PATH` | Overrides the per-user CLI config path for an isolated session. |
 | `SPECGATE_NO_UPDATE_CHECK` | Set to `1`, `true`, `yes`, or `on` to disable the public GitHub release freshness check. |
+| `SPECGATE_ACCESSIBLE` | Set to `1` to render interactive prompts in accessible mode, which screen readers can follow. |
 | `CI` | When truthy, suppresses human-facing public update checks. |
 
 ### Repo-level `.specgate/` directory
@@ -231,6 +232,9 @@ when it is unavailable.
 Settings include:
 
 - quality-gate confidence threshold;
+- governance model reasoning effort (`low`, `medium`, `high`);
+- `governance.registry_timeout_seconds`, the request timeout governance
+  operations use when calling Doc Registry (default `30`, maximum `600`);
 - work-item lifecycle behavior;
 - governance file retention.
 

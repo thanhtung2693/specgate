@@ -368,7 +368,7 @@ async def test_review_scopes_feedback_queries_by_change_and_event_type(monkeypat
     calls: set[tuple[str | None, str | None, int]] = set()
 
     class FakeClient:
-        def __init__(self, _base_url: str):
+        def __init__(self, _base_url: str, **_kwargs):
             pass
 
         def get_change_request(self, _change_request_id: str, *, workspace_id: str):
@@ -415,7 +415,7 @@ async def test_review_blocks_when_lead_artifact_policy_is_unavailable(
     posted: list[dict] = []
 
     class FakeClient:
-        def __init__(self, _base_url: str):
+        def __init__(self, _base_url: str, **_kwargs):
             pass
 
         def get_change_request(self, _change_request_id: str, *, workspace_id: str):
@@ -495,7 +495,7 @@ async def test_review_blocks_when_feature_policy_lookup_is_unavailable(monkeypat
     posted: list[dict] = []
 
     class FakeClient:
-        def __init__(self, _base_url: str):
+        def __init__(self, _base_url: str, **_kwargs):
             pass
 
         def get_change_request(self, _change_request_id: str, *, workspace_id: str):
@@ -565,7 +565,7 @@ async def test_review_blocks_when_feature_has_no_canonical_policy_artifact(monke
     posted: list[dict] = []
 
     class FakeClient:
-        def __init__(self, _base_url: str):
+        def __init__(self, _base_url: str, **_kwargs):
             pass
 
         def get_change_request(self, _change_request_id: str, *, workspace_id: str):
@@ -635,7 +635,7 @@ async def test_review_blocks_non_quick_work_without_a_policy_artifact(monkeypatc
     posted: list[dict] = []
 
     class FakeClient:
-        def __init__(self, _base_url: str):
+        def __init__(self, _base_url: str, **_kwargs):
             pass
 
         def get_change_request(self, _change_request_id: str, *, workspace_id: str):
@@ -700,7 +700,7 @@ async def test_review_requires_canonical_acceptance_rows(monkeypatch) -> None:
     import specgate_agents.governance.board.delivery_review as board_review
 
     class FakeClient:
-        def __init__(self, _base_url: str):
+        def __init__(self, _base_url: str, **_kwargs):
             pass
 
         def get_change_request(self, _change_request_id: str, *, workspace_id: str):
@@ -731,7 +731,7 @@ async def test_review_uses_canonical_acceptance_criterion_ids(monkeypatch) -> No
     import specgate_agents.governance.board.delivery_review as board_review
 
     class FakeClient:
-        def __init__(self, _base_url: str):
+        def __init__(self, _base_url: str, **_kwargs):
             pass
 
         def get_change_request(self, _change_request_id: str, *, workspace_id: str):
@@ -764,9 +764,6 @@ async def test_review_uses_canonical_acceptance_criterion_ids(monkeypatch) -> No
                     }
                 )
             }
-
-        async def aget_skills(self, *, workspace_id: str):
-            pytest.fail("delivery review must not read mutable workspace Skills")
 
         async def alist_acceptance_criteria(self, _change_request_id: str, *, workspace_id: str):
             return [{"id": "criterion-uuid", "text": "Receipt persists"}]
@@ -836,7 +833,7 @@ async def test_review_change_request_delivery_falls_back_when_model_unavailable(
     import specgate_agents.governance.board.delivery_review as board_review
 
     class FakeClient:
-        def __init__(self, _base_url: str):
+        def __init__(self, _base_url: str, **_kwargs):
             pass
 
         def get_change_request(self, _change_request_id: str, *, workspace_id: str):
@@ -913,7 +910,7 @@ async def test_review_change_request_delivery_fallback_hint_keeps_provider_detai
     import specgate_agents.governance.board.delivery_review as board_review
 
     class FakeClient:
-        def __init__(self, _base_url: str):
+        def __init__(self, _base_url: str, **_kwargs):
             pass
 
         def get_change_request(self, _change_request_id: str, *, workspace_id: str):

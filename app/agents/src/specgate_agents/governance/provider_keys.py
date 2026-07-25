@@ -214,6 +214,12 @@ def governance_gate_confidence_threshold() -> float:
 
 
 def governance_registry_timeout_seconds() -> float:
+    """Configured Doc Registry request timeout.
+
+    Every governance operation passes this to its `DocRegistryClient`. Omitting
+    it pins that path to the client's in-code default, which is how a configured
+    `governance.registry_timeout_seconds` silently stops applying.
+    """
     return _registry_timeout_seconds
 
 

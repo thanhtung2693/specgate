@@ -87,7 +87,7 @@ async def test_run_llm_gates_for_artifact_uses_snapshot_profile(
     captured: dict[str, object] = {}
 
     class FakeClient:
-        def __init__(self, base_url: str) -> None:
+        def __init__(self, base_url: str, **_kwargs) -> None:
             assert base_url == "http://registry.test"
 
         async def aget_artifact(self, artifact_id: str, **_kwargs) -> dict[str, object]:
@@ -183,7 +183,7 @@ async def test_run_llm_gates_resolves_gate_rubrics(monkeypatch: pytest.MonkeyPat
     captured: dict[str, object] = {}
 
     class FakeClient:
-        def __init__(self, base_url: str) -> None:
+        def __init__(self, base_url: str, **_kwargs) -> None:
             pass
 
         async def aget_artifact(self, artifact_id: str, **_kwargs) -> dict[str, object]:
@@ -247,7 +247,7 @@ async def test_run_llm_gates_dispatches_to_ide_agent_when_no_model(
     captured: dict[str, object] = {}
 
     class FakeClient:
-        def __init__(self, base_url: str) -> None:
+        def __init__(self, base_url: str, **_kwargs) -> None:
             pass
 
         async def aget_artifact(self, artifact_id: str, **_kwargs) -> dict[str, object]:
@@ -307,7 +307,7 @@ async def test_run_llm_gates_unsupported_snapshot_hides_exception_text(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class FakeClient:
-        def __init__(self, base_url: str) -> None:
+        def __init__(self, base_url: str, **_kwargs) -> None:
             pass
 
         async def aget_artifact(self, artifact_id: str, **_kwargs) -> dict[str, object]:
@@ -342,7 +342,7 @@ async def test_run_llm_gates_corrupt_snapshot_fails_closed_without_refresh(
     snapshot: object,
 ) -> None:
     class FakeClient:
-        def __init__(self, base_url: str) -> None:
+        def __init__(self, base_url: str, **_kwargs) -> None:
             pass
 
         async def aget_artifact(self, artifact_id: str, **_kwargs) -> dict[str, object]:
@@ -377,7 +377,7 @@ async def test_run_llm_gates_for_change_request_uses_snapshot_profile(
     captured: dict[str, object] = {}
 
     class FakeClient:
-        def __init__(self, base_url: str) -> None:
+        def __init__(self, base_url: str, **_kwargs) -> None:
             assert base_url == "http://registry.test"
 
         def get_change_request(self, change_request_id: str, **_kwargs) -> dict[str, object]:
@@ -412,10 +412,6 @@ async def test_run_llm_gates_for_change_request_uses_snapshot_profile(
         async def alist_feature_attachments(
             self, feature_id: str, **_kwargs
         ) -> list[dict[str, str]]:
-            return []
-
-        async def aget_skills(self, *, workspace_id: str) -> list[dict[str, str]]:
-            assert workspace_id == "ws-a"
             return []
 
         def refresh_change_request_gate_runs(
@@ -464,7 +460,7 @@ async def test_change_request_unsupported_snapshot_fails_closed_without_refresh(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class FakeClient:
-        def __init__(self, base_url: str) -> None:
+        def __init__(self, base_url: str, **_kwargs) -> None:
             pass
 
         def get_change_request(self, change_request_id: str, **_kwargs) -> dict[str, object]:
