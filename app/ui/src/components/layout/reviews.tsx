@@ -2,7 +2,7 @@
 // Reviews page. Extracted from app-shell.
 import { EyeIcon, SearchIcon } from "lucide-react"
 import { useEffect, useState } from "react"
-import { Link, useSearchParams } from "react-router-dom"
+import { Link, useSearchParams } from "react-router"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"

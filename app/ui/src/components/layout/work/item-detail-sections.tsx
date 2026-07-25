@@ -2,7 +2,7 @@
 
 import { AlertTriangleIcon, CheckCircle2Icon, ChevronRightIcon, CircleDotIcon, ClockIcon, CopyIcon, ExternalLinkIcon, FileTextIcon, ShieldCheckIcon } from "lucide-react"
 import { useState } from "react"
-import { Link } from "react-router-dom"
+import { Link } from "react-router"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"

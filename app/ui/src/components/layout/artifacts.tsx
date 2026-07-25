@@ -2,7 +2,7 @@
 // Artifacts page. Extracted from app-shell.
 import { CheckIcon, ClockIcon, ExternalLinkIcon, MessageSquareTextIcon, PaperclipIcon, ShieldCheckIcon, XIcon } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
-import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"

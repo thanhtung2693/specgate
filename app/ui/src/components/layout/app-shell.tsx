@@ -5,7 +5,7 @@ import {
   SettingsIcon,
 } from "lucide-react"
 import { lazy, Suspense, useEffect, useMemo, useState } from "react"
-import { Link, Navigate, Outlet, useLocation, useParams, useSearchParams } from "react-router-dom"
+import { Link, Navigate, Outlet, useLocation, useParams, useSearchParams } from "react-router"
 
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
