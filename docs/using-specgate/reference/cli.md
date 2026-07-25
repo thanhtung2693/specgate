@@ -456,7 +456,7 @@ alongside the page items.
 | Family | Purpose |
 |---|---|
 | `doctor` | Check the selected Local store or Full server setup and print the exact recovery command when setup is incomplete |
-| `config` | Save CLI configuration |
+| `config` | Save CLI configuration. `config server <url>` records the Full-mode server URL in the user configuration file, written atomically with owner-only permissions; a `--server` flag or `SPECGATE_SERVER` still overrides it for a single command. This is the value `install-cli.sh --server` sets for you |
 | `version` | Print the installed CLI version; equivalent to `specgate --version` |
 | `model` | Configure Full-mode governance and embedding models plus provider keys |
 | `user` | Create/select the local user with `user login`, clear it with `user logout`, list users, and show the selected user |
