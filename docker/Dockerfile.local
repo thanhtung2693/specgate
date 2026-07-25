@@ -30,8 +30,21 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 go build \
       -ldflags "-X github.com/specgate/doc-registry/internal/buildinfo.Version=${VERSION}" \
-      -o /out/doc-registry ./cmd/doc-registry \
-    && GOBIN=/out go install github.com/tianon/gosu@1.19
+      -o /out/doc-registry ./cmd/doc-registry
+# gosu is required at runtime: the postgres entrypoint re-execs itself through
+# it. Building it here also replaces the base image's copy, which was compiled
+# with an older Go toolchain and carries its stdlib advisories.
+# `go install pkg@version` would use gosu's own pins, and upstream's latest
+# release still requires golang.org/x/sys v0.1.0 (GO-2026-5024), so build it
+# through a throwaway module where a patched x/sys wins minimal version
+# selection.
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    mkdir -p /tmp/gosu-build && cd /tmp/gosu-build \
+    && go mod init specgate-gosu-build \
+    && go get github.com/tianon/gosu@1.19 \
+    && go get golang.org/x/sys@v0.44.0 \
+    && CGO_ENABLED=0 go build -o /out/gosu github.com/tianon/gosu
 
 # Build the Python environment on the same supported Trixie base as the
 # appliance runtime so copied interpreter binaries and wheels stay aligned.
