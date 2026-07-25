@@ -154,7 +154,7 @@ func TestChangeSubmitRunChecksMarksLocalAssuranceAsReproduced(t *testing.T) {
 			"name": "tests", "command": "go test ./...", "status": "pass",
 		}},
 		"criteria": []map[string]any{{
-			"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"summary": "verified"},
+			"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"heading": "verified"},
 		}},
 	})
 
@@ -190,7 +190,7 @@ func TestChangeSubmitRunChecksRecordsCorrectedClaimInAssurance(t *testing.T) {
 			"name": "tests", "command": "go test ./...", "status": "pass",
 		}},
 		"criteria": []map[string]any{{
-			"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"summary": "verified"},
+			"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"heading": "verified"},
 		}},
 	})
 
@@ -672,7 +672,7 @@ func TestChangeStatusLocalReceiptSurfacesAvailabilityWarnings(t *testing.T) {
 		"criteria": []any{map[string]any{
 			"criterion_id": "local-1",
 			"claim":        "satisfied",
-			"evidence":     map[string]any{"summary": "targeted test passed"},
+			"evidence":     map[string]any{"heading": "targeted test passed"},
 		}},
 	})
 	if err != nil {
@@ -735,7 +735,7 @@ func TestChangeStatusLocalStalePeerEvidenceIsSeparateFromAuthority(t *testing.T)
 			"git_receipt":                  map[string]any{"head_revision": "receipt-1"},
 		},
 		"criteria": []any{map[string]any{
-			"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"summary": "reviewed"},
+			"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"heading": "reviewed"},
 		}},
 	}); err != nil {
 		t.Fatal(err)

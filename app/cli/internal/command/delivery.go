@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -222,6 +223,10 @@ func validateCompletionReport(deps *Deps, command string, body map[string]any) e
 		}
 	}
 
+	if err := validateCompletionEvidenceFields(deps, command, criteria); err != nil {
+		return err
+	}
+
 	checks, _ := body["checks"].([]any)
 	for _, raw := range checks {
 		check, _ := raw.(map[string]any)
@@ -242,6 +247,42 @@ func validateCompletionReport(deps *Deps, command string, body map[string]any) e
 		if status == "pass" && strings.TrimSpace(commandValue) == "" {
 			return completionValidationError(deps, command, fmt.Sprintf("passing check %s requires a runnable command", check["name"]))
 		}
+	}
+	return nil
+}
+
+// completionEvidenceFields is the evidence contract both modes share. Local
+// review used to count any non-empty key as evidence, so a completion citing an
+// invented field passed Local and was then refused by the appliance with
+// "unexpected property". Validating here rejects it in either mode, before any
+// network call. `grounding` is stamped by the CLI after validation.
+var completionEvidenceFields = map[string]bool{
+	"kind": true, "path": true, "line": true,
+	"file_key": true, "heading": true, "url": true, "grounding": true,
+}
+
+func validateCompletionEvidenceFields(deps *Deps, command string, criteria []any) error {
+	allowed := make([]string, 0, len(completionEvidenceFields))
+	for field := range completionEvidenceFields {
+		allowed = append(allowed, field)
+	}
+	sort.Strings(allowed)
+	for _, raw := range criteria {
+		criterion, _ := raw.(map[string]any)
+		evidence, _ := criterion["evidence"].(map[string]any)
+		fields := make([]string, 0, len(evidence))
+		for field := range evidence {
+			if !completionEvidenceFields[field] {
+				fields = append(fields, field)
+			}
+		}
+		if len(fields) == 0 {
+			continue
+		}
+		sort.Strings(fields)
+		return completionValidationError(deps, command, fmt.Sprintf(
+			"criterion %v evidence has unsupported field(s) %s; use one of %s",
+			criterion["criterion_id"], strings.Join(fields, ", "), strings.Join(allowed, ", ")))
 	}
 	return nil
 }

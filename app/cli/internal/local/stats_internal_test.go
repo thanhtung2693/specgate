@@ -33,7 +33,7 @@ func TestStatsWindowExcludesOlderReviews(t *testing.T) {
 		"agent":          map[string]any{"name": "builder"},
 		"criteria": []any{map[string]any{
 			"criterion_id": "local-1", "claim": "satisfied",
-			"evidence": map[string]any{"summary": "evidence"},
+			"evidence": map[string]any{"heading": "evidence"},
 		}},
 		"checks": []any{map[string]any{"name": "unit", "status": "pass"}},
 	}); err != nil {

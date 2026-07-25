@@ -23,7 +23,7 @@ func TestDeliveryHandoffVerdictDisagreementIsDetected(t *testing.T) {
 		Report: local.DeliveryReport{Body: map[string]any{
 			"criteria": []any{map[string]any{
 				"criterion_id": "local-1", "claim": "satisfied",
-				"evidence": map[string]any{"summary": "checked by hand"},
+				"evidence": map[string]any{"heading": "checked by hand"},
 			}},
 			"checks": []any{map[string]any{"name": "unit", "status": "skipped"}},
 		}},

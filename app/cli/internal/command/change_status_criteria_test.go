@@ -28,7 +28,7 @@ func TestChangeStatusExposesPerCriterionVerdictAndDecidingCheck(t *testing.T) {
 		}},
 		"criteria": []map[string]any{{
 			"criterion_id": "local-1", "claim": "satisfied",
-			"evidence": map[string]any{"summary": "checked by hand"},
+			"evidence": map[string]any{"heading": "checked by hand"},
 		}},
 	})
 
@@ -70,7 +70,7 @@ func TestChangeStatusHumanOutputListsCriteriaVerdicts(t *testing.T) {
 		}},
 		"criteria": []map[string]any{{
 			"criterion_id": "local-1", "claim": "satisfied",
-			"evidence": map[string]any{"summary": "verified"},
+			"evidence": map[string]any{"heading": "verified"},
 		}},
 	})
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "change", "submit", work.Key, "--file", f); code != output.ExitOK {

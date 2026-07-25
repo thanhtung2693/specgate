@@ -50,7 +50,7 @@ func statsSubmit(t *testing.T, store *local.Store, workspaceID string, work loca
 		"agent":          map[string]any{"name": "builder"},
 		"criteria": []any{map[string]any{
 			"criterion_id": "local-1", "claim": claim,
-			"evidence": map[string]any{"summary": "evidence"},
+			"evidence": map[string]any{"heading": "evidence"},
 		}},
 		"checks": []any{map[string]any{"name": "unit", "status": "pass"}},
 	}); err != nil {

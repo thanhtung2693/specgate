@@ -132,6 +132,10 @@ removed cleanly when a checkout-specific selection is cleared. `specgate
 workspace select <slug>` in non-interactive mode saves the global workspace;
 use `workspace bind` when automation should bind a project. `specgate user
 logout` clears both the global workspace and project-scoped workspace bindings.
+`specgate user login` records the user and global workspace and leaves existing
+project bindings alone, so signing in never unbinds other checkouts; a binding
+whose workspace no longer resolves fails in that project with its own recovery
+command.
 Full appliance `specgate init` writes the deployment directory and saves the
 gateway API URL inferred from `SPECGATE_PORT`, so the next CLI command targets the appliance it
 just started. Supply `SPECGATE_PORT` or `SPECGATE_COMPOSE_PROJECT` before the

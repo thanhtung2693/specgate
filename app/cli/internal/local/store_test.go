@@ -508,7 +508,7 @@ func TestDeliveryEvidenceBindsContextAndNeedsHumanApproval(t *testing.T) {
 	review, err := store.SubmitDelivery(context.Background(), selection.Workspace.ID, work.Key, map[string]any{
 		"context_digest": work.ContextDigest,
 		"agent":          map[string]any{"name": "builder"},
-		"criteria":       []any{map[string]any{"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"summary": "implemented"}}},
+		"criteria":       []any{map[string]any{"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"heading": "implemented"}}},
 		"checks":         []any{map[string]any{"name": "unit", "status": "pass"}},
 	})
 	if err != nil {
@@ -600,7 +600,7 @@ func TestPeerReviewRequiresDifferentAgentAndMatchingLatestReceipt(t *testing.T) 
 		"context_digest": work.ContextDigest,
 		"agent":          map[string]any{"name": "builder"},
 		"git_receipt":    receipt,
-		"criteria":       []any{map[string]any{"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"summary": "implemented"}}},
+		"criteria":       []any{map[string]any{"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"heading": "implemented"}}},
 		"checks":         []any{map[string]any{"name": "tests", "status": "pass"}},
 	}
 	if _, err := store.SubmitDelivery(context.Background(), selection.Workspace.ID, work.Key, completion); err != nil {
@@ -613,16 +613,16 @@ func TestPeerReviewRequiresDifferentAgentAndMatchingLatestReceipt(t *testing.T) 
 	peer := map[string]any{
 		"agent":          map[string]any{"name": "reviewer"},
 		"peer_review_of": map[string]any{"completion_feedback_event_id": latest.ID, "git_receipt": receipt},
-		"criteria":       []any{map[string]any{"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"summary": "reviewed code"}}},
+		"criteria":       []any{map[string]any{"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"heading": "reviewed code"}}},
 	}
 	if _, err := store.PeerReviewDelivery(context.Background(), selection.Workspace.ID, work.Key, peer); err != nil {
 		t.Fatalf("PeerReviewDelivery: %v", err)
 	}
-	peer["criteria"] = []any{map[string]any{"criterion_id": "local-1", "claim": "SATISFIED", "evidence": map[string]any{"summary": "reviewed code"}}}
+	peer["criteria"] = []any{map[string]any{"criterion_id": "local-1", "claim": "SATISFIED", "evidence": map[string]any{"heading": "reviewed code"}}}
 	if _, err := store.PeerReviewDelivery(context.Background(), selection.Workspace.ID, work.Key, peer); err == nil || !strings.Contains(err.Error(), "invalid") {
 		t.Fatalf("uppercase peer claim error = %v, want exact enum validation", err)
 	}
-	peer["criteria"] = []any{map[string]any{"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"summary": "reviewed code"}}}
+	peer["criteria"] = []any{map[string]any{"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"heading": "reviewed code"}}}
 	peerStatus, err := store.PeerReviewStatus(context.Background(), selection.Workspace.ID, work.Key)
 	if err != nil || peerStatus.State != "passed" || peerStatus.AgentName != "reviewer" {
 		t.Fatalf("peer status = %#v, err = %v", peerStatus, err)
@@ -664,7 +664,7 @@ func TestApprovedDeliveryRejectsLaterAgentSubmission(t *testing.T) {
 	body := map[string]any{
 		"context_digest": work.ContextDigest,
 		"agent":          map[string]any{"name": "builder"},
-		"criteria":       []any{map[string]any{"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"summary": "implemented"}}},
+		"criteria":       []any{map[string]any{"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"heading": "implemented"}}},
 		"checks":         []any{map[string]any{"name": "unit", "status": "pass"}},
 	}
 	if _, err := store.SubmitDelivery(context.Background(), selection.Workspace.ID, work.Key, body); err != nil {
@@ -711,8 +711,8 @@ func TestDeliveryReviewRequiresOneEvidenceBackedClaimPerCriterion(t *testing.T) 
 		"context_digest": work.ContextDigest,
 		"agent":          map[string]any{"name": "builder"},
 		"criteria": []any{
-			map[string]any{"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"summary": "first"}},
-			map[string]any{"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"summary": "duplicate"}},
+			map[string]any{"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"heading": "first"}},
+			map[string]any{"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"heading": "duplicate"}},
 		},
 		"checks": []any{map[string]any{"name": "unit", "status": "pass"}},
 	})

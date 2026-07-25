@@ -293,7 +293,7 @@ func TestVerifyLocalRequiresAndReportsHumanApprovedDelivery(t *testing.T) {
 			map[string]any{
 				"criterion_id": "local-1",
 				"claim":        "satisfied",
-				"evidence":     map[string]any{"summary": "targeted test passed"},
+				"evidence":     map[string]any{"heading": "targeted test passed"},
 			},
 		},
 		"checks": []any{
@@ -368,7 +368,7 @@ func TestVerifyLocalSupportsAcceptedQuickWorkWithoutArtifact(t *testing.T) {
 		"agent":          map[string]any{"name": "builder"},
 		"criteria": []any{map[string]any{
 			"criterion_id": "local-1", "claim": "satisfied",
-			"evidence": map[string]any{"summary": "unit check passed"},
+			"evidence": map[string]any{"heading": "unit check passed"},
 		}},
 		"checks": []any{map[string]any{"name": "unit", "status": "pass"}},
 	}); err != nil {
@@ -437,7 +437,7 @@ func TestVerifyLocalReportsBoundCriterionFromItsCheckNotItsClaim(t *testing.T) {
 		"agent":          map[string]any{"name": "builder"},
 		"criteria": []any{map[string]any{
 			"criterion_id": "local-1", "claim": "satisfied",
-			"evidence": map[string]any{"summary": "checked by hand"},
+			"evidence": map[string]any{"heading": "checked by hand"},
 		}},
 		"checks": []any{map[string]any{"name": "unit", "status": "skipped", "detail": "no runner"}},
 	})

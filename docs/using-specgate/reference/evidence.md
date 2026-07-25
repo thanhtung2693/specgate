@@ -84,6 +84,11 @@ when the proof is in the checkout; optional `line`, `heading`, `url`, and
 `file_key` make a citation more precise. The CLI verifies local evidence paths
 and records a digest/excerpt unless `--skip-evidence-check` is explicitly used.
 
+Those field names are the whole contract: `kind`, `path`, `line`, `heading`,
+`url`, `file_key`, and the CLI-stamped `grounding`. Any other field is rejected
+before submission in both modes, so a completion accepted in Local mode is not
+refused later by a Full appliance.
+
 ## Bound criteria
 
 An acceptance criterion ending in `@check:<name>` is verified from the named

@@ -822,7 +822,10 @@ func saveIdentitySelection(deps *Deps, selection client.IdentitySelection) error
 		Slug: selection.Workspace.Slug,
 		Name: selection.Workspace.Name,
 	}
-	cfg.Projects = nil
+	// Existing per-project bindings survive sign-in. Workspace-scoped commands
+	// refuse to run in an unbound project, so discarding them would break every
+	// checkout on the machine; a binding that no longer resolves fails loudly on
+	// its own project instead.
 	return saveConfig(deps, cfg)
 }
 

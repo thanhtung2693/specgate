@@ -584,7 +584,10 @@ func TestUserLoginBootstrapsIdentityFromFlags(t *testing.T) {
 	}
 }
 
-func TestUserLoginClearsStaleProjectWorkspaceBindings(t *testing.T) {
+// Signing in records the new user and global workspace without unbinding other
+// checkouts. Only `user logout` clears project bindings, which is the behavior
+// the configuration reference documents.
+func TestUserLoginKeepsProjectWorkspaceBindingsInFullMode(t *testing.T) {
 	t.Parallel()
 	canonicalRepo, _ := commandGitRepo(t)
 
@@ -619,8 +622,8 @@ func TestUserLoginClearsStaleProjectWorkspaceBindings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Projects != nil {
-		t.Fatalf("project bindings = %#v, want nil after login", loaded.Projects)
+	if _, ok := loaded.Projects[canonicalRepo]; !ok {
+		t.Fatalf("login discarded the project binding: %#v", loaded.Projects)
 	}
 	if loaded.Workspace.Slug != "fresh-alpha-workspace" {
 		t.Fatalf("workspace = %#v, want fresh login workspace", loaded.Workspace)

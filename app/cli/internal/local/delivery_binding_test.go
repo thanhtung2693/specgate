@@ -53,7 +53,7 @@ func boundCompletion(work local.WorkItem, checks ...map[string]any) map[string]a
 		"criteria": []any{map[string]any{
 			"criterion_id": "local-1",
 			"claim":        "satisfied",
-			"evidence":     map[string]any{"summary": "implemented and verified by hand"},
+			"evidence":     map[string]any{"heading": "implemented and verified by hand"},
 		}},
 		"checks": raw,
 	}

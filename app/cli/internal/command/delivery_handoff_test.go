@@ -43,7 +43,7 @@ func handoffWork(t *testing.T, deps *command.Deps, criterion string, checks []an
 			"agent":          map[string]any{"name": "builder"},
 			"criteria": []any{map[string]any{
 				"criterion_id": "local-1", "claim": "satisfied",
-				"evidence": map[string]any{"summary": "checked by hand"},
+				"evidence": map[string]any{"heading": "checked by hand"},
 			}},
 			"checks": checks,
 		}); err != nil {
