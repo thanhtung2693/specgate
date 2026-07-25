@@ -146,6 +146,16 @@ existing-file rule.
 A pass means ready for human review, not accepted. Implementing agent never runs
 accept, request-changes, or another human-decision command.
 
+Export a teammate-readable review request only when the human requests one:
+
+```bash
+specgate delivery handoff export "$WORK_REF" --json
+```
+
+Report `data.path` for the human to commit, and report `data.git_ignored` when
+true, because an ignored bundle never reaches the reviewer. Never commit or
+decide.
+
 Completion criterion: the implementing agent has no remaining authoritative
 action, or one exact blocker is reported.
 
