@@ -112,20 +112,11 @@ type Service struct {
 	enqueuer webhookqueue.Enqueuer
 }
 
+// NewService builds a Service with no work-board reader. Delivery-review
+// lookups that need one are unavailable; production wiring uses
+// NewServiceWithWorkBoard.
 func NewService(store Store) *Service {
-	s := &Service{
-		integrations:  store,
-		resources:     store,
-		oauth:         store,
-		webhookEvents: store,
-		trackerLinks:  store,
-		feedback:      store,
-		txStore:       store,
-	}
-	if locker, ok := store.(ChangeRequestHandoffLocker); ok {
-		s.handoffLocker = locker
-	}
-	return s
+	return NewServiceWithWorkBoard(store, nil)
 }
 
 func NewServiceWithWorkBoard(store Store, workBoard WorkBoardStore) *Service {

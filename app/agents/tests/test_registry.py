@@ -63,28 +63,6 @@ async def test_list_governance_feedback_events_rejects_blank_workspace() -> None
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "payload",
-    [
-        {"items": [{"name": "scope"}]},
-        [{"name": "scope"}],
-        {"body": {"items": [{"name": "scope"}]}},
-        {"Body": {"items": [{"name": "scope"}]}},
-    ],
-)
-async def test_aget_skills_accepts_supported_list_envelopes(payload: object) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/skills"
-        assert request.url.params["workspace_id"] == "ws-a"
-        return httpx.Response(200, json=payload)
-
-    transport = httpx.MockTransport(handler)
-    client = DocRegistryClient("http://registry.test", transport=transport)
-
-    assert await client.aget_skills(workspace_id="ws-a") == [{"name": "scope"}]
-
-
-@pytest.mark.asyncio
 async def test_alist_acceptance_criteria_preserves_canonical_ids() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "GET"

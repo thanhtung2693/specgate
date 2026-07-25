@@ -206,11 +206,6 @@ func DefaultPath() (string, error) {
 	return filepath.Join(dir, "specgate", "config.json"), nil
 }
 
-// Load reads the config from DefaultPath. Missing file returns empty Config.
-func Load() (Config, error) {
-	return LoadFrom("")
-}
-
 // LoadFrom reads the config from path. Empty path uses DefaultPath.
 func LoadFrom(path string) (Config, error) {
 	if path == "" {
