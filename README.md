@@ -124,8 +124,8 @@ chat, or platform-drafted acceptance criteria for explicit quick-route work.
 - Automatic governance policy, readiness gates, delivery evidence, and delivery review.
 - Deterministic check bindings for acceptance criteria with `@check:<name>`.
 - Workspace-scoped Knowledge and integration foundations.
-- `specgate stats` for workspace totals in Local mode, and first-pass yield,
-  caught gaps, rework depth, and cycle time from real run data in Full mode.
+- `specgate stats` for first-pass yield, caught gaps, rework depth, and cycle
+  time from real run data, in both Local and Full mode.
 
 SpecGate does not replace your authoring tool, issue tracker, coding IDE, pull
 request review, or CI. It records the governed handoff and delivery review

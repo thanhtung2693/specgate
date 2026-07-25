@@ -36,7 +36,8 @@ stability beyond the classifications below.
   a registry; the same IDE targets are available in Full mode.
 - Safe uninstall that keeps data by default.
 - `specgate stats` governance-value reporting from real gate and delivery
-  history, including first-pass yield and pre/post-build governance signals.
+  history in both modes, including first-pass yield, pre/post-build governance
+  signals, rework, and cycle time.
 - Full-mode GitHub/GitLab **Repositories** with selected-resource managed
   webhooks and exact-head merged PR/MR observation.
 - Optional Full-mode Linear **Work tracking** handoff to one selected team;
