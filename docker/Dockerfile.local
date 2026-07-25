@@ -37,7 +37,11 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # appliance runtime so copied interpreter binaries and wheels stay aligned.
 # LangChain's Pydantic v1 compatibility layer is not supported on Python 3.14.
 FROM python:3.13-slim-trixie AS agents-build
-COPY --from=ghcr.io/astral-sh/uv:0.11.15 /uv /usr/local/bin/uv
+# uv is a build-only tool and must stay outside /usr/local: the final stage
+# copies that whole tree for the Python runtime, so a uv binary there ships in
+# the appliance and carries its vendored Rust crates — and their advisories —
+# into the release scan. Nothing at runtime invokes uv.
+COPY --from=ghcr.io/astral-sh/uv:0.11.15 /uv /usr/bin/uv
 WORKDIR /opt/specgate/agents
 # Keep the expensive, lockfile-resolved dependency layer independent of agent
 # source edits. The second sync below only installs the local project when its
