@@ -402,9 +402,19 @@ func TestArtifactPublishPreviewUsesExplicitPathsAndRolesWithoutPublishing(t *tes
 	if !strings.Contains(out.String(), `"path":"any/layout/contract.md"`) || !strings.Contains(out.String(), `"human_confirmation_required":true`) {
 		t.Fatalf("preview missing source/confirmation fields: %s", out.String())
 	}
-	if !strings.Contains(out.String(), `"omitted":["impact_declaration"]`) ||
-		!strings.Contains(out.String(), `"governance_hint":"Impact declaration missing; Full mode may select stricter governance."`) {
+	if !strings.Contains(out.String(), `"omitted":["impact_declaration"]`) {
 		t.Fatalf("preview hid stricter-governance risk: %s", out.String())
+	}
+	// Naming the gap without naming the fields leaves the author guessing, and an
+	// agent correctly refuses to invent a governance answer.
+	hint := out.String()
+	for _, want := range []string{
+		"Impact declaration missing", "impact_level",
+		"protected_domains_status", "data_or_schema_change", "yes", "no", "unknown",
+	} {
+		if !strings.Contains(hint, want) {
+			t.Fatalf("governance hint does not say how to supply %q: %s", want, hint)
+		}
 	}
 }
 

@@ -21,6 +21,7 @@ import (
 
 const (
 	specgatePluginName         = "specgate"
+	specgateHookDirName        = "specgate-hooks"
 	pluginPathPlaceholder      = "__SPECGATE_PLUGIN_PATH__"
 	codexPersonalMarketURL     = ".agents/plugins/personal-marketplace.json"
 	installedCodexPluginSource = "./.codex/plugins/specgate"
@@ -170,7 +171,7 @@ specgate plugins install --agent codex --project-local`),
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&opts.Agent, "agent", "", "IDE target: cursor, codex, claude, all, or comma-separated subset (prompts interactively if omitted)")
+	f.StringVar(&opts.Agent, "agent", "", "IDE target: "+supportedPluginAgentList()+" (prompts interactively if omitted)")
 	f.StringVar(&opts.Registry, "registry", "", "SpecGate agent-package registry base URL (default: configured SpecGate server)")
 	f.BoolVar(&opts.ProjectLocal, "project-local", false, "Install IDE files into the current repository instead of user-global locations")
 	f.BoolVar(&opts.DryRun, "dry-run", false, "Print planned file operations without writing")
@@ -319,7 +320,8 @@ specgate plugins doctor --agent codex --project-local`),
 			for _, agent := range agents {
 				health, native := nativeHealth[agent]
 				if !native {
-					health = checkPluginAgent(agent, home, opts.ProjectLocal, pkg)
+					adapter, _ := pluginAgentAdapterFor(agent)
+					health = adapter.health(home, opts.ProjectLocal, pkg)
 				}
 				if !health.OK {
 					ok = false
@@ -376,7 +378,7 @@ specgate plugins doctor --agent codex --project-local`),
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&opts.Agent, "agent", "", "IDE target to inspect: cursor, codex, claude, all, or comma-separated subset (prompts interactively if omitted)")
+	f.StringVar(&opts.Agent, "agent", "", "IDE target to inspect: "+supportedPluginAgentList()+" (prompts interactively if omitted)")
 	f.StringVar(&opts.Registry, "registry", "", "SpecGate agent-package registry base URL (default: configured SpecGate server)")
 	f.BoolVar(&opts.ProjectLocal, "project-local", false, "Inspect project-local IDE files in the current repository")
 	return cmd
@@ -421,14 +423,10 @@ func defaultPluginAgents(deps *Deps) []string {
 
 func detectPluginAgentDefaults() []string {
 	var agents []string
-	if pluginAgentAvailable("cursor") {
-		agents = append(agents, "cursor")
-	}
-	if pluginAgentAvailable("codex") {
-		agents = append(agents, "codex")
-	}
-	if pluginAgentAvailable("claude") {
-		agents = append(agents, "claude")
+	for _, adapter := range pluginAgentAdapters {
+		if adapter.available() {
+			agents = append(agents, adapter.name)
+		}
 	}
 	return agents
 }
@@ -439,9 +437,7 @@ func normalizePluginAgentDefaults(values []string) []string {
 	for _, value := range values {
 		for _, part := range strings.Split(value, ",") {
 			agent := strings.ToLower(strings.TrimSpace(part))
-			switch agent {
-			case "cursor", "codex", "claude":
-			default:
+			if _, ok := pluginAgentAdapterFor(agent); !ok {
 				continue
 			}
 			if !seen[agent] {
@@ -451,17 +447,17 @@ func normalizePluginAgentDefaults(values []string) []string {
 		}
 	}
 	if len(out) == 0 {
-		return []string{"cursor", "codex", "claude"}
+		return pluginAgentNames()
 	}
 	return out
 }
 
 func pluginAgentPromptOptions() []interactive.Option {
-	return []interactive.Option{
-		{Label: "Cursor", Value: "cursor"},
-		{Label: "Codex", Value: "codex"},
-		{Label: "Claude Code", Value: "claude"},
+	options := make([]interactive.Option, 0, len(pluginAgentAdapters))
+	for _, adapter := range pluginAgentAdapters {
+		options = append(options, interactive.Option{Label: adapter.label, Value: adapter.name})
 	}
+	return options
 }
 
 func pluginClientFor(deps *Deps, registry string) pluginPackageClient {
@@ -487,7 +483,7 @@ func useEmbeddedPluginPackage(deps *Deps, registry string, forceRegistry bool) b
 func normalizePluginAgents(input string) ([]string, error) {
 	input = strings.TrimSpace(input)
 	if input == "" || input == "all" {
-		return []string{"cursor", "codex", "claude"}, nil
+		return pluginAgentNames(), nil
 	}
 	seen := map[string]bool{}
 	var agents []string
@@ -497,11 +493,9 @@ func normalizePluginAgents(input string) ([]string, error) {
 			return nil, fmt.Errorf("empty --agent entry in %q", input)
 		}
 		if agent == "all" {
-			return []string{"cursor", "codex", "claude"}, nil
+			return pluginAgentNames(), nil
 		}
-		switch agent {
-		case "cursor", "codex", "claude":
-		default:
+		if _, ok := pluginAgentAdapterFor(agent); !ok {
 			return nil, fmt.Errorf("unsupported agent %q", agent)
 		}
 		if !seen[agent] {
@@ -631,8 +625,8 @@ func findSkillsSHConflicts(agents []string, home string) []skillsSHConflict {
 }
 
 func skillsSHSkillDir(agent string) string {
-	if agent == "claude" {
-		return filepath.Join(".claude", "skills")
+	if adapter, ok := pluginAgentAdapterFor(agent); ok {
+		return adapter.skillsSHDir
 	}
 	return filepath.Join(".agents", "skills")
 }

@@ -421,7 +421,8 @@ test("model docs distinguish IDE assistance from server-only features", () => {
 test("SpecGate uses one short bootstrap and one explicit lifecycle phase", () => {
   const routerWords = files.routerSkill.trim().split(/\s+/).length;
 
-  assert.match(files.routerSkill, /^description: Use when the user explicitly mentions SpecGate/m);
+  assert.match(files.routerSkill, /^description: Use when the working repository is SpecGate-governed/m);
+  assert.match(files.routerSkill, /^description:[^\n]*mentions SpecGate/m);
   assert.ok(routerWords <= 550, `router is ${routerWords} words; expected at most 550`);
   assert.match(files.routerSkill, /For lifecycle work, choose exactly one phase/is);
   assert.match(files.routerSkill, /exactly one.*setup.*prepar.*deliver/is);
@@ -441,12 +442,18 @@ test("SpecGate uses one short bootstrap and one explicit lifecycle phase", () =>
   assert.match(files.routerSkill, /restart[\s\S]*stop before[\s\S]*initializ/i);
 
   assert.match(files.sessionStartHook, /SpecGate skills are installed/);
-  assert.match(files.sessionStartHook, /explicitly mentions SpecGate/);
+  assert.match(files.sessionStartHook, /mentions SpecGate/);
+  // A repository the human already bound with `specgate init` is the opt-in;
+  // requiring them to also say the word means a vibe-coding user gets nothing.
+  assert.match(files.sessionStartHook, /\.specgate/);
+  assert.match(files.sessionStartHook, /governed by SpecGate/i);
+  assert.match(files.sessionStartHook, /before (writing|editing)/i);
   assert.match(files.sessionStartHook, /Read-only.*stay in the root skill/is);
   assert.doesNotMatch(files.sessionStartHook, /SpecGate is connected/);
   assert.doesNotMatch(files.sessionStartHook, /SKILL_CONTENT=.*cat/);
 
-  assert.match(files.cursorRule, /explicitly mentions SpecGate/);
+  assert.match(files.cursorRule, /mentions SpecGate/);
+  assert.match(files.cursorRule, /governed by SpecGate/i);
   assert.match(files.cursorRule, /Read-only.*stay in the root skill/is);
   assert.doesNotMatch(files.cursorPlugin, /hooks\/hooks-cursor\.json/);
   assert.doesNotMatch(files.pluginPackage, /hooks\/hooks-cursor\.json/);

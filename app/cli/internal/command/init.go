@@ -284,7 +284,7 @@ func newInitCmd(deps *Deps) *cobra.Command {
 	f.BoolVar(&noSeed, "no-seed", false, "Skip seeding demo data (Full mode only)")
 	f.StringVar(&bundleVersion, "bundle-version", "", "Compose bundle release to download (Full mode only; default: this CLI's version)")
 	f.BoolVar(&installPlugins, "install-plugins", false, "Install matching IDE plugin files after setup")
-	f.StringVar(&pluginAgentList, "plugin-agent", "", "IDE plugin target for --install-plugins: cursor, codex, claude, all, or a comma-separated subset")
+	f.StringVar(&pluginAgentList, "plugin-agent", "", "IDE plugin target for --install-plugins: "+supportedPluginAgentList())
 	f.StringVar(&workspaceName, "workspace-name", "", "Workspace name to create or reuse during local identity setup")
 	f.StringVar(&displayName, "display-name", "", "Display name for the local user")
 	f.StringVar(&username, "username", "", "Username for attribution")

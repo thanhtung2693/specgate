@@ -146,10 +146,17 @@ check-plugins:
 	  printf '%s\n' 'OLD GLOBAL UNRELATED CONTENT' > "$$tmp_root/home/.claude/skills/using-specgate/SKILL.md"; \
 	  cp -R plugins/. "$$tmp_root/cli-plugin"; \
 	  printf '%s\n' 'specgate-plugin-v1' > "$$tmp_root/cli-plugin/.specgate-owned"; \
-	  native_context=$$(HOME="$$tmp_root/home" plugins/hooks/session-start codex | jq -r '.additionalContext'); \
-	  cli_context=$$(HOME="$$tmp_root/home" "$$tmp_root/cli-plugin/hooks/session-start" codex | jq -r '.additionalContext'); \
+	  hook_abs=$$(cd plugins/hooks && pwd)/session-start; \
+	  mkdir -p "$$tmp_root/home/.specgate" "$$tmp_root/home/work/plain/.git" "$$tmp_root/home/work/governed/.git" "$$tmp_root/home/work/governed/.specgate"; \
+	  native_context=$$(cd "$$tmp_root/home/work/plain" && HOME="$$tmp_root/home" "$$hook_abs" codex | jq -r '.additionalContext'); \
+	  governed_context=$$(cd "$$tmp_root/home/work/governed" && HOME="$$tmp_root/home" "$$hook_abs" codex | jq -r '.additionalContext'); \
+	  cli_context=$$(cd "$$tmp_root/home/work/plain" && HOME="$$tmp_root/home" "$$tmp_root/cli-plugin/hooks/session-start" codex | jq -r '.additionalContext'); \
+	  if printf '%s\n' "$$native_context" | grep -Fq 'governed by SpecGate'; then \
+	    cleanup; echo "ERROR: session-start hook claimed governance outside a SpecGate repository" >&2; exit 1; fi; \
 	  if ! printf '%s\n' "$$native_context" | grep -Fq 'load `specgate`'; then \
 	    cleanup; echo "ERROR: session-start hook did not route explicit SpecGate work" >&2; exit 1; fi; \
+	  if ! printf '%s\n' "$$governed_context" | grep -Fq 'governed by SpecGate'; then \
+	    cleanup; echo "ERROR: session-start hook did not route implementation work in a governed repository" >&2; exit 1; fi; \
 	  if ! printf '%s\n' "$$native_context" | grep -Fq 'IDE plugin manager owns'; then \
 	    cleanup; echo "ERROR: session-start hook did not identify native marketplace ownership" >&2; exit 1; fi; \
 	  if ! printf '%s\n' "$$cli_context" | grep -Fq 'SpecGate CLI owns'; then \

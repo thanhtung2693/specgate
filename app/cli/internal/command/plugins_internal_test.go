@@ -34,6 +34,74 @@ func TestCodexMarketplaceHasPluginParsesJSON(t *testing.T) {
 	}
 }
 
+func TestAddSpecgateSessionHookIgnoresUnrelatedText(t *testing.T) {
+	settings := map[string]any{
+		"hooks": map[string]any{
+			"SessionStart": []any{map[string]any{
+				"matcher": "note mentions specgate-hooks",
+				"hooks": []any{map[string]any{
+					"type":    "command",
+					"command": "echo unrelated",
+				}},
+			}},
+		},
+	}
+
+	addSpecgateSessionHook(settings)
+
+	hooks := settings["hooks"].(map[string]any)
+	events := hooks["SessionStart"].([]any)
+	if len(events) != 2 {
+		t.Fatalf("SessionStart entries = %d, want unrelated entry plus SpecGate hook: %#v", len(events), events)
+	}
+}
+
+func TestAddSpecgateSessionHookRepairsOwnedCommand(t *testing.T) {
+	const want = `"$CLAUDE_PROJECT_DIR/.claude/specgate-hooks/run-hook.cmd" session-start claude`
+	settings := map[string]any{
+		"hooks": map[string]any{
+			"SessionStart": []any{map[string]any{
+				"matcher": "startup",
+				"hooks": []any{map[string]any{
+					"type":    "command",
+					"command": `"$CLAUDE_PROJECT_DIR/.claude/specgate-hooks/run-hook.cmd" stale`,
+				}},
+			}},
+		},
+	}
+
+	addSpecgateSessionHook(settings)
+
+	hooks := settings["hooks"].(map[string]any)
+	events := hooks["SessionStart"].([]any)
+	if len(events) != 1 {
+		t.Fatalf("SessionStart entries = %d, want repaired owned entry: %#v", len(events), events)
+	}
+	entry := events[0].(map[string]any)
+	commands := entry["hooks"].([]any)
+	got := commands[0].(map[string]any)["command"]
+	if got != want {
+		t.Fatalf("owned hook command = %q, want %q", got, want)
+	}
+}
+
+func TestPluginAgentAdaptersAreComplete(t *testing.T) {
+	want := []string{"cursor", "codex", "claude"}
+	if len(pluginAgentAdapters) != len(want) {
+		t.Fatalf("registered adapters = %d, want %d", len(pluginAgentAdapters), len(want))
+	}
+	for index, adapter := range pluginAgentAdapters {
+		if adapter.name != want[index] {
+			t.Fatalf("adapter %d name = %q, want %q", index, adapter.name, want[index])
+		}
+		if adapter.label == "" || adapter.skillsSHDir == "" || adapter.available == nil || adapter.preload == nil ||
+			adapter.validate == nil || adapter.projectDirs == nil || adapter.install == nil ||
+			adapter.health == nil || adapter.installed == nil || adapter.remove == nil {
+			t.Fatalf("adapter %q is incomplete: %#v", adapter.name, adapter)
+		}
+	}
+}
+
 func TestNativePluginDetectionUsesManagerMetadata(t *testing.T) {
 	for _, test := range []struct {
 		agent string

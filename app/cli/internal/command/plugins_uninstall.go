@@ -10,119 +10,145 @@ import (
 	"github.com/specgate/specgate/app/cli/internal/fsutil"
 )
 
+type pluginRemover struct {
+	home      string
+	removed   int
+	paths     []string
+	preserved []string
+}
+
 func removeSpecGatePluginFiles(deps *Deps) (int, []string, []string, error) {
 	home, err := userHomeDir(deps)
 	if err != nil {
 		return 0, nil, nil, err
 	}
-	var removed int
-	var paths []string
-	var preserved []string
-	removeDir := func(path string) error {
-		changed, fullyRemoved, err := removeOwnedPluginDir(path)
-		if err != nil {
+	remover := &pluginRemover{home: home}
+	for _, adapter := range pluginAgentAdapters {
+		if err := adapter.remove(remover); err != nil {
+			return remover.removed, remover.paths, remover.preserved, err
+		}
+	}
+	return remover.removed, remover.paths, remover.preserved, nil
+}
+
+func (r *pluginRemover) removeDir(path string) error {
+	changed, fullyRemoved, err := removeOwnedPluginDir(path)
+	if err != nil {
+		return err
+	}
+	if changed {
+		r.removed++
+		if fullyRemoved {
+			r.paths = append(r.paths, path)
+		} else {
+			r.preserved = append(r.preserved, path)
+		}
+	}
+	return nil
+}
+
+func (r *pluginRemover) removeFile(path string) error {
+	ok, err := removeOwnedPluginFile(path)
+	if err != nil {
+		return err
+	}
+	if ok {
+		r.removed++
+		r.paths = append(r.paths, path)
+	}
+	return nil
+}
+
+func (r *pluginRemover) removeEmptyDir(path string) error {
+	ok, err := removeDirIfEmpty(path)
+	if err != nil {
+		return err
+	}
+	if ok {
+		r.removed++
+		r.paths = append(r.paths, path)
+	}
+	return nil
+}
+
+func (r *pluginRemover) removeCursor() error {
+	if err := r.removeFile(filepath.Join(r.home, ".cursor", "rules", "using-specgate.mdc")); err != nil {
+		return err
+	}
+	skillsRoot := filepath.Join(r.home, ".cursor", "skills")
+	ownedSkills, err := ownedPluginDirs(skillsRoot)
+	if err != nil {
+		return err
+	}
+	for _, path := range ownedSkills {
+		if err := r.removeDir(path); err != nil {
 			return err
 		}
-		if changed {
-			removed++
-			if fullyRemoved {
-				paths = append(paths, path)
-			} else {
-				preserved = append(preserved, path)
-			}
-		}
-		return nil
 	}
-	removeFile := func(path string) error {
-		ok, err := removeOwnedPluginFile(path)
-		if err != nil {
-			return err
-		}
-		if ok {
-			removed++
-			paths = append(paths, path)
-		}
-		return nil
+	return r.removeEmptyDir(skillsRoot)
+}
+
+func (r *pluginRemover) removeCodex() error {
+	if err := r.removeDir(filepath.Join(r.home, ".codex", "plugins", specgatePluginName)); err != nil {
+		return err
 	}
-	cursorRule := filepath.Join(home, ".cursor", "rules", "using-specgate.mdc")
-	if err := removeFile(cursorRule); err != nil {
-		return removed, paths, preserved, err
-	}
-	for _, path := range []string{
-		filepath.Join(home, ".codex", "plugins", specgatePluginName),
-		filepath.Join(home, ".claude", "skills", specgatePluginName),
-	} {
-		if err := removeDir(path); err != nil {
-			return removed, paths, preserved, err
-		}
-	}
-	cacheRoot := filepath.Join(home, ".codex", "plugins", "cache", "personal", specgatePluginName)
+	cacheRoot := filepath.Join(r.home, ".codex", "plugins", "cache", "personal", specgatePluginName)
 	if entries, err := os.ReadDir(cacheRoot); err == nil {
 		for _, entry := range entries {
 			if entry.IsDir() {
-				if err := removeDir(filepath.Join(cacheRoot, entry.Name())); err != nil {
-					return removed, paths, preserved, err
+				if err := r.removeDir(filepath.Join(cacheRoot, entry.Name())); err != nil {
+					return err
 				}
 			}
 		}
 		_, _ = removeDirIfEmpty(cacheRoot)
 	} else if !os.IsNotExist(err) {
-		return removed, paths, preserved, err
+		return err
 	}
-	cursorSkills := filepath.Join(home, ".cursor", "skills")
-	ownedSkills, err := ownedPluginDirs(cursorSkills)
-	if err != nil {
-		return removed, paths, preserved, err
-	}
-	for _, path := range ownedSkills {
-		if err := removeDir(path); err != nil {
-			return removed, paths, preserved, err
-		}
-	}
-	marketplacePath := filepath.Join(home, ".agents", "plugins", "marketplace.json")
+	marketplacePath := filepath.Join(r.home, ".agents", "plugins", "marketplace.json")
 	unownedMarketplaceEntry, err := codexMarketplaceHasUnownedSpecGateEntry(marketplacePath)
 	if err != nil {
-		return removed, paths, preserved, err
+		return err
 	}
 	if unownedMarketplaceEntry {
-		return removed, paths, preserved, nil
+		return nil
 	}
 	if changed, err := removeCodexMarketplaceEntry(marketplacePath); err != nil {
-		return removed, paths, preserved, err
+		return err
 	} else if changed {
-		removed++
-		paths = append(paths, marketplacePath)
+		r.removed++
+		r.paths = append(r.paths, marketplacePath)
 	}
 	removePersonalMarketplace := false
 	if _, err := os.Stat(marketplacePath); os.IsNotExist(err) {
 		removePersonalMarketplace = true
 	} else if err != nil {
-		return removed, paths, preserved, err
+		return err
 	}
-	marketplaceRoot, err := filepath.Abs(home)
+	marketplaceRoot, err := filepath.Abs(r.home)
 	if err != nil {
-		return removed, paths, preserved, err
+		return err
 	}
-	configPath := filepath.Join(home, ".codex", "config.toml")
+	configPath := filepath.Join(r.home, ".codex", "config.toml")
 	if changed, err := removeCodexConfigSections(configPath, removePersonalMarketplace, marketplaceRoot); err != nil {
-		return removed, paths, preserved, err
+		return err
 	} else if changed {
-		removed++
-		paths = append(paths, configPath)
+		r.removed++
+		r.paths = append(r.paths, configPath)
 	}
 	for _, dir := range []string{
-		filepath.Join(home, ".codex", "plugins"),
-		filepath.Join(home, ".agents", "plugins"),
-		filepath.Join(home, ".cursor", "skills"),
+		filepath.Join(r.home, ".codex", "plugins"),
+		filepath.Join(r.home, ".agents", "plugins"),
 	} {
-		if ok, err := removeDirIfEmpty(dir); err != nil {
-			return removed, paths, preserved, err
-		} else if ok {
-			removed++
-			paths = append(paths, dir)
+		if err := r.removeEmptyDir(dir); err != nil {
+			return err
 		}
 	}
-	return removed, paths, preserved, nil
+	return nil
+}
+
+func (r *pluginRemover) removeClaude() error {
+	return r.removeDir(filepath.Join(r.home, ".claude", "skills", specgatePluginName))
 }
 
 func removeOwnedPluginDir(path string) (bool, bool, error) {
@@ -305,21 +331,30 @@ func removeCodexConfigSections(path string, removePersonalMarketplace bool, mark
 }
 
 func detectInstalledPluginAgents(root string) []string {
-	checks := []struct {
-		agent string
-		path  string
-	}{
-		{"cursor", filepath.Join(root, ".cursor", "rules", "using-specgate.mdc")},
-		{"codex", filepath.Join(root, ".codex", "plugins", specgatePluginName, ".codex-plugin", "plugin.json")},
-		{"claude", filepath.Join(root, ".claude", "skills", specgatePluginName, ".claude-plugin", "plugin.json")},
-	}
 	var agents []string
-	for _, check := range checks {
-		if info, err := os.Stat(check.path); err == nil && info.Mode().IsRegular() {
-			agents = append(agents, check.agent)
+	for _, adapter := range pluginAgentAdapters {
+		if adapter.installed(root) {
+			agents = append(agents, adapter.name)
 		}
 	}
 	return agents
+}
+
+func cursorPluginInstalled(root string) bool {
+	return regularFileExists(filepath.Join(root, ".cursor", "rules", "using-specgate.mdc"))
+}
+
+func codexPluginInstalled(root string) bool {
+	return regularFileExists(filepath.Join(root, ".codex", "plugins", specgatePluginName, ".codex-plugin", "plugin.json"))
+}
+
+func claudePluginInstalled(root string) bool {
+	return regularFileExists(filepath.Join(root, ".claude", "skills", specgatePluginName, ".claude-plugin", "plugin.json"))
+}
+
+func regularFileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular()
 }
 
 func removeCodexMarketplaceEntry(path string) (bool, error) {
