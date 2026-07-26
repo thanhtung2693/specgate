@@ -794,6 +794,18 @@ test("Node workflows use the current setup-node action", () => {
   }
 });
 
+test("Pages validates landing changes without redeploying unrelated main pushes", () => {
+  assert.match(files.pagesWorkflow, /push:\s*\n\s+branches: \["main"\]\s*\n\s+paths:/);
+  assert.match(files.pagesWorkflow, /pull_request:\s*\n\s+paths:/);
+  for (const path of ["app/landing/**", "media/specgate-promo/**", ".github/workflows/pages.yml"]) {
+    assert.match(files.pagesWorkflow, new RegExp(`- "${path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+  }
+  assert.match(
+    files.pagesWorkflow,
+    /deploy:\s*\n\s+if: github\.event_name != 'pull_request'[\s\S]*?concurrency:\s*\n\s+group: pages/,
+  );
+});
+
 test("release UI images build with the supported Node major", () => {
   for (const dockerfile of [files.localDockerfile, files.uiDockerfile]) {
     assert.match(dockerfile, /^FROM node:26-alpine AS /m);
