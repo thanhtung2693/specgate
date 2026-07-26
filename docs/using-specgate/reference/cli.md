@@ -106,7 +106,10 @@ Failure:
 }
 ```
 
-JSON mode does not mix prose into stdout.
+JSON mode does not mix prose into stdout, and every invocation emits exactly one
+envelope. A failure always carries an `error.code` and a message naming what to
+do, including a missing argument or a prompt that cannot run under `--no-input`;
+a nonzero exit with empty output is a bug, not a shape callers must handle.
 
 ## Exit codes
 
