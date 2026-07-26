@@ -103,8 +103,14 @@ func TestPluginsDoctorDetectsStaleDirectFileInstalls(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if agentName == "cursor" {
+			switch agentName {
+			case "cursor":
 				marker := filepath.Join(workDir, ".cursor", "rules", "using-specgate.mdc.specgate-owned")
+				if err := os.WriteFile(marker, []byte("specgate-plugin-v1\nversion=0.0.9\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			case "claude":
+				marker := filepath.Join(workDir, ".claude", "specgate-hooks", ".specgate-owned")
 				if err := os.WriteFile(marker, []byte("specgate-plugin-v1\nversion=0.0.9\n"), 0o600); err != nil {
 					t.Fatal(err)
 				}
@@ -349,6 +355,72 @@ func TestPluginsDoctorProjectLocalRequiresFocusedCodexSkill(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), ".agents/skills/specgate/SKILL.md") || !strings.Contains(out.String(), "specgate plugins install --agent codex --project-local") {
 		t.Fatalf("doctor output missing focused skill or repair command: %s", out.String())
+	}
+}
+
+func TestPluginsDoctorProjectLocalClaudeRequiresRuntimeIntegration(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(t *testing.T, root string)
+		want   string
+	}{
+		{
+			name: "session hook file",
+			mutate: func(t *testing.T, root string) {
+				t.Helper()
+				if err := os.Remove(filepath.Join(root, ".claude", "specgate-hooks", "session-start")); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: "specgate-hooks/session-start",
+		},
+		{
+			name: "CLI permission",
+			mutate: func(t *testing.T, root string) {
+				t.Helper()
+				writeTestFile(t, filepath.Join(root, ".claude", "settings.json"), `{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"\"$CLAUDE_PROJECT_DIR/.claude/specgate-hooks/run-hook.cmd\" session-start claude"}]}]}}`)
+			},
+			want: "Bash(specgate:*)",
+		},
+		{
+			name: "SessionStart registration",
+			mutate: func(t *testing.T, root string) {
+				t.Helper()
+				writeTestFile(t, filepath.Join(root, ".claude", "settings.json"), `{"permissions":{"allow":["Bash(specgate:*)"]}}`)
+			},
+			want: "SessionStart",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := newPluginRegistry(t)
+			workDir := t.TempDir()
+			t.Chdir(workDir)
+			homeDir := t.TempDir()
+
+			deps, out := newPluginDeps(homeDir)
+			if code := command.ExecuteForCode(command.NewRootCommand(deps),
+				"--json", "--server", srv.URL,
+				"plugins", "install", "--project-local", "--agent", "claude",
+			); code != output.ExitOK {
+				t.Fatalf("install exit = %d, output = %s", code, out.String())
+			}
+
+			tt.mutate(t, workDir)
+			deps, out = newPluginDeps(homeDir)
+			code := command.ExecuteForCode(command.NewRootCommand(deps),
+				"--json", "--server", srv.URL,
+				"plugins", "doctor", "--project-local", "--agent", "claude",
+			)
+			if code != output.ExitUnavailable {
+				t.Fatalf("doctor exit = %d, want unavailable; output = %s", code, out.String())
+			}
+			if !strings.Contains(out.String(), tt.want) ||
+				!strings.Contains(out.String(), "specgate plugins install --agent claude --project-local") {
+				t.Fatalf("doctor output missing %q or repair command: %s", tt.want, out.String())
+			}
+		})
 	}
 }
 

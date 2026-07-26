@@ -169,16 +169,39 @@ func validateClaudePluginInstall(i *pluginInstaller, root string) error {
 	if err := i.validateFocusedSkills(filepath.Join(root, ".claude", "skills")); err != nil {
 		return err
 	}
-	hookDir := filepath.Join(root, ".claude", specgateHookDirName)
-	if err := validatePluginDirectoryPath(root, hookDir); err != nil {
-		return err
-	}
 	settingsPath := filepath.Join(root, ".claude", "settings.json")
 	if err := validateRegularFileOrMissing(settingsPath); err != nil {
 		return err
 	}
-	if _, _, err := readClaudeSettings(settingsPath); err != nil {
+	settings, _, err := readClaudeSettings(settingsPath)
+	if err != nil {
 		return fmt.Errorf("parse %s: %w", settingsPath, err)
+	}
+	return validateClaudeProjectHookDir(
+		filepath.Join(root, ".claude", specgateHookDirName),
+		settings,
+	)
+}
+
+func validateClaudeProjectHookDir(hookDir string, settings map[string]any) error {
+	ownershipErr := validateOwnedPluginDir(hookDir)
+	if ownershipErr == nil {
+		return nil
+	}
+	if !hasSpecgateSessionHook(settings) {
+		return ownershipErr
+	}
+	entries, err := os.ReadDir(hookDir)
+	if err != nil {
+		return ownershipErr
+	}
+	for _, entry := range entries {
+		if entry.Name() != "session-start" && entry.Name() != "run-hook.cmd" {
+			return ownershipErr
+		}
+		if err := validateRegularFileOrMissing(filepath.Join(hookDir, entry.Name())); err != nil {
+			return ownershipErr
+		}
 	}
 	return nil
 }
@@ -415,6 +438,9 @@ func (i *pluginInstaller) installClaude() error {
 				return err
 			}
 		}
+		if err := i.writeFile(filepath.Join(hookDir, pluginOwnerMarker), []byte(pluginOwnerMarkerValue(i.pkg.Version)), 0o600); err != nil {
+			return err
+		}
 		return i.updateClaudeProjectSettings(filepath.Join(root, ".claude", "settings.json"))
 	}
 	pluginRoot := filepath.Join(root, ".claude", "skills", specgatePluginName)
@@ -432,7 +458,10 @@ func (i *pluginInstaller) updateClaudeProjectSettings(dest string) error {
 	})
 }
 
-const claudeProjectSessionHookCommand = `"$CLAUDE_PROJECT_DIR/.claude/specgate-hooks/run-hook.cmd" session-start claude`
+const (
+	claudeProjectSessionHookCommand = `"$CLAUDE_PROJECT_DIR/.claude/specgate-hooks/run-hook.cmd" session-start claude`
+	claudeSpecgateAllowRule         = "Bash(specgate:*)"
+)
 
 // addSpecgateSessionHook points SessionStart at the installed script. Matching
 // the command field preserves unrelated entries that happen to mention the
@@ -470,20 +499,47 @@ func addSpecgateSessionHook(settings map[string]any) {
 }
 
 func addSpecgateAllowRule(settings map[string]any) {
-	const rule = "Bash(specgate:*)"
 	permissions, _ := settings["permissions"].(map[string]any)
 	if permissions == nil {
 		permissions = map[string]any{}
 	}
 	allow, _ := permissions["allow"].([]any)
 	for _, entry := range allow {
-		if value, ok := entry.(string); ok && value == rule {
+		if value, ok := entry.(string); ok && value == claudeSpecgateAllowRule {
 			settings["permissions"] = permissions
 			return
 		}
 	}
-	permissions["allow"] = append(allow, rule)
+	permissions["allow"] = append(allow, claudeSpecgateAllowRule)
 	settings["permissions"] = permissions
+}
+
+func hasSpecgateAllowRule(settings map[string]any) bool {
+	permissions, _ := settings["permissions"].(map[string]any)
+	allow, _ := permissions["allow"].([]any)
+	for _, entry := range allow {
+		if value, ok := entry.(string); ok && value == claudeSpecgateAllowRule {
+			return true
+		}
+	}
+	return false
+}
+
+func hasSpecgateSessionHook(settings map[string]any) bool {
+	hooks, _ := settings["hooks"].(map[string]any)
+	events, _ := hooks["SessionStart"].([]any)
+	for _, rawEntry := range events {
+		entry, _ := rawEntry.(map[string]any)
+		commands, _ := entry["hooks"].([]any)
+		for _, rawCommand := range commands {
+			command, _ := rawCommand.(map[string]any)
+			value, _ := command["command"].(string)
+			if value == claudeProjectSessionHookCommand {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // mergeClaudeSettings adds a permission rule for the CLI the installed skills tell

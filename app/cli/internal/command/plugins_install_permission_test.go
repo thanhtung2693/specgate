@@ -149,12 +149,13 @@ func TestPluginsInstallProjectLocalClaudeRegistersTheSessionHook(t *testing.T) {
 	for _, path := range []string{
 		filepath.Join(".claude", "specgate-hooks", "session-start"),
 		filepath.Join(".claude", "specgate-hooks", "run-hook.cmd"),
+		filepath.Join(".claude", "specgate-hooks", ".specgate-owned"),
 	} {
 		info, err := os.Stat(filepath.Join(workDir, path))
 		if err != nil {
 			t.Fatalf("hook asset missing: %v", err)
 		}
-		if info.Mode().Perm()&0o111 == 0 {
+		if filepath.Base(path) != ".specgate-owned" && info.Mode().Perm()&0o111 == 0 {
 			t.Fatalf("%s is not executable: %v", path, info.Mode())
 		}
 	}
@@ -174,5 +175,55 @@ func TestPluginsInstallProjectLocalClaudeRegistersTheSessionHook(t *testing.T) {
 	}
 	if !strings.Contains(string(raw), "specgate-hooks") {
 		t.Fatalf("SessionStart hook does not point at the installed script:\n%s", raw)
+	}
+}
+
+func TestPluginsInstallProjectLocalClaudeRejectsUnownedHookDirectory(t *testing.T) {
+	srv := newPluginRegistry(t)
+	workDir := t.TempDir()
+	t.Chdir(workDir)
+	hook := filepath.Join(workDir, ".claude", "specgate-hooks", "custom")
+	writeTestFile(t, hook, "keep")
+	deps, out := newPluginDeps(t.TempDir())
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps),
+		"--json", "--server", srv.URL, "plugins", "install", "--project-local", "--agent", "claude")
+	if code != output.ExitUsage {
+		t.Fatalf("install exit = %d, want usage failure; output = %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "not owned by SpecGate") {
+		t.Fatalf("structured error does not explain ownership conflict: %s", out.String())
+	}
+	raw, err := os.ReadFile(hook)
+	if err != nil || string(raw) != "keep" {
+		t.Fatalf("unowned hook changed: body=%q err=%v", raw, err)
+	}
+	if _, err := os.Stat(filepath.Join(workDir, ".claude", "skills")); !os.IsNotExist(err) {
+		t.Fatalf("install wrote skills before rejecting unowned hooks: %v", err)
+	}
+}
+
+func TestPluginsInstallProjectLocalClaudeAdoptsLegacyHookDirectory(t *testing.T) {
+	srv := newPluginRegistry(t)
+	workDir := t.TempDir()
+	t.Chdir(workDir)
+	homeDir := t.TempDir()
+
+	deps, out := newPluginDeps(homeDir)
+	args := []string{"--json", "--server", srv.URL, "plugins", "install", "--project-local", "--agent", "claude"}
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), args...); code != output.ExitOK {
+		t.Fatalf("first install exit = %d, output = %s", code, out.String())
+	}
+
+	marker := filepath.Join(workDir, ".claude", "specgate-hooks", ".specgate-owned")
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+	deps, out = newPluginDeps(homeDir)
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), args...); code != output.ExitOK {
+		t.Fatalf("legacy refresh exit = %d, output = %s", code, out.String())
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("legacy hook directory was not adopted: %v", err)
 	}
 }

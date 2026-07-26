@@ -124,12 +124,14 @@ echo "--- specgate doctor"
 specgate doctor --no-input
 
 echo "--- login disposable user/workspace"
-specgate user login \
+LOGIN_JSON="$(specgate user login \
   --workspace "E2E Artifact Workspace $RUN_ID" \
   --display-name "E2E Artifact User" \
   --username "e2e-artifact-$USER_RUN_ID" \
   --email "e2e-artifact-$USER_RUN_ID@example.com" \
-  --json --no-input | jq -e '.ok == true' > /dev/null
+  --json --no-input)"
+export SPECGATE_WORKSPACE
+SPECGATE_WORKSPACE="$(printf '%s' "$LOGIN_JSON" | jq -er '.data.workspace.slug')"
 
 echo "--- publish artifact package"
 PUBLISH_JSON="$(specgate artifact publish --file "$PACKAGE_FILE" --json --no-input)"

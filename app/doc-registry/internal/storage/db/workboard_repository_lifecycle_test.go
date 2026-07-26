@@ -120,6 +120,19 @@ func TestWorkBoardRepository_DeliveryStaleWarning(t *testing.T) {
 			}
 			return false
 		}
+		hasApprovalRequired := func(t *testing.T) bool {
+			t.Helper()
+			warnings, wErr := repo.ListStaleWarnings(ctx, workboard.StaleWarningFilter{ChangeRequestID: cr.ID})
+			if wErr != nil {
+				t.Fatal(wErr)
+			}
+			for _, w := range warnings {
+				if w.Code == workboard.WarningDeliveryApprovalRequired {
+					return true
+				}
+			}
+			return false
+		}
 		deleteGateRuns := func(t *testing.T) {
 			t.Helper()
 			if err := gdb.Where("subject_kind = ? AND subject_id = ? AND gate = ?", workboard.GateRunSubjectChangeRequest, cr.ID, "delivery_review").
@@ -149,6 +162,9 @@ func TestWorkBoardRepository_DeliveryStaleWarning(t *testing.T) {
 		}
 		if hasDeliveryStale(t) {
 			t.Fatal("expected no delivery_stale warning when authoritative delivery review passed")
+		}
+		if !hasApprovalRequired(t) {
+			t.Fatal("expected delivery_approval_required after platform delivery pass")
 		}
 		deleteGateRuns(t)
 
@@ -238,6 +254,9 @@ func TestWorkBoardRepository_DeliveryStaleWarning(t *testing.T) {
 		}
 		if hasDeliveryStale(t) {
 			t.Fatal("expected no delivery_stale warning when authoritative human approval outranks later platform fail")
+		}
+		if hasApprovalRequired(t) {
+			t.Fatal("expected no delivery_approval_required after human delivery approval")
 		}
 	})
 }

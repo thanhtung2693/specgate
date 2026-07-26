@@ -45,12 +45,14 @@ echo "--- specgate doctor"
 specgate doctor --no-input
 
 echo "--- login disposable user/workspace"
-specgate user login \
+LOGIN_JSON="$(specgate user login \
   --workspace "E2E Smoke Workspace $RUN_ID" \
   --display-name "E2E Smoke User" \
   --username "e2e-smoke-$USER_RUN_ID" \
   --email "e2e-smoke-$USER_RUN_ID@example.com" \
-  --json --no-input | jq -e '.ok == true' > /dev/null
+  --json --no-input)"
+export SPECGATE_WORKSPACE
+SPECGATE_WORKSPACE="$(printf '%s' "$LOGIN_JSON" | jq -er '.data.workspace.slug')"
 
 echo "--- plugin install/doctor in temporary HOME"
 specgate plugins install --agent all --json --no-input | jq -e '.ok == true' > /dev/null

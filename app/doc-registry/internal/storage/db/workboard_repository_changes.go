@@ -711,12 +711,17 @@ func (r *WorkBoardRepository) listStaleWarningsForFeatureAndCR(
 		if priorityUrgent != nil {
 			warnings = append(warnings, *priorityUrgent)
 		}
-		deliveryStale, err := r.deliveryStaleWarning(ctx, feature, cr)
+		deliveryReview, err := r.AuthoritativeDeliveryReviewRun(ctx, cr.ID)
 		if err != nil {
 			return nil, err
 		}
+		deliveryStale := r.deliveryStaleWarning(feature, cr, deliveryReview)
 		if deliveryStale != nil {
 			warnings = append(warnings, *deliveryStale)
+		}
+		approvalRequired := deliveryApprovalRequiredWarning(feature, cr, deliveryReview)
+		if approvalRequired != nil {
+			warnings = append(warnings, *approvalRequired)
 		}
 	}
 	// Check for an open MR/PR — a delivery link in state "opened" means

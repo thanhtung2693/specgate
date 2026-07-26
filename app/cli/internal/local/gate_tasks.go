@@ -269,8 +269,8 @@ func (s *Store) submitGateResultOnce(ctx context.Context, workspaceID, taskID st
 		{"evaluator.executor", input.Evaluator.Executor, task.Executor},
 	} {
 		if field.got != field.want {
-			return GateResult{}, fmt.Errorf("%w: %s is %q, but task %s expects %q; copy it from `specgate gates tasks list`",
-				ErrGateTaskInvalid, field.name, field.got, task.TaskID, field.want)
+			return GateResult{}, fmt.Errorf("%w: %s is %q, but task %s expects %q; copy it from `specgate gates tasks list %s`",
+				ErrGateTaskInvalid, field.name, field.got, task.TaskID, field.want, task.ArtifactID)
 		}
 	}
 	if !validGateState(input.State) {

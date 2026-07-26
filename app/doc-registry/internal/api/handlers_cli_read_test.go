@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/specgate/doc-registry/internal/agentsclient"
 	"github.com/specgate/doc-registry/internal/artifact"
 	"github.com/specgate/doc-registry/internal/governanceops"
 	"github.com/specgate/doc-registry/internal/governanceprofile"
@@ -27,6 +28,35 @@ type cliTestWorkBoard struct {
 	features          map[string]*workboard.Feature
 	runs              []workboard.GateRun
 	deliveryDecisions []workboard.DeliveryDecisionInput
+}
+
+type cliTestDeadlineAgentsRunner struct {
+	remaining time.Duration
+}
+
+func (f *cliTestDeadlineAgentsRunner) RunReadiness(ctx context.Context, artifactID string) (*agentsclient.Verdict, error) {
+	deadline, ok := ctx.Deadline()
+	if ok {
+		f.remaining = time.Until(deadline)
+	}
+	return &agentsclient.Verdict{
+		ArtifactID: artifactID,
+		ReadinessRuns: []agentsclient.ReadinessRun{
+			{Gate: "scope_clear", State: "pass"},
+		},
+	}, nil
+}
+
+func (f *cliTestDeadlineAgentsRunner) RunLLMGates(context.Context, string) (map[string]any, error) {
+	return nil, nil
+}
+
+func (f *cliTestDeadlineAgentsRunner) ReviewDelivery(context.Context, string) (map[string]any, error) {
+	return nil, nil
+}
+
+func (f *cliTestDeadlineAgentsRunner) CreateQuickWorkItem(context.Context, string, string, string, string, string, string, []governanceops.AcceptanceCriterionInput, string, string) (map[string]any, error) {
+	return nil, nil
 }
 
 func (f *cliTestWorkBoard) ListChangeRequests(_ context.Context, _ bool) ([]workboard.ChangeRequest, error) {
@@ -643,6 +673,25 @@ func TestCLI_ReadinessNilAgents503(t *testing.T) {
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503; body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestCLI_ReadinessAllowsModelJudgedRequestTimeout(t *testing.T) {
+	t.Parallel()
+	runner := &cliTestDeadlineAgentsRunner{}
+	svc := newCLIGovernanceSvc()
+	svc.AgentsRunner = runner
+	srv := newCLITestRouter(t, svc)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/work-items/art-1/readiness", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
+	}
+	if runner.remaining < 100*time.Second {
+		t.Fatalf("readiness deadline remaining = %s, want at least 100s for model-judged gates", runner.remaining)
 	}
 }
 

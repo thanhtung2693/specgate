@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Inject a short router hint. The focused skill stays the source of truth and is
-# loaded only for an explicit SpecGate task.
+# Inject a short router hint. The focused skill stays the source of truth.
 
 set -eu
 
@@ -12,13 +11,13 @@ if [ ! -f "$ROUTER" ]; then
 fi
 
 OWNER_CONTEXT="The IDE plugin manager owns this SpecGate plugin. Skip \`specgate plugins install\` and \`specgate plugins doctor\` for this IDE."
-if [ -f "${PLUGIN_ROOT}/.specgate-owned" ] && [ "$(sed -n '1p' "${PLUGIN_ROOT}/.specgate-owned")" = "specgate-plugin-v1" ]; then
+if { [ -f "${PLUGIN_ROOT}/.specgate-owned" ] && [ "$(sed -n '1p' "${PLUGIN_ROOT}/.specgate-owned")" = "specgate-plugin-v1" ]; } ||
+   { [ -f "${SCRIPT_DIR}/.specgate-owned" ] && [ "$(sed -n '1p' "${SCRIPT_DIR}/.specgate-owned")" = "specgate-plugin-v1" ]; }; then
   OWNER_CONTEXT='The SpecGate CLI owns this plugin. It may use `specgate plugins install` and `specgate plugins doctor` for this IDE.'
 fi
 
-# A repository the human bound with `specgate init` is the opt-in. Requiring them
-# to also say "SpecGate" means a user who does not know the tool exists gets no
-# governance from a tool they installed.
+# A Git repository whose root contains `.specgate/` is governed. Requiring the
+# user to also say "SpecGate" would bypass the governance they installed.
 GOVERNED=0
 dir="$PWD"
 while [ "$dir" != "/" ]; do

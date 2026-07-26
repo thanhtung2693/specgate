@@ -850,7 +850,9 @@ fails closed. For CLI installs, missing files still include an exact `specgate
 plugins install ...` repair command; stale versions or a stale Codex plugin
 cache warn with the reinstall/restart action to take. The check validates the
 selected plugin files without requiring the corresponding IDE executable on
-the current `PATH`.
+the current `PATH`. For project-local Claude Code, it also validates the
+CLI-owned hook files plus the `Bash(specgate:*)` permission and SessionStart
+registration in `.claude/settings.json`.
 
 Interactive `plugins install` and `plugins doctor` show a checkbox list for
 Cursor, Codex, and Claude Code when `--agent` is omitted. The default selection

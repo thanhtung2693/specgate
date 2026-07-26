@@ -92,6 +92,9 @@ const (
 	// WarningDeliveryStale signals that the authoritative delivery_review gate run
 	// for a change request is still failing after the configured SLA threshold.
 	WarningDeliveryStale WarningCode = "delivery_stale"
+	// WarningDeliveryApprovalRequired signals that platform verification passed
+	// and the current completion still needs explicit human acceptance.
+	WarningDeliveryApprovalRequired WarningCode = "delivery_approval_required"
 )
 
 // BoardPhase is the derived work-item board phase. It is computed on read and

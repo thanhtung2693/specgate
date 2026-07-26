@@ -188,7 +188,9 @@ and focused skills. Project-local Codex contains focused skills only.
 Project-local Claude Code also installs its SessionStart hook and merges the
 required permission and hook entries into the existing settings object.
 Malformed settings JSON stops installation before any plugin files are written;
-existing settings permissions are preserved.
+existing settings permissions are preserved. `plugins doctor --project-local
+--agent claude` verifies the hook files, their SpecGate ownership marker, the
+CLI permission, and the SessionStart registration.
 
 The focused skills are:
 

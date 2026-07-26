@@ -443,8 +443,30 @@ func checkClaudePluginAgent(home string, projectLocal bool, pkg *client.PluginPa
 	skills := pluginSkillsFromPackage(pkg)
 	layout := pluginAgentFileLayout{}
 	if projectLocal {
+		hookDir := filepath.Join(root, ".claude", specgateHookDirName)
+		settingsPath := filepath.Join(root, ".claude", "settings.json")
+		layout.required = append(layout.required,
+			filepath.Join(hookDir, "session-start"),
+			filepath.Join(hookDir, "run-hook.cmd"),
+			settingsPath,
+		)
+		layout.ownershipTargets = append(layout.ownershipTargets, pluginOwnershipTarget{path: hookDir, directory: true})
 		layout.addSkills(filepath.Join(root, ".claude", "skills"), skills)
-		return finishPluginAgentHealth(checkPluginAgentFiles("claude", projectLocal, pkg, layout), projectLocal)
+		health := checkPluginAgentFiles("claude", projectLocal, pkg, layout)
+		if isRegularPluginFile(settingsPath) {
+			settings, _, err := readClaudeSettings(settingsPath)
+			if err != nil {
+				health.Missing = append(health.Missing, settingsPath+" valid JSON")
+			} else {
+				if !hasSpecgateAllowRule(settings) {
+					health.Missing = append(health.Missing, settingsPath+" Bash(specgate:*) permission")
+				}
+				if !hasSpecgateSessionHook(settings) {
+					health.Missing = append(health.Missing, settingsPath+" SessionStart SpecGate hook")
+				}
+			}
+		}
+		return finishPluginAgentHealth(health, projectLocal)
 	}
 	pluginRoot := filepath.Join(root, ".claude", "skills", specgatePluginName)
 	layout.manifest = filepath.Join(pluginRoot, ".claude-plugin", "plugin.json")

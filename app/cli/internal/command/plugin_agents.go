@@ -1,7 +1,6 @@
 package command
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -91,7 +90,7 @@ func pluginAgentNames() []string {
 }
 
 func supportedPluginAgentList() string {
-	return fmt.Sprintf("%s, all, or comma-separated subset", strings.Join(pluginAgentNames(), ", "))
+	return strings.Join(pluginAgentNames(), ", ") + ", all, or comma-separated subset"
 }
 
 func cursorProjectPluginDirs(root string) []string {

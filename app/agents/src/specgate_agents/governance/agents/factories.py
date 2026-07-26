@@ -22,11 +22,6 @@ from specgate_agents.governance.provider_keys import (
 
 _THINKING_LEVELS = frozenset({"low", "medium", "high"})
 
-# Gemini thinking budget per effort level. `low` keeps a zero budget so tokens
-# stream as generated (the default, no streaming regression); medium/high opt
-# into server-side thinking. Values sit inside the Gemini Flash range and are
-# tunable.
-_GEMINI_THINKING_BUDGET = {"low": 0, "medium": 8192, "high": 24576}
 # Anthropic extended-thinking budget per level. `low` disables thinking. When
 # enabled, max_tokens must exceed the thinking budget and temperature must be
 # left unset (the API forces it to 1).
@@ -64,7 +59,7 @@ def _provider_chat_kwargs(
 
     if provider == "google_genai":
         kwargs["temperature"] = temperature
-        kwargs["thinking_budget"] = _GEMINI_THINKING_BUDGET[level]
+        kwargs["thinking_level"] = level
         return kwargs
 
     if provider == "anthropic":

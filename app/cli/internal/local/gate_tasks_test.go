@@ -91,6 +91,12 @@ func TestLocalGateResultRejectsUntrustedBindings(t *testing.T) {
 			if !strings.Contains(err.Error(), tc.says) {
 				t.Fatalf("error %q does not name the offending field %q", err, tc.says)
 			}
+			if tc.name != "invalid state" {
+				want := "specgate gates tasks list " + task.ArtifactID
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("error %q lacks exact repair command %q", err, want)
+				}
+			}
 		})
 	}
 
