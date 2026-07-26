@@ -44,7 +44,7 @@ func resolveRef(cmd *cobra.Command, args []string, deps *Deps) (string, error) {
 	}
 
 	if !canPrompt(deps) {
-		return "", &output.ExitError{Code: output.ExitUsage, Err: ErrInputRequired}
+		return "", &output.ExitError{Code: output.ExitUsage, Err: ErrWorkRefRequired}
 	}
 
 	workspaceID, err := currentWorkspaceID(cmd.Context(), deps)

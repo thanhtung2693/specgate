@@ -1,815 +1,244 @@
+// Repo-wide release gate.
+//
+// Every check here must be able to fail for a reason other than "someone edited
+// this test". Three kinds qualify:
+//
+//   Derived    — read a fact out of the code (env vars, constants, a file glob)
+//                and assert the documentation covers it. These fail when the
+//                product changes and the docs do not.
+//   Structural — assert a property no single file can restate: links resolve,
+//                paths exist, files stay under their size and word budgets,
+//                published metadata fits the directory's limits.
+//   Policy     — assert that a retired term or an unshipped capability claim is
+//                absent. There is no code to derive these from; absence is the
+//                only place the rule can live.
+//
+// An assertion that pins a literal already present in the file under test is
+// none of those. `assert.match(releaseWorkflow, /anchore\/scan-action@v7\.4\.0/)`
+// only says release.yml says what release.yml says: bumping the action means
+// editing two files and catches nothing. Those belong in the file's own review.
+//
+// CLI command names, `change status` fields, and change states are derived in
+// app/cli/internal/command/docs_coverage_test.go and
+// app/cli/internal/command/docs_contract_internal_test.go, where the Cobra tree
+// and the structs are in memory. Do not re-pin them as literals here.
+
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const root = new URL("../", import.meta.url);
 const read = (path) => readFileSync(new URL(path, root), "utf8");
+const exists = (path) => existsSync(new URL(path, root));
 
-const trackedFiles = () =>
-  execFileSync("git", ["ls-files", "-z"], { cwd: root })
+const gitFiles = (...args) =>
+  execFileSync("git", ["ls-files", ...args, "-z"], { cwd: root })
     .toString("utf8")
     .split("\0")
-    .filter((path) => path && existsSync(new URL(path, root)));
+    .filter((path) => path && exists(path));
 
-const workingFiles = () =>
-  execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], { cwd: root })
-    .toString("utf8")
-    .split("\0")
-    .filter((path) => path && existsSync(new URL(path, root)));
-
-const docs = {
-  readme: read("README.md"),
-  security: read("SECURITY.md"),
-  quickstart: read("docs/using-specgate/quickstart.md"),
-  featureStatus: read("docs/using-specgate/reference/feature-status.md"),
-  howSpecGateWorks: read("docs/using-specgate/concepts/how-specgate-works.md"),
-  integrationGuide: read("docs/using-specgate/guides/connect-integrations.md"),
-  dataModel: read("docs/contributing/data-model.md"),
-  trustAndSecurity: read("docs/using-specgate/concepts/trust-and-security.md"),
-  governanceAndGates: read("docs/using-specgate/concepts/governance-and-gates.md"),
-  deliveryTrustADR: read("docs/contributing/adr/2026-07-07-delivery-trust-model.md"),
-  teamIntegrationsADR: read("docs/contributing/adr/2026-07-20-minimal-team-integrations.md"),
-  operateSpecGate: read("docs/using-specgate/guides/operate-specgate.md"),
-  contracts: read("docs/contributing/contracts.md"),
-  configReference: read("docs/using-specgate/reference/configuration.md"),
-  configureModels: read("docs/using-specgate/guides/configure-models.md"),
-  installIdePlugins: read("docs/using-specgate/guides/install-ide-plugins.md"),
-  cliWorkflow: read("docs/using-specgate/guides/cli-workflow.md"),
-  codingAgentWorkflow: read("docs/using-specgate/guides/coding-agent-workflow.md"),
-  respondToGateFailures: read("docs/using-specgate/guides/respond-to-gate-failures.md"),
-  cliReference: read("docs/using-specgate/reference/cli.md"),
-  governanceReference: read("docs/using-specgate/reference/governance.md"),
-  gatesReference: read("docs/using-specgate/reference/gates.md"),
-  deployReadme: read("deploy/README.md"),
-  docRegistrySpec: read("app/doc-registry/docs/spec.md"),
-  docRegistryAPI: read("app/doc-registry/docs/api.md"),
-  docRegistryReadme: read("app/doc-registry/docs/README.md"),
-  agentsReadme: read("app/agents/docs/README.md"),
-  agentsSpec: read("app/agents/docs/spec.md"),
-  governanceGraphSpec: read("app/agents/docs/governance/docs/spec.md"),
-  uiReadme: read("app/ui/README.md"),
-  uiSpec: read("app/ui/docs/spec.md"),
-  architecture: read("docs/contributing/architecture.md"),
-  contributorSetup: read("docs/contributing/setup.md"),
-  testing: read("docs/contributing/testing.md"),
-  release: read("docs/contributing/release.md"),
-};
-
-const files = {
-  rootIgnore: read(".gitignore"),
-  rootMakefile: read("Makefile"),
-  installCli: read("scripts/install-cli.sh"),
-  releaseWorkflow: read(".github/workflows/release.yml"),
-  cliWorkflow: read(".github/workflows/cli.yml"),
-  goreleaser: read(".goreleaser.yaml"),
-  pagesWorkflow: read(".github/workflows/pages.yml"),
-  readinessWorkflow: read(".github/workflows/release-readiness.yml"),
-  uiWorkflow: read(".github/workflows/ui.yml"),
-  issueLabelerWorkflow: read(".github/workflows/issue-labeler.yml"),
-  rootEnvExample: read(".env.example"),
-  docRegistryEnvExample: read("app/doc-registry/.env.example"),
-  docRegistryConfig: read("app/doc-registry/internal/config/config.go"),
-  docRegistrySettings: read("app/doc-registry/internal/settings/model.go"),
-  uiModelSettings: read("app/ui/src/data/model-settings.ts"),
-  uiModelSettingsPanel: read("app/ui/src/components/layout/settings/model-settings-panel.tsx"),
-  uiGovernanceAgent: read("app/ui/src/components/agent/governance-agent.tsx"),
-  uiGovernanceRuntime: read("app/ui/src/components/agent/governance-runtime.tsx"),
-  agentsWebapp: read("app/agents/src/specgate_agents/governance/webapp.py"),
-  docRegistryMigration: read("app/doc-registry/migrations/postgres/0001_init.migration"),
-  workboardModel: read("app/doc-registry/internal/workboard/model.go"),
-  routerSkill: read("plugins/skills/specgate/SKILL.md"),
-  setupSkill: read("plugins/skills/specgate-project-setup/SKILL.md"),
-  preparingWorkSkill: read("plugins/skills/specgate-work-preparation/SKILL.md"),
-  deliveringWorkSkill: read("plugins/skills/specgate-work-delivery/SKILL.md"),
-  pluginPackage: read("plugins/package.json"),
-  sessionStartHook: read("plugins/hooks/session-start"),
-  cursorRule: read("plugins/rules/using-specgate.mdc"),
-  cursorPlugin: read("plugins/.cursor-plugin/plugin.json"),
-  localDockerfile: read("docker/Dockerfile.local"),
-  uiDockerfile: read("docker/Dockerfile.ui"),
-  localGateway: read("docker/local/nginx.conf"),
-  fullGateway: read("app/ui/docker/nginx-default.conf"),
-  landingPage: read("app/landing/index.html"),
-  docRegistryPrd: read("app/doc-registry/docs/prd.md"),
-};
-
-const releaseFacingDocs = [
-  "README.md",
-  "docs/using-specgate/quickstart.md",
-  "docs/README.md",
-  "docs/contributing/contracts.md",
-  "docs/using-specgate/reference/cli.md",
-  "docs/using-specgate/reference/configuration.md",
-  "docs/using-specgate/guides/cli-workflow.md",
-  "docs/using-specgate/guides/coding-agent-workflow.md",
-  "docs/using-specgate/guides/install-ide-plugins.md",
-  "deploy/README.md",
-  "app/doc-registry/README.md",
-  "app/doc-registry/docs/README.md",
-  "app/doc-registry/docs/spec.md",
-  "app/doc-registry/docs/api.md",
-  "app/agents/README.md",
-  "app/agents/docs/README.md",
-  "app/ui/README.md",
-];
-
-const releaseDocsText = () => releaseFacingDocs.map(read).join("\n");
+const trackedFiles = () => gitFiles();
+const workingFiles = () => gitFiles("--cached", "--others", "--exclude-standard");
+const markdownFiles = () =>
+  trackedFiles().filter((path) => path.endsWith(".md") && !path.includes("/node_modules/"));
 
 const uniqueMatches = (text, pattern) => [...new Set([...text.matchAll(pattern)].map(([, value]) => value))];
+const wordCount = (text) => text.trim().split(/\s+/).length;
 
-const assertMentions = (text, value, label = value) => {
-  assert.match(text, new RegExp(`\\b${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`), `${label} is not documented`);
-};
+// ---------------------------------------------------------------------------
+// Derived: the code is the source of truth and the docs must keep up.
+// ---------------------------------------------------------------------------
 
-test("release docs keep the public install path CLI-first", () => {
-  const publicDocs = releaseDocsText();
-
-  assert.match(docs.readme, /scripts\/install-cli\.sh/);
-  assert.match(files.installCli, /releases\/latest/);
-  assert.match(files.installCli, /releases\.atom/);
-  assert.match(files.installCli, /STABLE_VERSION/);
-  assert.doesNotMatch(files.installCli, /api\.github\.com/);
-  assert.match(files.installCli, /"\$\{DEST\}" config server "\$\{SERVER_URL\}"/);
-  assert.match(files.installCli, /Run 'specgate init'/);
-  assert.doesNotMatch(files.installCli, /config set server/);
-  assert.match(files.installCli, /Cannot verify the download/);
-  assert.doesNotMatch(files.installCli, /skipping verification/);
-
-  for (const text of [docs.readme, docs.quickstart, docs.installIdePlugins, docs.contracts]) {
-    assert.match(text, /specgate plugins install/);
-  }
-  assert.match(docs.readme, /specgate plugins doctor/);
-  assert.match(docs.readme, /claude plugin marketplace add thanhtung2693\/specgate/);
-  assert.match(docs.readme, /claude plugin install specgate@specgate/);
-  assert.match(docs.installIdePlugins, /specgate plugins doctor/);
-  assert.match(docs.contracts, /normal coding-agent workflow publishes through `specgate artifact publish`/);
-
-  assert.doesNotMatch(publicDocs, /plugins\/install\.sh/);
-  assert.doesNotMatch(publicDocs, /agent-handoff\.md/);
-  assert.doesNotMatch(publicDocs, /ADMIN_SECRET/);
-});
-
-test("public docs accurately position the current v0.1 release", () => {
-  assert.match(docs.readme, /\*\*Status: v0\.1 early release\.\*\*/);
-  assert.match(docs.security, /The v0\.1 release also includes a web UI\./);
-  assert.doesNotMatch(docs.security, /The alpha release/i);
-  assert.match(docs.featureStatus, /ready for cautious\s+v0\.1 evaluation/i);
-  assert.match(docs.featureStatus, /## Core v0\.1 paths/);
-  assert.match(docs.quickstart, /Governance-chat threads reset when the appliance restarts/i);
-  assert.match(docs.operateSpecGate, /Governance-chat threads are ephemeral/i);
-});
-
-test("team integrations expose the graduated minimal workflow only", () => {
-  assert.match(docs.integrationGuide, /Full mode only/i);
-  assert.match(docs.integrationGuide, /Repositories[\s\S]{0,160}GitHub[\s\S]{0,160}GitLab/);
-  assert.match(docs.integrationGuide, /Work tracking[\s\S]{0,160}Linear/);
-  assert.match(docs.integrationGuide, /authorize[\s\S]{0,160}select[\s\S]{0,160}managed[\s\S]{0,80}webhook/i);
-  assert.match(docs.integrationGuide, /<!-- specgate-work-ref: CR-123 -->/);
-  assert.match(docs.integrationGuide, /head_sha[\s\S]{0,160}head_revision/);
-  assert.match(docs.integrationGuide, /directly to a coding IDE agent/i);
-  assert.doesNotMatch(docs.integrationGuide, /CI setup|CI ingestion|issue handoff|tracker authority|public Context Pack URL/i);
-  assert.doesNotMatch(docs.integrationGuide, /manually configure an integration-level webhook secret/i);
-  assert.doesNotMatch(docs.readme, /Graduate tracker and git integrations for team use/i);
-  assert.doesNotMatch(files.landingPage, /\bexperimental\s+(?:connectors?|integrations?|trackers?)\b/i);
-  assert.doesNotMatch(files.landingPage, /\b(?:connectors?|integrations?)\b[^.\n]{0,80}\bmirror(?:s|ed|ing)?\b[^.\n]{0,80}\btracker\b/i);
-});
-
-test("provider CI ingestion is absent from the graduated integration contract", () => {
-  const noProviderCI = [
-    files.docRegistryPrd,
-    docs.dataModel,
-    docs.trustAndSecurity,
-    docs.governanceAndGates,
-    docs.deliveryTrustADR,
-    docs.teamIntegrationsADR,
-  ].join("\n");
-
-  assert.doesNotMatch(noProviderCI, /CI or webhook events|CI, PR\/MR|matched merge and CI corroboration|managed webhook can transport a CI result/i);
-  assert.match(noProviderCI, /user-cited|user-reported|externally supplied|user's own/i);
-  assert.match(docs.deliveryTrustADR, /historical|superseded/i);
-});
-
-test("release docs do not advertise removed prose classification routes", () => {
-  const currentCapabilityDocs = [
-    docs.readme,
-    docs.agentsReadme,
-    docs.architecture,
-    docs.testing,
-    docs.configureModels,
-  ].join("\n");
-
-  assert.doesNotMatch(currentCapabilityDocs, /route suggestions/i);
-  assert.doesNotMatch(currentCapabilityDocs, /route advice/i);
-  assert.doesNotMatch(currentCapabilityDocs, /delivery review, classification/i);
-  assert.doesNotMatch(currentCapabilityDocs, /summaries, and classification run through/i);
-
-  for (const [label, text] of [
-    ["Doc Registry spec", docs.docRegistrySpec],
-    ["model settings panel", files.uiModelSettingsPanel],
-    ["governance agent setup", files.uiGovernanceAgent],
-  ]) {
-    assert.doesNotMatch(text, /\bclassification\b/i, `${label} advertises removed classification work`);
-  }
-});
-
-test("release purge docs preserve the cached appliance image", () => {
-  assert.match(docs.release, /downloaded appliance image stays in Docker's cache/i);
-  assert.doesNotMatch(docs.release, /no SpecGate-managed[\s\S]{0,100}appliance image remains/i);
-});
-
-test("release distribution is the single local appliance", () => {
-  assert.match(files.rootIgnore, /^CLAUDE\.specgate\.md$/m);
-  assert.match(files.rootIgnore, /^AGENTS\.specgate\.md$/m);
-
-  assert.ok(!existsSync(new URL("deploy/compose/compose.yml", root)), "legacy multi-service release bundle remains");
-  assert.ok(!existsSync(new URL("docker-compose.dev.yml", root)), "legacy local development override remains");
-  assert.ok(!existsSync(new URL("app/doc-registry/docker-compose.yml", root)), "legacy module Compose file remains");
-  assert.doesNotMatch(docs.deployReadme, /multi-service Compose/i);
-  assert.match(files.rootMakefile, /LOCAL_DEPLOY_DIR := deploy\/local/);
-  assert.match(files.rootMakefile, /LOCAL_PROJECT \?= specgate-dev/);
-  assert.match(files.rootMakefile, /SPECGATE_COMPOSE_PROJECT=\$\(LOCAL_PROJECT\)/);
-  assert.match(files.rootMakefile, /-f \$\(LOCAL_DEPLOY_DIR\)\/compose\.yml/);
-  assert.doesNotMatch(files.rootMakefile, /docker-compose\.dev\.yml/);
-  assert.match(docs.contributorSetup, /single-container appliance/i);
-  assert.doesNotMatch(files.rootMakefile, /Onboarding \(self-host\):/);
-});
-
-test("local and full gateways accept the documented upload limits", () => {
-  for (const gateway of [files.localGateway, files.fullGateway]) {
-    assert.match(gateway, /client_max_body_size 32m;/);
-  }
-});
-
-test("local and full gateways route provider callbacks and managed webhooks", () => {
-  for (const gateway of [files.localGateway, files.fullGateway]) {
-    assert.match(gateway, /location = \/integrations\/oauth-callback/);
-    assert.match(gateway, /location ~ \^\/integrations\/\[\^\/\]\+\/resources\/\[\^\/\]\+\/\(github\|gitlab\|linear\)\/webhook\$/);
-    assert.match(gateway, /proxy_set_header Host \$http_host;/);
-  }
-});
-
-test("release automation rejects an already-published GitHub Release before verification", () => {
-  const workflow = files.releaseWorkflow;
-  const verifyJob = workflow.slice(
-    workflow.indexOf("\n  verify:\n"),
-    workflow.indexOf("\n  release-cli:\n"),
-  );
-  const preflight = verifyJob.indexOf("Reject pre-published GitHub Release");
-  const checkout = verifyJob.indexOf("actions/checkout@v6");
-
-  assert.notEqual(preflight, -1, "tag releases need a published-release preflight");
-  assert.ok(preflight < checkout, "release-state validation must run before expensive verification");
-  assert.match(verifyJob, /\.tag_name == \$version and \.draft == false/);
-  assert.match(verifyJob, /push the tag directly/i);
-});
-
-test("release guide tells maintainers to push a tag without publishing a GitHub Release", () => {
-  assert.match(docs.release, /git push origin "\$VERSION"/);
-  assert.match(docs.release, /Do not create or publish a GitHub Release/i);
-});
-
-test("release workflow builds only the appliance and exercises doctor repair", () => {
-  const workflow = files.releaseWorkflow;
-  const manifestJob = workflow.slice(
-    workflow.indexOf("\n  release-image-manifests:\n"),
-    workflow.indexOf("\n  release-local-bundle:\n"),
-  );
-  const smokeJob = workflow.slice(
-    workflow.indexOf("\n  release-doctor-fix-smoke:\n"),
-    workflow.indexOf("\n  release-publish:\n"),
-  );
-  const publishJob = workflow.slice(workflow.indexOf("\n  release-publish:\n"));
-
-  assert.match(workflow, /^permissions:\n  contents: read$/m);
-  assert.doesNotMatch(workflow, /^permissions:\n  contents: write\n  packages: write$/m);
-  assert.match(workflow, /release-cli:\n[\s\S]*?permissions:\n\s+contents: write\n[\s\S]*?steps:/);
-  assert.match(workflow, /release-images:\n[\s\S]*?permissions:\n\s+contents: read\n\s+packages: write\n[\s\S]*?strategy:/);
-  assert.match(workflow, /release-image-manifests:\n[\s\S]*?permissions:\n\s+actions: read\n\s+packages: write\n[\s\S]*?steps:/);
-  assert.match(smokeJob, /^    permissions:\n      contents: write$/m);
-  assert.match(workflow, /release-publish:\n[\s\S]*?permissions:\n\s+contents: write\n[\s\S]*?steps:/);
-  assert.match(workflow, /--file docker\/Dockerfile\.local/);
-  assert.doesNotMatch(workflow, /image: \[(?:doc-registry|agents|ui)/);
-  for (const dockerfile of ["docker/Dockerfile.doc-registry", "docker/Dockerfile.agents", "docker/Dockerfile.ui"]) {
-    assert.doesNotMatch(workflow, new RegExp(`dockerfile: ${dockerfile.replace("/", "\\/")}`));
-  }
-  assert.match(workflow, /push-by-digest=true/);
-  assert.match(workflow, /docker buildx imagetools create/);
-  assert.doesNotMatch(manifestJob, /--tag "\$\{image\}:latest"/);
-  assert.match(workflow, /actions\/upload-artifact@v7/);
-  assert.match(workflow, /actions\/download-artifact@v7/);
-  assert.match(workflow, /release-doctor-fix-smoke:/);
-  assert.match(workflow, /needs: release-image-manifests/);
-  assert.match(workflow, /specgate init --mode full --dir "\$DEPLOY_DIR" --bundle-version "\$VERSION" --no-seed --no-input/);
-  assert.match(workflow, /specgate-deployment-v1/);
-  assert.match(workflow, /\$DEPLOY_DIR\/\.specgate-managed/);
-  assert.match(workflow, /specgate artifact publish --file/);
-  assert.doesNotMatch(workflow, /gates_profile/);
-  assert.match(workflow, /"request_type": "bugfix"/);
-  assert.doesNotMatch(workflow, /"request_type": "bug_fix"/);
-  assert.match(workflow, /specgate doctor --fix --yes/);
-  assert.match(workflow, /GO_RELEASER_VERSION=v2\.17\.0/);
-  assert.match(workflow, /goreleaser_Linux_x86_64\.tar\.gz/);
-  assert.doesNotMatch(workflow, /goreleaser\/goreleaser-action/);
-  assert.doesNotMatch(workflow, /go install github\.com\/goreleaser\/goreleaser/);
-  assert.match(workflow, /goreleaser release --clean/);
-  assert.match(files.goreleaser, /release:\s+[\s\S]*draft: true/);
-  assert.match(workflow, /--provenance=mode=max/);
-  assert.match(workflow, /--sbom=true/);
-  assert.match(workflow, /anchore\/scan-action@v7\.4\.0/);
-  assert.match(workflow, /severity-cutoff: high/);
-  assert.match(workflow, /only-fixed: true/);
-  assert.match(workflow, /release-publish:/);
-  assert.match(workflow, /needs: release-doctor-fix-smoke/);
-  assert.match(publishJob, /packages: write/);
-  assert.match(publishJob, /if \[\[ "\$VERSION" == \*-\* \]\]; then[\s\S]*else[\s\S]*--tag "\$\{image\}:latest"/);
-  assert.match(publishJob, /--tag "\$\{image\}:latest"/);
-  assert.match(publishJob, /"\$\{image\}:\$VERSION"/);
-  assert.match(workflow, /GH_REPO: \$\{\{ github\.repository \}\}/);
-  assert.doesNotMatch(workflow, /gh release download "\$VERSION"/);
-  assert.match(workflow, /gh api --paginate --slurp "repos\/\$\{GH_REPO\}\/releases"/);
-  assert.match(workflow, /gh api -H "Accept: application\/octet-stream"/);
-  assert.match(workflow, /gh release edit "\$VERSION" --draft=false/);
-});
-
-test("release workflow verifies every release-facing module before publishing", () => {
-  const workflow = files.releaseWorkflow;
-  const verifyJob = workflow.slice(
-    workflow.indexOf("\n  verify:\n"),
-    workflow.indexOf("\n  release-cli:\n"),
+test("every doc-registry config env var reaches the operator docs", () => {
+  const operatorDocs = [
+    "app/doc-registry/.env.example",
+    "deploy/README.md",
+    "app/doc-registry/docs/README.md",
+    "app/doc-registry/docs/spec.md",
+  ]
+    .map(read)
+    .join("\n");
+  const configEnvVars = uniqueMatches(
+    read("app/doc-registry/internal/config/config.go"),
+    /\bgetEnv(?:Bool|Int|Int64|Float)?\("([A-Z0-9_]+)"/g,
   );
 
-  assert.notEqual(verifyJob, "", "release workflow must define a verify job before release-cli");
-  assert.match(verifyJob, /go run honnef\.co\/go\/tools\/cmd\/staticcheck@v0\.7\.0 \.\/\.\.\./);
-  assert.match(verifyJob, /go test -race -count=1 -p=1 \.\/\.\.\./);
-  assert.match(verifyJob, /make test/);
-  assert.match(verifyJob, /uv run ruff check \.\/src \.\/tests/);
-  assert.match(verifyJob, /uv run pytest -q/);
-  assert.match(verifyJob, /npm run test -- --run/);
-  assert.match(verifyJob, /npm run lint/);
-  assert.match(verifyJob, /npm run build/);
-  assert.match(verifyJob, /node --test docs\/release-readiness\.test\.mjs/);
-  assert.match(workflow, /verify-windows-cli:\n[\s\S]*runs-on: windows-latest/);
-  assert.match(workflow, /verify-windows-cli:[\s\S]*TestUpdateWindows\|TestSelfUpdateWindowsCLI/);
-  assert.match(workflow, /release-cli:\n\s+needs: \[verify, verify-windows-cli\]\n/);
-  assert.match(files.cliWorkflow, /windows-update:\n[\s\S]*runs-on: windows-latest/);
+  assert.ok(configEnvVars.length > 0, "no doc-registry config env vars found; the accessor pattern changed");
+  assert.deepEqual(
+    configEnvVars.filter((name) => !new RegExp(`\\b${name}\\b`).test(operatorDocs)),
+    [],
+  );
 });
 
-test("release env examples document runtime config without requiring model secrets", () => {
-  const docRegistryOperatorDocs = [
-    files.docRegistryEnvExample,
-    docs.deployReadme,
-    docs.docRegistryReadme,
-    docs.docRegistrySpec,
-  ].join("\n");
-  const configEnvVars = uniqueMatches(files.docRegistryConfig, /\bgetEnv(?:Bool|Int|Int64|Float)?\("([A-Z0-9_]+)"/g);
-
-  assert.ok(configEnvVars.length > 0, "no doc-registry config env vars found");
-  for (const name of configEnvVars) {
-    assertMentions(docRegistryOperatorDocs, name);
-  }
-
-  assert.doesNotMatch(files.rootEnvExample, /STORAGE_DRIVER|KNOWLEDGE_DRIVER/);
-  assert.doesNotMatch(files.rootEnvExample, /^QUEUE_DRIVER/m);
-});
-
-test("shared contracts are generated from current backend vocabulary", () => {
-  const docRegistryContract = `${docs.docRegistrySpec}\n${docs.docRegistryAPI}`;
+test("every workboard warning code reaches the shared contract and the registry docs", () => {
+  const contracts = read("docs/contributing/contracts.md");
+  const registryContract = `${read("app/doc-registry/docs/spec.md")}\n${read("app/doc-registry/docs/api.md")}`;
   const warningCodes = uniqueMatches(
-    files.workboardModel,
+    read("app/doc-registry/internal/workboard/model.go"),
     /\bWarning[A-Za-z0-9_]+\s+WarningCode\s*=\s*"([^"]+)"/g,
   );
 
-  assert.ok(warningCodes.length > 0, "no WarningCode constants found");
-  for (const code of warningCodes) {
-    assert.match(docs.contracts, new RegExp(`\\\`${code}\\\``));
-    assert.match(docRegistryContract, new RegExp(`\\\`${code}\\\``));
-  }
-
-  assert.match(docRegistryContract, /workspace_id[\s\S]*scopes all reads and writes/);
-  assert.match(docs.contracts, /workspace_id/);
-});
-
-test("model defaults and docs agree on low governance thinking", () => {
-  assert.match(files.docRegistrySettings, /KeyGovernanceDefaultThinkingLevel:\s+"low"/);
-  assert.match(files.uiModelSettings, /"governance\.default_thinking_level": "low"/);
-  assert.match(docs.configureModels, /`low` is the runtime default/);
-});
-
-test("model docs distinguish IDE assistance from server-only features", () => {
-  assert.match(docs.configureModels, /Local[\s\S]*IDE-agent semantic readiness/);
-  assert.match(docs.configureModels, /agent_attested/);
-  assert.match(docs.configureModels, /different review-only agent/);
-  assert.match(docs.configureModels, /repository context, not Governance Knowledge/);
-  assert.match(docs.installIdePlugins, /Local[\s\S]*same\s+focused[\s\S]*without\s+contacting a registry/i);
-  assert.match(docs.codingAgentWorkflow, /artifact coverage[\s\S]*exact[- ]version/i);
-  assert.doesNotMatch(docs.quickstart, /Configure a model when you want server-side summaries, route suggestions/);
-  assert.doesNotMatch(docs.quickstart + docs.installIdePlugins, /Offline Local CLI/);
-  assert.match(docs.installIdePlugins, /Codex[\s\S]{0,160}`\.agents\/skills\/specgate-\*`/i);
-  assert.match(docs.installIdePlugins, /Claude Code[\s\S]{0,160}`\.claude\/skills\/specgate-\*`/i);
-  assert.doesNotMatch(docs.installIdePlugins, /project-local marketplace configuration/i);
-
-  for (const skill of [
-    "specgate",
-    "specgate-project-setup",
-    "specgate-work-preparation",
-    "specgate-work-delivery",
-  ]) {
-    assert.match(docs.installIdePlugins, new RegExp(`\\\`${skill}\\\``));
-  }
-
-  for (const reference of [docs.cliReference, docs.governanceReference, docs.gatesReference]) {
-    assert.match(reference, /Local[\s\S]*IDE[\s-]*gate tasks/i);
-    assert.match(reference, /not_run[\s\S]*until[\s\S]*submitted/i);
-  }
-});
-
-test("SpecGate uses one short bootstrap and one explicit lifecycle phase", () => {
-  const routerWords = files.routerSkill.trim().split(/\s+/).length;
-
-  assert.match(files.routerSkill, /^description: Use when the working repository is SpecGate-governed/m);
-  assert.match(files.routerSkill, /^description:[^\n]*mentions SpecGate/m);
-  assert.ok(routerWords <= 550, `router is ${routerWords} words; expected at most 550`);
-  assert.match(files.routerSkill, /For lifecycle work, choose exactly one phase/is);
-  assert.match(files.routerSkill, /exactly one.*setup.*prepar.*deliver/is);
-  assert.match(files.routerSkill, /framework.*owns.*paths.*Git/is);
-  assert.match(files.routerSkill, /readiness.*not.*approval/is);
-  assert.match(files.routerSkill, /read-only[\s\S]{0,160}specgate change status "\$WORK_REF" --json/i);
-  assert.match(files.routerSkill, /only product-state read and write surface/i);
-  assert.match(files.routerSkill, /never inspect\s+or edit[\s\S]{0,200}SQLite[\s\S]{0,200}object storage/i);
-  assert.match(files.routerSkill, /bootstrap[\s-]*only[\s\S]*`specgate-project-setup`[\s\S]*unavailable/i);
-  assert.match(files.routerSkill, /skills\.sh[\s\S]*instructions only[\s\S]*explicit approval/i);
-  assert.match(files.routerSkill, /raw\.githubusercontent\.com\/thanhtung2693\/specgate\/main\/scripts\/install-cli\.sh/);
-  assert.match(files.routerSkill, /npx skills remove specgate -y/);
-  assert.match(files.routerSkill, /npx skills remove specgate -g -y/);
-  assert.match(files.routerSkill, /never edit or delete[\s\S]*skills\.sh[\s\S]*directly/i);
-  assert.match(files.routerSkill, /native plugin ownership[\s\S]*never uninstall[\s\S]*separate explicit approval/i);
-  assert.match(files.routerSkill, /plugins install[\s\S]*--dry-run[\s\S]*plugins install[\s\S]*plugins doctor/i);
-  assert.match(files.routerSkill, /restart[\s\S]*stop before[\s\S]*initializ/i);
-
-  assert.match(files.sessionStartHook, /SpecGate skills are installed/);
-  assert.match(files.sessionStartHook, /mentions SpecGate/);
-  // A repository the human already bound with `specgate init` is the opt-in;
-  // requiring them to also say the word means a vibe-coding user gets nothing.
-  assert.match(files.sessionStartHook, /\.specgate/);
-  assert.match(files.sessionStartHook, /governed by SpecGate/i);
-  assert.match(files.sessionStartHook, /before (writing|editing)/i);
-  assert.match(files.sessionStartHook, /Read-only.*stay in the root skill/is);
-  assert.doesNotMatch(files.sessionStartHook, /SpecGate is connected/);
-  assert.doesNotMatch(files.sessionStartHook, /SKILL_CONTENT=.*cat/);
-
-  assert.match(files.cursorRule, /mentions SpecGate/);
-  assert.match(files.cursorRule, /governed by SpecGate/i);
-  assert.match(files.cursorRule, /Read-only.*stay in the root skill/is);
-  assert.doesNotMatch(files.cursorPlugin, /hooks\/hooks-cursor\.json/);
-  assert.doesNotMatch(files.pluginPackage, /hooks\/hooks-cursor\.json/);
-  assert.ok(!existsSync(new URL("plugins/hooks/hooks-cursor.json", root)), "dead Cursor bootstrap hook remains");
-});
-
-test("SpecGate exposes one product-named entry skill", () => {
-  assert.ok(existsSync(new URL("plugins/skills/specgate/SKILL.md", root)));
-  assert.ok(!existsSync(new URL("plugins/skills/specgate-router/SKILL.md", root)));
-  assert.match(files.pluginPackage, /"skills\/specgate\/SKILL\.md"/);
-  assert.doesNotMatch(files.pluginPackage, /specgate-router/);
-});
-
-test("Codex plugin metadata stays within public-directory limits", () => {
-  const plugin = JSON.parse(files.pluginPackage);
-  const prompts = [
-    "Check this artifact with SpecGate readiness.",
-    "Pick up and implement this SpecGate work item.",
-    "Show the delivery status for this SpecGate work item.",
-  ];
-
-  assert.match(plugin.name, /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/);
-  assert.match(plugin.version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/);
-  assert.ok(plugin.display_name.length <= 30, "plugin display name exceeds 30 characters");
-  assert.ok(plugin.short_description.length <= 30, "plugin short description exceeds 30 characters");
-  assert.ok(plugin.long_description.length <= 4000, "plugin long description exceeds 4,000 characters");
-  assert.ok(plugin.developer_name.length <= 80, "plugin developer name exceeds 80 characters");
-  assert.ok(prompts.length <= 3, "plugin has more than three starter prompts");
-  assert.equal(new Set(prompts.map((prompt) => prompt.trim().normalize())).size, prompts.length);
-  for (const prompt of prompts) {
-    assert.ok(prompt.length <= 128, `starter prompt exceeds 128 characters: ${prompt}`);
-    assert.doesNotMatch(prompt, /@\w/);
-  }
-});
-
-test("skills.sh bootstrap hands plugin ownership to the SpecGate CLI", () => {
-  assert.match(docs.readme, /skills\.sh[\s\S]{0,240}bootstrap/i);
-  assert.match(docs.readme, /ask your\s+agent[\s\S]{0,160}set up SpecGate/i);
-  assert.match(docs.installIdePlugins, /## Start from skills\.sh/i);
-  assert.match(docs.installIdePlugins, /instructions only[\s\S]{0,240}SpecGate CLI/i);
-  assert.match(docs.installIdePlugins, /npx skills remove specgate -y/);
-  assert.match(docs.installIdePlugins, /npx skills remove specgate -g -y/);
-  assert.match(docs.installIdePlugins, /sole manager|one owner/i);
-  assert.match(docs.installIdePlugins, /never edits[\s\S]{0,160}skills\.sh lock/i);
-  assert.match(docs.cliReference, /skills\.sh[\s\S]{0,240}`conflict`[\s\S]{0,240}retry_command/i);
-  assert.match(files.pluginPackage, /"version": "0\.2\.3"/);
-});
-
-test("SpecGate project setup performs and verifies the requested setup", () => {
-  const skill = files.setupSkill;
-
-  assert.match(skill, /^description: Use when SpecGate is being (?:initialized|configured)/m);
-  assert.match(skill, /command -v specgate/);
-  assert.match(skill, /Get-Command specgate/);
-  assert.match(skill, /lookup succeeds[\s\S]*specgate --version/i);
-  assert.match(skill, /skills\.sh[\s\S]*does not install[\s\S]*CLI/i);
-  assert.match(
-    skill,
-    /curl -fsSL https:\/\/raw\.githubusercontent\.com\/thanhtung2693\/specgate\/main\/scripts\/install-cli\.sh \| sh/,
+  assert.ok(warningCodes.length > 0, "no WarningCode constants found; the declaration pattern changed");
+  assert.deepEqual(
+    warningCodes.filter(
+      (code) => !contracts.includes(`\`${code}\``) || !registryContract.includes(`\`${code}\``),
+    ),
+    [],
   );
-  assert.match(skill, /show[\s\S]*installer command[\s\S]*explicit (?:approval|confirmation)/i);
-  assert.match(skill, /Windows[\s\S]*WSL2[\s\S]*releases\/latest/i);
-  for (const command of [
-    "specgate --version",
-    "specgate doctor --json",
-    "specgate workspace bind",
-    "specgate plugins install",
-    "specgate plugins doctor",
-    "specgate workspace current",
-  ]) assert.match(skill, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-
-  assert.match(skill, /user.*chooses.*Local.*Full/is);
-  assert.match(skill, /user.*chooses.*IDE.*scope/is);
-  assert.match(skill, /--workspace-name/);
-  assert.match(skill, /--display-name/);
-  assert.match(skill, /--username/);
-  assert.match(skill, /bind only when.*missing.*incorrect.*explicitly requested/is);
-  assert.match(skill, /existing topology.*recovery action/is);
-  assert.match(skill, /restart.*IDE/is);
-  assert.doesNotMatch(skill, /Produce a project setup map|hard_stop.*required_practice.*local_convention/is);
 });
 
-test("user docs keep Local and Full capability boundaries explicit", () => {
-  assert.match(docs.featureStatus, /Local and Full quick work item creation/);
-  assert.match(docs.featureStatus, /Embedded Codex, Claude Code, and Cursor plugin install in Local mode/);
-  assert.match(docs.cliReference, /Full mode only: list, inspect, add, and search[\s\S]*Governance Knowledge/);
-  assert.match(docs.cliReference, /`artifact request-changes` in Full mode/);
-  assert.match(docs.cliReference, /List and inspect governed features in either mode/);
-  assert.match(docs.configReference, /## Full appliance/);
-  assert.match(docs.howSpecGateWorks, /Local and Full modes[\s\S]{0,100}quick route/i);
-  assert.match(docs.howSpecGateWorks, /artifact-backed route/i);
-  assert.doesNotMatch(docs.howSpecGateWorks, /no Local quick-work parity/i);
-  assert.match(docs.cliReference, /same in Local and Full mode/i);
-  assert.doesNotMatch(files.deliveringWorkSkill, /specgate delivery review/i);
-  assert.match(files.deliveringWorkSkill, /checks\[\]\.command[\s\S]{0,240}`sh -c`/i);
-  assert.doesNotMatch(files.deliveringWorkSkill, /specgate gates run/);
-  for (const text of [docs.quickstart, docs.installIdePlugins, docs.cliReference]) {
-    assert.match(text, /removes\s+CLI\s+configuration\s+and\s+globally\s+installed\s+managed\s+plugin\s+files/);
-    assert.match(text, /Project-local\s+plugin\s+files[\s\S]{0,120}preserved/i);
-    assert.doesNotMatch(text, /removes CLI and plugin setup/);
-  }
-});
+test("every CLI exit code is documented as stable API", () => {
+  const reference = read("docs/using-specgate/reference/cli.md");
+  const codes = uniqueMatches(read("app/cli/internal/output/output.go"), /\bExit[A-Za-z]+\s+=\s+(\d)\b/g);
 
-test("Change facade docs describe the actionable post-handoff path without inventing an entity", () => {
-  const reference = docs.cliReference.split("## Change facade\n")[1]?.split("\n## ")[0] ?? "";
-  const workflow = docs.cliWorkflow.split("## Complete an existing change\n")[1]?.split("\n## ")[0] ?? "";
-
-  assert.notEqual(reference, "", "CLI Reference must have a dedicated Change facade section");
-  assert.notEqual(workflow, "", "CLI workflow must have a complete Change recipe");
-  for (const syntax of [
-    "specgate change status <work-ref>",
-    "specgate --yes change approve <artifact-id>",
-    "specgate change submit <ref> [--file <completion.json>]",
-    "specgate --yes change accept <ref>",
-    "specgate change accept <ref>",
-    "specgate --yes change request-changes <ref>",
-    "specgate change request-changes <ref>",
-  ]) assert.match(reference, new RegExp(syntax.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  assert.match(reference, /change approve <artifact-id> --title <title> --ac <criterion>/);
-  assert.match(reference, /\.specgate\/completion-<safe-ref>\.json/);
-  assert.match(reference, /letters, digits, `-`, and `_`/);
-  assert.match(reference, /must pass `--file`/);
-  for (const field of ["mode", "ref", "title", "state", "evidence", "assurance", "decision", "receipt", "freshness", "next_actor", "missing", "stale", "stale_reason", "next_command"]) {
-    assert.match(reference, new RegExp("`" + field + "`"));
-  }
-  for (const state of ["implementation", "awaiting_review", "review_pending", "awaiting_acceptance", "accepted", "rework_requested", "blocked"]) {
-    assert.match(reference, new RegExp("`" + state + "`"));
-  }
-  assert.match(reference, /separate summary labels/);
-  assert.match(reference, /`evidence_verdict`/);
-  assert.match(reference, /current reviewed completion/);
-  assert.match(reference, /`change prepare`[\s\S]*not available/i);
-  for (const family of ["delivery", "work", "gates", "artifact", "audit", "verify"]) {
-    assert.match(reference, new RegExp("`" + family + "`"));
-  }
-
-  const initialStatus = workflow.indexOf("specgate change status <work-ref>");
-  const scaffold = workflow.indexOf("specgate delivery report <work-ref> --init");
-  const submit = workflow.indexOf("specgate change submit <work-ref>");
-  const followUpStatus = workflow.indexOf("specgate change status <work-ref>", initialStatus + 1);
-  assert.ok(initialStatus >= 0 && initialStatus < scaffold && scaffold < submit && submit < followUpStatus,
-    "Change How-to must order status, scaffold, submit, then status again");
-  assert.match(workflow, /Run exactly one of the following human decisions/);
-  assert.match(workflow, /State: awaiting_review[\s\S]*specgate delivery status <work-ref> --detail/);
-  assert.match(workflow, /State: review_pending[\s\S]*specgate delivery review/);
-  assert.match(workflow, /State: awaiting_acceptance[\s\S]*specgate --yes change accept <work-ref>/);
-  assert.match(workflow, /not ready for acceptance[\s\S]*specgate --yes change request-changes <work-ref>/);
-  assert.match(docs.howSpecGateWorks, /does not create a new durable Change entity/i);
-  assert.match(docs.featureStatus, /Local and Full quick work item creation/i);
-  assert.match(docs.featureStatus, /`change prepare`[\s\S]*not available/i);
-});
-
-test("coding-agent delivery ends with a truthful human-acceptance receipt", () => {
-  const workflow = docs.codingAgentWorkflow;
-
-  for (const phrase of [
-    "SpecGate delivery receipt",
-    "`awaiting_acceptance`",
-    "Evidence",
-    "Assurance",
-    "Decision",
-    "Receipt",
-    "Freshness",
-    "Next",
-  ]) assert.match(workflow, new RegExp(phrase));
-  assert.match(workflow, /fresh\s+`specgate change status <work-ref> --json`/);
-  assert.match(workflow, /per-work\s+governance handoff/i);
-  assert.match(workflow, /Evidence: Ready for human review/);
-  assert.match(workflow, /Assurance: Agent-reported; locally reproduced; second agent affirmed/);
-  assert.match(workflow, /Freshness: Stored receipt matches the current checkout\./);
-  assert.match(docs.cliReference, /pending[\s\S]{0,180}submission rejects/i);
-  assert.match(workflow, /stale warning does not rewrite the reported state/i);
-  assert.match(workflow, /separate `Stale:` line/);
-  assert.match(workflow, /does not prove that SpecGate prevented bugs or saved\s+time/i);
-  assert.match(workflow, /not\s+accepted\s+or\s+delivered/i);
-  assert.match(workflow, /returned `data\.path`/i);
-  assert.doesNotMatch(workflow, /--file \.specgate\/completion-<work-ref>\.json/);
-});
-
-test("quickstart completes one Local CLI work item before linking to Full", () => {
-  for (const command of [
-    "specgate workspace bind",
-    "specgate artifact publish",
-    "specgate artifact show",
-    "specgate gates check",
-    "specgate gates results",
-    "specgate --yes change approve",
-    "specgate work context",
-    "specgate delivery report",
-    "specgate change submit",
-    "specgate change status",
-    "specgate --yes change accept",
-    "specgate --yes change request-changes",
-    "specgate audit",
-    "specgate stats",
-  ]) {
-    assert.match(docs.quickstart, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  }
-  assert.match(docs.quickstart, /Your IDE agent prepares and\s+publishes/);
-  assert.match(docs.quickstart, /You approve the exact artifact version/);
-  assert.match(docs.quickstart, /change approve <artifact-id>[\s\S]{0,220}--title[\s\S]{0,220}--ac/);
-  assert.match(docs.quickstart, /You make the final delivery decision/);
-  assert.doesNotMatch(docs.quickstart, /^## \d+\. Full appliance:/m);
-  assert.match(docs.quickstart, /For the Full appliance workflow, see \[Operate SpecGate\]/);
-});
-
-test("Local human-decision examples require an explicit human assertion", () => {
-  assert.match(docs.cliWorkflow, /specgate --yes change approve/);
-  assert.match(docs.codingAgentWorkflow, /specgate --yes change accept/);
-  assert.match(docs.respondToGateFailures, /specgate --yes change approve/);
-  assert.match(files.preparingWorkSkill, /specgate --yes change approve/);
-  assert.doesNotMatch(files.deliveringWorkSkill, /specgate --yes change approve/);
-  assert.match(docs.cliReference, /Local mode[\s\S]{0,240}requires explicit `--yes`/);
-  assert.match(docs.cliReference, /Full-mode[\s\S]{0,240}`--yes` is optional/);
-});
-
-test("delivery skill follows the authoritative SpecGate actor without crossing phases", () => {
-  const skill = files.deliveringWorkSkill;
-  const words = skill.trim().split(/\s+/).length;
-  const firstStatus = skill.indexOf('specgate change status "$WORK_REF" --json');
-  const driftDispatch = skill.indexOf('specgate gates tasks dispatch "$ARTIFACT_ID" --json');
-  const reworkRouting = skill.indexOf("`rework_requested`");
-  const reportSection = skill.indexOf("## 5. Report criterion evidence");
-  const reviewPendingRouting = skill.indexOf("`review_pending`");
-
-  assert.match(skill, /^description: Use when .*approved SpecGate work item/m);
-  assert.match(skill, /specgate work show "\$WORK_REF" --json[\s\S]*specgate work context "\$WORK_REF" --json/);
-  assert.ok(firstStatus > 0 && firstStatus < driftDispatch, "authoritative actor must be checked before drift or implementation");
-  assert.ok(reworkRouting > 0 && reworkRouting < reportSection, "rework guidance must be read before evidence is submitted");
-  assert.ok(reviewPendingRouting > 0 && reviewPendingRouting < driftDispatch, "review_pending must route before drift or implementation");
-  assert.match(skill.slice(reviewPendingRouting, driftDispatch), /next_command[\s\S]*immediately[\s\S]*status/i);
-  assert.match(skill, /data\.next_actor/);
-  assert.match(skill, /next_command.*verbatim/is);
-  assert.match(skill, /awaiting_review.*human reviewer/is);
-  assert.match(skill, /peer review.*only when.*human.*explicitly requests/is);
-  assert.match(skill, /new artifact version.*specgate-work-preparation/is);
-  assert.match(skill, /stop on\s+any mismatch/i);
-  assert.match(skill, /existing regular scaffold[\s\S]*reuse/is);
-  assert.match(skill, /`data\.path`.*verbatim/is);
-  assert.match(skill, /rework_requested[\s\S]*guidance[\s\S]*missing[\s\S]*focused fix[\s\S]*affected checks[\s\S]*submit[\s\S]*fresh status/is);
-  assert.doesNotMatch(skill, /specgate --yes change approve|specgate artifact publish|specgate work list|specgate status --json/);
-  assert.doesNotMatch(skill, /completion-\$WORK_REF|peer-review-\$WORK_REF|--force/);
-  assert.doesNotMatch(skill, /coding_agent\.blocked_ambiguity|coding_agent\.docs_updated/);
-  // Same ceiling as the preparation skill. Every word here is paid on each IDE
-  // agent session, so raise it only for a capability an agent cannot otherwise
-  // discover — the repository review handoff was the last one.
-  assert.ok(words <= 1000, `delivery skill is ${words} words; expected at most 1000`);
-});
-
-test("delivery examples capture the scaffold path before submitting", () => {
-  assert.match(docs.cliWorkflow, /delivery report <work-ref> --init --json[\s\S]*COMPLETION_PATH[\s\S]*change submit <work-ref> --file "\$COMPLETION_PATH"/);
-  assert.match(docs.configureModels, /delivery report <work-ref> --init --json[\s\S]*COMPLETION_PATH[\s\S]*change submit <work-ref> --file "\$COMPLETION_PATH"/);
-  assert.match(docs.codingAgentWorkflow, /delivery report <work-ref> --init --json[\s\S]*COMPLETION_PATH[\s\S]*change submit <work-ref>[\s\S]*--file "\$COMPLETION_PATH"/);
-  assert.match(docs.codingAgentWorkflow, /delivery peer-review <work-ref> --init --json[\s\S]*PEER_REVIEW_PATH[\s\S]*delivery peer-review <work-ref>[\s\S]*--file "\$PEER_REVIEW_PATH"/);
-  assert.match(docs.quickstart, /delivery report <work-ref> --init --json[\s\S]*COMPLETION_PATH[\s\S]*change submit <work-ref>[\s\S]*--file "\$COMPLETION_PATH"/);
-  assert.doesNotMatch(`${docs.cliWorkflow}\n${docs.configureModels}\n${docs.codingAgentWorkflow}\n${docs.quickstart}\n${docs.cliReference}\n${docs.respondToGateFailures}`, /<returned-data\.path>/);
-});
-
-test("update docs distinguish global refresh from project-local refresh", () => {
-  assert.match(docs.cliWorkflow, /update[\s\S]{0,220}already-installed global IDE plugin\s+files/i);
-  assert.match(docs.cliWorkflow, /project-local[\s\S]{0,180}specgate plugins install --project-local/i);
-});
-
-test("Full appliance custom-port setup selects Full mode explicitly", () => {
-  assert.match(docs.operateSpecGate, /SPECGATE_PORT=13000 specgate init --mode full/);
-  assert.doesNotMatch(docs.operateSpecGate, /SPECGATE_PORT=13000 specgate init\s*(?:\n|$)/);
-});
-
-test("work-preparation skill keeps comparison explicit and completes artifact-backed handoff", () => {
-  const skill = files.preparingWorkSkill;
-  const artifactRoute = skill.slice(skill.indexOf("## 2B."));
-
-  assert.match(skill, /artifact publish --file \.specgate\/work\/artifact\.json[\s\S]{0,80}--preview --compare/);
-  assert.match(skill, /artifact show/);
-  assert.match(skill, /specgate --yes change approve[\s\S]{0,180}--title[\s\S]{0,180}--ac/);
-  assert.match(skill, /work context/);
-  assert.match(skill, /does not detect frameworks or infer roles/i);
-  assert.doesNotMatch(skill, /auto-detect|detected source kind/i);
-  assert.doesNotMatch(skill, /specgate work create --feature/);
-  assert.ok(artifactRoute.indexOf("change approve") < artifactRoute.indexOf("work context"));
-});
-
-test("work preparation preserves framework sources and separates its two routes", () => {
-  const skill = files.preparingWorkSkill;
-  const words = skill.trim().split(/\s+/).length;
-
-  assert.match(skill, /^description: Use when preparing .*SpecGate/m);
-  assert.match(skill, /quick work[\s\S]*artifact-backed work/i);
-  assert.match(skill, /\.specgate\/work\/artifact\.json/);
-  assert.match(skill, /`path`.*repository-relative POSIX path/is);
-  assert.match(skill, /`source_file`.*contained.*manifest directory/is);
-  assert.match(skill, /`file_url`.*outside.*manifest directory/is);
-  assert.match(skill, /"feature_key"[\s\S]*"request_type"[\s\S]*"documents"/);
-  assert.match(skill, /new_feature.*change_request.*bugfix.*unknown/is);
-  assert.match(skill, /publication succeeded[\s\S]*On failure, stop[\s\S]*do not run readiness/is);
-  assert.match(skill, /never (?:relocate|move).*copy.*rename.*delete.*commit.*ignore/is);
-  assert.match(skill, /every selected source appears exactly once/i);
-  assert.match(skill, /explicit human confirmation[\s\S]*artifact publish/is);
-  assert.match(skill, /Quick work ends here/i);
-  assert.doesNotMatch(skill, /source path.*may differ|Fix each gap in the document that owns it/i);
-  assert.ok(words <= 1000, `preparation skill is ${words} words; expected at most 1000`);
-});
-
-test("public gateways strip the internal governance settings header", () => {
-  for (const gateway of [files.localGateway, files.fullGateway]) {
-    assert.match(gateway, /proxy_set_header X-SpecGate-Internal-Agent "";/);
-  }
-});
-
-test("Full UI docs keep delivery decisions and optional chat boundaries truthful", () => {
-  const uiDocs = `${docs.uiReadme}\n${docs.uiSpec}`;
-  const agentDocs = `${docs.agentsSpec}\n${docs.governanceGraphSpec}`;
-
-  assert.match(uiDocs, /Accept[\s\S]*Request changes/);
-  assert.match(uiDocs, /current platform review[\s\S]*regardless of its advisory evidence verdict/i);
-  assert.match(uiDocs, /selected username/i);
-  assert.match(uiDocs, /exact reviewed completion/i);
-  assert.match(uiDocs, /chat[\s\S]*hidden[\s\S]*unavailable/i);
-  assert.match(uiDocs, /Artifact summary[\s\S]*Readiness results[\s\S]*Knowledge search/);
-  assert.doesNotMatch(uiDocs, /deterministic local adapter|@ context insertion|thread history, search, rename, archive, delete/i);
-  assert.match(agentDocs, /four read-only diagnostic tools/);
-  assert.match(agentDocs, /Full-mode core[\s\S]*without governance chat/i);
-  assert.match(docs.contracts, /active workspace[\s\S]*workspace_id[\s\S]*thread_workspace_id/i);
-  assert.doesNotMatch(docs.contracts, /thread lists|thread fetch|thread projection|rename, archive, restore, and delete/i);
-  assert.match(docs.configureModels, /launcher is hidden/i);
-  assert.match(docs.operateSpecGate, /does not expose chat history/i);
-  assert.doesNotMatch(files.uiGovernanceRuntime, /unstable_threadListAdapter|\/governance\/threads/);
-  assert.doesNotMatch(files.agentsWebapp, /\/governance\/threads/);
-  assert.doesNotMatch(files.docRegistryMigration, /governance_threads|governance_thread_id/);
-});
-
-test("Node workflows use the current setup-node action", () => {
-  const workflows = [files.pagesWorkflow, files.readinessWorkflow, files.uiWorkflow, files.issueLabelerWorkflow];
-
-  for (const workflow of workflows) {
-    assert.match(workflow, /actions\/setup-node@v6/);
-    assert.doesNotMatch(workflow, /actions\/setup-node@v[1-5]/);
-  }
-});
-
-test("Pages validates landing changes without redeploying unrelated main pushes", () => {
-  assert.match(files.pagesWorkflow, /push:\s*\n\s+branches: \["main"\]\s*\n\s+paths:/);
-  assert.match(files.pagesWorkflow, /pull_request:\s*\n\s+paths:/);
-  for (const path of ["app/landing/**", "media/specgate-promo/**", ".github/workflows/pages.yml"]) {
-    assert.match(files.pagesWorkflow, new RegExp(`- "${path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
-  }
-  assert.match(
-    files.pagesWorkflow,
-    /deploy:\s*\n\s+if: github\.event_name != 'pull_request'[\s\S]*?concurrency:\s*\n\s+group: pages/,
+  assert.ok(codes.length > 0, "no exit-code constants found; the declaration pattern changed");
+  assert.deepEqual(
+    codes.filter((code) => !reference.includes(`| \`${code}\` |`)),
+    [],
   );
+});
+
+// Paths named in prose precisely because they must NOT exist.
+const deliberatelyAbsentPaths = new Set(["plugins/specgate/"]);
+
+test("every backticked repository path in tracked Markdown resolves", () => {
+  // Prefixes that are unambiguously repository-root-anchored. A bare `docs/...`
+  // is excluded because every module has its own `docs/`, so `docs/spec.md` in
+  // app/agents names a different file than the same string in the root rules.
+  // Module-relative paths still resolve against the file's own directory below,
+  // and `<placeholder>` segments never match the character class.
+  const repoPath = /`((?:app|deploy|docker|plugins|scripts|media|\.github)\/[A-Za-z0-9._\-/]+)`/g;
+  const missing = [];
+
+  for (const path of markdownFiles()) {
+    const dir = new URL(path, root);
+    for (const target of uniqueMatches(read(path), repoPath)) {
+      if (deliberatelyAbsentPaths.has(target)) continue;
+      if (existsSync(new URL(target, dir)) || exists(target)) continue;
+      missing.push(`${path}: ${target}`);
+    }
+  }
+
+  assert.deepEqual(missing, []);
+});
+
+test("tracked Markdown local links resolve", () => {
+  const missing = [];
+
+  for (const path of markdownFiles()) {
+    const base = new URL(path, root);
+
+    for (const match of read(path).matchAll(/!?\[[^\]\n]+\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)) {
+      let target = match[1];
+      if (/^(?:#|https?:|mailto:|app:)/.test(target)) continue;
+      if (target.startsWith("<") && target.endsWith(">")) target = target.slice(1, -1);
+
+      const localPath = target.split("#")[0];
+      if (!localPath) continue;
+
+      let decoded = localPath;
+      try {
+        decoded = decodeURIComponent(localPath);
+      } catch {
+        // Keep the raw target; the existence check below reports it.
+      }
+
+      const resolved = new URL(decoded, base);
+      if (resolved.protocol === "file:" && !existsSync(resolved)) {
+        missing.push(`${path}: ${target}`);
+      }
+    }
+  }
+
+  assert.deepEqual(missing, []);
+});
+
+test("every GitHub workflow uses supported action majors", () => {
+  const workflows = trackedFiles().filter((path) => /^\.github\/workflows\/.+\.ya?ml$/.test(path));
+  assert.ok(workflows.length > 0, "no workflows found");
+
+  const stale = [];
+  for (const path of workflows) {
+    const text = read(path);
+    for (const [action, minimum] of [
+      ["actions/setup-node", 6],
+      ["actions/checkout", 6],
+      ["actions/upload-artifact", 7],
+      ["actions/download-artifact", 7],
+    ]) {
+      for (const version of uniqueMatches(text, new RegExp(`${action}@v(\\d+)`, "g"))) {
+        if (Number(version) < minimum) stale.push(`${path}: ${action}@v${version} < v${minimum}`);
+      }
+    }
+  }
+
+  assert.deepEqual(stale, []);
+});
+
+test("every image that builds the UI uses the supported Node major", () => {
+  const dockerfiles = trackedFiles().filter((path) => /(?:^|\/)Dockerfile[.\w-]*$/.test(path));
+  assert.ok(dockerfiles.length > 0, "no Dockerfiles found");
+
+  const stale = [];
+  for (const path of dockerfiles) {
+    for (const major of uniqueMatches(read(path), /^FROM node:(\d+)/gm)) {
+      if (Number(major) !== 26) stale.push(`${path}: node:${major}`);
+    }
+  }
+
+  assert.deepEqual(stale, []);
+});
+
+// Every word in a skill is paid on each IDE agent session. Raise a budget only
+// for a capability the agent cannot otherwise discover.
+const skillBudgets = {
+  "plugins/skills/specgate/SKILL.md": 550,
+  "plugins/skills/specgate-project-setup/SKILL.md": 750,
+  "plugins/skills/specgate-work-preparation/SKILL.md": 1000,
+  "plugins/skills/specgate-work-delivery/SKILL.md": 1000,
+};
+
+test("every installed skill stays inside a declared word budget", () => {
+  const skills = trackedFiles()
+    .filter((path) => /^plugins\/skills\/[^/]+\/SKILL\.md$/.test(path))
+    .sort();
+  assert.deepEqual(skills, Object.keys(skillBudgets).sort(), "a skill has no declared word budget");
+
+  assert.deepEqual(
+    skills
+      .map((path) => ({ path, words: wordCount(read(path)), budget: skillBudgets[path] }))
+      .filter(({ words, budget }) => words > budget),
+    [],
+  );
+});
+
+test("every installed skill declares when it applies", () => {
+  assert.deepEqual(
+    trackedFiles()
+      .filter((path) => /^plugins\/skills\/[^/]+\/SKILL\.md$/.test(path))
+      .filter((path) => !/^description: Use when /m.test(read(path))),
+    [],
+  );
+});
+
+test("every skill shipped to users is byte-identical across its embedded copies", () => {
+  const canonical = trackedFiles().filter((path) => path.startsWith("plugins/skills/"));
+  assert.ok(canonical.length > 0, "no canonical plugin skills found");
+
+  const drift = [];
+  for (const source of canonical) {
+    for (const prefix of [
+      "app/doc-registry/internal/agentpackages/plugins/",
+      "app/cli/internal/command/local_plugin_assets/",
+    ]) {
+      const copy = source.replace("plugins/", prefix);
+      if (!exists(copy)) drift.push(`${copy} is missing; run make sync-plugins`);
+      else if (read(copy) !== read(source)) drift.push(`${copy} differs from ${source}; run make sync-plugins`);
+    }
+  }
+
+  assert.deepEqual(drift, []);
 });
 
 test("handwritten production modules stay below 800 lines", () => {
@@ -834,51 +263,305 @@ test("handwritten test modules stay below 1000 lines", () => {
   assert.deepEqual(oversized, []);
 });
 
-test("release UI images build with the supported Node major", () => {
-  for (const dockerfile of [files.localDockerfile, files.uiDockerfile]) {
-    assert.match(dockerfile, /^FROM node:26-alpine AS /m);
-    assert.doesNotMatch(dockerfile, /^FROM node:(?!26-alpine\b)/m);
+test("every plugin manifest publishes the same version", () => {
+  const manifests = {
+    "plugins/package.json": (json) => json.version,
+    "plugins/.cursor-plugin/plugin.json": (json) => json.version,
+    ".claude-plugin/marketplace.json": (json) => json.plugins?.[0]?.version,
+  };
+  const versions = Object.entries(manifests).map(([path, pick]) => `${path}=${pick(JSON.parse(read(path)))}`);
+
+  assert.equal(
+    new Set(versions.map((entry) => entry.split("=")[1])).size,
+    1,
+    `plugin manifests disagree: ${versions.join(", ")}`,
+  );
+});
+
+test("Codex plugin metadata stays within public-directory limits", () => {
+  const plugin = JSON.parse(read("plugins/package.json"));
+  const prompts = plugin.starter_prompts ?? [];
+
+  assert.match(plugin.name, /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/);
+  assert.match(plugin.version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/);
+  assert.ok(plugin.display_name.length <= 30, "plugin display name exceeds 30 characters");
+  assert.ok(plugin.short_description.length <= 30, "plugin short description exceeds 30 characters");
+  assert.ok(plugin.long_description.length <= 4000, "plugin long description exceeds 4,000 characters");
+  assert.ok(plugin.developer_name.length <= 80, "plugin developer name exceeds 80 characters");
+  assert.ok(prompts.length <= 3, "plugin has more than three starter prompts");
+  assert.equal(new Set(prompts.map((prompt) => prompt.trim().normalize())).size, prompts.length);
+  for (const prompt of prompts) {
+    assert.ok(prompt.length <= 128, `starter prompt exceeds 128 characters: ${prompt}`);
+    assert.doesNotMatch(prompt, /@\w/, `starter prompt must not @-mention: ${prompt}`);
   }
 });
 
-test("tracked Markdown local links resolve", () => {
-  const missing = [];
+// ---------------------------------------------------------------------------
+// Policy: names and claims that must not reappear anywhere in the repository.
+// A capability that does not exist has no code to derive from, so absence is
+// the only encoding.
+// ---------------------------------------------------------------------------
 
-  for (const path of trackedFiles()) {
-    if (!path.endsWith(".md") || path.includes("/node_modules/")) continue;
-    const markdown = read(path);
-    const base = new URL(path, root);
+// `allow` lists the files that may name a retired thing: a test proving it is
+// gone, or an ADR recording the decision that retired it. Both are the record
+// of the retirement, not a live claim.
+const retired = [
+  {
+    pattern: /plugins\/install\.sh/,
+    why: "the SpecGate CLI owns plugin installation; the standalone installer was removed",
+    allow: ["app/doc-registry/internal/api/handlers_agent_packages_test.go"],
+  },
+  {
+    pattern: /specgate-router/,
+    why: "the entry skill is named `specgate`",
+    allow: ["app/cli/internal/command/plugins_internal_test.go"],
+  },
+  { pattern: /hooks-cursor\.json/, why: "the Cursor bootstrap hook was removed" },
+  { pattern: /agent-handoff\.md/, why: "the handoff doc was retired" },
+  { pattern: /ADMIN_SECRET/, why: "no admin secret ever shipped; the appliance has no HTTP auth layer" },
+  { pattern: /docker-compose\.dev\.yml/, why: "the release is a single local appliance" },
+  { pattern: /multi-service Compose/i, why: "the release is a single local appliance" },
+  {
+    pattern: /\broute (?:suggestions|advice)\b/i,
+    why: "prose route classification was removed from the governance model surface",
+  },
+  { pattern: /public Context Pack URL/i, why: "Context Packs are never published to an unauthenticated URL" },
+  { pattern: /unstable_threadListAdapter/, why: "governance chat has no thread list; threads are ephemeral" },
+  { pattern: /Offline Local CLI/, why: "Local mode is not positioned as an offline product" },
+  { pattern: /<returned-data\.path>/, why: "examples capture the returned path in a shell variable" },
+  {
+    pattern: /\b(?:CI ingestion|tracker authority)\b/i,
+    why: "provider CI ingestion and tracker authority are not in the graduated integration contract",
+    allow: ["docs/contributing/adr/"],
+  },
+];
 
-    for (const match of markdown.matchAll(/!?\[[^\]\n]+\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)) {
-      let target = match[1];
-      if (
-        target.startsWith("#") ||
-        target.startsWith("http://") ||
-        target.startsWith("https://") ||
-        target.startsWith("mailto:") ||
-        target.startsWith("app://")
-      ) {
-        continue;
-      }
-      if (target.startsWith("<") && target.endsWith(">")) {
-        target = target.slice(1, -1);
-      }
-      const localPath = target.split("#")[0];
-      if (!localPath) continue;
+test("retired terminology and unshipped capability claims are absent repo-wide", () => {
+  // Text the repository actually ships or renders. Generated plugin copies are
+  // included on purpose: a retired term that survives `make sync-plugins` still
+  // reaches users.
+  const scannable = trackedFiles().filter(
+    (path) =>
+      /\.(?:md|mdc|mjs|cjs|jsx?|tsx?|go|py|sh|ya?ml|json|toml|conf|sql|migration|html|css|example)$/.test(path) &&
+      !path.includes("/node_modules/") &&
+      path !== "docs/release-readiness.test.mjs",
+  );
+  assert.ok(scannable.length > 0, "no scannable files found");
 
-      let resolvedTarget = localPath;
-      try {
-        resolvedTarget = decodeURIComponent(localPath);
-      } catch {
-        // Keep the raw target; the existence check below reports it.
-      }
-
-      const resolved = new URL(resolvedTarget, base);
-      if (resolved.protocol === "file:" && !existsSync(resolved)) {
-        missing.push(`${path}: ${target}`);
-      }
+  const found = [];
+  for (const path of scannable) {
+    const text = read(path);
+    for (const { pattern, why, allow = [] } of retired) {
+      if (allow.some((prefix) => path.startsWith(prefix))) continue;
+      const match = text.match(pattern);
+      if (match) found.push(`${path}: ${JSON.stringify(match[0])} — ${why}`);
     }
   }
 
-  assert.deepEqual(missing, []);
+  assert.deepEqual(found, []);
+});
+
+// Each lifecycle skill owns one phase. A command that belongs to another phase
+// is not a typo the agent recovers from — it silently crosses a governance
+// boundary, so the skill that must not name it is the only place to say so.
+// There is no code to derive this from: every command below exists and is
+// correct somewhere else.
+const skillPhaseBoundaries = [
+  {
+    skill: "plugins/skills/specgate-work-delivery/SKILL.md",
+    forbidden: [
+      { pattern: /specgate delivery review/i, why: "`change submit` runs the review; a separate call double-runs it" },
+      { pattern: /specgate gates run/, why: "delivery uses artifact gate tasks, not work-item model gates" },
+      { pattern: /specgate --yes change approve/, why: "approval is the preparation phase's human decision" },
+      { pattern: /specgate artifact publish/, why: "publishing a new version belongs to specgate-work-preparation" },
+      { pattern: /specgate work list/, why: "the delivery phase already has its work ref" },
+      { pattern: /specgate status --json/, why: "delivery reads change status for one ref, not the board" },
+      { pattern: /completion-\$WORK_REF|peer-review-\$WORK_REF/, why: "the scaffold path comes from `data.path`" },
+      { pattern: /--force/, why: "no delivery command takes --force; suggesting it invites a wrong retry" },
+    ],
+  },
+  {
+    skill: "plugins/skills/specgate-work-preparation/SKILL.md",
+    forbidden: [
+      { pattern: /specgate work create --feature/, why: "the flag does not exist; `work create` resolves the feature" },
+      { pattern: /auto-detect|detected source kind/i, why: "SpecGate does not infer frameworks or source kinds" },
+    ],
+  },
+];
+
+test("each lifecycle skill stays inside its phase", () => {
+  const crossings = [];
+
+  for (const { skill, forbidden } of skillPhaseBoundaries) {
+    const text = read(skill);
+    for (const { pattern, why } of forbidden) {
+      const match = text.match(pattern);
+      if (match) crossings.push(`${skill}: ${JSON.stringify(match[0])} — ${why}`);
+    }
+  }
+
+  assert.deepEqual(crossings, []);
+});
+
+test("the delivery skill reads the authoritative actor before it acts", () => {
+  const skill = read("plugins/skills/specgate-work-delivery/SKILL.md");
+  const at = (needle) => {
+    const index = skill.indexOf(needle);
+    assert.notEqual(index, -1, `delivery skill no longer contains ${JSON.stringify(needle)}`);
+    return index;
+  };
+
+  const status = at('specgate change status "$WORK_REF" --json');
+  const reviewPending = at("`review_pending`");
+  const rework = at("`rework_requested`");
+  const dispatch = at('specgate gates tasks dispatch "$ARTIFACT_ID" --json');
+  const report = at("## 5. Report criterion evidence");
+
+  assert.ok(status < dispatch, "the authoritative actor must be read before drift or implementation");
+  assert.ok(reviewPending < dispatch, "a review already pending must route before more work starts");
+  assert.ok(rework < report, "rework guidance must be read before evidence is submitted");
+});
+
+// In Local mode a human decision has no second party to confirm it, so the CLI
+// requires an explicit `--yes`. An example without it teaches a command that
+// fails, and the agent learns to add `--yes` by trial instead of by contract.
+test("documented Local human decisions carry the explicit assertion flag", () => {
+  const bare = [];
+
+  for (const path of [
+    "docs/using-specgate/guides/cli-workflow.md",
+    "docs/using-specgate/guides/coding-agent-workflow.md",
+    "docs/using-specgate/guides/respond-to-gate-failures.md",
+    "docs/using-specgate/quickstart.md",
+    "plugins/skills/specgate-work-preparation/SKILL.md",
+  ]) {
+    let full = false;
+    for (const line of read(path).split("\n")) {
+      // A `# Full` comment opens an example that is correct without --yes,
+      // because Full mode confirms interactively.
+      if (/^\s*#\s*(Local|Full)\b/.test(line)) full = /Full/.test(line);
+      const decision = line.match(/specgate (?:--yes )?change (approve|accept|request-changes)\b/);
+      if (decision && !full && !line.includes("specgate --yes change")) bare.push(`${path}: ${decision[0]}`);
+    }
+  }
+
+  assert.deepEqual(bare, []);
+});
+
+test("files retired with their features stay deleted", () => {
+  assert.deepEqual(
+    [
+      "deploy/compose/compose.yml",
+      "docker-compose.dev.yml",
+      "app/doc-registry/docker-compose.yml",
+      "plugins/hooks/hooks-cursor.json",
+      "plugins/skills/specgate-router/SKILL.md",
+    ].filter(exists),
+    [],
+  );
+});
+
+test("the installer never trades away download verification or rate-limited discovery", () => {
+  const installer = read("scripts/install-cli.sh");
+
+  assert.doesNotMatch(installer, /api\.github\.com/, "the unauthenticated API is rate-limited behind shared NAT");
+  assert.doesNotMatch(installer, /skipping verification/i, "a failed checksum must stop the install, not warn");
+  assert.match(installer, /Cannot verify the download/, "the installer must say why it stopped");
+});
+
+test("both gateways strip the internal header and accept the documented limits", () => {
+  for (const gateway of ["docker/local/nginx.conf", "app/ui/docker/nginx-default.conf"]) {
+    const text = read(gateway);
+    assert.match(text, /proxy_set_header X-SpecGate-Internal-Agent "";/, `${gateway} leaks the internal header`);
+    assert.match(text, /client_max_body_size 32m;/);
+    assert.match(text, /location = \/integrations\/oauth-callback/);
+    assert.match(
+      text,
+      /location ~ \^\/integrations\/\[\^\/\]\+\/resources\/\[\^\/\]\+\/\(github\|gitlab\|linear\)\/webhook\$/,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Positioning and release automation: the public claims a release may make, and
+// the workflow invariants that a doc alone cannot express.
+// ---------------------------------------------------------------------------
+
+test("public docs position the current v0.1 release honestly", () => {
+  assert.match(read("README.md"), /\*\*Status: v0\.1 early release\.\*\*/);
+  assert.doesNotMatch(read("SECURITY.md"), /The alpha release/i);
+  assert.match(read("docs/using-specgate/reference/feature-status.md"), /## Core v0\.1 paths/);
+});
+
+test("the repository ignores generated per-project agent rule files", () => {
+  const ignore = read(".gitignore");
+  assert.match(ignore, /^CLAUDE\.specgate\.md$/m);
+  assert.match(ignore, /^AGENTS\.specgate\.md$/m);
+});
+
+test("release automation rejects an already-published GitHub Release before verifying", () => {
+  const workflow = read(".github/workflows/release.yml");
+  const verifyJob = workflow.slice(workflow.indexOf("\n  verify:\n"), workflow.indexOf("\n  release-cli:\n"));
+  const preflight = verifyJob.indexOf("Reject pre-published GitHub Release");
+  const checkout = verifyJob.indexOf("actions/checkout@");
+
+  assert.notEqual(verifyJob, "", "release workflow must define a verify job before release-cli");
+  assert.notEqual(preflight, -1, "tag releases need a published-release preflight");
+  assert.ok(preflight < checkout, "release-state validation must run before expensive verification");
+});
+
+test("release verification covers every module a release ships", () => {
+  const verifyJob = read(".github/workflows/release.yml");
+
+  for (const command of [
+    "make test",
+    "uv run pytest -q",
+    "npm run test -- --run",
+    "npm run build",
+    "node --test docs/release-readiness.test.mjs",
+  ]) {
+    assert.ok(verifyJob.includes(command), `release verification does not run ${command}`);
+  }
+});
+
+test("release workflow builds only the single local appliance, with provenance and a blocking scan", () => {
+  const workflow = read(".github/workflows/release.yml");
+
+  assert.match(workflow, /--file docker\/Dockerfile\.local/);
+  assert.doesNotMatch(workflow, /dockerfile: docker\/Dockerfile\.(?:doc-registry|agents|ui)/);
+  assert.match(workflow, /--provenance=mode=max/);
+  assert.match(workflow, /--sbom=true/);
+  assert.match(workflow, /severity-cutoff: high/);
+  assert.match(workflow, /only-fixed: true/);
+});
+
+test("the release guide matches the automation it drives", () => {
+  const guide = read("docs/contributing/release.md");
+
+  assert.match(guide, /git push origin "\$VERSION"/, "the tag push is what triggers the release");
+  assert.match(guide, /Do not create or publish a GitHub Release/i, "a pre-published release fails the preflight");
+  assert.match(
+    guide,
+    /downloaded appliance image stays in Docker's cache/i,
+    "purge guidance must not claim the image is removed",
+  );
+});
+
+test("Pages validates landing changes without redeploying unrelated main pushes", () => {
+  const workflow = read(".github/workflows/pages.yml");
+
+  assert.match(workflow, /push:\s*\n\s+branches: \["main"\]\s*\n\s+paths:/);
+  assert.match(workflow, /pull_request:\s*\n\s+paths:/);
+  assert.match(
+    workflow,
+    /deploy:\s*\n\s+if: github\.event_name != 'pull_request'[\s\S]*?concurrency:\s*\n\s+group: pages/,
+  );
+});
+
+test("the local appliance deployment directory is the only Compose entry point", () => {
+  const makefile = read("Makefile");
+
+  assert.match(makefile, /LOCAL_DEPLOY_DIR := deploy\/local/);
+  assert.match(makefile, /-f \$\(LOCAL_DEPLOY_DIR\)\/compose\.yml/);
+  assert.ok(statSync(new URL("deploy/local/compose.yml", root)).isFile());
 });

@@ -15,6 +15,12 @@ import (
 // ErrInputRequired is returned when interactive input is needed but --no-input is set.
 var ErrInputRequired = errors.New("interactive input required: re-run without --no-input")
 
+// ErrWorkRefRequired is returned when a command needs a work reference and none
+// was passed. Machine callers imply --no-input with --json, so telling them to
+// drop --no-input names a flag they never set and an action they cannot take;
+// the missing argument is the thing to report.
+var ErrWorkRefRequired = errors.New("work reference required: pass it as the first argument, for example `specgate work list --json` to find one")
+
 func registerWorkCommands(root *cobra.Command, deps *Deps) {
 	work := &cobra.Command{
 		Use:   "work",
@@ -190,7 +196,7 @@ func newWorkShowCmd(deps *Deps) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if deps.Topology == config.ModeLocal {
 				if len(args) == 0 {
-					return localExitError(deps, "work.show", ErrInputRequired)
+					return localExitError(deps, "work.show", ErrWorkRefRequired)
 				}
 				store, err := openLocalStore(deps)
 				if err != nil {
@@ -290,7 +296,7 @@ IDE agents should read it before editing implementation files.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if deps.Topology == config.ModeLocal {
 				if len(args) == 0 {
-					return localExitError(deps, "work.context", ErrInputRequired)
+					return localExitError(deps, "work.context", ErrWorkRefRequired)
 				}
 				store, err := openLocalStore(deps)
 				if err != nil {

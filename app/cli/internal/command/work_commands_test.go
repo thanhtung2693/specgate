@@ -318,8 +318,8 @@ func TestWorkShowNoInputRequiresRef(t *testing.T) {
 	cmd := command.NewRootCommand(deps)
 	cmd.SetArgs([]string{"--no-input", "work", "show"})
 	err := cmd.Execute()
-	if !errors.Is(err, command.ErrInputRequired) {
-		t.Fatalf("error = %v, want ErrInputRequired", err)
+	if !errors.Is(err, command.ErrWorkRefRequired) {
+		t.Fatalf("error = %v, want ErrWorkRefRequired", err)
 	}
 }
 

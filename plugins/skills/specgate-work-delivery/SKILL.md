@@ -20,9 +20,9 @@ specgate change status "$WORK_REF" --json
 ```
 
 Stop before editing when approval is absent, the Context Pack is stale, or
-criteria are missing or placeholders. Quick work may lack an artifact. If
-artifact-backed work lacks its canonical approved version, hand the blocker to
-the human or `specgate-work-preparation`.
+criteria are missing or placeholders. Quick work may lack an artifact. When
+artifact-backed work lacks its approved version, hand that blocker to the human
+or `specgate-work-preparation`.
 
 Read only `change status.data`:
 
@@ -49,8 +49,7 @@ specgate change status "$WORK_REF" --json
 ```
 
 Continue only when `freshness` confirms a match. Stop on any mismatch signaled
-by `stale: true`. Treat an unavailable comparison as a blocker. Receipt metadata
-is not source, a patch, or cryptographic proof.
+by `stale: true`. Treat an unavailable comparison as a blocker. Receipt metadata is not proof.
 
 Completion criterion: the receipt matches this checkout, or mismatch is a
 human-owned blocker.
@@ -80,7 +79,7 @@ type checks, builds, and every skip reason. Never mutate an approved snapshot;
 a new artifact version belongs to `specgate-work-preparation`.
 
 For a pull or merge request, include
-`<!-- specgate-work-ref: $WORK_REF -->` in its description. Do not infer work
+`<!-- specgate-work-ref: $WORK_REF -->` in its description. Never infer work
 identity from branches, titles, commits, filenames, headings, or keywords.
 
 Completion criterion: every criterion is implemented or explicitly not done,
@@ -94,16 +93,17 @@ Create the CLI-owned scaffold:
 specgate delivery report "$WORK_REF" --init --json
 ```
 
-Keep returned `data.path` verbatim as `$COMPLETION_PATH`. When command reports
-an existing regular scaffold, reuse exact `error.details.path` only when
-`change_request_id` matches `work show`; when `context_digest` is present, it
-must match the Context Pack. Never overwrite automatically. Stop when an
-existing file cannot be attributed safely.
+Keep returned `data.path` verbatim as `$COMPLETION_PATH`. Reuse an existing
+regular scaffold's exact `error.details.path` only when its `change_request_id`
+matches `work show` and any `context_digest` matches the Context Pack. Never
+overwrite automatically; stop when attribution is unsafe.
 
 Fill `agent.name`, `summary`, `affected_files`, `checks[]`, and exactly one `criteria[]`
 entry per canonical criterion. Give each criterion an independently reviewable
-claim and evidence path, line, heading, file key, or URL; a command name alone
-is not evidence. Replace every `pending` check with `pass`, `fail`, or `skipped` plus
+claim and evidence. Anchor a local path with `line`, or with a `heading` that
+appears verbatim in that file: a path alone records `unanchored` and a wrong
+heading records `heading_not_found`, and neither carries an excerpt for the
+reviewer. A command name alone is not evidence. Replace every `pending` check with `pass`, `fail`, or `skipped` plus
 observed detail; submission rejects untouched placeholders. Evidence paths must
 exist. `satisfied` cannot depend on a failed, missing, or skipped required check.
 Every non-skipped `checks[].command` must be non-interactive and valid for
@@ -116,8 +116,8 @@ specgate change submit "$WORK_REF" \
   --file "$COMPLETION_PATH" --run-checks --yes --json
 ```
 
-`change submit` returns the same status payload; use its `data`, do not refetch.
-`--run-checks` replaces self-reported results with observed results. Fix failures
+`change submit` returns the same status payload; use its `data`, never refetch.
+`--run-checks` replaces self-reported results with observed ones. Fix failures
 before claiming completion.
 
 Completion criterion: submission succeeded and its returned status was read.
@@ -125,8 +125,8 @@ Completion criterion: submission succeeded and its returned status was read.
 ## 6. Follow the authoritative actor
 
 Use only `change status.data`. For `implementing_agent`, complete `missing`, run
-the supplied SpecGate `next_command` at its named step, then read status again.
-A scaffold command does not complete work.
+the supplied `next_command` at its named step, then reread status. A scaffold
+command does not complete work.
 
 Hand off `next_command` verbatim.
 
@@ -142,8 +142,8 @@ specgate delivery peer-review "$WORK_REF" \
 
 Keep `data.path` as `$PEER_REVIEW_PATH`; same existing-file rule.
 
-A pass means ready for human review, not accepted. Implementing agent never runs
-accept, request-changes, or another human-decision command.
+A pass means ready for human review, not accepted. The implementing agent never
+runs a human-decision command.
 
 Export a teammate-readable review request only when the human requests one:
 
@@ -175,15 +175,14 @@ Next (<next_actor>): <next_command>
 ```
 
 Preserve values verbatim, including every criterion line. Stale is a warning,
-not a state override. For any
-other state, show a compact `SpecGate delivery handoff` with state, missing,
-`next_actor`, and `next_command`; do not use success wording. If status fails,
-report failure. If state is `accepted`, echo it without claiming this agent
-accepted it.
+not a state override. For any other state, show a compact
+`SpecGate delivery handoff` with state, missing, `next_actor`, and
+`next_command`; never success wording. Report a failed status as failure. Echo
+`accepted` without claiming this agent accepted it.
 
 In Full mode only, use the URL returned by
 `specgate open "$WORK_REF" --print --json`. In Local mode, never call `open`.
-Do not read the completion file again or call stats or audit. Never claim cleanup
+Never reread the completion file, call stats or audit, or claim cleanup
 eligibility, bugs prevented, time saved, accepted, or delivered without
 authoritative status.
 

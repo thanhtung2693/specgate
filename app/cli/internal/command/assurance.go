@@ -402,9 +402,11 @@ func localReportEvidence(criteria []string, report local.DeliveryReport) ([]clie
 		row, _ := raw.(map[string]any)
 		checks = append(checks, client.CheckResult{
 			Name: strings.TrimSpace(fmt.Sprint(row["name"])), Status: strings.TrimSpace(fmt.Sprint(row["status"])), Detail: strings.TrimSpace(fmt.Sprint(row["detail"])),
+			Source: checkSource(row["source"]),
 		})
 	}
 	rawCriteria, _ := report.Body["criteria"].([]any)
+	citations := make(map[int]string, len(rawCriteria))
 	for _, raw := range rawCriteria {
 		row, _ := raw.(map[string]any)
 		id := strings.TrimSpace(fmt.Sprint(row["criterion_id"]))
@@ -421,6 +423,7 @@ func localReportEvidence(criteria []string, report local.DeliveryReport) ([]clie
 		}
 		reviews[index].Verdict = verdict
 		reviews[index].Why = evidenceSummary(row)
+		citations[index] = citationWeakness(row)
 	}
 	// A bound criterion reads its verdict from the named check, matching the
 	// review that produced the stored verdict; the claim never overrides it.
@@ -428,9 +431,46 @@ func localReportEvidence(criteria []string, report local.DeliveryReport) ([]clie
 		if review.VerificationBinding == "" {
 			continue
 		}
-		reviews[index].Verdict, reviews[index].Why = boundCriterionOutcome(review.VerificationBinding, checks)
+		verdict, why := boundCriterionOutcome(review.VerificationBinding, checks)
+		// The bound check decides, so a bad citation must not flip the verdict —
+		// a wrong pointer to the proof is not a broken feature. It still belongs
+		// on this line: overwriting `why` wholesale hid a fabricated citation
+		// behind a clean pass, which is what the human reads before accepting.
+		if note := citations[index]; note != "" {
+			why += "; " + note
+		}
+		reviews[index].Verdict, reviews[index].Why = verdict, why
 	}
 	return reviews, checks
+}
+
+// citationWeakness describes a cited-evidence problem worth showing next to a
+// verdict. It returns empty when the citation is anchored or absent, because a
+// criterion with no citation already reads as "no evidence supplied".
+func citationWeakness(row map[string]any) string {
+	evidence, _ := row["evidence"].(map[string]any)
+	grounding, _ := evidence["grounding"].(map[string]any)
+	status, _ := grounding["status"].(string)
+	switch strings.TrimSpace(status) {
+	case "heading_not_found":
+		heading, _ := evidence["heading"].(string)
+		return fmt.Sprintf("cited heading %q is not in %v", heading, evidence["path"])
+	case "line_out_of_range":
+		return fmt.Sprintf("cited line is past the end of %v", evidence["path"])
+	case "unanchored":
+		return fmt.Sprintf("citation names %v with no line or heading", evidence["path"])
+	case "empty_at_anchor":
+		return fmt.Sprintf("cited location in %v is blank", evidence["path"])
+	default:
+		return ""
+	}
+}
+
+// checkSource reads the CLI-stamped provenance of a check row. Only
+// `--run-checks` sets it, so a missing value means nothing re-ran the command.
+func checkSource(raw any) string {
+	source, _ := raw.(string)
+	return strings.TrimSpace(source)
 }
 
 func boundCriterionOutcome(binding string, checks []client.CheckResult) (string, string) {
@@ -438,11 +478,19 @@ func boundCriterionOutcome(binding string, checks []client.CheckResult) (string,
 		if check.Name != binding {
 			continue
 		}
+		// A human deciding acceptance reads this line, not the completion file.
+		// Saying a check "passed" without saying who observed it presents an
+		// unrun command as a deterministic result; `--run-checks` is opt-in, so
+		// the common case is the agent's own claim.
+		origin := "reported by the coding agent, not re-run"
+		if check.Source == "specgate_cli" {
+			origin = "observed by the SpecGate CLI"
+		}
 		switch check.Status {
 		case "pass":
-			return "pass", fmt.Sprintf("check %q passed (deterministic)", binding)
+			return "pass", fmt.Sprintf("check %q passed (%s)", binding, origin)
 		case "fail":
-			return "fail", fmt.Sprintf("check %q failed (deterministic)", binding)
+			return "fail", fmt.Sprintf("check %q failed (%s)", binding, origin)
 		default:
 			return "fail", fmt.Sprintf("check %q reported %q — cannot verify deterministically", binding, check.Status)
 		}

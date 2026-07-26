@@ -176,7 +176,7 @@ func newDeliveryPeerReviewCmd(deps *Deps) *cobra.Command {
 			}
 			if deps.Topology == config.ModeLocal {
 				if len(args) == 0 {
-					return localExitError(deps, "delivery.peer-review", ErrInputRequired)
+					return localExitError(deps, "delivery.peer-review", ErrWorkRefRequired)
 				}
 				delete(body, "git_receipt")
 				store, err := openLocalStore(deps)
@@ -235,7 +235,7 @@ func newDeliveryPeerReviewCmd(deps *Deps) *cobra.Command {
 
 func runLocalDeliveryPeerReviewInit(cmd *cobra.Command, args []string, deps *Deps, path string, force bool) error {
 	if len(args) == 0 {
-		return localExitError(deps, "delivery.peer-review", ErrInputRequired)
+		return localExitError(deps, "delivery.peer-review", ErrWorkRefRequired)
 	}
 	store, err := openLocalStore(deps)
 	if err != nil {
@@ -416,7 +416,7 @@ type completionTemplate struct {
 
 func runLocalDeliveryReportInit(cmd *cobra.Command, args []string, deps *Deps, path string, force bool) error {
 	if len(args) == 0 {
-		return localExitError(deps, "delivery.report", ErrInputRequired)
+		return localExitError(deps, "delivery.report", ErrWorkRefRequired)
 	}
 	store, err := openLocalStore(deps)
 	if err != nil {
