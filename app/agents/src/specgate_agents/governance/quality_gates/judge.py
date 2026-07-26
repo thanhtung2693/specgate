@@ -19,6 +19,7 @@ and a shared ``GateJudgment`` / ``GateEvaluation`` schema.
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any, Literal
 
 from langchain_core.messages import HumanMessage
@@ -60,6 +61,9 @@ ALL_LLM_GATES = (
 
 JUDGE_MODEL_DEFAULT = "governance-gate-judge"
 EVAL_SUITE_VERSION = "quality-gate-v1"
+GATE_EVALUATION_TIMEOUT_SECONDS = 30.0
+
+logger = logging.getLogger(__name__)
 
 _VERDICT_GUIDE = """\
 This change's type is: {work_type}
@@ -415,7 +419,21 @@ def _register_gate_if_enabled(
     }
     if extra_kwargs:
         kwargs.update(extra_kwargs)
-    tasks.append(evaluator(artifact_md, **kwargs))
+    tasks.append((gate, evaluator(artifact_md, **kwargs)))
+
+
+def _unavailable_gate_evaluation(
+    gate: str,
+    *,
+    judge_model: str,
+) -> GateEvaluation:
+    return GateEvaluation(
+        gate=gate,
+        state="needs_human_review",
+        hint="Model evaluation was unavailable; rerun this gate or review it manually.",
+        confidence=0.0,
+        judge_model=judge_model,
+    )
 
 
 async def evaluate_all_gates(
@@ -520,5 +538,23 @@ async def evaluate_all_gates(
         )
     if not tasks:
         return []
-    evals = await asyncio.gather(*tasks)
-    return list(evals)
+    running = [asyncio.create_task(evaluation) for _, evaluation in tasks]
+    done, pending = await asyncio.wait(
+        running,
+        timeout=GATE_EVALUATION_TIMEOUT_SECONDS,
+    )
+    for task in pending:
+        task.cancel()
+
+    results: list[GateEvaluation] = []
+    for (gate, _), task in zip(tasks, running, strict=True):
+        if task in pending:
+            logger.warning("quality gate %s timed out", gate)
+            results.append(_unavailable_gate_evaluation(gate, judge_model=judge_model))
+            continue
+        try:
+            results.append(task.result())
+        except Exception:
+            logger.warning("quality gate %s failed", gate, exc_info=True)
+            results.append(_unavailable_gate_evaluation(gate, judge_model=judge_model))
+    return results

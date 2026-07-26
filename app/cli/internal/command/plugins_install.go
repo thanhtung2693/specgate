@@ -1,6 +1,8 @@
 package command
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,19 +20,9 @@ func (i *pluginInstaller) install(agents []string) error {
 		return pluginInstallError{kind: "validation_failed", err: err}
 	}
 	for _, agent := range agents {
-		switch agent {
-		case "cursor":
-			if err := i.installCursor(); err != nil {
-				return err
-			}
-		case "codex":
-			if err := i.installCodex(); err != nil {
-				return err
-			}
-		case "claude":
-			if err := i.installClaude(); err != nil {
-				return err
-			}
+		adapter, _ := pluginAgentAdapterFor(agent)
+		if err := adapter.install(i); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -38,35 +30,9 @@ func (i *pluginInstaller) install(agents []string) error {
 
 func (i *pluginInstaller) preloadPluginFiles(agents []string) error {
 	paths := map[string]bool{}
-	addSkills := func() {
-		for _, skill := range i.pkg.Skills {
-			paths["skills/"+skill+"/SKILL.md"] = true
-		}
-	}
 	for _, agent := range agents {
-		switch agent {
-		case "cursor":
-			paths["rules/using-specgate.mdc"] = true
-			addSkills()
-		case "codex":
-			if i.opts.ProjectLocal {
-				addSkills()
-				continue
-			}
-			for _, path := range []string{".codex-plugin/plugin.json", "assets/logo.svg", "hooks/hooks.json", "hooks/run-hook.cmd", "hooks/session-start", codexPersonalMarketURL} {
-				paths[path] = true
-			}
-			addSkills()
-		case "claude":
-			if i.opts.ProjectLocal {
-				addSkills()
-				continue
-			}
-			for _, path := range []string{".claude-plugin/plugin.json", "assets/logo.svg", "hooks/hooks-claude.json", "hooks/run-hook.cmd", "hooks/session-start"} {
-				paths[path] = true
-			}
-			addSkills()
-		}
+		adapter, _ := pluginAgentAdapterFor(agent)
+		adapter.preload(i, paths)
 	}
 	ordered := make([]string, 0, len(paths))
 	for path := range paths {
@@ -90,6 +56,38 @@ func (i *pluginInstaller) preloadPluginFiles(agents []string) error {
 	return nil
 }
 
+func (i *pluginInstaller) addFocusedSkillFiles(paths map[string]bool) {
+	for _, skill := range i.pkg.Skills {
+		paths["skills/"+skill+"/SKILL.md"] = true
+	}
+}
+
+func preloadCursorPluginFiles(i *pluginInstaller, paths map[string]bool) {
+	paths["rules/using-specgate.mdc"] = true
+	i.addFocusedSkillFiles(paths)
+}
+
+func preloadCodexPluginFiles(i *pluginInstaller, paths map[string]bool) {
+	if !i.opts.ProjectLocal {
+		for _, path := range []string{".codex-plugin/plugin.json", "assets/logo.svg", "hooks/hooks.json", "hooks/run-hook.cmd", "hooks/session-start", codexPersonalMarketURL} {
+			paths[path] = true
+		}
+	}
+	i.addFocusedSkillFiles(paths)
+}
+
+func preloadClaudePluginFiles(i *pluginInstaller, paths map[string]bool) {
+	if i.opts.ProjectLocal {
+		paths["hooks/run-hook.cmd"] = true
+		paths["hooks/session-start"] = true
+	} else {
+		for _, path := range []string{".claude-plugin/plugin.json", "assets/logo.svg", "hooks/hooks-claude.json", "hooks/run-hook.cmd", "hooks/session-start"} {
+			paths[path] = true
+		}
+	}
+	i.addFocusedSkillFiles(paths)
+}
+
 func (i *pluginInstaller) validateInstallTargets(agents []string) error {
 	root := i.home
 	if i.opts.ProjectLocal {
@@ -98,74 +96,111 @@ func (i *pluginInstaller) validateInstallTargets(agents []string) error {
 			return err
 		}
 	}
-	validateSkills := func(dir string) error {
-		for _, skill := range i.pkg.Skills {
-			if err := validateOwnedPluginDir(filepath.Join(dir, skill)); err != nil {
-				return err
-			}
+	for _, agent := range agents {
+		adapter, _ := pluginAgentAdapterFor(agent)
+		if err := adapter.validate(i, root); err != nil {
+			return err
 		}
+	}
+	return nil
+}
+
+func (i *pluginInstaller) validateFocusedSkills(dir string) error {
+	for _, skill := range i.pkg.Skills {
+		if err := validateOwnedPluginDir(filepath.Join(dir, skill)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateCursorPluginInstall(i *pluginInstaller, root string) error {
+	rule := filepath.Join(root, ".cursor", "rules", "using-specgate.mdc")
+	if err := validateOwnedPluginFile(rule); err != nil {
+		return err
+	}
+	return i.validateFocusedSkills(filepath.Join(root, ".cursor", "skills"))
+}
+
+func validateCodexPluginInstall(i *pluginInstaller, root string) error {
+	if i.opts.ProjectLocal {
+		return i.validateFocusedSkills(filepath.Join(root, ".agents", "skills"))
+	}
+	if err := validateOwnedPluginDir(filepath.Join(root, ".codex", "plugins", specgatePluginName)); err != nil {
+		return err
+	}
+	if strings.TrimSpace(i.pkg.Version) != "" {
+		if err := validateOwnedPluginDir(filepath.Join(root, ".codex", "plugins", "cache", "personal", specgatePluginName, i.pkg.Version)); err != nil {
+			return err
+		}
+	}
+	for _, path := range []string{
+		filepath.Join(root, ".codex", "config.toml"),
+		filepath.Join(root, ".agents", "plugins", "marketplace.json"),
+	} {
+		if err := validateRegularFileOrMissing(path); err != nil {
+			return err
+		}
+	}
+	if err := validateCodexMarketplaceOwnership(filepath.Join(root, ".agents", "plugins", "marketplace.json")); err != nil {
+		return err
+	}
+	configPath := filepath.Join(root, ".codex", "config.toml")
+	marketplaceRoot, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	var configText string
+	if body, err := os.ReadFile(configPath); err == nil {
+		configText = string(body)
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if _, err := updateCodexConfig(configText, marketplaceRoot); err != nil {
+		return fmt.Errorf("parse %s: %w", configPath, err)
+	}
+	return nil
+}
+
+func validateClaudePluginInstall(i *pluginInstaller, root string) error {
+	if !i.opts.ProjectLocal {
+		return validateOwnedPluginDir(filepath.Join(root, ".claude", "skills", specgatePluginName))
+	}
+	if err := i.validateFocusedSkills(filepath.Join(root, ".claude", "skills")); err != nil {
+		return err
+	}
+	settingsPath := filepath.Join(root, ".claude", "settings.json")
+	if err := validateRegularFileOrMissing(settingsPath); err != nil {
+		return err
+	}
+	settings, _, err := readClaudeSettings(settingsPath)
+	if err != nil {
+		return fmt.Errorf("parse %s: %w", settingsPath, err)
+	}
+	return validateClaudeProjectHookDir(
+		filepath.Join(root, ".claude", specgateHookDirName),
+		settings,
+	)
+}
+
+func validateClaudeProjectHookDir(hookDir string, settings map[string]any) error {
+	ownershipErr := validateOwnedPluginDir(hookDir)
+	if ownershipErr == nil {
 		return nil
 	}
-	for _, agent := range agents {
-		switch agent {
-		case "cursor":
-			rule := filepath.Join(root, ".cursor", "rules", "using-specgate.mdc")
-			if err := validateOwnedPluginFile(rule); err != nil {
-				return err
-			}
-			if err := validateSkills(filepath.Join(root, ".cursor", "skills")); err != nil {
-				return err
-			}
-		case "codex":
-			if i.opts.ProjectLocal {
-				if err := validateSkills(filepath.Join(root, ".agents", "skills")); err != nil {
-					return err
-				}
-				continue
-			}
-			if err := validateOwnedPluginDir(filepath.Join(root, ".codex", "plugins", specgatePluginName)); err != nil {
-				return err
-			}
-			if strings.TrimSpace(i.pkg.Version) != "" {
-				if err := validateOwnedPluginDir(filepath.Join(root, ".codex", "plugins", "cache", "personal", specgatePluginName, i.pkg.Version)); err != nil {
-					return err
-				}
-			}
-			for _, path := range []string{
-				filepath.Join(root, ".codex", "config.toml"),
-				filepath.Join(root, ".agents", "plugins", "marketplace.json"),
-			} {
-				if err := validateRegularFileOrMissing(path); err != nil {
-					return err
-				}
-			}
-			if err := validateCodexMarketplaceOwnership(filepath.Join(root, ".agents", "plugins", "marketplace.json")); err != nil {
-				return err
-			}
-			configPath := filepath.Join(root, ".codex", "config.toml")
-			marketplaceRoot, err := filepath.Abs(root)
-			if err != nil {
-				return err
-			}
-			var configText string
-			if body, err := os.ReadFile(configPath); err == nil {
-				configText = string(body)
-			} else if !os.IsNotExist(err) {
-				return err
-			}
-			if _, err := updateCodexConfig(configText, marketplaceRoot); err != nil {
-				return fmt.Errorf("parse %s: %w", configPath, err)
-			}
-		case "claude":
-			if i.opts.ProjectLocal {
-				if err := validateSkills(filepath.Join(root, ".claude", "skills")); err != nil {
-					return err
-				}
-				continue
-			}
-			if err := validateOwnedPluginDir(filepath.Join(root, ".claude", "skills", specgatePluginName)); err != nil {
-				return err
-			}
+	if !hasSpecgateSessionHook(settings) {
+		return ownershipErr
+	}
+	entries, err := os.ReadDir(hookDir)
+	if err != nil {
+		return ownershipErr
+	}
+	for _, entry := range entries {
+		if entry.Name() != "session-start" && entry.Name() != "run-hook.cmd" {
+			return ownershipErr
+		}
+		if err := validateRegularFileOrMissing(filepath.Join(hookDir, entry.Name())); err != nil {
+			return ownershipErr
 		}
 	}
 	return nil
@@ -174,17 +209,8 @@ func (i *pluginInstaller) validateInstallTargets(agents []string) error {
 func validateProjectLocalPluginAncestors(root string, agents []string) error {
 	var dirs []string
 	for _, agent := range agents {
-		switch agent {
-		case "cursor":
-			dirs = append(dirs,
-				filepath.Join(root, ".cursor", "rules"),
-				filepath.Join(root, ".cursor", "skills"),
-			)
-		case "codex":
-			dirs = append(dirs, filepath.Join(root, ".agents", "skills"))
-		case "claude":
-			dirs = append(dirs, filepath.Join(root, ".claude", "skills"))
-		}
+		adapter, _ := pluginAgentAdapterFor(agent)
+		dirs = append(dirs, adapter.projectDirs(root)...)
 	}
 	for _, dir := range dirs {
 		if err := validatePluginDirectoryPath(root, dir); err != nil {
@@ -403,10 +429,161 @@ func (i *pluginInstaller) installClaude() error {
 	root := i.home
 	if i.opts.ProjectLocal {
 		root = "."
-		return i.installFocusedSkills(filepath.Join(root, ".claude", "skills"))
+		if err := i.installFocusedSkills(filepath.Join(root, ".claude", "skills")); err != nil {
+			return err
+		}
+		hookDir := filepath.Join(root, ".claude", "specgate-hooks")
+		for _, name := range []string{"session-start", "run-hook.cmd"} {
+			if err := i.writePluginFile("hooks/"+name, filepath.Join(hookDir, name), 0o755); err != nil {
+				return err
+			}
+		}
+		if err := i.writeFile(filepath.Join(hookDir, pluginOwnerMarker), []byte(pluginOwnerMarkerValue(i.pkg.Version)), 0o600); err != nil {
+			return err
+		}
+		return i.updateClaudeProjectSettings(filepath.Join(root, ".claude", "settings.json"))
 	}
 	pluginRoot := filepath.Join(root, ".claude", "skills", specgatePluginName)
 	return i.installPluginBundle(pluginRoot, ".claude-plugin/plugin.json", "hooks/hooks-claude.json")
+}
+
+// updateClaudeProjectSettings grants the CLI permission and registers the
+// SessionStart hook that routes governed repositories to a lifecycle phase.
+// Both belong in the project settings file, so they are merged in one read and
+// one write.
+func (i *pluginInstaller) updateClaudeProjectSettings(dest string) error {
+	return i.mergeClaudeSettings(dest, func(settings map[string]any) {
+		addSpecgateAllowRule(settings)
+		addSpecgateSessionHook(settings)
+	})
+}
+
+const (
+	claudeProjectSessionHookCommand = `"$CLAUDE_PROJECT_DIR/.claude/specgate-hooks/run-hook.cmd" session-start claude`
+	claudeSpecgateAllowRule         = "Bash(specgate:*)"
+)
+
+// addSpecgateSessionHook points SessionStart at the installed script. Matching
+// the command field preserves unrelated entries that happen to mention the
+// SpecGate hook directory elsewhere.
+func addSpecgateSessionHook(settings map[string]any) {
+	hooks, _ := settings["hooks"].(map[string]any)
+	if hooks == nil {
+		hooks = map[string]any{}
+	}
+	events, _ := hooks["SessionStart"].([]any)
+	for _, rawEntry := range events {
+		entry, _ := rawEntry.(map[string]any)
+		commands, _ := entry["hooks"].([]any)
+		for _, rawCommand := range commands {
+			command, _ := rawCommand.(map[string]any)
+			value, _ := command["command"].(string)
+			if value == claudeProjectSessionHookCommand {
+				return
+			}
+			if strings.Contains(value, "$CLAUDE_PROJECT_DIR/.claude/"+specgateHookDirName+"/run-hook.cmd") {
+				command["type"] = "command"
+				command["command"] = claudeProjectSessionHookCommand
+				return
+			}
+		}
+	}
+	hooks["SessionStart"] = append(events, map[string]any{
+		"matcher": "startup|clear|compact",
+		"hooks": []any{map[string]any{
+			"type":    "command",
+			"command": claudeProjectSessionHookCommand,
+		}},
+	})
+	settings["hooks"] = hooks
+}
+
+func addSpecgateAllowRule(settings map[string]any) {
+	permissions, _ := settings["permissions"].(map[string]any)
+	if permissions == nil {
+		permissions = map[string]any{}
+	}
+	allow, _ := permissions["allow"].([]any)
+	for _, entry := range allow {
+		if value, ok := entry.(string); ok && value == claudeSpecgateAllowRule {
+			settings["permissions"] = permissions
+			return
+		}
+	}
+	permissions["allow"] = append(allow, claudeSpecgateAllowRule)
+	settings["permissions"] = permissions
+}
+
+func hasSpecgateAllowRule(settings map[string]any) bool {
+	permissions, _ := settings["permissions"].(map[string]any)
+	allow, _ := permissions["allow"].([]any)
+	for _, entry := range allow {
+		if value, ok := entry.(string); ok && value == claudeSpecgateAllowRule {
+			return true
+		}
+	}
+	return false
+}
+
+func hasSpecgateSessionHook(settings map[string]any) bool {
+	hooks, _ := settings["hooks"].(map[string]any)
+	events, _ := hooks["SessionStart"].([]any)
+	for _, rawEntry := range events {
+		entry, _ := rawEntry.(map[string]any)
+		commands, _ := entry["hooks"].([]any)
+		for _, rawCommand := range commands {
+			command, _ := rawCommand.(map[string]any)
+			value, _ := command["command"].(string)
+			if value == claudeProjectSessionHookCommand {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// mergeClaudeSettings adds a permission rule for the CLI the installed skills tell
+// the agent to drive. Without it the first governed command is denied and the
+// work stalls before SpecGate has any record of it.
+//
+// The file belongs to the user, so an existing one is merged, never replaced:
+// unknown keys, other allow rules, and deny rules all survive.
+func (i *pluginInstaller) mergeClaudeSettings(dest string, apply func(map[string]any)) error {
+	settings, mode, err := readClaudeSettings(dest)
+	if err != nil {
+		return err
+	}
+	apply(settings)
+
+	body, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	return i.writeFile(dest, append(body, '\n'), mode)
+}
+
+func readClaudeSettings(path string) (map[string]any, os.FileMode, error) {
+	settings := map[string]any{}
+	mode := os.FileMode(0o600)
+	existing, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return settings, mode, nil
+	}
+	if err != nil {
+		return nil, 0, err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, 0, err
+	}
+	mode = info.Mode().Perm()
+	if len(bytes.TrimSpace(existing)) == 0 {
+		return settings, mode, nil
+	}
+	if err := json.Unmarshal(existing, &settings); err != nil {
+		return nil, 0, err
+	}
+	return settings, mode, nil
 }
 
 func (i *pluginInstaller) installFocusedSkills(destDir string) error {

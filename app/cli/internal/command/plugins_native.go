@@ -23,11 +23,9 @@ type nativePluginInspection struct {
 
 func inspectNativePlugin(agent, home string) nativePluginInspection {
 	var inspection nativePluginInspection
-	switch agent {
-	case "codex":
-		inspection = inspectNativeCodexPlugin(home)
-	case "claude":
-		inspection = inspectNativeClaudePlugin(home)
+	adapter, ok := pluginAgentAdapterFor(agent)
+	if ok && adapter.inspectNative != nil {
+		inspection = adapter.inspectNative(home)
 	}
 	sort.Slice(inspection.Installations, func(i, j int) bool {
 		return inspection.Installations[i].Marketplace < inspection.Installations[j].Marketplace
@@ -73,7 +71,8 @@ func inspectNativeCodexPlugin(home string) nativePluginInspection {
 
 func needsNativePluginInspection(agents []string) bool {
 	for _, agent := range agents {
-		if agent == "codex" || agent == "claude" {
+		adapter, _ := pluginAgentAdapterFor(agent)
+		if adapter.inspectNative != nil {
 			return true
 		}
 	}
@@ -111,9 +110,18 @@ func rejectNativePluginConflicts(agents []string, home string, projectLocal bool
 }
 
 func nativePluginRemovalAction(agent, marketplace string) string {
-	if agent == "claude" {
-		return fmt.Sprintf("claude plugin uninstall specgate@%s", marketplace)
+	adapter, ok := pluginAgentAdapterFor(agent)
+	if ok && adapter.nativeRemoval != nil {
+		return adapter.nativeRemoval(marketplace)
 	}
+	return fmt.Sprintf("remove specgate@%s from %s's native plugin manager", marketplace, agent)
+}
+
+func claudeNativePluginRemovalAction(marketplace string) string {
+	return fmt.Sprintf("claude plugin uninstall specgate@%s", marketplace)
+}
+
+func codexNativePluginRemovalAction(marketplace string) string {
 	return fmt.Sprintf("Open Codex and use /plugins to remove specgate@%s", marketplace)
 }
 

@@ -78,10 +78,6 @@ seed-skills:
 # Run after editing plugin files. Commit the result; check-plugins (CI) guards drift.
 AGENTPKG_PLUGINS := app/doc-registry/internal/agentpackages/plugins
 LOCAL_PLUGIN_ASSETS := app/cli/internal/command/local_plugin_assets
-# Compare plugin trees ignoring OS metadata. A stray .DS_Store is untracked and
-# globally gitignored, so it must not fail the drift guard on a contributor's
-# machine while CI, which never has one, passes.
-PLUGIN_DIFF := diff -r -x .DS_Store
 
 generate-plugins:
 	@python3 app/doc-registry/scripts/generate-plugin-metadata.py --plugin-dir plugins
@@ -92,71 +88,5 @@ sync-plugins: generate-plugins
 	@SPECGATE_PLUGIN_SOURCE=plugins SPECGATE_EMBEDDED_PLUGIN_DEST=$(LOCAL_PLUGIN_ASSETS) sh app/doc-registry/scripts/sync-embedded-plugins.sh
 	@echo "Synced plugin skills, hooks, manifests, and package files. Commit the result."
 
-# Verify embedded plugin content matches canonical sources in plugins/.
-# Works whether the plugin dirs use symlinks (diff follows them) or copies.
-# CI guard — run in CI to catch out-of-sync embedded files.
 check-plugins:
-	@python3 app/doc-registry/scripts/generate-plugin-metadata.py --plugin-dir plugins --check
-	@for file in \
-		$(LOCAL_PLUGIN_ASSETS)/.agents/plugins/marketplace.json \
-		$(LOCAL_PLUGIN_ASSETS)/.agents/plugins/personal-marketplace.json; do \
-		if ! git ls-files --error-unmatch "$$file" >/dev/null 2>&1; then \
-			echo "ERROR: required embedded plugin asset is not tracked: $$file" >&2; exit 1; \
-		fi; \
-	done
-	@$(PLUGIN_DIFF) plugins/skills $(AGENTPKG_PLUGINS)/skills >/dev/null
-	@$(PLUGIN_DIFF) plugins/hooks $(AGENTPKG_PLUGINS)/hooks >/dev/null
-	@$(PLUGIN_DIFF) plugins/assets $(AGENTPKG_PLUGINS)/assets >/dev/null
-	@$(PLUGIN_DIFF) plugins/rules $(AGENTPKG_PLUGINS)/rules >/dev/null
-	@$(PLUGIN_DIFF) plugins/.agents $(AGENTPKG_PLUGINS)/.agents >/dev/null
-	@$(PLUGIN_DIFF) plugins/.codex-plugin $(AGENTPKG_PLUGINS)/.codex-plugin >/dev/null
-	@$(PLUGIN_DIFF) plugins/.claude-plugin $(AGENTPKG_PLUGINS)/.claude-plugin >/dev/null
-	@$(PLUGIN_DIFF) plugins/.cursor-plugin $(AGENTPKG_PLUGINS)/.cursor-plugin >/dev/null
-	@diff plugins/README.md $(AGENTPKG_PLUGINS)/README.md >/dev/null
-	@diff plugins/README.md.tmpl $(AGENTPKG_PLUGINS)/README.md.tmpl >/dev/null
-	@diff plugins/package.json $(AGENTPKG_PLUGINS)/package.json >/dev/null
-	@$(PLUGIN_DIFF) plugins/skills $(LOCAL_PLUGIN_ASSETS)/skills >/dev/null
-	@$(PLUGIN_DIFF) plugins/hooks $(LOCAL_PLUGIN_ASSETS)/hooks >/dev/null
-	@$(PLUGIN_DIFF) plugins/assets $(LOCAL_PLUGIN_ASSETS)/assets >/dev/null
-	@$(PLUGIN_DIFF) plugins/rules $(LOCAL_PLUGIN_ASSETS)/rules >/dev/null
-	@$(PLUGIN_DIFF) plugins/.agents $(LOCAL_PLUGIN_ASSETS)/.agents >/dev/null
-	@$(PLUGIN_DIFF) plugins/.codex-plugin $(LOCAL_PLUGIN_ASSETS)/.codex-plugin >/dev/null
-	@$(PLUGIN_DIFF) plugins/.claude-plugin $(LOCAL_PLUGIN_ASSETS)/.claude-plugin >/dev/null
-	@$(PLUGIN_DIFF) plugins/.cursor-plugin $(LOCAL_PLUGIN_ASSETS)/.cursor-plugin >/dev/null
-	@diff plugins/README.md $(LOCAL_PLUGIN_ASSETS)/README.md >/dev/null
-	@diff plugins/README.md.tmpl $(LOCAL_PLUGIN_ASSETS)/README.md.tmpl >/dev/null
-	@diff plugins/package.json $(LOCAL_PLUGIN_ASSETS)/package.json >/dev/null
-	@echo "plugins in sync with canonical plugin sources"
-	@if grep -rn 'resolve_work_item\|list_work_items\|report_implementation_feedback\|trigger_delivery_review' \
-	    plugins/skills plugins/hooks plugins/rules 2>/dev/null; then \
-	  echo "ERROR: plugins still contain legacy tool call names — migrate to CLI commands" >&2; exit 1; fi
-	@if grep -rn '\.claude/skills/using-specgate\|legacy global skill\|older global skill' \
-	    plugins/hooks $(AGENTPKG_PLUGINS)/hooks 2>/dev/null; then \
-	  echo "ERROR: plugin hooks must use bundled skills, not stale global fallbacks" >&2; exit 1; fi
-	@for skill in specgate specgate-project-setup specgate-work-preparation specgate-work-delivery; do \
-	  if [ ! -f "plugins/skills/$$skill/SKILL.md" ]; then \
-	    echo "ERROR: missing focused skill plugins/skills/$$skill/SKILL.md" >&2; exit 1; fi; \
-	  if ! grep -Fxq "name: $$skill" "plugins/skills/$$skill/SKILL.md"; then \
-	    echo "ERROR: skill directory and frontmatter name disagree for $$skill" >&2; exit 1; fi; done
-	@for phrase in "specgate doctor --json" "specgate work show" "specgate work context" "specgate delivery report" "specgate change submit" "specgate change status"; do \
-	  if ! grep -rn "$$phrase" plugins/skills plugins/rules/ >/dev/null 2>&1; then \
-	    echo "ERROR: missing required CLI command in plugins: $$phrase" >&2; exit 1; fi; done
-	@tmp_root=$$(mktemp -d); cleanup() { rm -rf "$$tmp_root"; }; trap cleanup EXIT INT TERM; \
-	  mkdir -p "$$tmp_root/home/.claude/skills/using-specgate" "$$tmp_root/cli-plugin"; \
-	  printf '%s\n' 'OLD GLOBAL UNRELATED CONTENT' > "$$tmp_root/home/.claude/skills/using-specgate/SKILL.md"; \
-	  cp -R plugins/. "$$tmp_root/cli-plugin"; \
-	  printf '%s\n' 'specgate-plugin-v1' > "$$tmp_root/cli-plugin/.specgate-owned"; \
-	  native_context=$$(HOME="$$tmp_root/home" plugins/hooks/session-start codex | jq -r '.additionalContext'); \
-	  cli_context=$$(HOME="$$tmp_root/home" "$$tmp_root/cli-plugin/hooks/session-start" codex | jq -r '.additionalContext'); \
-	  if ! printf '%s\n' "$$native_context" | grep -Fq 'load `specgate`'; then \
-	    cleanup; echo "ERROR: session-start hook did not route explicit SpecGate work" >&2; exit 1; fi; \
-	  if ! printf '%s\n' "$$native_context" | grep -Fq 'IDE plugin manager owns'; then \
-	    cleanup; echo "ERROR: session-start hook did not identify native marketplace ownership" >&2; exit 1; fi; \
-	  if ! printf '%s\n' "$$cli_context" | grep -Fq 'SpecGate CLI owns'; then \
-	    cleanup; echo "ERROR: session-start hook did not identify CLI ownership" >&2; exit 1; fi; \
-	  if printf '%s\n' "$$native_context" | grep -Fq '# Using SpecGate'; then \
-	    cleanup; echo "ERROR: session-start hook injected the full router instead of the short bootstrap" >&2; exit 1; fi; \
-	  if printf '%s\n' "$$native_context" | grep -Fq 'UNRELATED CONTENT'; then \
-	    cleanup; echo "ERROR: session-start hook loaded stale global skill content" >&2; exit 1; fi; \
-	  cleanup
-	@echo "plugin CLI migration checks passed"
+	@scripts/check-plugins.sh

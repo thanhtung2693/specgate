@@ -299,122 +299,54 @@ func codexConfigRegistersPersonalMarketplace(text, marketplaceRoot string) bool 
 		filepath.Clean(strings.TrimSpace(source)) == filepath.Clean(strings.TrimSpace(marketplaceRoot))
 }
 
-func checkPluginAgent(agent, home string, projectLocal bool, pkg *client.PluginPackage) pluginAgentHealth {
-	health := pluginAgentHealth{Agent: agent, OK: true}
-	root := home
-	if projectLocal {
-		root = "."
+type pluginAgentFileLayout struct {
+	required         []string
+	manifest         string
+	ownershipTargets []pluginOwnershipTarget
+}
+
+func (l *pluginAgentFileLayout) addSkills(dir string, skills []string) {
+	for _, skill := range skills {
+		skillDir := filepath.Join(dir, skill)
+		l.required = append(l.required, filepath.Join(skillDir, "SKILL.md"))
+		l.ownershipTargets = append(l.ownershipTargets, pluginOwnershipTarget{path: skillDir, directory: true})
 	}
-	skills := pluginSkillsFromPackage(pkg)
+}
+
+func pluginHealthRoot(home string, projectLocal bool) string {
+	if projectLocal {
+		return "."
+	}
+	return home
+}
+
+func checkPluginAgentFiles(agent string, projectLocal bool, pkg *client.PluginPackage, layout pluginAgentFileLayout) pluginAgentHealth {
+	health := pluginAgentHealth{Agent: agent, OK: true}
 	latestVersion := ""
 	if pkg != nil {
 		latestVersion = strings.TrimSpace(pkg.Version)
 		health.LatestVersion = latestVersion
 	}
-	var required []string
-	var pluginManifest string
-	var ownershipTargets []pluginOwnershipTarget
-	addSkills := func(dir string) {
-		for _, skill := range skills {
-			skillDir := filepath.Join(dir, skill)
-			required = append(required, filepath.Join(skillDir, "SKILL.md"))
-			ownershipTargets = append(ownershipTargets, pluginOwnershipTarget{path: skillDir, directory: true})
-		}
-	}
-	switch agent {
-	case "cursor":
-		pluginRoot := filepath.Join(root, ".cursor")
-		rule := filepath.Join(pluginRoot, "rules", "using-specgate.mdc")
-		required = append(required, rule)
-		ownershipTargets = append(ownershipTargets, pluginOwnershipTarget{path: rule})
-		addSkills(filepath.Join(pluginRoot, "skills"))
-	case "codex":
-		if projectLocal {
-			addSkills(filepath.Join(root, ".agents", "skills"))
-			break
-		}
-		pluginRoot := filepath.Join(root, ".codex", "plugins", specgatePluginName)
-		configPath := filepath.Join(root, ".codex", "config.toml")
-		marketplace := filepath.Join(root, ".agents", "plugins", "marketplace.json")
-		pluginManifest = filepath.Join(pluginRoot, ".codex-plugin", "plugin.json")
-		required = append(required,
-			pluginManifest,
-			filepath.Join(pluginRoot, "assets", "logo.svg"),
-			filepath.Join(pluginRoot, "hooks", "hooks.json"),
-			filepath.Join(pluginRoot, "hooks", "run-hook.cmd"),
-			filepath.Join(pluginRoot, "hooks", "session-start"),
-			marketplace,
-			configPath,
-		)
-		ownershipTargets = append(ownershipTargets, pluginOwnershipTarget{path: pluginRoot, directory: true})
-		addSkills(filepath.Join(pluginRoot, "skills"))
-	case "claude":
-		if projectLocal {
-			addSkills(filepath.Join(root, ".claude", "skills"))
-			break
-		}
-		pluginRoot := filepath.Join(root, ".claude", "skills", specgatePluginName)
-		pluginManifest = filepath.Join(pluginRoot, ".claude-plugin", "plugin.json")
-		required = append(required,
-			pluginManifest,
-			filepath.Join(pluginRoot, "assets", "logo.svg"),
-			filepath.Join(pluginRoot, "hooks", "hooks-claude.json"),
-			filepath.Join(pluginRoot, "hooks", "run-hook.cmd"),
-			filepath.Join(pluginRoot, "hooks", "session-start"),
-		)
-		ownershipTargets = append(ownershipTargets, pluginOwnershipTarget{path: pluginRoot, directory: true})
-		addSkills(filepath.Join(pluginRoot, "skills"))
-	}
-	for _, path := range required {
+	for _, path := range layout.required {
 		if !isRegularPluginFile(path) {
 			health.Missing = append(health.Missing, path)
 		}
 	}
-	for _, target := range ownershipTargets {
+	for _, target := range layout.ownershipTargets {
 		if !hasValidPluginOwnership(target.path, target.directory) {
 			health.Missing = append(health.Missing, target.path+" SpecGate ownership")
 		}
 	}
-	if agent == "codex" && !projectLocal {
-		configPath := filepath.Join(root, ".codex", "config.toml")
-		marketplace := filepath.Join(root, ".agents", "plugins", "marketplace.json")
-		pluginRoot := filepath.Join(root, ".codex", "plugins", specgatePluginName)
-		marketplaceRoot, rootErr := filepath.Abs(root)
-		if rootErr != nil {
-			health.Missing = append(health.Missing, configPath+" registered personal marketplace")
-		}
-		if isRegularPluginFile(configPath) {
-			body, _ := os.ReadFile(configPath)
-			configText := string(body)
-			if !codexConfigEnablesSpecGate(configText) {
-				health.Missing = append(health.Missing, configPath+" enabled specgate@personal")
-			}
-			if rootErr != nil || !codexConfigRegistersPersonalMarketplace(configText, marketplaceRoot) {
-				health.Missing = append(health.Missing, configPath+" registered personal marketplace")
-			}
-		}
-		if isRegularPluginFile(marketplace) {
-			body, _ := os.ReadFile(marketplace)
-			if !codexMarketplaceHasPlugin(body) {
-				health.Missing = append(health.Missing, marketplace+" SpecGate-managed entry")
-			}
-		}
-		if latestVersion != "" {
-			cacheWarnings := codexCacheWarnings(home, pluginRoot, latestVersion, skills)
-			health.Warnings = append(health.Warnings, cacheWarnings...)
-			health.NeedsUpdate = len(cacheWarnings) > 0
-		}
-	}
-	if pluginManifest != "" && latestVersion != "" && isRegularPluginFile(pluginManifest) {
-		installedVersion := readPluginManifestVersion(pluginManifest)
+	if layout.manifest != "" && latestVersion != "" && isRegularPluginFile(layout.manifest) {
+		installedVersion := readPluginManifestVersion(layout.manifest)
 		health.InstalledVersion = installedVersion
 		if installedVersion != "" && installedVersion != latestVersion {
 			health.NeedsUpdate = true
 			health.Warnings = append(health.Warnings, pluginVersionMismatchWarning(installedVersion, latestVersion, pluginRepairCommand(agent, projectLocal)))
 		}
 	}
-	if pluginManifest == "" && latestVersion != "" && len(ownershipTargets) > 0 && len(health.Missing) == 0 {
-		installedVersion, consistent := directPluginInstallVersion(ownershipTargets)
+	if layout.manifest == "" && latestVersion != "" && len(layout.ownershipTargets) > 0 && len(health.Missing) == 0 {
+		installedVersion, consistent := directPluginInstallVersion(layout.ownershipTargets)
 		if consistent {
 			health.InstalledVersion = installedVersion
 		}
@@ -428,13 +360,126 @@ func checkPluginAgent(agent, home string, projectLocal bool, pkg *client.PluginP
 			}
 		}
 	}
+	return health
+}
+
+func finishPluginAgentHealth(health pluginAgentHealth, projectLocal bool) pluginAgentHealth {
 	sort.Strings(health.Missing)
 	sort.Strings(health.Warnings)
 	health.OK = len(health.Missing) == 0
 	if !health.OK {
-		health.RepairCommand = pluginRepairCommand(agent, projectLocal)
+		health.RepairCommand = pluginRepairCommand(health.Agent, projectLocal)
 	}
 	return health
+}
+
+func checkCursorPluginAgent(home string, projectLocal bool, pkg *client.PluginPackage) pluginAgentHealth {
+	root := pluginHealthRoot(home, projectLocal)
+	skills := pluginSkillsFromPackage(pkg)
+	pluginRoot := filepath.Join(root, ".cursor")
+	rule := filepath.Join(pluginRoot, "rules", "using-specgate.mdc")
+	layout := pluginAgentFileLayout{
+		required:         []string{rule},
+		ownershipTargets: []pluginOwnershipTarget{{path: rule}},
+	}
+	layout.addSkills(filepath.Join(pluginRoot, "skills"), skills)
+	return finishPluginAgentHealth(checkPluginAgentFiles("cursor", projectLocal, pkg, layout), projectLocal)
+}
+
+func checkCodexPluginAgent(home string, projectLocal bool, pkg *client.PluginPackage) pluginAgentHealth {
+	root := pluginHealthRoot(home, projectLocal)
+	skills := pluginSkillsFromPackage(pkg)
+	layout := pluginAgentFileLayout{}
+	if projectLocal {
+		layout.addSkills(filepath.Join(root, ".agents", "skills"), skills)
+		return finishPluginAgentHealth(checkPluginAgentFiles("codex", projectLocal, pkg, layout), projectLocal)
+	}
+	pluginRoot := filepath.Join(root, ".codex", "plugins", specgatePluginName)
+	configPath := filepath.Join(root, ".codex", "config.toml")
+	marketplace := filepath.Join(root, ".agents", "plugins", "marketplace.json")
+	layout.manifest = filepath.Join(pluginRoot, ".codex-plugin", "plugin.json")
+	layout.required = append(layout.required,
+		layout.manifest,
+		filepath.Join(pluginRoot, "assets", "logo.svg"),
+		filepath.Join(pluginRoot, "hooks", "hooks.json"),
+		filepath.Join(pluginRoot, "hooks", "run-hook.cmd"),
+		filepath.Join(pluginRoot, "hooks", "session-start"),
+		marketplace,
+		configPath,
+	)
+	layout.ownershipTargets = append(layout.ownershipTargets, pluginOwnershipTarget{path: pluginRoot, directory: true})
+	layout.addSkills(filepath.Join(pluginRoot, "skills"), skills)
+	health := checkPluginAgentFiles("codex", projectLocal, pkg, layout)
+	marketplaceRoot, rootErr := filepath.Abs(root)
+	if rootErr != nil {
+		health.Missing = append(health.Missing, configPath+" registered personal marketplace")
+	}
+	if isRegularPluginFile(configPath) {
+		body, _ := os.ReadFile(configPath)
+		configText := string(body)
+		if !codexConfigEnablesSpecGate(configText) {
+			health.Missing = append(health.Missing, configPath+" enabled specgate@personal")
+		}
+		if rootErr != nil || !codexConfigRegistersPersonalMarketplace(configText, marketplaceRoot) {
+			health.Missing = append(health.Missing, configPath+" registered personal marketplace")
+		}
+	}
+	if isRegularPluginFile(marketplace) {
+		body, _ := os.ReadFile(marketplace)
+		if !codexMarketplaceHasPlugin(body) {
+			health.Missing = append(health.Missing, marketplace+" SpecGate-managed entry")
+		}
+	}
+	if pkg != nil && strings.TrimSpace(pkg.Version) != "" {
+		cacheWarnings := codexCacheWarnings(home, pluginRoot, strings.TrimSpace(pkg.Version), skills)
+		health.Warnings = append(health.Warnings, cacheWarnings...)
+		health.NeedsUpdate = health.NeedsUpdate || len(cacheWarnings) > 0
+	}
+	return finishPluginAgentHealth(health, projectLocal)
+}
+
+func checkClaudePluginAgent(home string, projectLocal bool, pkg *client.PluginPackage) pluginAgentHealth {
+	root := pluginHealthRoot(home, projectLocal)
+	skills := pluginSkillsFromPackage(pkg)
+	layout := pluginAgentFileLayout{}
+	if projectLocal {
+		hookDir := filepath.Join(root, ".claude", specgateHookDirName)
+		settingsPath := filepath.Join(root, ".claude", "settings.json")
+		layout.required = append(layout.required,
+			filepath.Join(hookDir, "session-start"),
+			filepath.Join(hookDir, "run-hook.cmd"),
+			settingsPath,
+		)
+		layout.ownershipTargets = append(layout.ownershipTargets, pluginOwnershipTarget{path: hookDir, directory: true})
+		layout.addSkills(filepath.Join(root, ".claude", "skills"), skills)
+		health := checkPluginAgentFiles("claude", projectLocal, pkg, layout)
+		if isRegularPluginFile(settingsPath) {
+			settings, _, err := readClaudeSettings(settingsPath)
+			if err != nil {
+				health.Missing = append(health.Missing, settingsPath+" valid JSON")
+			} else {
+				if !hasSpecgateAllowRule(settings) {
+					health.Missing = append(health.Missing, settingsPath+" Bash(specgate:*) permission")
+				}
+				if !hasSpecgateSessionHook(settings) {
+					health.Missing = append(health.Missing, settingsPath+" SessionStart SpecGate hook")
+				}
+			}
+		}
+		return finishPluginAgentHealth(health, projectLocal)
+	}
+	pluginRoot := filepath.Join(root, ".claude", "skills", specgatePluginName)
+	layout.manifest = filepath.Join(pluginRoot, ".claude-plugin", "plugin.json")
+	layout.required = append(layout.required,
+		layout.manifest,
+		filepath.Join(pluginRoot, "assets", "logo.svg"),
+		filepath.Join(pluginRoot, "hooks", "hooks-claude.json"),
+		filepath.Join(pluginRoot, "hooks", "run-hook.cmd"),
+		filepath.Join(pluginRoot, "hooks", "session-start"),
+	)
+	layout.ownershipTargets = append(layout.ownershipTargets, pluginOwnershipTarget{path: pluginRoot, directory: true})
+	layout.addSkills(filepath.Join(pluginRoot, "skills"), skills)
+	return finishPluginAgentHealth(checkPluginAgentFiles("claude", projectLocal, pkg, layout), projectLocal)
 }
 
 func pluginVersionMismatchWarning(installed, latest, repair string) string {
@@ -483,16 +528,31 @@ func hasValidPluginOwnership(path string, directory bool) bool {
 	return validatePluginOwnerMarker(marker, path) == nil
 }
 
-func pluginAgentAvailable(agent string) bool {
+func executablePluginAgentAvailable(agent string) bool {
 	if _, err := exec.LookPath(agent); err == nil {
 		return true
 	}
-	if agent == "cursor" && runtime.GOOS == "darwin" {
+	return false
+}
+
+func cursorPluginAgentAvailable() bool {
+	if executablePluginAgentAvailable("cursor") {
+		return true
+	}
+	if runtime.GOOS == "darwin" {
 		if _, err := os.Stat("/Applications/Cursor.app"); err == nil {
 			return true
 		}
 	}
 	return false
+}
+
+func codexPluginAgentAvailable() bool {
+	return executablePluginAgentAvailable("codex")
+}
+
+func claudePluginAgentAvailable() bool {
+	return executablePluginAgentAvailable("claude")
 }
 
 func codexMarketplaceHasPlugin(body []byte) bool {

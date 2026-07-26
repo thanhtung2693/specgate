@@ -251,27 +251,43 @@ func (r *WorkBoardRepository) trackerPriorityUrgentWarning(
 // authoritative review passed, or when the failure is within the threshold.
 // per spec §delivery-sla.
 func (r *WorkBoardRepository) deliveryStaleWarning(
-	ctx context.Context,
 	feature workboard.Feature,
 	cr workboard.ChangeRequest,
-) (*workboard.StaleWarning, error) {
-	latest, err := r.AuthoritativeDeliveryReviewRun(ctx, cr.ID)
-	if err != nil {
-		return nil, err
-	}
+	latest *workboard.GateRun,
+) *workboard.StaleWarning {
 	if latest == nil {
-		return nil, nil // no delivery review yet — no warning
+		return nil // no delivery review yet — no warning
 	}
 	if latest.State != workboard.NextActionStateFail {
-		return nil, nil // authoritative review passed or is pending — no warning
+		return nil // authoritative review passed or is pending — no warning
 	}
 	days := int(time.Since(latest.CreatedAt).Hours() / 24)
 	if days < r.deliverySLADays {
-		return nil, nil
+		return nil
 	}
 	msg := fmt.Sprintf("Delivery review has been failing for %d day(s). Last failed on %s.", days, latest.CreatedAt.UTC().Format("2006-01-02"))
 	w := staleWarning(workboard.WarningDeliveryStale, feature.ID, cr.ID, "", msg)
-	return &w, nil
+	return &w
+}
+
+func deliveryApprovalRequiredWarning(
+	feature workboard.Feature,
+	cr workboard.ChangeRequest,
+	latest *workboard.GateRun,
+) *workboard.StaleWarning {
+	if latest == nil ||
+		latest.Executor == workboard.GateRunExecutorHuman ||
+		latest.State != workboard.NextActionStatePass {
+		return nil
+	}
+	warning := staleWarning(
+		workboard.WarningDeliveryApprovalRequired,
+		feature.ID,
+		cr.ID,
+		"",
+		"Platform delivery checks passed; explicit human approval is required.",
+	)
+	return &warning
 }
 
 // Linear workflow state.type values that matter to the conflict check. These

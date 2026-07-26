@@ -302,7 +302,14 @@ func artifactPublishPreview(body map[string]any, sources []string) map[string]an
 		"non_goals": []string{"No filesystem watcher", "No implicit repository-wide upload"},
 	}
 	if len(omitted) > 0 {
-		preview["governance_hint"] = "Impact declaration missing; Full mode may select stricter governance."
+		// Name the fields, not just the gap. An author cannot answer "supply an
+		// impact declaration", and an agent is right to refuse to invent a
+		// governance answer on the human's behalf.
+		preview["governance_hint"] = "Impact declaration missing; Full mode may select stricter governance. " +
+			"To declare it, add `impact_level` (low|medium|high) and an `impact_declaration` object answering " +
+			"`protected_domains_status`, `data_or_schema_change`, `external_contract_change`, " +
+			"`irreversible_or_complex_rollback`, and `broad_blast_radius` with yes, no, or unknown. " +
+			"Omitting it is allowed; unanswered questions resolve as unknown, which raises governance rather than lowering it."
 	}
 	return preview
 }

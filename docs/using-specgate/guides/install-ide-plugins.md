@@ -170,21 +170,27 @@ specgate plugins install --project-local
 specgate plugins doctor --project-local
 ```
 
-Project-local installation updates only the selected IDE's focused SpecGate
-skills and, for Cursor, its SpecGate rule. It does not change Codex marketplace
-configuration, `.codex/config.toml`, `AGENTS.md`, or unrelated project files.
+Project-local installation updates the selected IDE's focused SpecGate skills,
+Cursor's SpecGate rule, and Claude Code's project hook and settings entries. It
+does not change Codex marketplace configuration, `.codex/config.toml`,
+`AGENTS.md`, or unrelated project files.
 
 ## What is written
 
 | IDE | User-global location | Project-local location |
 |---|---|---|
 | Codex | `~/.codex/plugins/specgate`, `~/.agents/plugins/marketplace.json`, and `~/.codex/config.toml` | `.agents/skills/specgate` and `.agents/skills/specgate-*` |
-| Claude Code | `~/.claude/skills/specgate` | `.claude/skills/specgate` and `.claude/skills/specgate-*` |
+| Claude Code | `~/.claude/skills/specgate` | `.claude/skills/specgate`, `.claude/skills/specgate-*`, `.claude/specgate-hooks/`, and merged `.claude/settings.json` entries |
 | Cursor | `~/.cursor/rules/using-specgate.mdc`, `~/.cursor/skills/specgate`, and `~/.cursor/skills/specgate-*` | `.cursor/rules/using-specgate.mdc`, `.cursor/skills/specgate`, and `.cursor/skills/specgate-*` |
 
 Global Codex and Claude Code locations contain the native plugin package, hooks,
-and focused skills. Project-local Codex and Claude Code locations contain
-focused skills only, using the repository paths those IDEs discover directly.
+and focused skills. Project-local Codex contains focused skills only.
+Project-local Claude Code also installs its SessionStart hook and merges the
+required permission and hook entries into the existing settings object.
+Malformed settings JSON stops installation before any plugin files are written;
+existing settings permissions are preserved. `plugins doctor --project-local
+--agent claude` verifies the hook files, their SpecGate ownership marker, the
+CLI permission, and the SessionStart registration.
 
 The focused skills are:
 

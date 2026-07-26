@@ -1,6 +1,6 @@
 ---
 name: specgate
-description: Use when the user explicitly mentions SpecGate, the specgate CLI, or a SpecGate artifact, gate, Context Pack, work reference, or delivery state.
+description: Use when the working repository is SpecGate-governed, or when the user mentions SpecGate, the specgate CLI, or a SpecGate artifact, gate, Context Pack, work reference, or delivery state.
 ---
 
 # Using SpecGate
@@ -9,8 +9,8 @@ description: Use when the user explicitly mentions SpecGate, the specgate CLI, o
 
 Use when `specgate-project-setup` is unavailable after a root-only skills.sh
 install. Check `command -v specgate` (PowerShell: `Get-Command specgate`). If
-absent, explain skills.sh provides instructions only. On macOS, Linux, or
-WSL2, show this and await explicit approval:
+absent, explain skills.sh gives instructions only. On macOS, Linux, or WSL2,
+show this and await explicit approval:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/scripts/install-cli.sh | sh
@@ -41,7 +41,7 @@ On native plugin ownership, stop. Never uninstall or disable it without
 separate explicit approval.
 
 Require an IDE restart and stop before initialization. Continue through
-`specgate-project-setup` after restart.
+`specgate-project-setup` after it.
 
 Completion: one CLI-managed plugin, healthy doctor, explicit restart.
 
@@ -60,20 +60,20 @@ with the authoritative read:
 specgate change status "$WORK_REF" --json
 ```
 
-For other SpecGate concept or troubleshooting questions, use the smallest
-relevant CLI read. Do not force a lifecycle phase or mutate records.
+For other concept or troubleshooting questions, use the smallest relevant CLI
+read. Do not force a phase or mutate records.
 
 Before a mode-dependent write or handoff, run `specgate doctor --json`. Read
-`data.mode`; never infer Local or Full mode from Docker, URLs, or browser
-availability. Report an unsuccessful doctor result instead of guessing.
+`data.mode`; never infer the mode from Docker, URLs, or browser availability.
+Report an unsuccessful doctor result instead of guessing.
 
 ## Operating contract
 
 - The `specgate` CLI is the only product-state read and write surface. Never inspect
   or edit SpecGate SQLite, Postgres, object storage, deployment volumes, or
   `.specgate/local` directly. Repository source reads remain allowed.
-- Drafts, explanations, summaries, and repository reads remain ephemeral until
-  an explicit CLI command persists them.
+- Drafts, explanations, summaries, and repository reads stay ephemeral until an
+  explicit CLI command persists them.
 - The originating authoring framework owns durable source documents: their
   paths, names, lifecycle, and Git policy. SpecGate snapshots them in place. It
   does not move, copy, rename, delete, commit, or change ignore rules for them.
@@ -83,7 +83,7 @@ availability. Report an unsuccessful doctor result instead of guessing.
 - An approved Context Pack outranks chat history, tracker prose, and stale
   repository documentation. Never silently expand its scope.
 - Follow exact identifiers and versions. `artifact coverage <artifact-id>` is
-  exact-version evidence; do not collapse versions by feature name.
+  exact-version evidence; never collapse versions by feature name.
 - Follow `change status.data.next_actor` and `next_command`. When the next actor
   is human, stop and hand off that command verbatim.
 - Local mode has no UI URL and never calls `specgate open`. In Full mode, use

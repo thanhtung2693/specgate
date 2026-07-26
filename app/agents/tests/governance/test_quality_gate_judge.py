@@ -7,6 +7,8 @@ threshold->state downgrade in deterministic code, not in the model.
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from specgate_agents.governance.provider_keys import governance_gate_confidence_threshold
@@ -229,6 +231,35 @@ async def test_evaluate_all_gates_returns_all_gates() -> None:
     assert IMPLEMENTATION_TRACEABLE_GATE in gates
     assert "spec_completeness" in gates
     assert len(results) == 7
+
+
+@pytest.mark.asyncio
+async def test_evaluate_all_gates_fails_closed_when_provider_stalls(monkeypatch) -> None:
+    class _StalledRunnable:
+        async def ainvoke(self, _messages, config=None):  # noqa: ANN001, ANN202
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                # Provider SDK cleanup may not acknowledge cancellation promptly.
+                await asyncio.sleep(0.5)
+
+    class _StalledModel:
+        def with_structured_output(self, _schema, **_kwargs):  # noqa: ANN001, ANN201
+            return _StalledRunnable()
+
+    monkeypatch.setattr(
+        "specgate_agents.governance.quality_gates.judge.GATE_EVALUATION_TIMEOUT_SECONDS",
+        0.01,
+        raising=False,
+    )
+    results = await asyncio.wait_for(
+        evaluate_all_gates({"spec": "# Spec"}, model=_StalledModel()),
+        timeout=0.2,
+    )
+
+    assert len(results) == 7
+    assert all(result.state == "needs_human_review" for result in results)
+    assert all("unavailable" in result.hint.lower() for result in results)
 
 
 # A role-keyed bundle with distinctive per-role sentinel strings so we can prove routing.

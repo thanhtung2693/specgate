@@ -532,6 +532,7 @@ Workboard stale warnings are derived read-model signals. Current codes:
 - `tracker_status_conflict`
 - `tracker_priority_urgent`
 - `delivery_stale`
+- `delivery_approval_required`
 
 Warnings may affect queues and Context Packs, but they do not mutate approved
 artifacts.

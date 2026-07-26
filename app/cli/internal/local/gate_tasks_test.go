@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/specgate/specgate/app/cli/internal/local"
@@ -66,21 +67,35 @@ func TestLocalGateResultRejectsUntrustedBindings(t *testing.T) {
 	}
 	valid := validLocalGateResult(task)
 
+	// Rejection must name the offending field. "gate task result is invalid"
+	// leaves an agent with four candidates and no way to choose between them.
 	cases := []struct {
 		name string
 		edit func(*local.GateResultInput)
+		says string
 	}{
-		{"wrong gate digest", func(in *local.GateResultInput) { in.GateDigest = "sha256:wrong" }},
-		{"wrong input digest", func(in *local.GateResultInput) { in.InputDigest = "sha256:wrong" }},
-		{"wrong executor", func(in *local.GateResultInput) { in.Evaluator.Executor = "platform_llm" }},
-		{"invalid state", func(in *local.GateResultInput) { in.State = "passed" }},
+		{"wrong gate", func(in *local.GateResultInput) { in.Gate = "scope_clear" }, "gate"},
+		{"wrong gate digest", func(in *local.GateResultInput) { in.GateDigest = "sha256:wrong" }, "gate_digest"},
+		{"wrong input digest", func(in *local.GateResultInput) { in.InputDigest = "sha256:wrong" }, "input_digest"},
+		{"wrong executor", func(in *local.GateResultInput) { in.Evaluator.Executor = "platform_llm" }, "evaluator.executor"},
+		{"invalid state", func(in *local.GateResultInput) { in.State = "passed" }, "state"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			input := valid
 			tc.edit(&input)
-			if _, err := store.SubmitGateResult(ctx, selection.Workspace.ID, task.TaskID, input); !errors.Is(err, local.ErrGateTaskInvalid) {
+			_, err := store.SubmitGateResult(ctx, selection.Workspace.ID, task.TaskID, input)
+			if !errors.Is(err, local.ErrGateTaskInvalid) {
 				t.Fatalf("error = %v", err)
+			}
+			if !strings.Contains(err.Error(), tc.says) {
+				t.Fatalf("error %q does not name the offending field %q", err, tc.says)
+			}
+			if tc.name != "invalid state" {
+				want := "specgate gates tasks list " + task.ArtifactID
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("error %q lacks exact repair command %q", err, want)
+				}
 			}
 		})
 	}

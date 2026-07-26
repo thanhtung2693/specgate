@@ -70,8 +70,11 @@ specgate plugins doctor --agent all
 
 Global Codex and Claude Code installs receive native plugin packages with the
 focused skills and hooks. Project-local installs use each IDE's repository skill
-directory; Cursor also receives its rule. Use `--project-local` only when a
-repository should vendor those files. Restart the selected IDE after refresh.
+directory; Cursor also receives its rule. Claude Code additionally receives a
+CLI-owned SessionStart hook under `.claude/specgate-hooks/` and merged
+permission and hook entries in `.claude/settings.json`. Use `--project-local`
+only when a repository should vendor those files. Restart the selected IDE
+after refresh.
 
 The checked-in marketplace files support repository development and private
 distribution. They are not an official-directory availability claim.

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
@@ -12,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/zerolog"
 
+	"github.com/specgate/doc-registry/internal/agentsclient"
 	"github.com/specgate/doc-registry/internal/config"
 	"github.com/specgate/doc-registry/internal/integrations"
 	"github.com/specgate/doc-registry/internal/observability"
@@ -43,7 +43,7 @@ func (rt *Router) Build() http.Handler {
 	if rt.Logger != nil {
 		r.Use(RequestLogger(*rt.Logger))
 	}
-	r.Use(middleware.Timeout(30 * time.Second))
+	r.Use(middleware.Timeout(agentsclient.DefaultTimeout))
 	r.Use(cliWorkspaceMiddleware)
 
 	// Resolve the OAuth callback base URL per request (env override else derived

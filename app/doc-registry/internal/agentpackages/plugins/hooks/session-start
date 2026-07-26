@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Inject a short router hint. The focused skill stays the source of truth and is
-# loaded only for an explicit SpecGate task.
+# Inject a short router hint. The focused skill stays the source of truth.
 
 set -eu
 
@@ -12,13 +11,34 @@ if [ ! -f "$ROUTER" ]; then
 fi
 
 OWNER_CONTEXT="The IDE plugin manager owns this SpecGate plugin. Skip \`specgate plugins install\` and \`specgate plugins doctor\` for this IDE."
-if [ -f "${PLUGIN_ROOT}/.specgate-owned" ] && [ "$(sed -n '1p' "${PLUGIN_ROOT}/.specgate-owned")" = "specgate-plugin-v1" ]; then
+if { [ -f "${PLUGIN_ROOT}/.specgate-owned" ] && [ "$(sed -n '1p' "${PLUGIN_ROOT}/.specgate-owned")" = "specgate-plugin-v1" ]; } ||
+   { [ -f "${SCRIPT_DIR}/.specgate-owned" ] && [ "$(sed -n '1p' "${SCRIPT_DIR}/.specgate-owned")" = "specgate-plugin-v1" ]; }; then
   OWNER_CONTEXT='The SpecGate CLI owns this plugin. It may use `specgate plugins install` and `specgate plugins doctor` for this IDE.'
 fi
 
-CONTENT='<EXTREMELY_IMPORTANT>
-SpecGate skills are installed. When the user explicitly mentions SpecGate, load `specgate`; for lifecycle work, load exactly one phase before a write. Read-only concept and troubleshooting questions stay in the root skill. Do not apply the SpecGate lifecycle to generic specifications or work that is not tied to SpecGate.
+# A Git repository whose root contains `.specgate/` is governed. Requiring the
+# user to also say "SpecGate" would bypass the governance they installed.
+GOVERNED=0
+dir="$PWD"
+while [ "$dir" != "/" ]; do
+  if [ -e "$dir/.git" ]; then
+    if [ -d "$dir/.specgate" ]; then
+      GOVERNED=1
+    fi
+    break
+  fi
+  dir="$(dirname "$dir")"
+done
+
+if [ "$GOVERNED" = "1" ]; then
+  CONTENT='<EXTREMELY_IMPORTANT>
+This repository is governed by SpecGate. Before writing or editing repository files for a feature, fix, or refactor, load exactly one lifecycle phase: `specgate-work-preparation` to shape and approve the work, or `specgate-work-delivery` to implement approved work and report evidence. Load `specgate` when the user mentions SpecGate or asks a read-only concept or troubleshooting question. Work the human explicitly scopes as ungoverned, and edits outside this repository, need no phase.
 '
+else
+  CONTENT='<EXTREMELY_IMPORTANT>
+SpecGate skills are installed. When the user mentions SpecGate, load `specgate`; for lifecycle work, load exactly one phase before a write. Read-only concept and troubleshooting questions stay in the root skill. Do not apply the SpecGate lifecycle to generic specifications or work that is not tied to SpecGate.
+'
+fi
 CONTENT="${CONTENT}${OWNER_CONTEXT}
 </EXTREMELY_IMPORTANT>"
 

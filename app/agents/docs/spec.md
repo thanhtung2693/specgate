@@ -292,6 +292,11 @@ which every operation passes to its Doc Registry client. Fetching the settings
 that carry these values necessarily precedes hydration, so those two requests use
 the client default.
 
+Each model-judged quality gate has a bounded provider call. A timeout or
+provider failure yields `needs_human_review` for that gate while the other gate
+results continue; one unavailable judgment must not discard or indefinitely
+block the full readiness batch.
+
 ## 11. Multi-language and Control Flow
 
 User input may be any language. Intent, route, and entity extraction must go

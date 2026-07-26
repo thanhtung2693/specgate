@@ -242,23 +242,40 @@ func (s *Store) submitGateResultOnce(ctx context.Context, workspaceID, taskID st
 		return GateResult{}, err
 	}
 	if !expiresAt.After(time.Now().UTC()) {
-		return GateResult{}, ErrGateTaskExpired
+		return GateResult{}, fmt.Errorf("%w at %s; re-dispatch with `specgate gates check %s`",
+			ErrGateTaskExpired, task.ExpiresAt, task.ArtifactID)
 	}
 	artifact, err := getArtifactTx(ctx, tx, workspaceID, task.ArtifactID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return GateResult{}, ErrGateTaskStale
+		return GateResult{}, fmt.Errorf("%w: artifact %s no longer exists in this workspace",
+			ErrGateTaskStale, task.ArtifactID)
 	}
 	if err != nil {
 		return GateResult{}, err
 	}
+	// The artifact or its policy was republished after this task was frozen, so
+	// the rubric it was judged against no longer describes the artifact.
 	if artifact.SnapshotDigest != task.ArtifactDigest || artifact.PolicyDigest != task.PolicyDigest {
-		return GateResult{}, ErrGateTaskStale
+		return GateResult{}, fmt.Errorf("%w: artifact %s changed since this task was dispatched; re-dispatch with `specgate gates check %s` and judge the fresh task",
+			ErrGateTaskStale, task.ArtifactID, task.ArtifactID)
 	}
-	if input.Gate != task.GateKey || input.GateDigest != task.GateDigest || input.InputDigest != task.ArtifactDigest || input.Evaluator.Executor != task.Executor {
-		return GateResult{}, ErrGateTaskInvalid
+	// Name the field that failed. A bare "invalid" leaves the submitter with five
+	// candidates and no way to choose, and these values are copied by hand from
+	// the dispatched task.
+	for _, field := range []struct{ name, got, want string }{
+		{"gate", input.Gate, task.GateKey},
+		{"gate_digest", input.GateDigest, task.GateDigest},
+		{"input_digest", input.InputDigest, task.ArtifactDigest},
+		{"evaluator.executor", input.Evaluator.Executor, task.Executor},
+	} {
+		if field.got != field.want {
+			return GateResult{}, fmt.Errorf("%w: %s is %q, but task %s expects %q; copy it from `specgate gates tasks list %s`",
+				ErrGateTaskInvalid, field.name, field.got, task.TaskID, field.want, task.ArtifactID)
+		}
 	}
 	if !validGateState(input.State) {
-		return GateResult{}, ErrGateTaskInvalid
+		return GateResult{}, fmt.Errorf("%w: state %q is not one of pass, warn, fail, needs_human_review, not_applicable, not_run",
+			ErrGateTaskInvalid, input.State)
 	}
 	state := input.State
 	if task.GateKey == "spec_repo_drift" {

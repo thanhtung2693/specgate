@@ -120,12 +120,14 @@ specgate doctor --no-input
 snapshot_settings
 
 echo "--- login disposable user/workspace"
-specgate user login \
+LOGIN_JSON="$(specgate user login \
   --workspace "E2E Delivery Workspace $RUN_ID" \
   --display-name "E2E Delivery User" \
   --username "e2e-delivery-$USER_RUN_ID" \
   --email "e2e-delivery-$USER_RUN_ID@example.com" \
-  --json --no-input | jq -e '.ok == true' > /dev/null
+  --json --no-input)"
+export SPECGATE_WORKSPACE
+SPECGATE_WORKSPACE="$(printf '%s' "$LOGIN_JSON" | jq -er '.data.workspace.slug')"
 
 echo "--- needs_human_review fallback outcome"
 force_deterministic_review_settings "false"
@@ -143,8 +145,15 @@ jq \
       | .[1].claim = "partial")' \
   "$NEEDS_REVIEW_REPORT" > "$NEEDS_REVIEW_REPORT.tmp"
 mv "$NEEDS_REVIEW_REPORT.tmp" "$NEEDS_REVIEW_REPORT"
-specgate delivery submit "$NEEDS_REVIEW_REF" --file "$NEEDS_REVIEW_REPORT" --json --no-input \
-  | jq -e '.ok == true and .data.status.verdict == "needs_human_review"' > /dev/null
+NEEDS_REVIEW_RESULT="$(
+  specgate delivery submit "$NEEDS_REVIEW_REF" \
+    --file "$NEEDS_REVIEW_REPORT" --json --no-input || true
+)"
+if ! printf '%s' "$NEEDS_REVIEW_RESULT" \
+  | jq -e '.ok == true and .data.status.verdict == "needs_human_review"' > /dev/null; then
+  printf '%s\n' "$NEEDS_REVIEW_RESULT" >&2
+  exit 1
+fi
 specgate delivery status "$NEEDS_REVIEW_REF" --detail --json \
   | jq -e '.ok == true and .data.verdict == "needs_human_review" and any(.data.per_criterion[]; .verdict == "unclear")' > /dev/null
 
@@ -164,12 +173,23 @@ jq \
       | .evidence = {"kind":"command","path":"app/cli/test/e2e/delivery-outcomes.sh"})' \
   "$AUTO_ARCHIVE_REPORT" > "$AUTO_ARCHIVE_REPORT.tmp"
 mv "$AUTO_ARCHIVE_REPORT.tmp" "$AUTO_ARCHIVE_REPORT"
-specgate delivery submit "$AUTO_ARCHIVE_REF" --file "$AUTO_ARCHIVE_REPORT" --run-checks --yes --json --no-input \
-  | jq -e '.ok == true and .data.status.verdict == "pass"' > /dev/null
+AUTO_ARCHIVE_RESULT="$(
+  specgate delivery submit "$AUTO_ARCHIVE_REF" \
+    --file "$AUTO_ARCHIVE_REPORT" --run-checks --yes --json --no-input || true
+)"
+if ! printf '%s' "$AUTO_ARCHIVE_RESULT" \
+  | jq -e '.ok == true and .data.status.verdict == "pass"' > /dev/null; then
+  printf '%s\n' "$AUTO_ARCHIVE_RESULT" >&2
+  exit 1
+fi
 
-specgate work list --json \
+PENDING_APPROVAL_LIST="$(specgate work list --json)"
+if ! printf '%s' "$PENDING_APPROVAL_LIST" \
   | jq -e --arg ref "$AUTO_ARCHIVE_REF" \
-    '.ok == true and ([.data.needs_attention[]? | select(.change_request_key == $ref)] | length) == 1' > /dev/null
+    '.ok == true and ([.data.needs_attention[]? | select(.key == $ref)] | length) == 1' > /dev/null; then
+  printf '%s\n' "$PENDING_APPROVAL_LIST" >&2
+  exit 1
+fi
 specgate delivery approve "$AUTO_ARCHIVE_REF" --yes --json --no-input \
   | jq -e '.ok == true and .data.verdict == "pass" and .data.executor == "human"' > /dev/null
 
@@ -177,6 +197,6 @@ specgate work show "$AUTO_ARCHIVE_REF" --json \
   | jq -e --arg ref "$AUTO_ARCHIVE_REF" '.ok == true and .data.change_request_key == $ref' > /dev/null
 specgate work list --json \
   | jq -e --arg ref "$AUTO_ARCHIVE_REF" \
-    '.ok == true and ([.data.needs_attention[]? | select(.change_request_key == $ref)] | length) == 0' > /dev/null
+    '.ok == true and ([.data.needs_attention[]? | select(.key == $ref)] | length) == 0' > /dev/null
 
 echo "OK: delivery outcome smoke passed for $NEEDS_REVIEW_REF and $AUTO_ARCHIVE_REF"

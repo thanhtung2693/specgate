@@ -195,20 +195,12 @@ def test_build_model_openai_sets_reasoning_without_model_name_rules(monkeypatch)
     assert kwargs["reasoning_effort"] == "high"
 
 
-def test_build_model_gemini_low_keeps_streaming_budget_zero(monkeypatch) -> None:
-    # low is the default: Gemini stays at thinking_budget=0 so tokens stream as
-    # generated — no regression for the default config.
+def test_build_model_gemini_uses_native_thinking_level(monkeypatch) -> None:
     kwargs = _capture_build_kwargs(
-        monkeypatch, provider="google_genai", model_id="gemini-3.1-flash-lite", level="low"
+        monkeypatch, provider="google_genai", model_id="gemini-3.1-flash-lite", level="medium"
     )
-    assert kwargs["thinking_budget"] == 0
-
-
-def test_build_model_gemini_high_enables_thinking_budget(monkeypatch) -> None:
-    kwargs = _capture_build_kwargs(
-        monkeypatch, provider="google_genai", model_id="gemini-3.1-flash-lite", level="high"
-    )
-    assert kwargs["thinking_budget"] > 0
+    assert kwargs["thinking_level"] == "medium"
+    assert "thinking_budget" not in kwargs
 
 
 def test_build_model_anthropic_high_enables_extended_thinking(monkeypatch) -> None:
@@ -246,7 +238,7 @@ def test_build_model_uses_configured_thinking_level(monkeypatch) -> None:
     kwargs = _capture_build_kwargs(
         monkeypatch, provider="google_genai", model_id="gemini-3.1-flash-lite"
     )
-    assert kwargs["thinking_budget"] > 0
+    assert kwargs["thinking_level"] == "high"
 
 
 def test_ensure_llm_env_gates_on_model_provider(monkeypatch) -> None:

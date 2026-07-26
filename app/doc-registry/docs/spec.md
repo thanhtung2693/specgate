@@ -544,11 +544,15 @@ Stale warning codes:
 - `tracker_status_conflict`
 - `tracker_priority_urgent`
 - `delivery_stale`
+- `delivery_approval_required`
 
 `delivery_stale` fires when the current cycle's authoritative delivery review is a failing run
 older than `DELIVERY_SLA_DAYS` (default 7). It does not fire for missing review
 history, passing authoritative review, same-cycle human decisions, or failures
 inside the SLA window.
+
+`delivery_approval_required` fires when platform delivery checks pass but the
+current completion does not yet have explicit human approval.
 
 Quick-route work may be featureless. Featureless CRs must not cause the server
 or UI to invent a durable Feature.
