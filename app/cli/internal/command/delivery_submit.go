@@ -86,7 +86,7 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 			attachGitReceipt(cmd.Context(), deps, body)
 			if deps.Topology == config.ModeLocal {
 				if len(args) == 0 {
-					return localExitError(deps, spec.Operation, ErrInputRequired)
+					return localExitError(deps, spec.Operation, ErrWorkRefRequired)
 				}
 				if runChecks {
 					proceed, err := confirmCompletionChecks(deps, spec.Operation, body)
@@ -252,7 +252,7 @@ func newDeliveryReviewCmd(deps *Deps) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if deps.Topology == config.ModeLocal {
 				if len(args) == 0 {
-					return localExitError(deps, "delivery.review", ErrInputRequired)
+					return localExitError(deps, "delivery.review", ErrWorkRefRequired)
 				}
 				return printLocalDeliveryStatus(cmd, deps, args[0], "delivery.review")
 			}
@@ -328,7 +328,7 @@ func newDeliveryRejectCmd(deps *Deps) *cobra.Command {
 func runDeliveryDecision(cmd *cobra.Command, deps *Deps, args []string, op string, decision string, note string, prompt string) error {
 	if deps.Topology == config.ModeLocal {
 		if len(args) == 0 {
-			return localExitError(deps, op, ErrInputRequired)
+			return localExitError(deps, op, ErrWorkRefRequired)
 		}
 		if !deps.Yes {
 			payload := output.ErrorPayload{Code: "confirmation_required", Message: fmt.Sprintf(prompt+" Re-run with --yes to record this human decision.", args[0])}
@@ -400,7 +400,7 @@ func newDeliveryStatusCmd(deps *Deps) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if deps.Topology == config.ModeLocal {
 				if len(args) == 0 {
-					return localExitError(deps, "delivery.status", ErrInputRequired)
+					return localExitError(deps, "delivery.status", ErrWorkRefRequired)
 				}
 				return printLocalDeliveryStatus(cmd, deps, args[0], "delivery.status")
 			}

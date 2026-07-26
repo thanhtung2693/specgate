@@ -316,16 +316,17 @@ func groundCompletionEvidence(body map[string]any) {
 		if err != nil {
 			continue
 		}
-		excerpt := evidenceExcerpt(data, evidenceLine(ev["line"]))
-		if excerpt == "" {
-			continue
-		}
+		heading, _ := ev["heading"].(string)
+		excerpt, status := evidenceExcerpt(data, evidenceLine(ev["line"]), strings.TrimSpace(heading))
 		sum := sha256.Sum256(data)
-		ev["grounding"] = map[string]any{
-			"status":  "grounded",
-			"excerpt": excerpt,
-			"digest":  fmt.Sprintf("sha256:%x", sum[:]),
+		grounding := map[string]any{
+			"status": status,
+			"digest": fmt.Sprintf("sha256:%x", sum[:]),
 		}
+		if excerpt != "" {
+			grounding["excerpt"] = excerpt
+		}
+		ev["grounding"] = grounding
 	}
 }
 
@@ -345,19 +346,31 @@ func evidenceLine(raw any) int {
 	}
 }
 
-func evidenceExcerpt(data []byte, line int) string {
-	text := string(data)
+// evidenceExcerpt anchors the excerpt to what the criterion actually cites and
+// reports how it was anchored. A citation whose heading is absent from the file
+// is the exact case a reviewer needs to see: the path existing proves nothing
+// about the claim. Returning the first 2000 bytes of any readable file and
+// labelling it "grounded" hid that, so an unanchored citation now says so.
+func evidenceExcerpt(data []byte, line int, heading string) (excerpt string, status string) {
+	lines := strings.Split(string(data), "\n")
+
 	if line > 0 {
-		lines := strings.Split(text, "\n")
-		if line <= len(lines) {
-			return strings.TrimSpace(lines[line-1])
+		if line > len(lines) {
+			return "", "line_out_of_range"
 		}
+		return strings.TrimSpace(lines[line-1]), "grounded"
 	}
-	text = strings.TrimSpace(text)
-	if len(text) > 2000 {
-		text = text[:2000]
+
+	if heading != "" {
+		for index, candidate := range lines {
+			if strings.Contains(candidate, heading) {
+				return strings.TrimSpace(lines[index]), "grounded"
+			}
+		}
+		return "", "heading_not_found"
 	}
-	return text
+
+	return "", "unanchored"
 }
 
 // executeCompletionChecks re-runs each checks[].command locally and replaces the

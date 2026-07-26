@@ -508,8 +508,14 @@ Human `delivery status --detail` output separates evidence assessment,
 assurance source, human decision, and recorded Git receipt. JSON exposes the
 authoritative `verdict` and the optional `evidence_verdict`.
 
-Cited local evidence paths are existence-checked and grounded with an excerpt
-plus a SHA-256 digest. `submit --run-checks` previews and confirms the
+Cited local evidence paths are existence-checked, and each citation records a
+SHA-256 digest of the file plus a `grounding.status` saying how the excerpt was
+anchored: `grounded` when an explicit `line` or a `heading` present in the file
+located it, `heading_not_found` when the cited heading is absent,
+`line_out_of_range` when the cited line is past the end, and `unanchored` when
+the citation names only a path. Only `grounded` carries an excerpt — a path
+that merely exists is not evidence for one criterion, so the other statuses are
+reported rather than papered over with the head of the file. `submit --run-checks` previews and confirms the
 completion file's commands, re-executes the non-skipped checks through `sh -c`,
 marks those rows as observed by the SpecGate CLI, and submits the observed
 statuses. Local status then labels that assurance `locally reproduced`. When

@@ -351,6 +351,11 @@ func localExitError(deps *Deps, command string, err error) error {
 		payload = output.ErrorPayload{Code: "validation", Message: err.Error()}
 	} else if errors.Is(err, local.ErrDeliveryApproved) {
 		payload = output.ErrorPayload{Code: "conflict", Message: err.Error()}
+	} else if errors.Is(err, ErrWorkRefRequired) || errors.Is(err, ErrInputRequired) {
+		// A missing argument is a usage error. Reporting it as `unavailable`
+		// tells an automated caller the service is down and to retry, which
+		// loops forever on an invocation that can never succeed as written.
+		payload = output.ErrorPayload{Code: "usage", Message: err.Error()}
 	}
 	code := deps.Printer.Error(command, payload)
 	return &output.ExitError{Code: code, Err: err}
