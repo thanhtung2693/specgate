@@ -432,6 +432,38 @@ def test_derive_grounded_evidence_records_grounded_tier() -> None:
     assert review.state == "pass"
 
 
+@pytest.mark.parametrize(
+    "status", ["heading_not_found", "line_out_of_range", "unanchored", "empty_at_anchor"]
+)
+def test_derive_weak_citation_does_not_record_grounded_tier(status: str) -> None:
+    """A citation the CLI could not anchor is not grounded evidence.
+
+    The CLI stamps these statuses when a cited heading is absent from the file,
+    the line is past its end, the anchor is blank, or only a path was given. The
+    criterion may still pass on its bound check — a wrong pointer to the proof is
+    not a broken feature — but it must not earn the grounded trust tier.
+    """
+    review = derive_review_from_claims(
+        acceptance_criteria=[{"id": "ac_1", "text": "Handler exists"}],
+        completed_payload={
+            "criteria": [
+                {
+                    "criterion_id": "ac_1",
+                    "claim": "satisfied",
+                    "evidence": {
+                        "kind": "file",
+                        "path": "handler.go",
+                        "heading": "func Handler",
+                        "grounding": {"status": status, "digest": "sha256:abc"},
+                    },
+                }
+            ],
+            "checks": [{"name": "tests", "status": "pass"}],
+        },
+    )
+    assert review.criteria[0].trust_tier != "grounded"
+
+
 def test_derive_review_requires_canonical_criterion_ids() -> None:
     review = derive_review_from_claims(
         acceptance_criteria=[
