@@ -85,8 +85,9 @@ when the proof is in the checkout; optional `line`, `heading`, `url`, and
 and records a digest plus a `grounding.status` unless `--skip-evidence-check` is
 explicitly used. An excerpt accompanies the digest only when `line` or a
 `heading` actually present in the file anchors the citation; otherwise the
-status is `heading_not_found`, `line_out_of_range`, or `unanchored` and a
-reviewer can see that the path alone was cited.
+status is `heading_not_found`, `line_out_of_range`, `empty_at_anchor`, or
+`unanchored`, and a reviewer can see that the citation did not resolve to
+content.
 
 Those field names are the whole contract: `kind`, `path`, `line`, `heading`,
 `url`, `file_key`, and the CLI-stamped `grounding`. Any other field is rejected

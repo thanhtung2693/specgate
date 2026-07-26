@@ -41,6 +41,13 @@ func TestEvidenceExcerptReportsHowItAnchored(t *testing.T) {
 			status: "unanchored",
 		},
 		{
+			// The agents' delivery review requires a non-empty excerpt next to
+			// `grounded`, so a blank anchor must not claim to be grounded.
+			name:   "a citation resolving to a blank line is not grounded",
+			line:   2,
+			status: "empty_at_anchor",
+		},
+		{
 			name:   "a line past the end is reported, not silently clamped",
 			line:   99,
 			status: "line_out_of_range",

@@ -383,8 +383,12 @@ model reviewers in both modes, so its `status` is shared vocabulary:
 | `heading_not_found` | The cited `heading` does not appear in the file |
 | `line_out_of_range` | The cited `line` is past the end of the file |
 | `unanchored` | The citation names a path and nothing that pins it to this criterion |
+| `empty_at_anchor` | The anchor resolved, but the line there is blank |
 
-Only `grounded` carries an `excerpt`; every status carries the file `digest`. A
+Only `grounded` carries an `excerpt`, and it always carries a non-empty one —
+the agents' delivery review requires both together, so a blank anchor reports
+`empty_at_anchor` rather than an empty grounded excerpt. Every status carries the
+file `digest`. A
 non-`grounded` status is reviewer-visible information, not a submission error —
 the citation is recorded as weak rather than silently presented as verified.
 Neither Local nor Full submission validates `grounding` against a closed set, so

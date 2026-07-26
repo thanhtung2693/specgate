@@ -459,6 +459,8 @@ func citationWeakness(row map[string]any) string {
 		return fmt.Sprintf("cited line is past the end of %v", evidence["path"])
 	case "unanchored":
 		return fmt.Sprintf("citation names %v with no line or heading", evidence["path"])
+	case "empty_at_anchor":
+		return fmt.Sprintf("cited location in %v is blank", evidence["path"])
 	default:
 		return ""
 	}

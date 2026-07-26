@@ -512,8 +512,9 @@ Cited local evidence paths are existence-checked, and each citation records a
 SHA-256 digest of the file plus a `grounding.status` saying how the excerpt was
 anchored: `grounded` when an explicit `line` or a `heading` present in the file
 located it, `heading_not_found` when the cited heading is absent,
-`line_out_of_range` when the cited line is past the end, and `unanchored` when
-the citation names only a path. Only `grounded` carries an excerpt — a path
+`line_out_of_range` when the cited line is past the end, `empty_at_anchor` when
+the anchor resolves to a blank line, and `unanchored` when the citation names
+only a path. Only `grounded` carries an excerpt — a path
 that merely exists is not evidence for one criterion, so the other statuses are
 reported rather than papered over with the head of the file. `submit --run-checks` previews and confirms the
 completion file's commands, re-executes the non-skipped checks through `sh -c`,

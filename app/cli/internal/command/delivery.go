@@ -358,19 +358,30 @@ func evidenceExcerpt(data []byte, line int, heading string) (excerpt string, sta
 		if line > len(lines) {
 			return "", "line_out_of_range"
 		}
-		return strings.TrimSpace(lines[line-1]), "grounded"
+		return anchored(strings.TrimSpace(lines[line-1]))
 	}
 
 	if heading != "" {
 		for index, candidate := range lines {
 			if strings.Contains(candidate, heading) {
-				return strings.TrimSpace(lines[index]), "grounded"
+				return anchored(strings.TrimSpace(lines[index]))
 			}
 		}
 		return "", "heading_not_found"
 	}
 
 	return "", "unanchored"
+}
+
+// anchored keeps `grounded` meaning "there is an excerpt". The agents' delivery
+// review already requires a non-empty excerpt alongside the status, so a
+// citation resolving to a blank line must not claim to be grounded and then
+// carry nothing.
+func anchored(excerpt string) (string, string) {
+	if excerpt == "" {
+		return "", "empty_at_anchor"
+	}
+	return excerpt, "grounded"
 }
 
 // executeCompletionChecks re-runs each checks[].command locally and replaces the
