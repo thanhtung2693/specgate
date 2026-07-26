@@ -326,6 +326,9 @@ const retired = [
     why: "prose route classification was removed from the governance model surface",
   },
   { pattern: /public Context Pack URL/i, why: "Context Packs are never published to an unauthenticated URL" },
+  { pattern: /unstable_threadListAdapter/, why: "governance chat has no thread list; threads are ephemeral" },
+  { pattern: /Offline Local CLI/, why: "Local mode is not positioned as an offline product" },
+  { pattern: /<returned-data\.path>/, why: "examples capture the returned path in a shell variable" },
   {
     pattern: /\b(?:CI ingestion|tracker authority)\b/i,
     why: "provider CI ingestion and tracker authority are not in the graduated integration contract",
@@ -356,6 +359,93 @@ test("retired terminology and unshipped capability claims are absent repo-wide",
   }
 
   assert.deepEqual(found, []);
+});
+
+// Each lifecycle skill owns one phase. A command that belongs to another phase
+// is not a typo the agent recovers from — it silently crosses a governance
+// boundary, so the skill that must not name it is the only place to say so.
+// There is no code to derive this from: every command below exists and is
+// correct somewhere else.
+const skillPhaseBoundaries = [
+  {
+    skill: "plugins/skills/specgate-work-delivery/SKILL.md",
+    forbidden: [
+      { pattern: /specgate delivery review/i, why: "`change submit` runs the review; a separate call double-runs it" },
+      { pattern: /specgate gates run/, why: "delivery uses artifact gate tasks, not work-item model gates" },
+      { pattern: /specgate --yes change approve/, why: "approval is the preparation phase's human decision" },
+      { pattern: /specgate artifact publish/, why: "publishing a new version belongs to specgate-work-preparation" },
+      { pattern: /specgate work list/, why: "the delivery phase already has its work ref" },
+      { pattern: /specgate status --json/, why: "delivery reads change status for one ref, not the board" },
+      { pattern: /completion-\$WORK_REF|peer-review-\$WORK_REF/, why: "the scaffold path comes from `data.path`" },
+      { pattern: /--force/, why: "no delivery command takes --force; suggesting it invites a wrong retry" },
+    ],
+  },
+  {
+    skill: "plugins/skills/specgate-work-preparation/SKILL.md",
+    forbidden: [
+      { pattern: /specgate work create --feature/, why: "the flag does not exist; `work create` resolves the feature" },
+      { pattern: /auto-detect|detected source kind/i, why: "SpecGate does not infer frameworks or source kinds" },
+    ],
+  },
+];
+
+test("each lifecycle skill stays inside its phase", () => {
+  const crossings = [];
+
+  for (const { skill, forbidden } of skillPhaseBoundaries) {
+    const text = read(skill);
+    for (const { pattern, why } of forbidden) {
+      const match = text.match(pattern);
+      if (match) crossings.push(`${skill}: ${JSON.stringify(match[0])} — ${why}`);
+    }
+  }
+
+  assert.deepEqual(crossings, []);
+});
+
+test("the delivery skill reads the authoritative actor before it acts", () => {
+  const skill = read("plugins/skills/specgate-work-delivery/SKILL.md");
+  const at = (needle) => {
+    const index = skill.indexOf(needle);
+    assert.notEqual(index, -1, `delivery skill no longer contains ${JSON.stringify(needle)}`);
+    return index;
+  };
+
+  const status = at('specgate change status "$WORK_REF" --json');
+  const reviewPending = at("`review_pending`");
+  const rework = at("`rework_requested`");
+  const dispatch = at('specgate gates tasks dispatch "$ARTIFACT_ID" --json');
+  const report = at("## 5. Report criterion evidence");
+
+  assert.ok(status < dispatch, "the authoritative actor must be read before drift or implementation");
+  assert.ok(reviewPending < dispatch, "a review already pending must route before more work starts");
+  assert.ok(rework < report, "rework guidance must be read before evidence is submitted");
+});
+
+// In Local mode a human decision has no second party to confirm it, so the CLI
+// requires an explicit `--yes`. An example without it teaches a command that
+// fails, and the agent learns to add `--yes` by trial instead of by contract.
+test("documented Local human decisions carry the explicit assertion flag", () => {
+  const bare = [];
+
+  for (const path of [
+    "docs/using-specgate/guides/cli-workflow.md",
+    "docs/using-specgate/guides/coding-agent-workflow.md",
+    "docs/using-specgate/guides/respond-to-gate-failures.md",
+    "docs/using-specgate/quickstart.md",
+    "plugins/skills/specgate-work-preparation/SKILL.md",
+  ]) {
+    let full = false;
+    for (const line of read(path).split("\n")) {
+      // A `# Full` comment opens an example that is correct without --yes,
+      // because Full mode confirms interactively.
+      if (/^\s*#\s*(Local|Full)\b/.test(line)) full = /Full/.test(line);
+      const decision = line.match(/specgate (?:--yes )?change (approve|accept|request-changes)\b/);
+      if (decision && !full && !line.includes("specgate --yes change")) bare.push(`${path}: ${decision[0]}`);
+    }
+  }
+
+  assert.deepEqual(bare, []);
 });
 
 test("files retired with their features stay deleted", () => {
