@@ -199,25 +199,13 @@ make seed-skills
 docker compose -f docker-compose.yml exec doc-registry doc-registry --migrate-only
 ```
 
-### Kubernetes
-
-Inside a running pod (the binary is on `$PATH`):
-
-```bash
-kubectl exec -it <doc-registry-pod> -- doc-registry --migrate-only
-kubectl exec -it <doc-registry-pod> -- doc-registry --seed-skills # seeds each existing workspace
-```
-
-Already shelled into the pod? Just run the binary directly:
+Inside any running container the binary is on `$PATH`, so a shell in the
+container runs the same commands directly:
 
 ```sh
 doc-registry --migrate-only
 doc-registry --seed-skills # seeds each existing workspace
 ```
-
-For CI/CD, a one-shot Job using the same image + `envFrom` as the Deployment
-is the cleanest pattern — the Job runs `command: ["doc-registry",
-"--migrate-only"]`, exits, and gets cleaned up automatically.
 
 ### When to seed
 

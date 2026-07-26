@@ -142,13 +142,13 @@ underlying detail.
 | `coverage` | Classify every canonical specification in the selected workspace as `uncovered`, `unfinished`, `stale`, or `delivered`, including the governing artifact, related work refs, and a next command for every non-delivered state |
 | `portable` | `portable export --file <path>` writes the selected Local workspace to a private, checksummed `specgate.portable/v1` bundle. Export and import both enforce a 64 MiB bundle limit; an oversized export does not replace an existing destination, and export refuses the active Local SQLite database or journal paths. In Full mode, `portable import --file <path> --dry-run` reports every destination conflict without writing; re-run with `--yes` only after reviewing an empty conflict list. A retry reuses only exact prior imports proven by source workspace, record IDs, and digests |
 | `verify` | Produce one read-only closeout verdict for a work ref: artifact-backed work includes the exact artifact version and digest, while artifact-free work sets `quick_route=true`; both include criterion evidence, checks, authoritative delivery verdict, cleanup eligibility, and the next command. A non-closeable result exits `1` |
-| `work` | List the attention queue (`work list --all-workspaces` is an explicit aggregate status read), or enumerate ready work in the selected workspace with `work list --phase ready` to discover pickup-ready items and their refs. Ready includes approved artifact-backed work and quick-route bug fixes with no lead artifact. The aggregate and phase flags cannot be combined. Both modes can create feature-backed or quick work and read its immutable Context Pack; Local quick work requires at least one explicit `--ac`. `work policy`, archive, and server-backed resolution are Full-only |
+| `work` | List the attention queue (`work list --all-workspaces` is an explicit aggregate status read), or enumerate ready work in the selected workspace with `work list --phase ready` to discover pickup-ready items and their refs. Ready includes approved artifact-backed work and quick-route bug fixes with no lead artifact. The aggregate and phase flags cannot be combined. `work show <ref>` prints one item's detail. Both modes can create feature-backed or quick work and read its immutable Context Pack; Local quick work requires at least one explicit `--ac`. `work policy`, archive, and server-backed resolution are Full-only |
 | `audit` | `audit <ref>` prints the full governance trail for a work item — the "git log for governance". It resolves a change-request id or key (e.g. `CR-1234`) and renders one line per event (date, actor+kind, action, verdict, trust tier, detail) sorted oldest-first, merging artifact status events, readiness/quality gate runs, delivery reviews, and workboard lifecycle events. Read-only; `--json` prints the raw `AuditTrail`; `--verify` recomputes the tamper-evidence event chain and reports `intact` or `tampered` (naming the first bad event). Unresolvable ref → clean error |
-| `feature` | List and inspect governed features in either mode so a new artifact can reuse the exact key instead of creating a duplicate. In Full mode, `feature list` hides archived features unless `--all` is set, and `feature archive <key-or-id>` retires a feature with confirmation while keeping its record and history |
+| `feature` | List and inspect governed features in either mode so a new artifact can reuse the exact key instead of creating a duplicate. `feature show <key-or-id>` prints one feature. In Full mode, `feature list` hides archived features unless `--all` is set, and `feature archive <key-or-id>` retires a feature with confirmation while keeping its record and history |
 | `knowledge` | Full mode only: list, inspect, add, and search workspace-scoped Governance Knowledge documents. `knowledge add-text --title <title> --file <path>` uploads a text/Markdown source into the selected workspace; `knowledge search <query>` retrieves cited chunks using the configured embedding model |
 | `artifact` | Preview (`artifact publish --preview`), optionally compare that preview with one explicit base artifact (`--compare <artifact-id>`), publish complete immutable versions, inspect, and read artifacts; `artifact coverage <artifact-id>` is a read-only exact-version delivery view; decide as a human reviewer with `artifact approve` in either mode or `artifact request-changes` in Full mode (optional `--note`); `artifact show` accepts a unique id prefix from `artifact list` |
-| `gates` | Artifact readiness checks (`check`), stored artifact results (`results`), and IDE-agent artifact gate tasks (`tasks`) work in both modes. Local IDE gate tasks and Full model-less IDE gate tasks use the same `check` → `tasks list/show/submit-result` → `results` loop. Compact `gates check --summary` output preserves each result's executor origin so agent-attested evidence is not presented as platform evaluation. Human `gates check` output names every gate with its state, trust origin, and hint beneath the aggregate, because an aggregate alone cannot distinguish one soft hint from four gates still awaiting a result. `tasks list` already returns each task's `skill_content` and both digests, so `tasks show` is only needed for a task id obtained some other way. A rejected `submit-result` names the field that did not match the dispatched task — `gate`, `gate_digest`, `input_digest`, `evaluator.executor`, or `state` — with the value the task expects. A task rejected as stale means the artifact or its policy was republished after the task was frozen; re-dispatch with `gates check` and judge the fresh task rather than resubmitting. Work-item model gates (`run`, `status`, `history`) are Full-only |
-| `delivery` | Report implementation, run delivery review, and decide delivery as a human reviewer; `delivery report --init` scaffolds a conservative completion report (`.specgate/completion-<ref>.json`) with a required blank `agent.name`, empty affected files, one `pending` check per unique declared verification binding (or a `tests` fallback), and `not_done` criterion claims. `pending` is a scaffold-only placeholder: submission rejects it until the agent records `pass`, `fail`, or an explained `skipped`. The scaffold captures Git identity but defers delivery-scope comparison until `affected_files` is supplied at submission. Fill `agent.name` with the coding agent's stable name before submission. `delivery peer-review --init` scaffolds a review bound to the latest completion event and its exact Git receipt; its reviewer must cover every canonical criterion exactly once, then `--file` records it and reruns review. This works in both Local and Full mode: the peer must differ from the completion agent, and the CLI preserves the receipt in the bound scaffold so the server can verify the same completion. Direct `delivery report --file` is Full-mode feedback ingestion; Local completion uses `change submit`. `delivery submit` accepts only `coding_agent.completed`; both paths reject missing completion-agent identity, untouched pending checks, `satisfied` claims without evidence, and passing checks without runnable commands before any network call. `delivery submit` runs the whole tail (report → gates → review → status), while `delivery approve` / `reject` record human decisions. `delivery handoff export` writes a committable review request for a reviewed work item and `delivery handoff show` renders one read-only without a workspace or server; see [Hand a review to a teammate through the repository](#hand-a-review-to-a-teammate-through-the-repository). A human may accept an advisory or false-negative review without hiding its evidence verdict; the completion reporter cannot approve its own delivery, and a new completion needs its own review and human decision. These rules are the same in Local and Full mode. Human `delivery status --detail` output separates evidence assessment, assurance source, human decision, and recorded Git receipt; JSON exposes the authoritative `verdict` and optional `evidence_verdict`. Cited local evidence paths are existence-checked and grounded with an excerpt plus SHA-256 digest; `submit --run-checks` previews and confirms the completion file's commands before re-executing non-skipped checks through `sh -c`, marks those rows as observed by the SpecGate CLI, and submits their observed statuses. Local status then labels that assurance as `locally reproduced`, and when re-execution contradicts a reported status it keeps the superseded claim in `checks[].claimed_status` and reports `corrected N agent-reported check result(s)` in the same assurance line. Noninteractive callers must add `--yes`. Git receipts retain full checkout provenance while labeling changes outside `affected_files` as unrelated checkout state. `change status` compares the stored receipt with the current repository, branch, HEAD, and diff digest; mismatches are explicit stale warnings and unavailable Git metadata never claims freshness. It also returns `criteria[]` — each acceptance criterion with its verdict, the reason, and any `verification_binding` — so a human deciding acceptance sees which criterion is weak and which check decided it without reopening the completion file. `change submit` returns that same payload, so a caller does not need a second `change status` call. `agent_attested` passes require a bound peer review or human review. |
+| `gates` | Artifact readiness checks (`check`), stored artifact results (`results`), and IDE-agent artifact gate tasks (`tasks`) work in both modes. Local IDE gate tasks and Full model-less IDE gate tasks use the same `check` → `tasks list/show/submit-result` → `results` loop. Compact `gates check --summary` output preserves each result's executor origin so agent-attested evidence is not presented as platform evaluation. Human `gates check` output names every gate with its state, trust origin, and hint beneath the aggregate, because an aggregate alone cannot distinguish one soft hint from four gates still awaiting a result. `gates check` dispatches tasks as part of the readiness run; `gates tasks dispatch <artifact-id>` redispatches them alone when the artifact is unchanged. `tasks list` already returns each task's `skill_content` and both digests, so `tasks show` is only needed for a task id obtained some other way. A rejected `submit-result` names the field that did not match the dispatched task — `gate`, `gate_digest`, `input_digest`, `evaluator.executor`, or `state` — with the value the task expects. A task rejected as stale means the artifact or its policy was republished after the task was frozen; re-dispatch with `gates check` and judge the fresh task rather than resubmitting. Work-item model gates are Full-only: `gates run <ref>` triggers them, `gates status <ref>` shows the current state, and `gates history <ref>` lists past runs |
+| `delivery` | Report implementation, review that evidence, and decide delivery as a human reviewer. See [Delivery commands](#delivery-commands) for every subcommand, the completion scaffold contract, the assurance rules, and Git receipt freshness |
 
 ## Change facade
 
@@ -451,18 +451,101 @@ page; when more documents match than the page contains, the human output tells
 you the next `--offset` to use. JSON output keeps the full `total` match count
 alongside the page items.
 
-### Setup and identity
+## Delivery commands
+
+`delivery` records what a coding agent did, reviews that evidence, and captures
+the human decision. Every rule below is the same in Local and Full mode unless
+the text says otherwise.
+
+| Command | Purpose |
+|---|---|
+| `delivery report [ref] --init` | Scaffold a conservative completion report at `.specgate/completion-<ref>.json` |
+| `delivery report [ref] --file <path>` | Full-mode coding-agent feedback ingestion; Local completion uses `change submit` |
+| `delivery peer-review [ref] --init` | Scaffold an independent agent review bound to the latest completion event and its exact Git receipt |
+| `delivery peer-review [ref] --file <path>` | Record that review and rerun the delivery review |
+| `delivery submit [ref]` | Run the whole tail: report → gates → review → status |
+| `delivery review [ref]` | Trigger the delivery review alone, without reporting new completion evidence |
+| `delivery status [ref]` | Show the authoritative delivery review verdict for a work item |
+| `delivery approve [ref]` | Record a human approval of the delivery |
+| `delivery reject [ref]` | Record a human rejection of the delivery |
+| `delivery handoff export <ref>` | Write a committable review request for a reviewed work item |
+| `delivery handoff show --file <path>` | Render a committed review request read-only, without a workspace or server |
+
+Noninteractive callers must add `--yes` to the commands that record a decision.
+
+### Completion scaffold
+
+`delivery report --init` writes a deliberately incomplete report: a required
+blank `agent.name`, empty affected files, one `pending` check per unique
+declared verification binding (or a `tests` fallback), and `not_done` criterion
+claims. Fill `agent.name` with the coding agent's stable name before
+submission.
+
+`pending` is a scaffold-only placeholder. Submission rejects it until the agent
+records `pass`, `fail`, or an explained `skipped`. The scaffold captures Git
+identity but defers delivery-scope comparison until `affected_files` is
+supplied at submission.
+
+`delivery submit` accepts only `coding_agent.completed`. Both the direct and
+scaffolded paths reject missing completion-agent identity, untouched pending
+checks, `satisfied` claims without evidence, and passing checks without
+runnable commands — all before any network call.
+
+### Review and assurance
+
+`delivery peer-review --init` binds the review to the latest completion event
+and its exact Git receipt. The reviewer must cover every canonical criterion
+exactly once, and the peer must differ from the completion agent. The CLI
+preserves the receipt in the bound scaffold so the server verifies the same
+completion. `agent_attested` passes require a bound peer review or human
+review.
+
+A human may accept an advisory or false-negative review without hiding its
+evidence verdict. The completion reporter cannot approve its own delivery, and
+a new completion needs its own review and human decision.
+
+Human `delivery status --detail` output separates evidence assessment,
+assurance source, human decision, and recorded Git receipt. JSON exposes the
+authoritative `verdict` and the optional `evidence_verdict`.
+
+Cited local evidence paths are existence-checked and grounded with an excerpt
+plus a SHA-256 digest. `submit --run-checks` previews and confirms the
+completion file's commands, re-executes the non-skipped checks through `sh -c`,
+marks those rows as observed by the SpecGate CLI, and submits the observed
+statuses. Local status then labels that assurance `locally reproduced`. When
+re-execution contradicts a reported status, the superseded claim stays in
+`checks[].claimed_status` and the same assurance line reports
+`corrected N agent-reported check result(s)`.
+
+Use [Hand a review to a teammate through the repository](#hand-a-review-to-a-teammate-through-the-repository)
+for the committable `delivery handoff` flow.
+
+### Git receipts and freshness
+
+Git receipts retain full checkout provenance while labeling changes outside
+`affected_files` as unrelated checkout state. `change status` compares the
+stored receipt with the current repository, branch, HEAD, and diff digest.
+Mismatches are explicit stale warnings, and unavailable Git metadata never
+claims freshness.
+
+`change status` also returns `criteria` — each acceptance criterion with its
+verdict, the reason, and any `verification_binding` — so a human deciding
+acceptance sees which criterion is weak and which check decided it without
+reopening the completion file. `change submit` returns that same payload, so a
+caller does not need a second `change status` call.
+
+## Setup and identity
 
 | Family | Purpose |
 |---|---|
 | `doctor` | Check the selected Local store or Full server setup and print the exact recovery command when setup is incomplete |
 | `config` | Save CLI configuration. `config server <url>` records the Full-mode server URL in the user configuration file, written atomically with owner-only permissions; a `--server` flag or `SPECGATE_SERVER` still overrides it for a single command. This is the value `install-cli.sh --server` sets for you |
 | `version` | Print the installed CLI version; equivalent to `specgate --version` |
-| `model` | Configure Full-mode governance and embedding models plus provider keys |
-| `user` | Create/select the local user with `user login`, clear it with `user logout`, list users, and show the selected user |
-| `workspace` | List workspaces, list members, show/select the active workspace, bind the current Git project, and unbind the current project |
+| `model` | Configure Full-mode governance and embedding models plus provider keys. `model set` writes the provider, model, and API key; `model show` reports the saved configuration with the API key as set/not set; `model test` checks the settings without a live model call; `model on` and `model off` switch between the saved server-side model and the IDE-agent model-less workflows |
+| `user` | Create or select the local user with `user login` and clear it with `user logout`. `user list` enumerates local users and `user current` shows the selected one |
+| `workspace` | `workspace list` enumerates local workspaces and `workspace create <name>` adds one in Local mode. `workspace members` lists members, `workspace current` and `workspace select` show and change the active workspace, and `workspace bind` / `workspace unbind` attach or detach the current Git project |
 | `plugins` | Install and verify Codex, Claude Code, and Cursor IDE plugin files. A project-local Claude install also writes `.claude/specgate-hooks/` and merges two entries into `.claude/settings.json`: `Bash(specgate:*)`, because the installed skills drive the CLI and an unpermitted first command stalls the work, and a `SessionStart` hook, which routes implementation work in a SpecGate-governed repository to a lifecycle phase without the user naming the tool. A Git repository is governed when its root contains `.specgate/`, which `specgate init` and `workspace bind` create; an unrelated ancestor such as `~/.specgate` does not govern it. An existing settings file is merged, never replaced, and keeps its file mode. Local mode reads the complete matching package embedded in the CLI; Full mode reads it from the configured appliance |
-| `skill` | Inspect user-defined Skills |
+| `skill` | Inspect user-defined Skills: `skill list` enumerates them and `skill show <id-or-name>` prints one |
 | `open`, `update`, `uninstall` | Open the web UI — `open` alone opens the base URL; `open <work-ref>`, `open reviews\|artifacts\|work`, and `open --artifact <id>` deep-link to the matching page; add `--print` to return the server-advertised canonical URL without launching a browser — refresh setup, or remove user-local setup |
 
 The selected local user and workspace are stored in CLI config. Use
@@ -520,7 +603,7 @@ project's workspace binding. Effective workspace precedence is:
 5. global workspace;
 6. no workspace.
 
-### Full appliance
+## Full appliance
 
 | Family | Purpose |
 |---|---|
@@ -566,7 +649,7 @@ completion and peer-review JSON files with mode `0600`. It refuses symlinked
 working directories or scaffold paths, including with `--force`, so generating
 a report cannot overwrite a file outside the selected project.
 
-### Local CLI uninstall
+## Local CLI uninstall
 
 In Local CLI mode, `specgate uninstall` removes CLI configuration and globally
 installed managed plugin files while keeping the configured SQLite store.
@@ -581,7 +664,7 @@ uses the configured SQLite state directory. An empty `.specgate/` parent is remo
 receipts or any other files is preserved. It does not invoke Docker. The interactive prompt
 offers only IDE plugin files and Local SQLite state.
 
-### Full appliance uninstall
+## Full appliance uninstall
 
 In Full appliance mode, `specgate uninstall` removes user-local SpecGate setup.
 In an interactive terminal it shows a checkbox list:
@@ -637,7 +720,7 @@ The deployment directory must also contain SpecGate's exact private ownership
 marker; matching filenames or Compose labels alone never authorize mutation.
 Container images remain in Docker's cache for Docker or the user to prune.
 
-### Advanced governance
+## Advanced governance
 
 | Family | Purpose |
 |---|---|
