@@ -103,7 +103,7 @@ With a single node there is no sub-agent namespace fan-out and no async-task cha
 The assistant narrates inline in its own reply. The wire shapes the UI consumes — stream modes, transcript hydration, and any companion / status surfaces — are defined in [`event-contract.md`](event-contract.md); this document does not restate them.
 
 The Full UI exposes chat only after its health route confirms the service is
-configured and reachable. It does not expose the alpha appliance's ephemeral
+configured and reachable. It does not expose the v0.1 appliance's ephemeral
 thread history. Missing configuration and failed health checks hide the
 launcher without affecting core Full-mode routes.
 
@@ -141,7 +141,7 @@ rubric frozen in the artifact policy snapshot.
   operator explicitly opts in; `custom_metadata.thread_id` is the cross-frame
   correlation key
 - When deployed with a durable checkpointer, per-thread LangGraph `values` plus
-  the `messages` channel form the persistable chat audit trail. The alpha
+  the `messages` channel form the persistable chat audit trail. The v0.1
   appliance intentionally uses in-memory checkpoints, so its chat threads reset
   on restart; governed records remain in Doc Registry.
 

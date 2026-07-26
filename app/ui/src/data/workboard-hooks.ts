@@ -2,13 +2,17 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 
 import {
-  emptyRegistryDetail,
-  emptyRegistryView,
   fetchWorkboard,
   fetchWorkItemDetail,
+} from "./workboard-api"
+import {
+  emptyRegistryDetail,
+} from "./workboard-mappers"
+import {
+  emptyRegistryView,
   type WorkboardData,
   type WorkItemDetailData,
-} from "./workboard-core"
+} from "./workboard-types"
 import type { WorkItem } from "./workspace"
 
 export function useWorkboardData(selectedWorkspaceId?: string): WorkboardData {

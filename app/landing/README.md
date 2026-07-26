@@ -32,7 +32,7 @@ Use the manual workflow trigger to redeploy unchanged landing-page files.
 ## Files
 
 - `index.html` - page structure and product copy
-- `styles.css` - design-system tokens and responsive layout based on `ui/DESIGN.md`
+- `styles.css` - stylesheet entry point for the focused files under `styles/`
 - `script.js` - theme toggle, delivery review console, terminal carousel, and scroll interactions
 - `logo.svg` - the branded header mark used in the top-left nav
 - `fonts/` - self-hosted Host Grotesk and Commit Mono assets plus their OFL licenses
@@ -75,4 +75,4 @@ node --test app/landing/landing.test.mjs
 node -c app/landing/script.js
 ```
 
-The page is intentionally dependency-free so it can be hosted as a static microsite or copied into the Vite app later.
+The page is intentionally dependency-free so GitHub Pages can host it directly.

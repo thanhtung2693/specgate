@@ -122,7 +122,7 @@ Dockerfiles, workflows, release metadata, or cross-module contracts:
 node --test docs/release-readiness.test.mjs
 ```
 
-The gate checks alpha positioning, installer paths, Compose defaults, image
+The gate checks v0.1 positioning, installer paths, Compose defaults, image
 runtime settings, Node workflow versions, static landing metadata, terminology,
 and contract references.
 

@@ -4,6 +4,9 @@ This HyperFrames composition produces the short product tour linked from the
 root README. It is silent and caption-led so it works in a GitHub preview
 without audio.
 
+See [DESIGN.md](DESIGN.md) for visual language, timing, and product-truth
+constraints.
+
 ## Validate
 
 ```bash

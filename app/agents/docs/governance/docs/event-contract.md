@@ -40,7 +40,7 @@ diagnostic operations — there are no gated or irreversible tool interrupts.
 ## State Hydration
 
 When the LangGraph runtime has durable checkpoints, per-thread `values` plus
-the `messages` channel form the persistable chat audit trail. The alpha
+the `messages` channel form the persistable chat audit trail. The v0.1
 appliance uses in-memory checkpoints, so its chat transcript is available only
 until the appliance restarts. The UI creates the active workspace-tagged
 thread directly and rehydrates its transcript via the LangGraph SDK

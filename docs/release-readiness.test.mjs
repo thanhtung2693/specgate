@@ -12,6 +12,12 @@ const trackedFiles = () =>
     .split("\0")
     .filter((path) => path && existsSync(new URL(path, root)));
 
+const workingFiles = () =>
+  execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], { cwd: root })
+    .toString("utf8")
+    .split("\0")
+    .filter((path) => path && existsSync(new URL(path, root)));
+
 const docs = {
   readme: read("README.md"),
   security: read("SECURITY.md"),
@@ -804,6 +810,28 @@ test("Pages validates landing changes without redeploying unrelated main pushes"
     files.pagesWorkflow,
     /deploy:\s*\n\s+if: github\.event_name != 'pull_request'[\s\S]*?concurrency:\s*\n\s+group: pages/,
   );
+});
+
+test("handwritten production modules stay below 800 lines", () => {
+  const oversized = workingFiles()
+    .filter((path) => /\.(?:go|py|[cm]?[jt]sx?|sh)$/.test(path))
+    .filter((path) => !/(?:^|\/)(?:tests?|fixtures|generated|node_modules|dist)(?:\/|$)/.test(path))
+    .filter((path) => !/(?:_test\.go|\.test\.[cm]?[jt]sx?|\.spec\.[cm]?[jt]sx?|\.d\.ts)$/.test(path))
+    .map((path) => ({ path, lines: read(path).split("\n").length - 1 }))
+    .filter(({ lines }) => lines >= 800);
+
+  assert.deepEqual(oversized, []);
+});
+
+test("handwritten test modules stay below 1000 lines", () => {
+  const oversized = workingFiles()
+    .filter((path) => /\.(?:go|py|[cm]?[jt]sx?)$/.test(path))
+    .filter((path) => /(?:^|\/)tests?(?:\/|$)|(?:_test\.go|\.test\.[cm]?[jt]sx?|\.spec\.[cm]?[jt]sx?)$/.test(path))
+    .filter((path) => !/(?:^|\/)(?:fixtures|generated|node_modules|dist)(?:\/|$)/.test(path))
+    .map((path) => ({ path, lines: read(path).split("\n").length - 1 }))
+    .filter(({ lines }) => lines >= 1000);
+
+  assert.deepEqual(oversized, []);
 });
 
 test("release UI images build with the supported Node major", () => {

@@ -74,7 +74,7 @@ docs/                 # this folder — PRD, spec
 | `WEBHOOK_QUEUE_MAX_RETRY` | `5` | Max automatic retries per failed webhook task before it is archived (asynq). |
 | `KNOWLEDGE_MAX_FILE_BYTES` | `10485760` | Positive max content size (bytes) accepted and read for Governance Knowledge text and file documents (default 10 MiB). |
 | `KNOWLEDGE_EMBEDDING_DIM` | `1024` | Embedding vector dimension for Governance Knowledge. Must match the embedding model used. |
-| `KNOWLEDGE_DRIVER` | `none` | Workspace-scoped Knowledge vector backend (alpha opt-in): `pgvector` (uses Postgres) or `none` (disabled, default). |
+| `KNOWLEDGE_DRIVER` | `none` | Workspace-scoped Knowledge vector backend (v0.1 opt-in): `pgvector` (uses Postgres) or `none` (disabled, default). |
 | `GOVERNANCE_UPLOAD_MAX_BYTES` | `26214400` | Positive max bytes accepted for internal governance-file uploads and reads; rejected at presign, and the accepted size is signed into presigned PUT requests (default 25 MiB). |
 | `GOVERNANCE_FILES_PURGE_INTERVAL_HOURS` | `24` | Cadence of the in-process governance_files TTL ticker (float allowed). The retention window itself is the `governancefiles.ttl_days` setting (default 90), configurable via `PUT /settings` / the Settings UI — not an env var. |
 | `ARTIFACT_RETENTION_SWEEP_ENABLED` | `false` | Opt-in artifact retention sweeper (spec §9). When `true`, deletes `superseded` artifacts past 90 days and `needs_changes` past 30 days; never deletes `approved` or `draft`, and skips artifacts referenced by a feature or change request. |
