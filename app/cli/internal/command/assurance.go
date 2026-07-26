@@ -406,6 +406,7 @@ func localReportEvidence(criteria []string, report local.DeliveryReport) ([]clie
 		})
 	}
 	rawCriteria, _ := report.Body["criteria"].([]any)
+	citations := make(map[int]string, len(rawCriteria))
 	for _, raw := range rawCriteria {
 		row, _ := raw.(map[string]any)
 		id := strings.TrimSpace(fmt.Sprint(row["criterion_id"]))
@@ -422,6 +423,7 @@ func localReportEvidence(criteria []string, report local.DeliveryReport) ([]clie
 		}
 		reviews[index].Verdict = verdict
 		reviews[index].Why = evidenceSummary(row)
+		citations[index] = citationWeakness(row)
 	}
 	// A bound criterion reads its verdict from the named check, matching the
 	// review that produced the stored verdict; the claim never overrides it.
@@ -429,9 +431,37 @@ func localReportEvidence(criteria []string, report local.DeliveryReport) ([]clie
 		if review.VerificationBinding == "" {
 			continue
 		}
-		reviews[index].Verdict, reviews[index].Why = boundCriterionOutcome(review.VerificationBinding, checks)
+		verdict, why := boundCriterionOutcome(review.VerificationBinding, checks)
+		// The bound check decides, so a bad citation must not flip the verdict —
+		// a wrong pointer to the proof is not a broken feature. It still belongs
+		// on this line: overwriting `why` wholesale hid a fabricated citation
+		// behind a clean pass, which is what the human reads before accepting.
+		if note := citations[index]; note != "" {
+			why += "; " + note
+		}
+		reviews[index].Verdict, reviews[index].Why = verdict, why
 	}
 	return reviews, checks
+}
+
+// citationWeakness describes a cited-evidence problem worth showing next to a
+// verdict. It returns empty when the citation is anchored or absent, because a
+// criterion with no citation already reads as "no evidence supplied".
+func citationWeakness(row map[string]any) string {
+	evidence, _ := row["evidence"].(map[string]any)
+	grounding, _ := evidence["grounding"].(map[string]any)
+	status, _ := grounding["status"].(string)
+	switch strings.TrimSpace(status) {
+	case "heading_not_found":
+		heading, _ := evidence["heading"].(string)
+		return fmt.Sprintf("cited heading %q is not in %v", heading, evidence["path"])
+	case "line_out_of_range":
+		return fmt.Sprintf("cited line is past the end of %v", evidence["path"])
+	case "unanchored":
+		return fmt.Sprintf("citation names %v with no line or heading", evidence["path"])
+	default:
+		return ""
+	}
 }
 
 // checkSource reads the CLI-stamped provenance of a check row. Only

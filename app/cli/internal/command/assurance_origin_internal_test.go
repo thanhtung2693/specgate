@@ -56,6 +56,72 @@ func TestBoundCriterionOutcomeNamesWhoObservedTheCheck(t *testing.T) {
 	}
 }
 
+// A bound criterion takes its verdict from the named check, so a bad citation
+// must not flip it — a wrong pointer to the proof is not a broken feature. It
+// must still reach the decision line, because overwriting `why` with the check
+// outcome alone hid a fabricated citation behind a clean pass.
+func TestLocalReportEvidenceShowsCitationWeaknessWithoutFlippingTheVerdict(t *testing.T) {
+	t.Parallel()
+	report := func(evidence map[string]any) local.DeliveryReport {
+		return local.DeliveryReport{Body: map[string]any{
+			"checks": []any{map[string]any{"name": "unit", "status": "pass"}},
+			"criteria": []any{map[string]any{
+				"criterion_id": "local-1", "claim": "satisfied", "evidence": evidence,
+			}},
+		}}
+	}
+
+	for _, tc := range []struct {
+		name     string
+		evidence map[string]any
+		note     string
+	}{
+		{
+			name: "a fabricated heading is named",
+			evidence: map[string]any{
+				"path": "test_notes.py", "heading": "test_invented",
+				"grounding": map[string]any{"status": "heading_not_found"},
+			},
+			note: `cited heading "test_invented" is not in test_notes.py`,
+		},
+		{
+			name: "a path-only citation is named",
+			evidence: map[string]any{
+				"path": "notes.py", "grounding": map[string]any{"status": "unanchored"},
+			},
+			note: "citation names notes.py with no line or heading",
+		},
+		{
+			name: "an anchored citation adds nothing",
+			evidence: map[string]any{
+				"path": "test_notes.py", "heading": "test_real",
+				"grounding": map[string]any{"status": "grounded", "excerpt": "def test_real():"},
+			},
+			note: "",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			reviews, _ := localReportEvidence([]string{"Tags persist @check:unit"}, report(tc.evidence))
+			if len(reviews) != 1 {
+				t.Fatalf("reviews = %+v, want one", reviews)
+			}
+			if reviews[0].Verdict != "pass" {
+				t.Fatalf("verdict = %q, want pass — the bound check decides", reviews[0].Verdict)
+			}
+			if tc.note == "" {
+				if strings.Contains(reviews[0].Why, ";") {
+					t.Fatalf("why = %q, want no citation note for anchored evidence", reviews[0].Why)
+				}
+				return
+			}
+			if !strings.Contains(reviews[0].Why, tc.note) {
+				t.Fatalf("why = %q, want it to contain %q", reviews[0].Why, tc.note)
+			}
+		})
+	}
+}
+
 func TestLocalReportEvidenceCarriesCheckProvenance(t *testing.T) {
 	t.Parallel()
 	reviews, checks := localReportEvidence(

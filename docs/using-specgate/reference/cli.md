@@ -546,6 +546,12 @@ worth: `observed by the SpecGate CLI` when re-execution produced the status, and
 `reported by the coding agent, not re-run` when nothing re-ran the command. A
 `pass` of the second kind is the agent's own claim; treat it as a claim.
 
+The reason also names a weak citation — a heading absent from the cited file, a
+line past its end, or a path with nothing anchoring it — without changing the
+verdict. The bound check is what the criterion was declared to depend on, so a
+wrong pointer to the proof is reported as a citation defect rather than a broken
+feature.
+
 ## Setup and identity
 
 | Family | Purpose |
