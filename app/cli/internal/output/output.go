@@ -50,6 +50,26 @@ const (
 	ExitIncompatible     = 6
 )
 
+// ErrorCodeForExit names the canonical error code for an exit status. It lets a
+// failure that carried only an exit code still emit a truthful envelope rather
+// than reporting every such failure as a usage error.
+func ErrorCodeForExit(exit int) string {
+	switch exit {
+	case ExitGovernanceFailed:
+		return "governance_failed"
+	case ExitNotFound:
+		return "not_found"
+	case ExitConflict:
+		return "conflict"
+	case ExitUnavailable:
+		return "unavailable"
+	case ExitIncompatible:
+		return "incompatible"
+	default:
+		return "usage"
+	}
+}
+
 var errorCodeToExit = map[string]int{
 	"usage":                     ExitUsage,
 	"governance_failed":         ExitGovernanceFailed,
@@ -106,6 +126,10 @@ type Printer struct {
 	mode        Mode
 	color       bool
 	stderrColor bool
+	// emitted records whether this command already reported its outcome, so a
+	// failure that returns an ExitError without printing can be completed
+	// instead of exiting silently.
+	emitted bool
 }
 
 // New creates a Printer with the given streams and output mode.
@@ -130,6 +154,7 @@ func NewWithCapabilities(stdout, stderr io.Writer, mode Mode, stdoutColor, stder
 // Error emits a JSON error envelope and returns the corresponding exit code.
 // Details is always present as {} when not supplied.
 func (p *Printer) Error(command string, payload ErrorPayload) int {
+	p.emitted = true
 	if payload.Details == nil {
 		payload.Details = map[string]any{}
 	}
@@ -158,6 +183,7 @@ func (p *Printer) Error(command string, payload ErrorPayload) int {
 
 // Success emits a JSON success envelope and returns ExitOK.
 func (p *Printer) Success(command string, data any) int {
+	p.emitted = true
 	env := envelope{
 		SchemaVersion: "specgate.cli/v1",
 		Command:       command,
@@ -170,6 +196,11 @@ func (p *Printer) Success(command string, data any) int {
 
 // Mode returns the current output mode.
 func (p *Printer) Mode() Mode { return p.mode }
+
+// Emitted reports whether this command already printed a success or error
+// outcome. The `--json` contract is exactly one envelope per invocation, so the
+// root uses this to fill in for a failure that returned without printing.
+func (p *Printer) Emitted() bool { return p.emitted }
 
 // ColorEnabled reports whether ANSI styling is active for this printer.
 func (p *Printer) ColorEnabled() bool {

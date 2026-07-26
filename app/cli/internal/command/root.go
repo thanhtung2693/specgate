@@ -3,6 +3,7 @@ package command
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -417,6 +418,7 @@ func NewRootCommand(deps *Deps) *cobra.Command {
 	root.AddCommand(newVerifyCmd(deps))
 	defaultArgumentPolicies(root)
 	wrapArgumentErrors(root, renderUsageError)
+	guaranteeErrorEnvelope(root, deps)
 	assignRootCommandGroups(root)
 
 	defaultHelp := root.HelpFunc()
@@ -619,6 +621,45 @@ func ExecuteForCode(root *cobra.Command, args ...string) int {
 		return output.ExitCodeFromError(err)
 	}
 	return output.ExitOK
+}
+
+// guaranteeErrorEnvelope enforces the machine-output contract: every invocation
+// emits exactly one envelope. Several commands return an ExitError directly —
+// a missing work ref, a prompt that cannot run under --no-input, an invalid
+// provider — without printing one, which left a `--json` caller with a bare
+// exit code and empty stdout. An IDE agent cannot act on that: it sees neither
+// what failed nor what to do. Wrapping every RunE is the one place that covers
+// present and future sites alike.
+func guaranteeErrorEnvelope(root *cobra.Command, deps *Deps) {
+	var wrap func(cmd *cobra.Command)
+	wrap = func(cmd *cobra.Command) {
+		if run := cmd.RunE; run != nil {
+			cmd.RunE = func(c *cobra.Command, args []string) error {
+				err := run(c, args)
+				if err == nil || deps.Printer == nil || deps.Printer.Emitted() {
+					return err
+				}
+				var exit *output.ExitError
+				message := err.Error()
+				code := "usage"
+				if errors.As(err, &exit) {
+					if exit.Err == nil {
+						// A code-only ExitError means the command already
+						// reported through another printer; leave it alone.
+						return err
+					}
+					message = exit.Err.Error()
+					code = output.ErrorCodeForExit(exit.Code)
+				}
+				deps.Printer.Error(commandOutputName(c), output.ErrorPayload{Code: code, Message: message})
+				return err
+			}
+		}
+		for _, child := range cmd.Commands() {
+			wrap(child)
+		}
+	}
+	wrap(root)
 }
 
 func jsonOutputRequested(args []string) bool {
