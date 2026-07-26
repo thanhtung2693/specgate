@@ -540,6 +540,12 @@ acceptance sees which criterion is weak and which check decided it without
 reopening the completion file. `change submit` returns that same payload, so a
 caller does not need a second `change status` call.
 
+For a bound criterion the reason names who observed the deciding check, because
+`--run-checks` is opt-in and the difference decides how much the verdict is
+worth: `observed by the SpecGate CLI` when re-execution produced the status, and
+`reported by the coding agent, not re-run` when nothing re-ran the command. A
+`pass` of the second kind is the agent's own claim; treat it as a claim.
+
 ## Setup and identity
 
 | Family | Purpose |

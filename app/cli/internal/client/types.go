@@ -477,6 +477,11 @@ type CheckResult struct {
 	Name   string `json:"name,omitempty"`
 	Status string `json:"status,omitempty"`
 	Detail string `json:"detail,omitempty"`
+	// Source is `specgate_cli` when the CLI re-executed this check under
+	// `--run-checks`. Empty means the status is the coding agent's own claim,
+	// which is what a human deciding acceptance needs to know. In Full mode the
+	// server stamps its own source and strips this one.
+	Source string `json:"source,omitempty"`
 }
 
 // GitReceipt is the repository identity persisted with completion evidence.

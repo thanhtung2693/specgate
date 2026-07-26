@@ -402,6 +402,7 @@ func localReportEvidence(criteria []string, report local.DeliveryReport) ([]clie
 		row, _ := raw.(map[string]any)
 		checks = append(checks, client.CheckResult{
 			Name: strings.TrimSpace(fmt.Sprint(row["name"])), Status: strings.TrimSpace(fmt.Sprint(row["status"])), Detail: strings.TrimSpace(fmt.Sprint(row["detail"])),
+			Source: checkSource(row["source"]),
 		})
 	}
 	rawCriteria, _ := report.Body["criteria"].([]any)
@@ -433,16 +434,31 @@ func localReportEvidence(criteria []string, report local.DeliveryReport) ([]clie
 	return reviews, checks
 }
 
+// checkSource reads the CLI-stamped provenance of a check row. Only
+// `--run-checks` sets it, so a missing value means nothing re-ran the command.
+func checkSource(raw any) string {
+	source, _ := raw.(string)
+	return strings.TrimSpace(source)
+}
+
 func boundCriterionOutcome(binding string, checks []client.CheckResult) (string, string) {
 	for _, check := range checks {
 		if check.Name != binding {
 			continue
 		}
+		// A human deciding acceptance reads this line, not the completion file.
+		// Saying a check "passed" without saying who observed it presents an
+		// unrun command as a deterministic result; `--run-checks` is opt-in, so
+		// the common case is the agent's own claim.
+		origin := "reported by the coding agent, not re-run"
+		if check.Source == "specgate_cli" {
+			origin = "observed by the SpecGate CLI"
+		}
 		switch check.Status {
 		case "pass":
-			return "pass", fmt.Sprintf("check %q passed (deterministic)", binding)
+			return "pass", fmt.Sprintf("check %q passed (%s)", binding, origin)
 		case "fail":
-			return "fail", fmt.Sprintf("check %q failed (deterministic)", binding)
+			return "fail", fmt.Sprintf("check %q failed (%s)", binding, origin)
 		default:
 			return "fail", fmt.Sprintf("check %q reported %q — cannot verify deterministically", binding, check.Status)
 		}
