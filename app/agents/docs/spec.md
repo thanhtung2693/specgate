@@ -57,7 +57,7 @@ missing workspace or a runtime/thread workspace mismatch fails closed before
 Doc Registry is called. The graph never invokes readiness or other stateful
 operations; callers run those through the explicit CLI/IDE workflow.
 
-The alpha local appliance starts this graph through `langgraph dev`, so its
+The v0.1 local appliance starts this graph through `langgraph dev`, so its
 chat checkpoints are process-lifetime only. Durable records belong to Doc
 Registry; users must not rely on appliance chat threads surviving a restart.
 Full-mode core remains usable without governance chat. The web launcher is

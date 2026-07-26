@@ -103,7 +103,7 @@ hidden sample data or alternate workflow state.
 
 ## Trust Boundaries
 
-SpecGate alpha assumes a trusted local or private network.
+SpecGate v0.1 assumes a trusted local or private network.
 
 - Doc Registry has no public HTTP auth layer.
 - Local users and workspaces are attribution and filtering, not RBAC.

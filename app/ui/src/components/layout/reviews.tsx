@@ -15,7 +15,7 @@ import { type WorkItem } from "@/data/workspace"
 import { formatDateTime, formatRelativeTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { isDeliveredWorkItem, readableKey, reviewTone, toneClass } from "./shared"
-import { ArtifactDetailDialog } from "./artifacts"
+import { ArtifactDetailDialog } from "./artifact-detail"
 
 type ReviewFilter = "all" | "ready" | "needs_changes" | "gate_failed"
 

@@ -27,7 +27,7 @@ volume in local installs and can be switched to S3/MinIO. Redis is optional.
 ### User and Workspace
 
 Users and workspaces provide attribution, team visibility, and selection
-filters. They are not authentication or authorization records in the alpha
+filters. They are not authentication or authorization records in the v0.1
 stack.
 
 Workspace membership answers: "who is working in this space?" It does not grant

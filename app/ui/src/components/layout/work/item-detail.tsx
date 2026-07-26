@@ -17,14 +17,13 @@ import { workItemStatusBadge } from "../work-page"
 import {
   AcceptanceCriteriaSummary,
   ActivityList,
-  ContextPackDetail,
   ContextSummary,
-  DeliverySummary,
   FeatureOverview,
   FreshnessSignalsSummary,
   GateSummary,
-  RepositoryObservationSummary,
 } from "./item-detail-sections"
+import { ContextPackDetail } from "./item-detail-handoff"
+import { DeliverySummary, RepositoryObservationSummary } from "./item-detail-delivery"
 
 export function WorkItemDetail({
   item,
