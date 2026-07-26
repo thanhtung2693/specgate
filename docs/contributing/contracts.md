@@ -370,9 +370,25 @@ recognize the value refuses the file rather than guessing.
 
 Export drops every `criteria[].evidence.grounding.excerpt`. Grounding cites any
 path the agent read, including files outside the checkout, and the bundle is
-committed; the retained `status` and `digest` still prove the citation was
-grounded without republishing file contents. Export also refuses the active
+committed; the retained `status` and `digest` still say how the citation was
+anchored without republishing file contents. Export also refuses the active
 Local SQLite file as a destination.
+
+`criteria[].evidence.grounding` is written by the CLI and read by human and
+model reviewers in both modes, so its `status` is shared vocabulary:
+
+| `status` | Meaning |
+|---|---|
+| `grounded` | An explicit `line`, or a `heading` found in the cited file, located the excerpt |
+| `heading_not_found` | The cited `heading` does not appear in the file |
+| `line_out_of_range` | The cited `line` is past the end of the file |
+| `unanchored` | The citation names a path and nothing that pins it to this criterion |
+
+Only `grounded` carries an `excerpt`; every status carries the file `digest`. A
+non-`grounded` status is reviewer-visible information, not a submission error —
+the citation is recorded as weak rather than silently presented as verified.
+Neither Local nor Full submission validates `grounding` against a closed set, so
+a new status never becomes a mode asymmetry.
 
 The bundle is a transport for review, never an authority. `handoff show`
 re-derives the verdict from the report and acceptance criteria it carries and

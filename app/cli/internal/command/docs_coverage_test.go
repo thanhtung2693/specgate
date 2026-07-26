@@ -82,10 +82,11 @@ func readRepoFile(t *testing.T, rel string) string {
 func documentedSurfaces(t *testing.T) map[string]string {
 	t.Helper()
 	surfaces := map[string]string{}
-	for _, rel := range []string{"README.md", "docs/using-specgate", "plugins/skills"} {
+	// `.mdc` covers plugins/rules, the Cursor rule file installed for users.
+	for _, rel := range []string{"README.md", "docs/using-specgate", "plugins/skills", "plugins/rules"} {
 		root := filepath.Join(repoRoot, rel)
 		err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
-			if err != nil || entry.IsDir() || !strings.HasSuffix(path, ".md") {
+			if err != nil || entry.IsDir() || !(strings.HasSuffix(path, ".md") || strings.HasSuffix(path, ".mdc")) {
 				return err
 			}
 			raw, readErr := os.ReadFile(path)
