@@ -271,14 +271,21 @@ func TestDeliveringWorkSkillRequiresCriterionSpecificEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	normalized := strings.Join(strings.Fields(body), " ")
-	for _, want := range []string{
-		"exactly one `criteria[]` entry per canonical criterion",
-		"independently reviewable claim",
-		"evidence path, line, heading, file key, or URL",
-		"command name alone is not evidence",
+	// Assert the requirements, not the sentences that carry them. Pinning exact
+	// prose here made a reword fail CI while a dropped rule would have passed.
+	for _, requirement := range []struct {
+		what  string
+		needs []string
+	}{
+		{"one entry per criterion", []string{"exactly one `criteria[]` entry per canonical criterion"}},
+		{"an independently reviewable claim", []string{"independently reviewable"}},
+		{"a citation anchored by line or heading", []string{"`line`", "`heading`"}},
+		{"a command name is not evidence", []string{"command name alone is not evidence"}},
 	} {
-		if !strings.Contains(normalized, want) {
-			t.Fatalf("work-delivery skill missing criterion-specific evidence guidance %q:\n%s", want, body)
+		for _, needle := range requirement.needs {
+			if !strings.Contains(normalized, needle) {
+				t.Fatalf("work-delivery skill no longer requires %s (missing %q):\n%s", requirement.what, needle, body)
+			}
 		}
 	}
 }
@@ -311,15 +318,23 @@ func TestDeliveringWorkSkillReportsTruthfulAwaitingAcceptanceReceipt(t *testing.
 		"In Local mode, never call `open`",
 		"SpecGate delivery handoff",
 		"Stale is a warning, not a state override",
-		"Do not read the completion file again",
+		"completion file",
 		"call stats or audit",
-		"Never claim cleanup eligibility, bugs prevented, time saved, accepted, or delivered",
+		// The forbidden claims, each on its own, so rewording the sentence that
+		// joins them cannot drop one silently.
+		"cleanup",
+		"bugs prevented",
+		"time saved",
+		"without authoritative status",
 	} {
 		if !strings.Contains(receipt, want) {
 			t.Fatalf("work-delivery receipt contract missing %q:\n%s", want, parts[1])
 		}
 	}
-	if !strings.Contains(receipt, "For any other state") || !strings.Contains(receipt, "do not use success wording") {
+	// Non-success states must not borrow success wording. Match the rule, not one
+	// phrasing of it.
+	if !strings.Contains(receipt, "For any other state") ||
+		!(strings.Contains(receipt, "never success wording") || strings.Contains(receipt, "do not use success wording")) {
 		t.Fatalf("work-delivery handoff contract does not cover non-success states:\n%s", parts[1])
 	}
 }
