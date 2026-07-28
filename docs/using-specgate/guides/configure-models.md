@@ -139,10 +139,10 @@ key for a one-step return with `specgate model on`.
 
 ## Use workspace-scoped Knowledge
 
-Knowledge search is an experimental Full-mode capability. It needs a configured
-embedding model and is not available in Local mode. Upload, ingest, search,
-citations, and Context Pack provenance are usable for evaluation; authoring and
-Knowledge-aware readiness gates remain experimental.
+Knowledge search is a Full-mode capability. It needs a configured embedding
+model and is not available in Local mode. Upload, ingest, search, citations, and
+Context Pack provenance all work. Knowledge authoring and Knowledge-aware
+readiness gates are newer and have had less mileage.
 
 Configure the embedding provider and model in Settings → Models. `specgate
 doctor` reports whether Knowledge is ready. Ask the appliance operator for help

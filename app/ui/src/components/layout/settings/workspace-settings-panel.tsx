@@ -108,7 +108,7 @@ export function WorkspaceSettingsPanel({
           <div>
             <h3 className="text-sm font-semibold">Team members</h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              Members come from Doc Registry identity bootstrap records; access control remains outside this alpha UI.
+              Members come from Doc Registry identity bootstrap records; access control remains outside this UI.
             </p>
           </div>
           {workspace ? (

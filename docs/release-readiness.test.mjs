@@ -368,6 +368,14 @@ const retired = [
   { pattern: /Offline Local CLI/, why: "Local mode is not positioned as an offline product" },
   { pattern: /<returned-data\.path>/, why: "examples capture the returned path in a shell variable" },
   {
+    // Provisional self-description stopped people trying the product. The
+    // deployment boundary in SECURITY.md and trust-and-security.md is a
+    // different thing and stays.
+    pattern: /\b(?:experimental|early release|alpha release)\b/i,
+    why: "SpecGate does not describe itself as provisional; state the capability and its boundary instead",
+    allow: ["docs/contributing/adr/", "CHANGELOG.md", "app/ui/src/App.integrations.test.tsx"],
+  },
+  {
     pattern: /\b(?:CI ingestion|tracker authority)\b/i,
     why: "provider CI ingestion and tracker authority are not in the graduated integration contract",
     allow: ["docs/contributing/adr/"],
@@ -525,10 +533,19 @@ test("both gateways strip the internal header and accept the documented limits",
 // the workflow invariants that a doc alone cannot express.
 // ---------------------------------------------------------------------------
 
-test("public docs position the current v0.1 release honestly", () => {
-  assert.match(read("README.md"), /\*\*Status: v0\.1 early release\.\*\*/);
-  assert.doesNotMatch(read("SECURITY.md"), /The alpha release/i);
-  assert.match(read("docs/using-specgate/reference/feature-status.md"), /## Core v0\.1 paths/);
+test("public docs lead with the deployment boundary, not with hedging", () => {
+  // The boundary is a safety fact and has to stay stated. Provisional framing —
+  // "early release", "experimental", "alpha" — is separate: it deterred people
+  // from trying the product and is enforced absent by the retired-terminology
+  // scan below.
+  const readme = read("README.md");
+  assert.match(readme, /trusted machine or private network/i);
+  assert.match(readme, /no HTTP[\s>]+authentication layer/i);
+  assert.match(readme, /pre-1\.0/);
+
+  const featureStatus = read("docs/using-specgate/reference/feature-status.md");
+  assert.match(featureStatus, /## Established paths/);
+  assert.match(featureStatus, /## Newer surfaces/);
 });
 
 test("the repository ignores generated per-project agent rule files", () => {

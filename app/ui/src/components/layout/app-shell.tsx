@@ -146,7 +146,7 @@ function AppSidebar({
               <Link to="/work" aria-label="SpecGate work">
                 <img className="size-8 rounded-lg" src="/logo.svg" alt="" />
                 <span className="grid min-w-0 text-left">
-                  <span className="truncate text-sm font-semibold">SpecGate (Experimental)</span>
+                  <span className="truncate text-sm font-semibold">SpecGate</span>
                   <span className="truncate text-xs text-muted-foreground">Governed delivery</span>
                 </span>
               </Link>

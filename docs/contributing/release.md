@@ -19,7 +19,7 @@ Release only when:
 
 Check that:
 
-- root README says SpecGate is a v0.1 early release, CLI-first, and trusted-network by default;
+- root README leads with the trusted-machine/private-network boundary, is CLI-first, and states that SpecGate is pre-1.0;
 - [Quickstart](../using-specgate/quickstart.md) works without a source checkout;
 - IDE plugin docs point to CLI install first, then `specgate plugins install`;
 - model setup is optional for core operation;

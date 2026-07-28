@@ -1,6 +1,6 @@
 # SpecGate UI
 
-Vite + React + TypeScript app shell for the SpecGate (Experimental) governed delivery UI.
+Vite + React + TypeScript app shell for the SpecGate governed delivery UI.
 
 This folder contains the responsive app shell, vertical sidebar, light/dark theme tokens, route surfaces, and an assistant-ui governance agent surface. The UI is available for human review, artifact inspection, governance chat, settings, and operational scanning; authoring and implementation still start from the IDE + CLI workflow.
 
@@ -131,7 +131,7 @@ the selected username, and requires useful feedback when changes are requested.
 Doc Registry remains authoritative for stale, duplicate, self-review,
 missing-review, and workspace errors.
 
-The browser title and sidebar product title are `SpecGate (Experimental)`, and the favicon uses the shared SpecGate logo asset from `public/logo.svg`.
+The browser title and sidebar product title are `SpecGate`, and the favicon uses the shared SpecGate logo asset from `public/logo.svg`.
 
 Settings is an honest status/configuration modal opened from the sidebar footer, not a standalone page. IDE plugin setup stays in the CLI and IDE; server-side governance plus embedding model settings save through Doc Registry `/settings`. Workspace/user identity actions live in the sidebar account menu, and the browser does not expose Knowledge or Plugins settings while those remain backend and IDE concerns. Integrations can add GitHub, GitLab, or Linear through Doc Registry only for the selected workspace and store a write-only provider API token; switching workspace clears integration details and pending dialogs. Settings groups GitHub and GitLab as Repositories, and Linear as Work tracking. Hosted OAuth is the default; API tokens remain available for self-hosted or advanced setup, while Base URL stays hidden unless GitHub/GitLab is marked self-hosted. OAuth returns can reopen Integrations through `?settings=integrations`. Heavier resource/webhook management stays out of the first pass.
 

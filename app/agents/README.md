@@ -24,7 +24,7 @@ Configure models:
 - Main server-side governance workloads (gates, readiness,
   delivery review, and quick-work criteria) use the provider/model stored in
   Doc Registry settings or configured with `specgate model set`.
-- The experimental LangGraph governance-ops chat agent uses env-only model
+- The LangGraph governance-ops chat agent uses env-only model
   configuration: `GOVERNANCE_OPS_MODEL_PROVIDER`, `GOVERNANCE_OPS_MODEL`,
   `GOVERNANCE_OPS_API_KEY`, and `GOVERNANCE_OPS_THINKING_LEVEL`. OpenRouter
   model ids are `vendor/model` slugs.
@@ -43,10 +43,10 @@ inspected by the agent.
   uv run uvicorn specgate_agents.governance.webapp:app --host 0.0.0.0 --port 2024
   ```
 
-- **LangGraph (adds the experimental governance-ops chat agent).** Runs the full
+- **LangGraph (adds the governance-ops chat agent).** Runs the full
   `langgraph.json` (the `governance` chat graph plus the same webapp as `http.app`)
-  via the LangGraph CLI / server, as below. The chat agent remains optional and
-  experimental; FastAPI-only mode exposes governance operations but no chat.
+  via the LangGraph CLI / server, as below. The chat agent is optional;
+  FastAPI-only mode exposes governance operations but no chat.
 
 ### Fast loop (in-memory checkpoints, with chat)
 
