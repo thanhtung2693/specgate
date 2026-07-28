@@ -32,6 +32,8 @@ type fakeClient struct {
 	deliveryStatusResult  *client.DeliveryStatusResult
 	readinessResult       map[string]any
 	governanceLevels      []client.GovernanceLevel
+	policyProjection      *client.PolicyProjection
+	policyResolveErr      error
 	policyExplanation     *client.PolicyExplanation
 	acceptanceCriteria    []client.AcceptanceCriterion
 	feedbackEvents        []client.GovernanceFeedbackEvent
@@ -116,6 +118,7 @@ type fakeClient struct {
 	lastArchiveReason       string
 	lastArchiveActor        string
 	lastPolicyRef           string
+	lastPolicyResolveInput  client.ResolveGovernancePolicyInput
 
 	lastDispatchGateTasksID string
 	dispatchGateTasksResult *client.DispatchGateTasksResult
@@ -569,6 +572,26 @@ func (f *fakeClient) ListGovernanceLevels(_ context.Context) ([]client.Governanc
 		{GovernanceLevel: "light", DisplayName: "Light governance", ApprovalPolicy: "human_required", EvidencePolicy: "attested_ok"},
 		{GovernanceLevel: "standard", DisplayName: "Standard governance", ApprovalPolicy: "human_required", EvidencePolicy: "attested_ok"},
 		{GovernanceLevel: "enhanced", DisplayName: "Enhanced governance", ApprovalPolicy: "human_required", EvidencePolicy: "corroborated_required"},
+	}, nil
+}
+
+func (f *fakeClient) ResolveGovernancePolicy(_ context.Context, in client.ResolveGovernancePolicyInput) (*client.PolicyProjection, error) {
+	f.calls++
+	f.lastPolicyResolveInput = in
+	if f.policyResolveErr != nil {
+		return nil, f.policyResolveErr
+	}
+	if f.policyProjection != nil {
+		return f.policyProjection, nil
+	}
+	return &client.PolicyProjection{
+		GovernanceLevel:  "standard",
+		ReasonCodes:      []string{"default_standard"},
+		RequiredRoles:    []string{"plan", "spec"},
+		RequiredEvidence: []string{"tests"},
+		EnabledGates:     []string{"acceptance_criteria_verifiable", "scope_clear", "spec_completeness", "spec_repo_drift"},
+		ApprovalPolicy:   "human_required",
+		EvidencePolicy:   "attested_ok",
 	}, nil
 }
 

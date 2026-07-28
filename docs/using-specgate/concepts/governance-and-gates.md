@@ -22,6 +22,10 @@ The built-in levels are:
 See [Governance reference](../reference/governance.md) for exact resolution
 rules.
 
+Full mode resolves among these levels. Local artifact-backed work stays on a
+fixed Standard policy so it remains model-free and server-free; Local Quick
+work is the lighter path for small changes.
+
 ## Readiness checks happen before implementation
 
 Readiness gates ask whether an artifact is ready to hand off. Examples:
@@ -74,9 +78,9 @@ review can pass; CI is not a first-release assurance source.
 
 ## Skills act as team rubrics
 
-Skills are reusable team instructions. The resolved automatic policy can attach skills
-to gates, and Context Packs can point agents to the relevant skill prompts.
-This lets teams keep local standards close to the governed workflow.
+Skills are reusable team instructions. Full mode can attach workspace-edited
+Skills to gates. Local mode freezes equivalent default rubric content into each
+artifact without adding a Skill editor or server.
 
 ## Human approval remains separate
 

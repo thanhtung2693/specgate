@@ -14,6 +14,152 @@ import (
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
+func TestArtifactPublishReadsRepoFileFromGitRoot(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(repo, "docs", "framework", "spec.md")
+	if err := os.MkdirAll(filepath.Dir(source), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(source, []byte("# Framework spec\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	source, err := filepath.EvalSymlinks(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packageDir := filepath.Join(repo, ".specgate", "work")
+	if err := os.MkdirAll(packageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	packagePath := filepath.Join(packageDir, "artifact.json")
+	body, err := json.Marshal(map[string]any{
+		"feature_key":  "framework-fit",
+		"workspace_id": "ws-core",
+		"documents": []map[string]any{{
+			"path": "docs/framework/spec.md", "role": "spec",
+			"repo_file": "docs/framework/spec.md",
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(packagePath, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("preview from nested directory", func(t *testing.T) {
+		deps, fc, _, out := newFakeDeps(t)
+		deps.WorkingDir = filepath.Join(repo, "docs", "framework")
+		code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "publish", "--preview", "--file", packagePath)
+		if code != output.ExitOK {
+			t.Fatalf("exit = %d, output = %s", code, out.String())
+		}
+		if fc.calls != 1 {
+			t.Fatalf("preview made %d API calls, want one policy read", fc.calls)
+		}
+		if !strings.Contains(out.String(), `"source_path":`+strconv.Quote(source)) {
+			t.Fatalf("preview source path missing: %s", out.String())
+		}
+	})
+
+	t.Run("publish sends only content and immutable path", func(t *testing.T) {
+		deps, fc, _, out := newFakeDeps(t)
+		deps.WorkingDir = repo
+		code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "publish", "--file", packagePath)
+		if code != output.ExitOK {
+			t.Fatalf("exit = %d, output = %s", code, out.String())
+		}
+		documents := fc.lastPublishBody["documents"].([]any)
+		document := documents[0].(map[string]any)
+		if document["path"] != "docs/framework/spec.md" || document["content"] != "# Framework spec\n" {
+			t.Fatalf("published document = %#v", document)
+		}
+		if _, exists := document["repo_file"]; exists {
+			t.Fatalf("repo_file leaked to server payload: %#v", document)
+		}
+		if strings.Contains(out.String(), source) {
+			t.Fatalf("publish response leaked local absolute path: %s", out.String())
+		}
+	})
+}
+
+func TestArtifactPublishRejectsUnsafeRepoFile(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "outside.md")
+	if err := os.WriteFile(outside, []byte("outside"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(repo, "docs", "link.md")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Dir(outside), filepath.Join(repo, "linked-outside")); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name     string
+		repoFile string
+	}{
+		{"absolute", filepath.Join(repo, "docs", "spec.md")},
+		{"traversal", "../outside.md"},
+		{"windows traversal", `..\outside.md`},
+		{"windows absolute", `C:\outside.md`},
+		{"directory", "docs"},
+		{"final symlink", "docs/link.md"},
+		{"symlink escape", "linked-outside/outside.md"},
+	}
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			deps, fc, _, out := newFakeDeps(t)
+			deps.WorkingDir = repo
+			packagePath := writeTempJSON(t, map[string]any{
+				"feature_key": "unsafe-repo-file",
+				"documents": []map[string]any{{
+					"path": "spec.md", "role": "spec", "repo_file": tc.repoFile,
+				}},
+			})
+			code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "publish", "--preview", "--file", packagePath)
+			if code != output.ExitUsage {
+				t.Fatalf("exit = %d, want usage; output = %s", code, out.String())
+			}
+			if fc.calls != 0 {
+				t.Fatalf("unsafe source made %d API calls", fc.calls)
+			}
+		})
+	}
+}
+
+func TestArtifactPublishRepoFileRequiresGitRepository(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	deps.WorkingDir = t.TempDir()
+	packagePath := writeTempJSON(t, map[string]any{
+		"feature_key": "no-git-root",
+		"documents": []map[string]any{{
+			"path": "spec.md", "role": "spec", "repo_file": "docs/spec.md",
+		}},
+	})
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "publish", "--preview", "--file", packagePath)
+	if code != output.ExitUsage {
+		t.Fatalf("exit = %d, want usage; output = %s", code, out.String())
+	}
+	if fc.calls != 0 || !strings.Contains(out.String(), "requires a Git repository") {
+		t.Fatalf("result: calls=%d output=%s", fc.calls, out.String())
+	}
+}
+
 // writeTempJSON writes data as JSON to a temp file and returns the path.
 func TestArtifactPublishRejectsSourceFileOutsidePackage(t *testing.T) {
 	t.Parallel()
@@ -187,7 +333,8 @@ func TestArtifactPublishPreviewShowsAbsoluteFileURLSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	packagePath := writeTempJSON(t, map[string]any{
-		"feature_key": "feat-file-url-preview",
+		"feature_key":  "feat-file-url-preview",
+		"workspace_id": "ws-core",
 		"documents": []map[string]any{
 			{"path": "tasks.md", "role": "plan", "file_url": "file://" + source},
 		},
@@ -197,7 +344,7 @@ func TestArtifactPublishPreviewShowsAbsoluteFileURLSource(t *testing.T) {
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
 	}
-	if fc.calls != 0 || !strings.Contains(out.String(), `"source_path":`+strconv.Quote(source)) {
+	if fc.calls != 1 || !strings.Contains(out.String(), `"source_path":`+strconv.Quote(source)) {
 		t.Fatalf("preview hid external source: calls=%d output=%s", fc.calls, out.String())
 	}
 }

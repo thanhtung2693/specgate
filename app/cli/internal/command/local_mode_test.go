@@ -187,13 +187,35 @@ func TestLocalProjectWorkspaceBindingOverridesGlobalSelection(t *testing.T) {
 
 func TestLocalArtifactPublishListAndShowNeedNoHTTP(t *testing.T) {
 	deps, out := newTestDeps(t, "")
+	repo := t.TempDir()
+	for _, dir := range []string{".git", "docs/framework", ".specgate/work"} {
+		if err := os.MkdirAll(filepath.Join(repo, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	specPath := filepath.Join(repo, "docs/framework/spec.md")
+	planPath := filepath.Join(repo, "docs/framework/plan.md")
+	if err := os.WriteFile(specPath, []byte("immutable spec"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(planPath, []byte("immutable plan"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	deps.WorkingDir = filepath.Join(repo, "docs/framework")
 	stateDir := filepath.Join(t.TempDir(), "local")
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--no-input", "init", "--mode", "local", "--local-dir", stateDir, "--workspace-name", "Alpha", "--display-name", "Human", "--username", "human"); code != output.ExitOK {
 		t.Fatalf("init exit = %d; output=%s", code, out.String())
 	}
-	artifactPath := filepath.Join(t.TempDir(), "artifact.json")
-	if err := os.WriteFile(artifactPath, []byte(`{"feature_key":"LOCAL-ARTIFACTS","request_type":"new_feature","documents":[{"path":"spec.md","role":"spec","content":"immutable body"}]}`), 0o600); err != nil {
+	artifactPath := filepath.Join(repo, ".specgate/work/artifact.json")
+	if err := os.WriteFile(artifactPath, []byte(`{"feature_key":"LOCAL-ARTIFACTS","request_type":"new_feature","documents":[{"path":"docs/framework/spec.md","role":"spec","repo_file":"docs/framework/spec.md"},{"path":"docs/framework/plan.md","role":"plan","repo_file":"docs/framework/plan.md"}]}`), 0o600); err != nil {
 		t.Fatal(err)
+	}
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "publish", "--preview", "--file", artifactPath); code != output.ExitOK {
+		t.Fatalf("preview exit = %d; output=%s", code, out.String())
+	}
+	if !strings.Contains(out.String(), `"governance_level":"standard"`) || !strings.Contains(out.String(), `"missing_roles":[]`) {
+		t.Fatalf("preview policy = %s", out.String())
 	}
 	out.Reset()
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "publish", "--file", artifactPath); code != output.ExitOK {
@@ -215,8 +237,11 @@ func TestLocalArtifactPublishListAndShowNeedNoHTTP(t *testing.T) {
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "show", published.Data.ArtifactID); code != output.ExitOK {
 		t.Fatalf("show exit = %d; output=%s", code, out.String())
 	}
-	if !strings.Contains(out.String(), "immutable body") {
+	if !strings.Contains(out.String(), "immutable spec") || !strings.Contains(out.String(), "immutable plan") {
 		t.Fatalf("show output = %s", out.String())
+	}
+	if body, _ := os.ReadFile(specPath); string(body) != "immutable spec" {
+		t.Fatalf("framework source changed: %q", body)
 	}
 	if deps.Client != nil {
 		t.Fatal("Local artifact commands created an HTTP client")
@@ -305,6 +330,42 @@ func TestLocalWorkspaceOverrideScopesArtifactWithoutChangingSelection(t *testing
 	}
 }
 
+func TestLocalArtifactPackageWorkspaceScopesPublishWithoutChangingSelection(t *testing.T) {
+	deps, out := newTestDeps(t, "")
+	stateDir := filepath.Join(t.TempDir(), "local")
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--no-input", "init", "--mode", "local", "--local-dir", stateDir, "--workspace-name", "Alpha", "--display-name", "Human", "--username", "human"); code != output.ExitOK {
+		t.Fatalf("init exit = %d; output=%s", code, out.String())
+	}
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "workspace", "create", "Beta"); code != output.ExitOK {
+		t.Fatalf("workspace create exit = %d; output=%s", code, out.String())
+	}
+	artifactPath := filepath.Join(t.TempDir(), "artifact.json")
+	if err := os.WriteFile(artifactPath, []byte(`{"workspace_id":"beta","feature_key":"LOCAL-PACKAGE-SCOPE","request_type":"new_feature","documents":[{"path":"spec.md","role":"spec","content":"beta only"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "publish", "--file", artifactPath); code != output.ExitOK {
+		t.Fatalf("publish exit = %d; output=%s", code, out.String())
+	}
+	var published struct {
+		Data struct {
+			ArtifactID string `json:"artifact_id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &published); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "show", published.Data.ArtifactID); code != output.ExitNotFound {
+		t.Fatalf("artifact leaked into selected Alpha workspace: exit=%d output=%s", code, out.String())
+	}
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--workspace", "beta", "artifact", "show", published.Data.ArtifactID); code != output.ExitOK {
+		t.Fatalf("artifact missing from package workspace: exit=%d output=%s", code, out.String())
+	}
+}
+
 func TestLocalReadinessThenHumanApprovalNeedNoHTTP(t *testing.T) {
 	deps, out := newTestDeps(t, "")
 	repoDir := t.TempDir()
@@ -315,7 +376,7 @@ func TestLocalReadinessThenHumanApprovalNeedNoHTTP(t *testing.T) {
 		t.Fatalf("init exit = %d; output=%s", code, out.String())
 	}
 	artifactPath := filepath.Join(t.TempDir(), "artifact.json")
-	if err := os.WriteFile(artifactPath, []byte(`{"feature_key":"LOCAL-READINESS","request_type":"new_feature","documents":[{"path":"spec.md","role":"spec","content":"acceptance criteria"}]}`), 0o600); err != nil {
+	if err := os.WriteFile(artifactPath, []byte(`{"feature_key":"LOCAL-READINESS","request_type":"new_feature","documents":[{"path":"spec.md","role":"spec","content":"acceptance criteria"},{"path":"plan.md","role":"plan","content":"implement and verify"}]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	out.Reset()
@@ -508,7 +569,7 @@ func TestLocalGateTaskLoopNeedsNoHTTP(t *testing.T) {
 		t.Fatalf("init exit=%d output=%s", code, out.String())
 	}
 	artifactPath := filepath.Join(t.TempDir(), "artifact.json")
-	if err := os.WriteFile(artifactPath, []byte(`{"feature_key":"LOCAL-GATES","request_type":"new_feature","documents":[{"path":"spec.md","role":"spec","content":"# Local gates\n\nAcceptance criteria: observable"}]}`), 0o600); err != nil {
+	if err := os.WriteFile(artifactPath, []byte(`{"feature_key":"LOCAL-GATES","request_type":"new_feature","documents":[{"path":"spec.md","role":"spec","content":"# Local gates\n\nAcceptance criteria: observable"},{"path":"plan.md","role":"plan","content":"# Plan\n\nImplement and verify."}]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if code := execute("--json", "artifact", "publish", "--file", artifactPath); code != output.ExitOK {
@@ -544,7 +605,7 @@ func TestLocalGateTaskLoopNeedsNoHTTP(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if len(listed.Data.Tasks) != 4 {
+	if len(listed.Data.Tasks) != 3 {
 		t.Fatalf("tasks = %#v", listed.Data.Tasks)
 	}
 	for _, task := range listed.Data.Tasks {
@@ -583,7 +644,7 @@ func TestLocalWorkCreatePersistsIDEAgentConfirmedAcceptanceCriteria(t *testing.T
 	artifactPath := filepath.Join(t.TempDir(), "artifact.json")
 	artifact := `{"feature_key":"LOCAL-EXPLICIT-AC","request_type":"new_feature","documents":[
 		{"path":"spec.md","role":"spec","content":"# Contract\n\nThe source format is intentionally not interpreted by the CLI."},
-		{"path":"notes.md","role":"design","content":"Acceptance criteria are confirmed by the IDE agent."}
+		{"path":"notes.md","role":"plan","content":"Acceptance criteria are confirmed by the IDE agent."}
 	]}`
 	if err := os.WriteFile(artifactPath, []byte(artifact), 0o600); err != nil {
 		t.Fatal(err)

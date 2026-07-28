@@ -117,7 +117,7 @@ func (s *Service) PublishArtifact(ctx context.Context, in PublishArtifactInput) 
 		}
 	}
 
-	resolved, err := s.ProfileResolver.ResolveProfile(ctx, governanceprofile.ResolveInput{
+	resolved, explanation, err := s.resolveArtifactPolicy(ctx, workspaceID, governanceprofile.ResolveInput{
 		RequestType:              reqType,
 		ImpactLevel:              impact,
 		RequestedGovernanceLevel: governanceprofile.GovernanceLevel(strings.TrimSpace(in.RequestedGovernanceLevel)),
@@ -126,29 +126,10 @@ func (s *Service) PublishArtifact(ctx context.Context, in PublishArtifactInput) 
 	if err != nil {
 		return nil, err
 	}
-	// Stamp the v1 schema-version marker on the resolved policy before
-	// serializing. This makes the persisted snapshot parseable by ParseSnapshot,
-	// which enables fail-closed approval guards for later reads. The marker is
-	// not set by the resolver itself to keep the resolver output schema-agnostic.
-	resolved.SnapshotSchemaVersion = governanceprofile.SnapshotSchemaPolicyV1
-	skillPrompts := map[string]string{}
-	if s.Skills != nil && len(resolved.GateSkills) > 0 {
-		registered, err := s.Skills.List(skills.WithWorkspace(ctx, workspaceID))
-		if err != nil {
-			return nil, fmt.Errorf("freeze policy Skill rubrics: %w", err)
-		}
-		for _, skill := range registered {
-			skillPrompts[strings.TrimSpace(skill.Name)] = skill.Prompt
-		}
-	}
-	if err := resolved.FreezeGateDefinitions(skillPrompts); err != nil {
-		return nil, fmt.Errorf("freeze policy gate definitions: %w", err)
-	}
 	snapshotJSON, err := resolved.SnapshotJSON()
 	if err != nil {
 		return nil, err
 	}
-	explanation := governanceprofile.ExplainSnapshot(*resolved)
 
 	art, err := s.ArtifactWriter.Publish(ctx, artifact.PublishInput{
 		WorkspaceID:          workspaceID,
@@ -202,9 +183,98 @@ func (s *Service) PublishArtifact(ctx context.Context, in PublishArtifactInput) 
 		RiskLevel:       resolved.RiskLevel,
 		GovernanceLevel: string(resolved.GovernanceLevel),
 		GovernanceWhy:   resolved.ReasonCodes,
+		PolicyDigest:    resolved.Digest,
 	}
-	result.PolicyExplanation = &explanation
+	result.PolicyExplanation = explanation
 	return result, nil
+}
+
+func (s *Service) resolveArtifactPolicy(
+	ctx context.Context,
+	workspaceID string,
+	in governanceprofile.ResolveInput,
+) (*governanceprofile.ResolvedProfile, *governanceprofile.Explanation, error) {
+	if s.ProfileResolver == nil {
+		return nil, nil, fmt.Errorf("automatic policy resolver is not configured")
+	}
+	resolved, err := s.ProfileResolver.ResolveProfile(ctx, in)
+	if err != nil {
+		return nil, nil, err
+	}
+	resolved.SnapshotSchemaVersion = governanceprofile.SnapshotSchemaPolicyV1
+	skillPrompts := map[string]string{}
+	if s.Skills != nil && len(resolved.GateSkills) > 0 {
+		registered, err := s.Skills.List(skills.WithWorkspace(ctx, workspaceID))
+		if err != nil {
+			return nil, nil, fmt.Errorf("freeze policy Skill rubrics: %w", err)
+		}
+		for _, skill := range registered {
+			skillPrompts[strings.TrimSpace(skill.Name)] = skill.Prompt
+		}
+	}
+	if err := resolved.FreezeGateDefinitions(skillPrompts); err != nil {
+		return nil, nil, fmt.Errorf("freeze policy gate definitions: %w", err)
+	}
+	explanation := governanceprofile.ExplainSnapshot(*resolved)
+	return resolved, &explanation, nil
+}
+
+func (s *Service) PreviewArtifactPolicy(
+	ctx context.Context,
+	in PreviewArtifactPolicyInput,
+) (*ArtifactPolicyProjection, error) {
+	workspaceID := strings.TrimSpace(in.WorkspaceID)
+	if selected := trustedWorkspace(ctx); selected != "" {
+		if workspaceID != "" && workspaceID != selected {
+			return nil, fmt.Errorf("%w: workspace_id must match the trusted request workspace", ErrValidation)
+		}
+		workspaceID = selected
+	}
+	var valid bool
+	if workspaceID, valid = workspace.NormalizeID(workspaceID); !valid {
+		return nil, fmt.Errorf("workspace_id is required and must be a safe path segment")
+	}
+	impact := strings.TrimSpace(in.ImpactLevel)
+	if impact == "" {
+		impact = "medium"
+	}
+	requestType := strings.TrimSpace(in.RequestType)
+	if requestType == "" {
+		requestType = "unknown"
+	}
+	resolved, explanation, err := s.resolveArtifactPolicy(ctx, workspaceID, governanceprofile.ResolveInput{
+		RequestType:              requestType,
+		ImpactLevel:              impact,
+		RequestedGovernanceLevel: governanceprofile.GovernanceLevel(strings.TrimSpace(in.RequestedGovernanceLevel)),
+		ImpactDeclaration:        in.ImpactDeclaration,
+	})
+	if err != nil {
+		return nil, err
+	}
+	rubrics := make([]PolicyRubricProjection, 0, len(resolved.GateDefinitions))
+	for _, definition := range resolved.GateDefinitions {
+		source := "inline"
+		if definition.SkillName != "" {
+			source = "workspace_skill"
+		}
+		rubrics = append(rubrics, PolicyRubricProjection{
+			Gate: definition.Key, Skill: definition.SkillName,
+			Digest: definition.SkillDigest, Source: source,
+		})
+	}
+	return &ArtifactPolicyProjection{
+		GovernanceLevel:  string(resolved.GovernanceLevel),
+		ReasonCodes:      resolved.ReasonCodes,
+		RequiredRoles:    resolved.RequiredRoles,
+		RequiredTopics:   resolved.RequiredTopics,
+		RequiredEvidence: resolved.RequiredEvidence,
+		EnabledGates:     resolved.EnabledGates,
+		ApprovalPolicy:   resolved.ApprovalPolicy,
+		EvidencePolicy:   resolved.EvidencePolicy,
+		PolicyDigest:     resolved.Digest,
+		Rubrics:          rubrics,
+		Explanation:      *explanation,
+	}, nil
 }
 
 func validateArtifactPackageSize(documents []DocumentInput) error {

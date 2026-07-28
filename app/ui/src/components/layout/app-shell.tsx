@@ -501,13 +501,14 @@ export function AppShell() {
       <main className="grid min-h-svh place-items-center bg-background p-4">
         <section className="grid w-full max-w-md gap-4 rounded-xl border bg-card p-5">
           <div>
-            <h1 className="text-xl font-semibold">Web UI requires Full mode</h1>
+            <h1 className="text-xl font-semibold">UI is not configured</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Local mode stays in the CLI and IDE. Start the Full appliance to use the browser UI.
+              This build has no Doc Registry endpoint.
             </p>
           </div>
-          <code className="rounded-md border bg-background px-3 py-2 text-sm">specgate init --mode full</code>
-          <p className="text-xs text-muted-foreground">Then run <code>specgate doctor</code> and open the URL it reports.</p>
+          <p className="text-xs text-muted-foreground">
+            Rebuild the Full appliance, or set <code>VITE_DOC_REGISTRY_URL</code> when running the UI directly.
+          </p>
         </section>
       </main>
     )

@@ -398,7 +398,7 @@ Important facades:
 | `GET` | `/api/v1/artifacts/{id}/files`, `/files/_?path=...` | Artifact file read surfaces |
 | `GET` | `/api/v1/skills?workspace_id=...`, `/api/v1/skills/{id}?workspace_id=...` | Workspace-scoped Skill catalog/detail |
 | `GET` | `/api/v1/policies/levels` | Built-in policy levels |
-| `POST` | `/api/v1/policies/resolve` | Policy dry-run |
+| `POST` | `/api/v1/policies/resolve` | Read-only policy projection for an unpublished artifact. Returns the exact roles, evidence, gates, digest, and frozen rubric sources that publication would use; requires the selected workspace and writes nothing. |
 | `GET` | `/api/v1/artifacts/{id}/policy` | Explain artifact policy |
 
 Stats are computed from existing gate runs, feedback events, and CR rows. No

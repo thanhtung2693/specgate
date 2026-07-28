@@ -389,8 +389,38 @@ type PublishArtifactResult struct {
 	RiskLevel       string   `json:"risk_level,omitempty"`
 	GovernanceLevel string   `json:"governance_level,omitempty"`
 	GovernanceWhy   []string `json:"governance_why,omitempty"`
+	PolicyDigest    string   `json:"policy_digest,omitempty"`
 	// PolicyExplanation is a human-readable explanation of the governance decision.
 	PolicyExplanation *governanceprofile.Explanation `json:"policy_explanation,omitempty"`
+}
+
+type PreviewArtifactPolicyInput struct {
+	WorkspaceID              string                              `json:"workspace_id,omitempty"`
+	RequestType              string                              `json:"request_type,omitempty"`
+	ImpactLevel              string                              `json:"impact_level,omitempty"`
+	RequestedGovernanceLevel string                              `json:"requested_governance_level,omitempty"`
+	ImpactDeclaration        governanceprofile.ImpactDeclaration `json:"impact_declaration,omitempty"`
+}
+
+type PolicyRubricProjection struct {
+	Gate   string `json:"gate"`
+	Skill  string `json:"skill,omitempty"`
+	Digest string `json:"digest,omitempty"`
+	Source string `json:"source"`
+}
+
+type ArtifactPolicyProjection struct {
+	GovernanceLevel  string                        `json:"governance_level"`
+	ReasonCodes      []string                      `json:"reason_codes"`
+	RequiredRoles    []string                      `json:"required_roles"`
+	RequiredTopics   []string                      `json:"required_topics"`
+	RequiredEvidence []string                      `json:"required_evidence"`
+	EnabledGates     []string                      `json:"enabled_gates"`
+	ApprovalPolicy   string                        `json:"approval_policy"`
+	EvidencePolicy   string                        `json:"evidence_policy"`
+	PolicyDigest     string                        `json:"policy_digest"`
+	Rubrics          []PolicyRubricProjection      `json:"rubrics"`
+	Explanation      governanceprofile.Explanation `json:"explanation"`
 }
 
 // --- Agents-backed operations types ---

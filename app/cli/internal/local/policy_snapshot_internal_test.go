@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -32,7 +33,8 @@ func TestDispatchGateTasksUsesFrozenArtifactPolicy(t *testing.T) {
 
 	frozen := map[string]any{
 		"snapshot_schema_version": "specgate.local_policy/v1",
-		"policy_version":          "frozen@v9",
+		"policy_version":          "local-standard",
+		"required_roles":          []string{"plan", "spec"},
 		"enabled_gates":           []string{"scope_clear"},
 		"gate_definitions": []map[string]string{{
 			"key": "scope_clear", "version": "frozen-v9", "skill_content": "Use the frozen rubric.",
@@ -95,6 +97,66 @@ func TestFrozenLocalPolicyRequiresAuthorityContracts(t *testing.T) {
 				t.Fatal("invalid authority policy was accepted")
 			}
 		})
+	}
+}
+
+func TestLocalDriftGateHasNoDeliverySkillBinding(t *testing.T) {
+	snapshot, _, err := localPolicySnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var policy localPolicyDocument
+	if err := json.Unmarshal([]byte(snapshot), &policy); err != nil {
+		t.Fatal(err)
+	}
+	if skill, exists := policy.GateSkills["spec_repo_drift"]; exists {
+		t.Fatalf("spec_repo_drift skill = %q; drift uses its frozen inline rubric", skill)
+	}
+	for _, definition := range policy.GateDefinitions {
+		if definition.Key == "spec_repo_drift" {
+			if !strings.Contains(definition.SkillContent, "approved artifact") {
+				t.Fatalf("drift rubric = %q, want frozen drift-specific content", definition.SkillContent)
+			}
+			return
+		}
+	}
+	t.Fatal("spec_repo_drift gate definition missing")
+}
+
+func TestLocalPolicyMatchesFullStandardContract(t *testing.T) {
+	snapshot, digest, err := localPolicySnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var policy localPolicyDocument
+	if err := json.Unmarshal([]byte(snapshot), &policy); err != nil {
+		t.Fatal(err)
+	}
+	if policy.PolicyVersion != "local-standard" ||
+		policy.GovernanceLevel != "standard" ||
+		!reflect.DeepEqual(policy.ReasonCodes, []string{"local_fixed_standard"}) ||
+		policy.Approval != "human_required" ||
+		policy.Evidence != "attested_ok" {
+		t.Fatalf("policy = %#v", policy)
+	}
+	assertStringsEqual(t, policy.RequiredRoles, []string{"plan", "spec"})
+	assertStringsEqual(t, policy.RequiredTopics, []string{"acceptance_criteria", "outcomes", "scope", "verification"})
+	assertStringsEqual(t, policy.RequiredEvidence, []string{"tests"})
+	assertStringsEqual(t, policy.EnabledGates, []string{
+		"acceptance_criteria_verifiable",
+		"scope_clear",
+		"spec_completeness",
+		"spec_repo_drift",
+	})
+	if digest != digestText(snapshot) {
+		t.Fatalf("digest = %q, want %q", digest, digestText(snapshot))
+	}
+}
+
+func assertStringsEqual(t *testing.T, got, want []string) {
+	t.Helper()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
 	}
 }
 
@@ -193,7 +255,8 @@ func setAlternateValidLocalPolicy(t *testing.T, ctx context.Context, store *Stor
 	t.Helper()
 	policy := map[string]any{
 		"snapshot_schema_version": localPolicySchemaVersion,
-		"policy_version":          "alternate@v1",
+		"policy_version":          localPolicyVersion,
+		"required_roles":          []string{"plan", "spec"},
 		"enabled_gates":           []string{"alternate_gate"},
 		"gate_definitions": []map[string]string{{
 			"key": "alternate_gate", "version": "v1", "skill_content": "Evaluate the alternate contract.",

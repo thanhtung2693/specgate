@@ -36,18 +36,23 @@ func (h *Handlers) CLIListPolicyLevels(_ context.Context, _ *struct{}) (*CLIList
 // CLIResolvePolicy handles POST /api/v1/policies/resolve — resolves the
 // governance level and explanation for a proposed change without persisting
 // anything.
-func (h *Handlers) CLIResolvePolicy(_ context.Context, in *CLIResolvePolicyInput) (*CLIPolicyOutput, error) {
-	p, err := governanceprofile.ResolveBuiltInPolicy(governanceprofile.ResolveInput{
+func (h *Handlers) CLIResolvePolicy(ctx context.Context, in *CLIResolvePolicyInput) (*CLIResolvePolicyOutput, error) {
+	svc, err := h.requireGovernance()
+	if err != nil {
+		return nil, err
+	}
+	projection, err := svc.PreviewArtifactPolicy(ctx, governanceops.PreviewArtifactPolicyInput{
+		WorkspaceID:              workspace.ID(ctx),
 		RequestType:              in.Body.RequestType,
 		ImpactLevel:              in.Body.ImpactLevel,
-		RequestedGovernanceLevel: governanceprofile.GovernanceLevel(in.Body.RequestedGovernanceLevel),
+		RequestedGovernanceLevel: in.Body.RequestedGovernanceLevel,
 		ImpactDeclaration:        in.Body.ImpactDeclaration,
 	})
 	if err != nil {
-		return nil, huma.Error500InternalServerError("resolve policy", err)
+		return nil, mapGovernanceError("resolve policy", err)
 	}
-	out := &CLIPolicyOutput{}
-	out.Body = governanceprofile.ExplainSnapshot(*p)
+	out := &CLIResolvePolicyOutput{}
+	out.Body = *projection
 	return out, nil
 }
 

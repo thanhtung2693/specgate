@@ -464,9 +464,8 @@ func getArtifactForWorkspaceCLI(ctx context.Context, deps *Deps, workspaceID, id
 	return deps.Client.GetArtifact(ctx, id)
 }
 
-// artifactPublishPreviewContext scopes the stored-artifact reads made by
-// --compare. A bare local preview remains offline; only a comparison resolves
-// the selected workspace because it reads a workspace-owned artifact.
+// artifactPublishPreviewContext scopes Full-mode policy resolution and optional
+// stored-artifact reads to the selected workspace.
 func artifactPublishPreviewContext(ctx context.Context, deps *Deps, body map[string]any) (context.Context, error) {
 	if workspaceID, _ := body["workspace_id"].(string); strings.TrimSpace(workspaceID) != "" {
 		return client.WithWorkspace(ctx, workspaceID), nil

@@ -565,6 +565,37 @@ type PolicyExplanation struct {
 	PolicyLineage   []PolicyLineageEntry `json:"policy_lineage,omitempty"`
 }
 
+// ResolveGovernancePolicyInput describes an artifact before publication.
+type ResolveGovernancePolicyInput struct {
+	RequestType              string         `json:"request_type"`
+	ImpactLevel              string         `json:"impact_level"`
+	RequestedGovernanceLevel string         `json:"requested_governance_level,omitempty"`
+	ImpactDeclaration        map[string]any `json:"impact_declaration,omitempty"`
+}
+
+// PolicyRubricProjection identifies the frozen rubric selected for one gate.
+type PolicyRubricProjection struct {
+	Gate   string `json:"gate"`
+	Skill  string `json:"skill,omitempty"`
+	Digest string `json:"digest,omitempty"`
+	Source string `json:"source"`
+}
+
+// PolicyProjection is the exact governance policy an artifact would freeze.
+type PolicyProjection struct {
+	GovernanceLevel  string                   `json:"governance_level"`
+	ReasonCodes      []string                 `json:"reason_codes"`
+	RequiredRoles    []string                 `json:"required_roles"`
+	RequiredTopics   []string                 `json:"required_topics"`
+	RequiredEvidence []string                 `json:"required_evidence"`
+	EnabledGates     []string                 `json:"enabled_gates"`
+	ApprovalPolicy   string                   `json:"approval_policy"`
+	EvidencePolicy   string                   `json:"evidence_policy"`
+	PolicyDigest     string                   `json:"policy_digest"`
+	Rubrics          []PolicyRubricProjection `json:"rubrics"`
+	Explanation      PolicyExplanation        `json:"explanation"`
+}
+
 // GovernanceLevel is the execution projection for one built-in governance tier
 // returned by GET /api/v1/policies/levels.
 type GovernanceLevel struct {

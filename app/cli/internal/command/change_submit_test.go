@@ -276,7 +276,10 @@ func newLocalChangeWork(t *testing.T, deps *command.Deps) (string, *local.Store,
 	}
 	artifact, err := store.PublishArtifact(t.Context(), selection.Workspace.ID, local.ArtifactInput{
 		FeatureKey: "CHANGE", RequestType: "new_feature",
-		Documents: []local.ArtifactDocumentInput{{Path: "spec.md", Role: "spec", Content: []byte("# Change\n\n## Acceptance criteria\n\n1. Status is actionable.")}},
+		Documents: []local.ArtifactDocumentInput{
+			{Path: "spec.md", Role: "spec", Content: []byte("# Change\n\n## Acceptance criteria\n\n1. Status is actionable.")},
+			{Path: "plan.md", Role: "plan", Content: []byte("# Plan\n\nImplement and verify.")},
+		},
 	})
 	if err != nil {
 		t.Fatal(err)

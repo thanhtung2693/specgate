@@ -266,13 +266,7 @@ func defaultGateRubric(gateKey string) string {
 	case "acceptance_criteria_verifiable":
 		return "Evaluate whether each acceptance criterion is observable and testable. Pass only when every criterion has a clear pass/fail check; warn for minor wording gaps; fail when one or more criteria are vague, subjective, or not tied to observable behavior."
 	case "spec_repo_drift":
-		return "Detect where the repository's governed docs contradict the approved spec artifact. " +
-			"Examine the doc-layering convention for each module the spec governs: the module's docs/spec.md, " +
-			"docs/prd.md, and README.md, plus any repo docs the spec text itself names. Judge semantic " +
-			"contradictions against the frozen approved spec content — report a finding when a doc's claim " +
-			"conflicts with the spec. Two rules bind you: (1) the approved spec outranks the drifted doc — do " +
-			"not follow the doc or rewrite it to match your reading; (2) do not rewrite repo docs outside the " +
-			"current work item's scope — report the drift as a finding instead. Drift warns, never blocks."
+		return governanceprofile.SpecRepoDriftRubric
 	default:
 		return "Evaluate this gate honestly against the artifact content. Return pass, warn, fail, needs_human_review, or not_applicable with specific evidence from the artifact."
 	}

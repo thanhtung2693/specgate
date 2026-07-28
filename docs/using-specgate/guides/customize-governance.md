@@ -76,9 +76,10 @@ Two inputs improve gate judgment without any configuration:
 - **Attachments** — pin bug reproductions, examples, or design links to the
   feature with the `gate` (or `both`) audience; the acceptance-criteria and
   scope gates receive them.
-- **Verification documents** — the acceptance-criteria gates read the
-  `verification` role. A test plan in the package directly improves those
-  verdicts.
+- **Verification material** — acceptance-criteria gates read the spec, plan,
+  and optional `verification` role. Keep the verification method in the
+  framework document where it naturally belongs; map a separate test plan only
+  when one already exists.
 
 ## Verify a customization end to end
 

@@ -1,16 +1,12 @@
 package command
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"io"
-	"net/url"
-	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/spf13/cobra"
 
@@ -61,7 +57,8 @@ to compare explicit paths, roles, and hashes against one stored artifact.`,
 				code := deps.Printer.Error("artifact.publish", payload)
 				return &output.ExitError{Code: code, Err: err}
 			}
-			documentSources, err := expandArtifactDocumentSources(body, filePath)
+			projectRoot, _ := config.FindProjectRoot(deps.WorkingDir)
+			documentSources, err := expandArtifactDocumentSources(body, filePath, projectRoot)
 			if err != nil {
 				payload := output.ErrorPayload{Code: "usage", Message: err.Error()}
 				code := deps.Printer.Error("artifact.publish", payload)
@@ -69,6 +66,19 @@ to compare explicit paths, roles, and hashes against one stored artifact.`,
 			}
 			if previewOnly {
 				preview := artifactPublishPreview(body, documentSources)
+				policy, err := artifactPreviewPolicy(cmd.Context(), deps, body)
+				if err != nil {
+					if deps.Topology == config.ModeLocal {
+						return localExitError(deps, "artifact.publish.preview", err)
+					}
+					return apiExitError(deps, "artifact.publish.preview", err)
+				}
+				preview["policy"] = policy
+				preview["missing_roles"] = missingArtifactRoles(body, policy.RequiredRoles)
+				if deps.Topology == config.ModeLocal {
+					delete(preview, "governance_hint")
+					preview["omitted"] = []string{}
+				}
 				var comparison *artifactComparison
 				if compareArtifactID != "" {
 					var base *client.Artifact
@@ -79,15 +89,9 @@ to compare explicit paths, roles, and hashes against one stored artifact.`,
 							return localExitError(deps, "artifact.publish.preview", err)
 						}
 						defer store.Close()
-						selection, err := localSelection(cmd.Context(), deps, store)
+						selection, err := localArtifactSelection(cmd.Context(), deps, store, body)
 						if err != nil {
 							return localExitError(deps, "artifact.publish.preview", err)
-						}
-						if workspaceID, _ := body["workspace_id"].(string); strings.TrimSpace(workspaceID) != "" {
-							selection.Workspace, err = store.Workspace(cmd.Context(), workspaceID)
-							if err != nil {
-								return localExitError(deps, "artifact.publish.preview", err)
-							}
 						}
 						localBase, err := store.GetArtifact(cmd.Context(), selection.Workspace.ID, compareArtifactID)
 						if err != nil {
@@ -131,6 +135,11 @@ to compare explicit paths, roles, and hashes against one stored artifact.`,
 				for _, doc := range preview["documents"].([]map[string]any) {
 					fmt.Fprintf(deps.Stdout, "%s\t%s\t%d bytes\n", styled(deps, output.StyleBold, fmt.Sprint(doc["path"])), doc["role"], doc["size_bytes"])
 				}
+				fmt.Fprintf(deps.Stdout, "Policy\t%s (%s)\n", policy.GovernanceLevel, strings.Join(policy.ReasonCodes, ", "))
+				if missing := preview["missing_roles"].([]string); len(missing) > 0 {
+					fmt.Fprintf(deps.Stdout, "Missing roles\t%s\n", strings.Join(missing, ", "))
+				}
+				fmt.Fprintf(deps.Stdout, "Evidence\t%s\n", strings.Join(policy.RequiredEvidence, ", "))
 				if comparison != nil {
 					writeArtifactComparison(deps.Stdout, *comparison)
 				}
@@ -143,7 +152,7 @@ to compare explicit paths, roles, and hashes against one stored artifact.`,
 					return localExitError(deps, "artifact.publish", err)
 				}
 				defer store.Close()
-				selection, err := localSelection(cmd.Context(), deps, store)
+				selection, err := localArtifactSelection(cmd.Context(), deps, store, body)
 				if err != nil {
 					return localExitError(deps, "artifact.publish", err)
 				}
@@ -208,9 +217,93 @@ to compare explicit paths, roles, and hashes against one stored artifact.`,
 		},
 	}
 	cmd.Flags().StringVar(&filePath, "file", "", "JSON file to publish (required)")
-	cmd.Flags().BoolVar(&previewOnly, "preview", false, "Show exact package mapping without publishing")
+	cmd.Flags().BoolVar(&previewOnly, "preview", false, "Show exact package and governance mapping without publishing")
 	cmd.Flags().StringVar(&compareArtifactID, "compare", "", "Compare preview with one published artifact using stored hashes")
 	return cmd
+}
+
+func artifactPreviewPolicy(ctx context.Context, deps *Deps, body map[string]any) (*client.PolicyProjection, error) {
+	if deps.Topology == config.ModeLocal {
+		policy, err := local.PreviewPolicy()
+		if err != nil {
+			return nil, err
+		}
+		rubrics := make([]client.PolicyRubricProjection, len(policy.Rubrics))
+		for i, rubric := range policy.Rubrics {
+			rubrics[i] = client.PolicyRubricProjection{
+				Gate: rubric.Gate, Skill: rubric.Skill, Digest: rubric.Digest, Source: rubric.Source,
+			}
+		}
+		return &client.PolicyProjection{
+			GovernanceLevel: policy.GovernanceLevel, ReasonCodes: policy.ReasonCodes,
+			RequiredRoles: policy.RequiredRoles, RequiredTopics: policy.RequiredTopics,
+			RequiredEvidence: policy.RequiredEvidence, EnabledGates: policy.EnabledGates,
+			ApprovalPolicy: policy.ApprovalPolicy, EvidencePolicy: policy.EvidencePolicy,
+			PolicyDigest: policy.PolicyDigest, Rubrics: rubrics,
+			Explanation: client.PolicyExplanation{
+				GovernanceLevel: "standard",
+				Title:           "Local Standard governance",
+				Summary:         "Human approval and test evidence are required.",
+				Reasons:         policy.ReasonCodes,
+			},
+		}, nil
+	}
+	previewCtx, err := artifactPublishPreviewContext(ctx, deps, body)
+	if err != nil {
+		return nil, err
+	}
+	impactDeclaration, _ := body["impact_declaration"].(map[string]any)
+	impactLevel := artifactString(body, "impact_level")
+	if impactLevel == "" {
+		impactLevel = "medium"
+	}
+	return deps.Client.ResolveGovernancePolicy(previewCtx, client.ResolveGovernancePolicyInput{
+		RequestType:              artifactString(body, "request_type"),
+		ImpactLevel:              impactLevel,
+		RequestedGovernanceLevel: artifactString(body, "requested_governance_level"),
+		ImpactDeclaration:        impactDeclaration,
+	})
+}
+
+func artifactString(body map[string]any, field string) string {
+	value, _ := body[field].(string)
+	return strings.TrimSpace(value)
+}
+
+func localArtifactSelection(
+	ctx context.Context,
+	deps *Deps,
+	store *local.Store,
+	body map[string]any,
+) (local.Selection, error) {
+	selection, err := localSelection(ctx, deps, store)
+	if err != nil {
+		return local.Selection{}, err
+	}
+	workspaceID := artifactString(body, "workspace_id")
+	if workspaceID == "" {
+		return selection, nil
+	}
+	selection.Workspace, err = store.Workspace(ctx, workspaceID)
+	return selection, err
+}
+
+func missingArtifactRoles(body map[string]any, required []string) []string {
+	present := map[string]bool{}
+	if documents, ok := body["documents"].([]any); ok {
+		for _, item := range documents {
+			if document, ok := item.(map[string]any); ok {
+				present[artifactString(document, "role")] = true
+			}
+		}
+	}
+	missing := []string{}
+	for _, role := range required {
+		if !present[role] {
+			missing = append(missing, role)
+		}
+	}
+	return missing
 }
 
 func localArtifactInput(body map[string]any) (local.ArtifactInput, error) {
@@ -319,12 +412,7 @@ func normalizeArtifactPublishBody(body map[string]any) error {
 		return fmt.Errorf("version is server-assigned; remove version from the publish file and use base_version only when publishing an update")
 	}
 	if _, hasRequestType := body["request_type"]; !hasRequestType {
-		if workType, ok := body["work_type"]; ok {
-			body["request_type"] = workType
-			delete(body, "work_type")
-		} else {
-			body["request_type"] = "unknown"
-		}
+		body["request_type"] = "unknown"
 	}
 	if requestType, ok := body["request_type"].(string); ok {
 		body["request_type"] = strings.TrimSpace(requestType)
@@ -359,7 +447,7 @@ func validateArtifactPublishFields(body map[string]any) error {
 		return nil
 	}
 	allowedDocument := map[string]bool{
-		"path": true, "role": true, "content": true, "source_file": true, "file_url": true,
+		"path": true, "role": true, "content": true, "source_file": true, "repo_file": true, "file_url": true,
 	}
 	for index, raw := range documents {
 		document, ok := raw.(map[string]any)
@@ -376,170 +464,23 @@ func validateArtifactPublishFields(body map[string]any) error {
 		if len(unknown) > 0 {
 			return fmt.Errorf("unknown artifact package field %q", fmt.Sprintf("documents[%d].%s", index, unknown[0]))
 		}
-		sourceFields := make([]string, 0, 3)
-		for _, field := range []string{"content", "source_file", "file_url"} {
+		sourceFields := make([]string, 0, 4)
+		for _, field := range []string{"content", "source_file", "repo_file", "file_url"} {
 			if _, exists := document[field]; exists {
 				sourceFields = append(sourceFields, field)
 			}
 		}
 		if len(sourceFields) == 0 {
-			return fmt.Errorf("documents[%d] must set exactly one of content, source_file, or file_url", index)
+			return fmt.Errorf("documents[%d] must set exactly one of content, source_file, repo_file, or file_url", index)
 		}
 		if len(sourceFields) > 1 {
-			return fmt.Errorf("documents[%d] must set exactly one of content, source_file, or file_url; found %s", index, strings.Join(sourceFields, ", "))
+			return fmt.Errorf("documents[%d] must set exactly one of content, source_file, repo_file, or file_url; found %s", index, strings.Join(sourceFields, ", "))
 		}
 		if _, ok := document[sourceFields[0]].(string); !ok {
 			return fmt.Errorf("documents[%d].%s must be a string", index, sourceFields[0])
 		}
 	}
 	return nil
-}
-
-func expandArtifactDocumentSources(body map[string]any, packagePath string) ([]string, error) {
-	rawDocuments, ok := body["documents"]
-	if !ok || rawDocuments == nil {
-		return nil, nil
-	}
-
-	documents, ok := rawDocuments.([]any)
-	if !ok {
-		return nil, fmt.Errorf("documents must be an array")
-	}
-
-	packageDir := filepath.Dir(packagePath)
-	realPackageDir, err := filepath.EvalSymlinks(packageDir)
-	if err != nil {
-		return nil, fmt.Errorf("resolve artifact package directory %s: %w", packageDir, err)
-	}
-	sources := make([]string, len(documents))
-	for index, raw := range documents {
-		document, ok := raw.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("documents[%d] must be an object", index)
-		}
-
-		sourceFile, hasSourceFile := stringField(document, "source_file")
-		fileURL, hasFileURL := stringField(document, "file_url")
-		if hasSourceFile && hasFileURL {
-			return nil, fmt.Errorf("documents[%d] must use source_file or file_url, not both", index)
-		}
-		if !hasSourceFile && !hasFileURL {
-			continue
-		}
-		if content, hasContent := stringField(document, "content"); hasContent && content != "" {
-			return nil, fmt.Errorf("documents[%d] must use content or a file reference, not both", index)
-		}
-
-		var (
-			sourcePath string
-			sourceInfo os.FileInfo
-		)
-		if hasFileURL {
-			parsed, err := url.Parse(fileURL)
-			if err != nil || parsed.Scheme != "file" || parsed.Host != "" || parsed.Path == "" {
-				return nil, fmt.Errorf("documents[%d].file_url must be an absolute local file:// URL", index)
-			}
-			sourcePath = filepath.FromSlash(parsed.Path)
-			if !filepath.IsAbs(sourcePath) {
-				return nil, fmt.Errorf("documents[%d].file_url must be an absolute local file:// URL", index)
-			}
-		} else {
-			if filepath.IsAbs(sourceFile) {
-				return nil, fmt.Errorf("documents[%d].source_file must be relative; use file_url for an explicit external file", index)
-			}
-			clean := filepath.Clean(sourceFile)
-			if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-				return nil, fmt.Errorf("documents[%d].source_file must stay within the artifact package directory", index)
-			}
-			sourcePath = filepath.Join(packageDir, clean)
-			sourceInfo, err = os.Lstat(sourcePath)
-			if err != nil {
-				return nil, fmt.Errorf("read documents[%d] source %s: %w", index, sourcePath, err)
-			}
-			if sourceInfo.Mode()&os.ModeSymlink != 0 {
-				return nil, fmt.Errorf("documents[%d] source %s is a symlink; publish the regular file explicitly", index, sourcePath)
-			}
-			realSource, err := filepath.EvalSymlinks(sourcePath)
-			if err != nil {
-				return nil, fmt.Errorf("read documents[%d] source %s: %w", index, sourcePath, err)
-			}
-			relative, err := filepath.Rel(realPackageDir, realSource)
-			if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-				return nil, fmt.Errorf("documents[%d].source_file must stay within the artifact package directory", index)
-			}
-		}
-
-		if sourceInfo == nil {
-			sourceInfo, err = os.Lstat(sourcePath)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("read documents[%d] source %s: %w", index, sourcePath, err)
-		}
-		if sourceInfo.Mode()&os.ModeSymlink != 0 {
-			return nil, fmt.Errorf("documents[%d] source %s is a symlink; publish the regular file explicitly", index, sourcePath)
-		}
-		content, err := readArtifactSource(sourcePath, sourceInfo)
-		if err != nil {
-			return nil, fmt.Errorf("read documents[%d] source %s: %w", index, sourcePath, err)
-		}
-		if !utf8.Valid(content) {
-			return nil, fmt.Errorf("documents[%d] source %s is not valid UTF-8 text", index, sourcePath)
-		}
-
-		absoluteSource, err := filepath.Abs(sourcePath)
-		if err != nil {
-			return nil, fmt.Errorf("resolve documents[%d] source %s: %w", index, sourcePath, err)
-		}
-		sources[index] = absoluteSource
-		document["content"] = string(content)
-		delete(document, "source_file")
-		delete(document, "file_url")
-	}
-	return sources, nil
-}
-
-func readArtifactSource(path string, info os.FileInfo) ([]byte, error) {
-	if !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("source is not a regular file")
-	}
-	if info.Size() > artifactSourceMaxBytes {
-		return nil, fmt.Errorf("source exceeds the 1 MiB limit")
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	openedInfo, err := file.Stat()
-	if err != nil {
-		return nil, err
-	}
-	if !os.SameFile(info, openedInfo) {
-		return nil, fmt.Errorf("source changed while it was being opened")
-	}
-	if !openedInfo.Mode().IsRegular() {
-		return nil, fmt.Errorf("source is not a regular file")
-	}
-	if openedInfo.Size() > artifactSourceMaxBytes {
-		return nil, fmt.Errorf("source exceeds the 1 MiB limit")
-	}
-	content, err := io.ReadAll(io.LimitReader(file, artifactSourceMaxBytes+1))
-	if err != nil {
-		return nil, err
-	}
-	if len(content) > artifactSourceMaxBytes {
-		return nil, fmt.Errorf("source exceeds the 1 MiB limit")
-	}
-	return content, nil
-}
-
-func stringField(values map[string]any, key string) (string, bool) {
-	value, ok := values[key]
-	if !ok || value == nil {
-		return "", false
-	}
-	text, ok := value.(string)
-	return text, ok
 }
 
 // specgate artifact approve <artifact-id> [--note <text>]

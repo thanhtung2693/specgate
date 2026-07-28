@@ -92,7 +92,7 @@ func automaticGateSkills(enabledGates []string) map[string]string {
 var builtInLevels = map[GovernanceLevel]Definition{
 	GovernanceLight: {
 		DisplayName:      "Light governance",
-		RequiredRoles:    []string{"spec", "verification"},
+		RequiredRoles:    []string{"spec"},
 		RequiredTopics:   []string{"outcomes", "scope", "acceptance_criteria", "verification"},
 		RequiredEvidence: []string{"tests"},
 		EnabledGates:     []string{"spec_completeness", "acceptance_criteria_verifiable"},
@@ -102,7 +102,7 @@ var builtInLevels = map[GovernanceLevel]Definition{
 	},
 	GovernanceStandard: {
 		DisplayName:      "Standard governance",
-		RequiredRoles:    []string{"spec", "plan", "verification"},
+		RequiredRoles:    []string{"plan", "spec"},
 		RequiredTopics:   []string{"outcomes", "scope", "acceptance_criteria", "verification"},
 		RequiredEvidence: []string{"tests"},
 		EnabledGates:     []string{"spec_completeness", "scope_clear", "acceptance_criteria_verifiable", "spec_repo_drift"},
@@ -112,7 +112,7 @@ var builtInLevels = map[GovernanceLevel]Definition{
 	},
 	GovernanceEnhanced: {
 		DisplayName:      "Enhanced governance",
-		RequiredRoles:    []string{"spec", "design", "plan", "verification"},
+		RequiredRoles:    []string{"plan", "spec"},
 		RequiredTopics:   []string{"outcomes", "scope", "non_goals", "acceptance_criteria", "constraints", "rollout_rollback", "verification"},
 		RequiredEvidence: []string{"tests", "rollout_defined"},
 		EnabledGates:     sortedKnownGateKeys(),

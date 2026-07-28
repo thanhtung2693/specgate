@@ -196,6 +196,13 @@ deterministic manifest digest, and versioned source provenance. Local existence
 or framework generation is not cloud synchronization; only successful publish
 makes the snapshot available elsewhere.
 
+The CLI source locator is explicit and never changes the artifact `path`:
+`repo_file` resolves from the nearest Git root, `source_file` resolves inside
+the manifest directory, `file_url` names an explicitly selected external local
+file, and `content` is inline. Exactly one is accepted. The CLI replaces local
+locators with UTF-8 content before crossing the service boundary and rejects
+filesystem escapes or unsafe file types.
+
 ## Governance Policy
 
 Publish resolves automatic governance policy and snapshots it onto the artifact.
@@ -235,6 +242,15 @@ Policy snapshots use `specgate.policy/v1` and include:
 - approval and evidence policy;
 - policy lineage and digest.
 
+Artifact document roles are caller-selected routing labels. Built-in Full
+governance requires `spec` for Light and `spec` plus `plan` for Standard and
+Enhanced; it does not require a separate file for every concern.
+`verification` and `design` remain valid optional roles. Verification methods
+may live in the spec, plan, or optional verification material, while delivery
+still requires criterion-specific claims and observed check evidence. Gate
+inputs are selected by explicit role only; paths, filenames, headings, and
+framework names never infer a role.
+
 `approval_policy` is `human_required`. `evidence_policy` is `attested_ok` or
 `corroborated_required`; the latter accepts a merged-PR/MR event bound to the
 latest completion head or
@@ -245,6 +261,11 @@ gate execution use the frozen gate definition in the artifact snapshot, so
 editing a Skill cannot change an already-published artifact's evaluation.
 Publication fails when a bound Skill is unavailable rather than freezing an
 empty replacement.
+
+Local artifact snapshots use the fixed `local-standard` contract: Standard
+governance with `plan` and `spec` roles, the Standard topics and
+gates, `human_required`, and `attested_ok`. Local embeds default rubric content
+and does not resolve Light or Enhanced.
 
 ## Context Pack
 

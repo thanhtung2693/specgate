@@ -14,43 +14,12 @@ import (
 	sqlite3 "modernc.org/sqlite/lib"
 )
 
-const localSemanticPolicyVersion = "local-standard@v1"
-
 var (
 	ErrGateTaskNotFound = errors.New("gate task not found")
 	ErrGateTaskExpired  = errors.New("gate task expired")
 	ErrGateTaskStale    = errors.New("gate task input is stale")
 	ErrGateTaskInvalid  = errors.New("gate task result is invalid")
 )
-
-type localGateDefinition struct {
-	Key          string `json:"key"`
-	Version      string `json:"version"`
-	SkillContent string `json:"skill_content"`
-}
-
-var localSemanticGates = []localGateDefinition{
-	{Key: "spec_completeness", Version: "v1", SkillContent: "Evaluate whether the artifact gives an implementer a minimum executable contract: outcome, scope, non-goals, acceptance criteria, risks or constraints, and verification. Cite concrete sections. Pass only when the contract is implementable; warn for a minor gap; fail when a core element is absent."},
-	{Key: "scope_clear", Version: "v1", SkillContent: "Evaluate whether scope is bounded and distinguishable from explicit non-goals. Pass only when an implementer can tell what is in and out; warn for a small ambiguity; fail when scope is conflicting or open-ended."},
-	{Key: "acceptance_criteria_verifiable", Version: "v1", SkillContent: "Evaluate every acceptance criterion for an observable pass or fail check. Pass only when every criterion is independently verifiable; warn for a small wording gap; fail when any criterion is subjective or has no observable outcome."},
-	{Key: "acceptance_criteria_edge_cases", Version: "v1", SkillContent: "Evaluate whether acceptance criteria cover meaningful failure and edge paths, not only the happy path. Pass when applicable edge behavior is explicit; warn when one likely edge is missing; fail when failure behavior is material and unspecified; return not_applicable only when the change has no meaningful edge path."},
-	{Key: "spec_repo_drift", Version: "v1", SkillContent: "Compare the approved artifact with the repository's governed docs named by the artifact and module doc-layering rules. Report semantic contradictions only. The approved artifact wins; do not rewrite out-of-scope docs. Submit examined_docs and repo_commit. Zero findings maps to pass; one or more findings maps to warn; this gate never fails or approves delivery."},
-}
-
-func localSkillNameForGate(gate string) string {
-	switch gate {
-	case "spec_completeness":
-		return "spec-review"
-	case "scope_clear":
-		return "prd-review"
-	case "acceptance_criteria_verifiable", "acceptance_criteria_edge_cases":
-		return "acceptance-criteria"
-	case "spec_repo_drift":
-		return "review-impl"
-	default:
-		return ""
-	}
-}
 
 type GateTask struct {
 	TaskID         string `json:"task_id"`
@@ -492,28 +461,18 @@ func recordReadinessRunTx(ctx context.Context, tx *sql.Tx, workspaceID string, a
 }
 
 func readinessChecks(ctx context.Context, q gateTaskQuerier, workspaceID string, artifact Artifact) (map[string]any, error) {
-	definitions, err := frozenLocalGateDefinitions(artifact)
+	policy, err := parseLocalPolicy(artifact)
 	if err != nil {
 		return nil, err
 	}
-	hasSpec := false
-	for _, document := range artifact.Documents {
-		if document.Role == "spec" {
-			hasSpec = true
-			break
-		}
-	}
 	checks := map[string]any{
-		"has_documents": map[string]any{"gate": "has_documents", "state": "pass", "hint": "artifact contains immutable documents"},
-		"has_spec":      map[string]any{"gate": "has_spec", "state": "pass", "hint": "spec document present"},
+		"has_documents":          map[string]any{"gate": "has_documents", "state": "pass", "hint": "artifact contains immutable documents"},
+		"required_roles_present": requiredRoleCheck(policy.RequiredRoles, artifact.Documents),
 	}
 	if len(artifact.Documents) == 0 {
 		checks["has_documents"] = map[string]any{"gate": "has_documents", "state": "fail", "hint": "add immutable documents and publish a new version"}
 	}
-	if !hasSpec {
-		checks["has_spec"] = map[string]any{"gate": "has_spec", "state": "fail", "hint": "add a document with role 'spec' and publish a new version"}
-	}
-	semantic, err := semanticChecks(ctx, q, workspaceID, artifact, definitions)
+	semantic, err := semanticChecks(ctx, q, workspaceID, artifact, policy.GateDefinitions)
 	if err != nil {
 		return nil, err
 	}
@@ -521,6 +480,34 @@ func readinessChecks(ctx context.Context, q gateTaskQuerier, workspaceID string,
 		checks[key] = semantic[key]
 	}
 	return checks, nil
+}
+
+func requiredRoleCheck(required []string, documents []ArtifactDocument) map[string]any {
+	presentSet := map[string]bool{}
+	for _, document := range documents {
+		presentSet[document.Role] = true
+	}
+	required = append([]string(nil), required...)
+	sort.Strings(required)
+	present := make([]string, 0, len(required))
+	missing := make([]string, 0, len(required))
+	for _, role := range required {
+		if presentSet[role] {
+			present = append(present, role)
+		} else {
+			missing = append(missing, role)
+		}
+	}
+	state := "pass"
+	hint := "required document roles present"
+	if len(missing) > 0 {
+		state = "fail"
+		hint = "add documents for missing roles and publish a new version"
+	}
+	return map[string]any{
+		"gate": "required_roles_present", "state": state, "hint": hint,
+		"required": required, "present": present, "missing": missing,
+	}
 }
 
 func (s *Store) ListReadinessRuns(ctx context.Context, workspaceID, artifactID string) ([]ReadinessRun, error) {

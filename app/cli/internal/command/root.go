@@ -85,6 +85,7 @@ type APIClient interface {
 	ListAcceptanceCriteria(ctx context.Context, id string) ([]client.AcceptanceCriterion, error)
 	// Policy commands
 	ListGovernanceLevels(ctx context.Context) ([]client.GovernanceLevel, error)
+	ResolveGovernancePolicy(ctx context.Context, in client.ResolveGovernancePolicyInput) (*client.PolicyProjection, error)
 	WorkPolicy(ctx context.Context, ref string) (*client.PolicyExplanation, error)
 	// Gate task commands
 	ListGateTasks(ctx context.Context, artifactID string) ([]client.GateTask, error)

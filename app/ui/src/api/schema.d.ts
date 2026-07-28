@@ -1819,6 +1819,25 @@ export interface components {
             /** Format: int64 */
             size_bytes: number;
         };
+        ArtifactPolicyProjection: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ArtifactPolicyProjection.json
+             */
+            readonly $schema?: string;
+            approval_policy: string;
+            enabled_gates: string[] | null;
+            evidence_policy: string;
+            explanation: components["schemas"]["Explanation"];
+            governance_level: string;
+            policy_digest: string;
+            reason_codes: string[] | null;
+            required_evidence: string[] | null;
+            required_roles: string[] | null;
+            required_topics: string[] | null;
+            rubrics: components["schemas"]["PolicyRubricProjection"][] | null;
+        };
         ArtifactReadinessRunDTO: {
             artifact_id: string;
             /** Format: date-time */
@@ -3228,6 +3247,12 @@ export interface components {
             key: string;
             version: string;
         };
+        PolicyRubricProjection: {
+            digest?: string;
+            gate: string;
+            skill?: string;
+            source: string;
+        };
         PresignFileInputBody: {
             /**
              * Format: uri
@@ -3307,6 +3332,7 @@ export interface components {
             governance_level?: string;
             governance_why?: string[] | null;
             missing_roles: string[] | null;
+            policy_digest?: string;
             policy_explanation?: components["schemas"]["Explanation"];
             readiness_hint: string;
             review_url: string;
@@ -4098,7 +4124,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Explanation"];
+                    "application/json": components["schemas"]["ArtifactPolicyProjection"];
                 };
             };
             /** @description Error */

@@ -61,7 +61,7 @@ func cliWorkspaceExempt(path string) bool {
 		return true
 	}
 	switch path {
-	case "/api/v1/meta", "/api/v1/policies/levels", "/api/v1/policies/resolve":
+	case "/api/v1/meta", "/api/v1/policies/levels":
 		return true
 	default:
 		return false

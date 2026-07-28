@@ -9,6 +9,7 @@ package api
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/specgate/doc-registry/internal/artifact"
@@ -102,15 +103,46 @@ func TestGovernancePolicyPipeline(t *testing.T) {
 		return "artifacts/" + featureID + "/" + version + "/" + path
 	})
 
+	features := newPipelineFeatureUpserter()
 	publishSvc := &governanceops.Service{
 		ArtifactWriter:  &pipelineArtifactWriter{svc: artSvc},
-		FeatureUpserter: newPipelineFeatureUpserter(),
+		FeatureUpserter: features,
 		ProfileResolver: pipelineProfileResolver{},
 		Skills:          pipelineSkillReader{},
 		AppBaseURL:      "https://app.example.com",
 	}
 
-	h := &Handlers{Artifacts: artSvc}
+	h := &Handlers{Artifacts: artSvc, Governance: publishSvc}
+
+	impact := governanceprofile.ImpactDeclaration{ProtectedDomainsStatus: governanceprofile.TriNo}
+	preview, err := h.CLIResolvePolicy(ctx, &CLIResolvePolicyInput{Body: CLIResolvePolicyBody{
+		RequestType: "new_feature", ImpactLevel: "medium", ImpactDeclaration: impact,
+	}})
+	if err != nil {
+		t.Fatalf("preview policy: %v", err)
+	}
+	if preview.Body.GovernanceLevel != "standard" || len(features.features) != 0 {
+		t.Fatalf("preview = %#v, features written = %#v", preview.Body, features.features)
+	}
+	standard, err := publishSvc.PublishArtifact(ctx, governanceops.PublishArtifactInput{
+		FeatureKey: "framework-neutral", RequestType: "new_feature",
+		ImpactLevel: "medium", ImpactDeclaration: impact,
+		Documents: []governanceops.DocumentInput{
+			{Path: "spec.md", Role: "spec", Content: "# Spec"},
+			{Path: "plan.md", Role: "plan", Content: "# Plan"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("publish standard artifact: %v", err)
+	}
+	if preview.Body.PolicyDigest != standard.PolicyDigest {
+		t.Fatalf("preview digest %q != published digest %q", preview.Body.PolicyDigest, standard.PolicyDigest)
+	}
+	if !slices.Contains(preview.Body.RequiredTopics, "verification") ||
+		slices.Contains(preview.Body.RequiredRoles, "verification") ||
+		slices.Contains(preview.Body.RequiredRoles, "design") {
+		t.Fatalf("framework-neutral policy = %#v", preview.Body)
+	}
 
 	// --- Step 1: publish a high-impact bugfix touching a protected domain ---
 	publishResult, err := publishSvc.PublishArtifact(ctx, governanceops.PublishArtifactInput{

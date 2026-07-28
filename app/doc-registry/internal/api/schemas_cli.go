@@ -310,8 +310,12 @@ type CLIResolvePolicyInput struct {
 	Body CLIResolvePolicyBody
 }
 
-// CLIPolicyOutput is the response for POST /api/v1/policies/resolve and
-// GET /api/v1/artifacts/{id}/policy and GET /api/v1/work-items/{id}/policy.
+type CLIResolvePolicyOutput struct {
+	Body governanceops.ArtifactPolicyProjection
+}
+
+// CLIPolicyOutput is the response for GET /api/v1/artifacts/{id}/policy and
+// GET /api/v1/work-items/{id}/policy.
 type CLIPolicyOutput struct {
 	Body governanceprofile.Explanation
 }

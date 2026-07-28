@@ -779,26 +779,32 @@ or summaries:
   `specgate gates results <artifact-id> --json` to read the stored detailed
   evidence without running readiness again.
 - `specgate artifact publish --file artifact.json --preview` expands local
-  `source_file` entries and shows exact paths, roles, target, base version, and
-  non-goals without network calls. After human confirmation, run the same
-  command without `--preview`. Add `--compare <artifact-id>` only when a
+  document sources and shows exact paths, roles, target, base version, and
+  non-goals plus the governance policy, required roles, evidence, gates, and
+  frozen rubric sources. Local mode stays entirely on the machine. Full mode
+  makes one read-only policy-resolution request in the selected workspace.
+  Neither mode publishes or persists preview state. After human confirmation,
+  run the same command without `--preview`. Add `--compare <artifact-id>` only when a
   read-only comparison with one explicit published version is needed. That
   lookup is constrained to the package's explicit workspace or the selected
   workspace; it fails locally when neither is available. It reads
   artifact metadata and file hashes, never prior content, and reports added,
   removed, changed, and unchanged paths; it still performs no
-  publication. `--compare` requires `--preview`. The publish command accepts local `source_file`
-  paths or absolute local `file_url` entries in `documents[]`; every document
-  must set exactly one of `content`, `source_file`, or `file_url`. The CLI reads
+  publication. `--compare` requires `--preview`. The publish command accepts
+  Git-root-relative `repo_file`, manifest-relative `source_file`, or absolute
+  local `file_url` entries in `documents[]`; every document must set exactly one
+  of `content`, `repo_file`, `source_file`, or `file_url`. The CLI reads
   those files and sends raw UTF-8 content, not base64, to avoid bloating IDE
   prompts. Unknown package or document fields are rejected instead of being
-  silently ignored. A `source_file` must stay inside the package directory after symlink
-  resolution, cannot itself be a symlink, and is limited to 1 MiB. Preview
-  output shows its resolved absolute `source_path`; that local path is never
-  sent to the server. Publish files use `request_type` for the work kind; omitted
-  values default conservatively to the structured `unknown` value, without
-  inferring intent from document prose. `work_type` is accepted as a CLI-only
-  alias. `version` is server-assigned; use
+  silently ignored. A `repo_file` must stay inside the nearest Git root and a
+  `source_file` must stay inside the package directory after symlink
+  resolution. Sources must be regular UTF-8 files, cannot themselves be
+  symlinks, cannot change between validation and opening, and are limited to
+  1 MiB. Preview output shows the resolved absolute `source_path`; that local
+  path is never sent to the server. Publish files use `request_type` for the
+  work kind; omitted values default conservatively to the structured `unknown`
+  value, without inferring intent from document prose. `version` is
+  server-assigned; use
   `base_version` only when publishing an update from an existing version.
 - `specgate skill list --json` omits full prompts; add `--include-prompt` only
   when an agent needs the rubric body.

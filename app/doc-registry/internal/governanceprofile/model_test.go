@@ -94,6 +94,45 @@ func TestFreezeGateDefinitions_RejectsMissingBoundSkill(t *testing.T) {
 	}
 }
 
+func TestFreezeGateDefinitionsFreezesInlineDriftRubric(t *testing.T) {
+	t.Parallel()
+	profile, err := ResolveBuiltInPolicy(ResolveInput{
+		RequestType: "new_feature",
+		ImpactLevel: "medium",
+		ImpactDeclaration: ImpactDeclaration{
+			ProtectedDomainsStatus: TriNo,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prompts := map[string]string{
+		"spec-review":         "spec rubric",
+		"prd-review":          "product rubric",
+		"acceptance-criteria": "acceptance rubric",
+		"review-impl":         "delivery rubric",
+	}
+	if err := profile.FreezeGateDefinitions(prompts); err != nil {
+		t.Fatal(err)
+	}
+	for _, definition := range profile.GateDefinitions {
+		if definition.Key != "spec_repo_drift" {
+			continue
+		}
+		if definition.SkillName != "" {
+			t.Fatalf("drift must not claim a named Skill: %#v", definition)
+		}
+		if definition.SkillContent == "" || definition.SkillDigest == "" {
+			t.Fatalf("drift inline rubric was not frozen: %#v", definition)
+		}
+		if !strings.Contains(definition.SkillContent, "approved artifact") {
+			t.Fatalf("drift rubric = %q, want drift-specific content", definition.SkillContent)
+		}
+		return
+	}
+	t.Fatal("spec_repo_drift gate definition missing")
+}
+
 func TestDefinitionDigest_GateSkillsIncludedWhenSet_ChangesDigest(t *testing.T) {
 	t.Parallel()
 	base := Definition{DisplayName: "x", ChangeType: "y"}

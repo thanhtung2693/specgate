@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"path"
 	"sort"
@@ -13,11 +12,8 @@ import (
 )
 
 const (
-	maxDocumentBytes         = 1 << 20
-	maxPackageBytes          = 10 << 20
-	localPolicySchemaVersion = "specgate.local_policy/v1"
-	localApprovalPolicy      = "human_required"
-	localEvidencePolicy      = "attested_ok"
+	maxDocumentBytes = 1 << 20
+	maxPackageBytes  = 10 << 20
 )
 
 var artifactRequestTypes = map[string]struct{}{
@@ -59,16 +55,6 @@ type ArtifactDocument struct {
 	Content   []byte
 	Digest    string
 	SizeBytes int
-}
-
-type localPolicyDocument struct {
-	SchemaVersion   string                `json:"snapshot_schema_version"`
-	PolicyVersion   string                `json:"policy_version"`
-	EnabledGates    []string              `json:"enabled_gates"`
-	GateDefinitions []localGateDefinition `json:"gate_definitions"`
-	GateSkills      map[string]string     `json:"gate_skills,omitempty"`
-	Approval        string                `json:"approval_policy"`
-	Evidence        string                `json:"evidence_policy"`
 }
 
 func (s *Store) PublishArtifact(ctx context.Context, workspaceID string, input ArtifactInput) (Artifact, error) {
@@ -165,67 +151,6 @@ func (s *Store) GetArtifact(ctx context.Context, workspaceID, id string) (Artifa
 		artifact.Documents = append(artifact.Documents, document)
 	}
 	return artifact, rows.Err()
-}
-
-func localPolicySnapshot() (string, string, error) {
-	enabledGates := make([]string, 0, len(localSemanticGates))
-	gateSkills := make(map[string]string, len(localSemanticGates))
-	for _, gate := range localSemanticGates {
-		enabledGates = append(enabledGates, gate.Key)
-		gateSkills[gate.Key] = localSkillNameForGate(gate.Key)
-	}
-	body, err := json.Marshal(localPolicyDocument{
-		SchemaVersion:   localPolicySchemaVersion,
-		PolicyVersion:   localSemanticPolicyVersion,
-		EnabledGates:    enabledGates,
-		GateDefinitions: localSemanticGates,
-		GateSkills:      gateSkills,
-		Approval:        localApprovalPolicy,
-		Evidence:        localEvidencePolicy,
-	})
-	if err != nil {
-		return "", "", err
-	}
-	text := string(body)
-	return text, digestText(text), nil
-}
-
-func frozenLocalGateDefinitions(artifact Artifact) ([]localGateDefinition, error) {
-	policySnapshot := strings.TrimSpace(artifact.PolicySnapshot)
-	if policySnapshot == "" {
-		return nil, fmt.Errorf("artifact %s is missing frozen policy snapshot", artifact.ID)
-	}
-	if digestText(policySnapshot) != strings.TrimSpace(artifact.PolicyDigest) {
-		return nil, fmt.Errorf("artifact %s frozen policy digest does not match its snapshot", artifact.ID)
-	}
-	var policy localPolicyDocument
-	if err := json.Unmarshal([]byte(policySnapshot), &policy); err != nil {
-		return nil, fmt.Errorf("artifact %s has invalid frozen policy snapshot: %w", artifact.ID, err)
-	}
-	if policy.SchemaVersion != localPolicySchemaVersion ||
-		policy.Approval != localApprovalPolicy ||
-		policy.Evidence != localEvidencePolicy ||
-		len(policy.EnabledGates) != len(policy.GateDefinitions) {
-		return nil, fmt.Errorf("artifact %s has unsupported frozen policy snapshot", artifact.ID)
-	}
-	enabled := make(map[string]bool, len(policy.EnabledGates))
-	for _, key := range policy.EnabledGates {
-		key = strings.TrimSpace(key)
-		if key == "" || enabled[key] {
-			return nil, fmt.Errorf("artifact %s has invalid frozen policy gates", artifact.ID)
-		}
-		enabled[key] = true
-	}
-	for _, definition := range policy.GateDefinitions {
-		if !enabled[definition.Key] || strings.TrimSpace(definition.Version) == "" || strings.TrimSpace(definition.SkillContent) == "" {
-			return nil, fmt.Errorf("artifact %s has invalid frozen policy gate definition", artifact.ID)
-		}
-		delete(enabled, definition.Key)
-	}
-	if len(enabled) != 0 {
-		return nil, fmt.Errorf("artifact %s frozen policy gates do not match their definitions", artifact.ID)
-	}
-	return policy.GateDefinitions, nil
 }
 
 func validateArtifactDocuments(input []ArtifactDocumentInput) ([]ArtifactDocument, string, error) {

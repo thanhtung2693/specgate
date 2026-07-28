@@ -8,15 +8,17 @@ describe("SpecGate UI shell: navigation and agent", () => {
   afterEach(cleanupAppTest)
   const langGraphClientMock = getLangGraphClientMock()
 
-  it("requires Full mode when the Doc Registry is not configured", async () => {
+  it("reports a UI build without a Doc Registry endpoint", async () => {
     vi.stubEnv("VITE_DOC_REGISTRY_URL", "")
     localStorage.clear()
 
     renderApp("/work")
 
-    expect(await screen.findByRole("heading", { name: "Web UI requires Full mode" })).toBeInTheDocument()
-    expect(screen.getByText("specgate init --mode full")).toBeInTheDocument()
-    expect(screen.getByText(/Local mode stays in the CLI and IDE/)).toBeInTheDocument()
+    expect(await screen.findByRole("heading", { name: "UI is not configured" })).toBeInTheDocument()
+    expect(screen.getByText("This build has no Doc Registry endpoint.")).toBeInTheDocument()
+    expect(screen.getByText("VITE_DOC_REGISTRY_URL")).toBeInTheDocument()
+    expect(screen.getByText(/Rebuild the Full appliance/)).toBeInTheDocument()
+    expect(screen.queryByText("specgate init --mode full")).not.toBeInTheDocument()
     expect(screen.queryByRole("heading", { name: "Set up attribution" })).not.toBeInTheDocument()
     expect(localStorage.getItem(sessionStorageKey)).toBeNull()
   })
