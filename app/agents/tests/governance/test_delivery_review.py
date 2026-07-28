@@ -464,6 +464,38 @@ def test_derive_weak_citation_does_not_record_grounded_tier(status: str) -> None
     assert review.criteria[0].trust_tier != "grounded"
 
 
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("specgate_cli", "observed by the SpecGate CLI"),
+        ("", "reported by the coding agent, not re-run"),
+        (None, "reported by the coding agent, not re-run"),
+    ],
+)
+def test_derive_bound_criterion_names_who_observed_the_check(source, expected) -> None:
+    """The reason a human reads must say whether anything re-ran the check.
+
+    ``--run-checks`` is opt-in, so the common case is the coding agent's own
+    claim. Calling that "(deterministic)" presented an unexecuted command as a
+    platform result -- the same overclaim the CLI readback already removed.
+    """
+    check: dict[str, object] = {"name": "unit", "status": "pass"}
+    if source is not None:
+        check["source"] = source
+    review = derive_review_from_claims(
+        acceptance_criteria=[
+            {"id": "ac_1", "text": "Tags persist", "verification_binding": "unit"}
+        ],
+        completed_payload={
+            "criteria": [{"criterion_id": "ac_1", "claim": "satisfied"}],
+            "checks": [check],
+        },
+    )
+    assert review.criteria[0].verdict == "met"
+    assert expected in review.criteria[0].why
+    assert "(deterministic)" not in review.criteria[0].why
+
+
 def test_derive_review_requires_canonical_criterion_ids() -> None:
     review = derive_review_from_claims(
         acceptance_criteria=[

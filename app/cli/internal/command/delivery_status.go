@@ -325,7 +325,12 @@ func deliveryAssuranceSourceLabel(source string) string {
 	case "grounded":
 		return "local citation captured"
 	case "deterministic":
-		return "locally reproduced"
+		// The `deterministic` trust tier means a bound check decided the
+		// criterion, not that anything re-ran. Reproduction is a separate fact,
+		// carried by `checks[].source == "specgate_cli"` and labelled above;
+		// contracts.md states that marker is the only thing that earns
+		// "locally reproduced".
+		return "bound deterministic check"
 	case "peer_reviewed":
 		return "second agent affirmed"
 	case "repository_observed":

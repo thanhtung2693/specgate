@@ -154,12 +154,21 @@ def _resolve_bound_criterion(ac: dict[str, Any], checks: list[dict[str, Any]]) -
     text = str(ac.get("text") or "").strip()
     check = _find_check(checks, binding)
     status = str((check or {}).get("status") or "").strip()
+    # Name who observed the check. `--run-checks` is opt-in, so the common case is
+    # the coding agent's own claim; calling that "deterministic" presented an
+    # unexecuted command as a platform result. The CLI stamps `specgate_cli` on a
+    # row it re-executed.
+    observer = (
+        "observed by the SpecGate CLI"
+        if str((check or {}).get("source") or "").strip() == "specgate_cli"
+        else "reported by the coding agent, not re-run"
+    )
     if status == "pass":
         verdict: CriterionVerdict = "met"
-        why = f"check '{binding}' passed (deterministic)"
+        why = f"check '{binding}' passed ({observer})"
     elif status == "fail":
         verdict = "unmet"
-        why = f"check '{binding}' failed (deterministic)"
+        why = f"check '{binding}' failed ({observer})"
     elif check is None:
         verdict = "unclear"
         why = f"check '{binding}' not found in report — cannot verify deterministically"
