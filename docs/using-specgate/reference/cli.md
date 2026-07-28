@@ -713,7 +713,12 @@ same-name marketplace entries and removes only known managed files from marked
 plugin paths. A native Codex or Claude Code installation makes CLI install stop
 with exit code `4` before writing. Update and uninstall touch only marked CLI
 files. Unknown files inside CLI-managed directories are preserved and listed as
-`preserved_paths` in JSON output.
+`preserved_paths` in JSON output. A shared configuration SpecGate only removed
+its own entries from — a Codex `config.toml` that also holds your settings — is
+reported under `modified_paths`, not `removed_paths`, because the file is kept.
+A native plugin configuration SpecGate cannot parse is a `validation` error with
+`owner: "unknown"`: ownership was never established, so it is not reported as a
+native install to uninstall.
 Symlinked deployment, cleanup,
 plugin-target, and plugin-config paths are refused instead of followed. Full
 data purge additionally requires the exact deployment marker and refuses

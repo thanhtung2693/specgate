@@ -15,20 +15,24 @@ type pluginRemover struct {
 	removed   int
 	paths     []string
 	preserved []string
+	// modified records a file SpecGate edited rather than deleted — a shared
+	// config it removed its own entry from. Reporting those under removed_paths
+	// told a user auditing an uninstall that their own file had been deleted.
+	modified []string
 }
 
-func removeSpecGatePluginFiles(deps *Deps) (int, []string, []string, error) {
+func removeSpecGatePluginFiles(deps *Deps) (int, []string, []string, []string, error) {
 	home, err := userHomeDir(deps)
 	if err != nil {
-		return 0, nil, nil, err
+		return 0, nil, nil, nil, err
 	}
 	remover := &pluginRemover{home: home}
 	for _, adapter := range pluginAgentAdapters {
 		if err := adapter.remove(remover); err != nil {
-			return remover.removed, remover.paths, remover.preserved, err
+			return remover.removed, remover.paths, remover.preserved, remover.modified, err
 		}
 	}
-	return remover.removed, remover.paths, remover.preserved, nil
+	return remover.removed, remover.paths, remover.preserved, remover.modified, nil
 }
 
 func (r *pluginRemover) removeDir(path string) error {
@@ -133,8 +137,9 @@ func (r *pluginRemover) removeCodex() error {
 	if changed, err := removeCodexConfigSections(configPath, removePersonalMarketplace, marketplaceRoot); err != nil {
 		return err
 	} else if changed {
+		// The file stays; only SpecGate's own sections were dropped from it.
 		r.removed++
-		r.paths = append(r.paths, configPath)
+		r.modified = append(r.modified, configPath)
 	}
 	for _, dir := range []string{
 		filepath.Join(r.home, ".codex", "plugins"),

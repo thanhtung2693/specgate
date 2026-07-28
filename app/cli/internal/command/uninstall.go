@@ -24,7 +24,10 @@ type uninstallResult struct {
 	RemovedPlugins int      `json:"removed_plugins"`
 	RemovedPaths   []string `json:"removed_paths"`
 	PreservedPaths []string `json:"preserved_paths,omitempty"`
-	KeptData       bool     `json:"kept_data"`
+	// ModifiedPaths are files SpecGate edited, not deleted, so an auditor can
+	// tell "we dropped our entry from your config" from "we removed this file".
+	ModifiedPaths []string `json:"modified_paths,omitempty"`
+	KeptData      bool     `json:"kept_data"`
 }
 
 // specgate uninstall
@@ -119,7 +122,7 @@ func newUninstallCmd(deps *Deps) *cobra.Command {
 				}
 			}
 			if removePlugins {
-				removed, paths, preserved, err := removeSpecGatePluginFiles(deps)
+				removed, paths, preserved, modified, err := removeSpecGatePluginFiles(deps)
 				if err != nil {
 					code := deps.Printer.Error("uninstall", output.ErrorPayload{Code: "unavailable", Message: err.Error()})
 					return &output.ExitError{Code: code, Err: err}
@@ -127,6 +130,7 @@ func newUninstallCmd(deps *Deps) *cobra.Command {
 				result.RemovedPlugins = removed
 				result.RemovedPaths = append(result.RemovedPaths, paths...)
 				result.PreservedPaths = append(result.PreservedPaths, preserved...)
+				result.ModifiedPaths = append(result.ModifiedPaths, modified...)
 			}
 			configRemoved, err := removeConfigFile(deps)
 			if err != nil {
@@ -210,7 +214,7 @@ func runLocalUninstall(cmd *cobra.Command, deps *Deps, stateDir string, purgeDat
 		result.RemovedPaths = append(result.RemovedPaths, removed...)
 	}
 	if removePlugins {
-		removed, paths, preserved, err := removeSpecGatePluginFiles(deps)
+		removed, paths, preserved, modified, err := removeSpecGatePluginFiles(deps)
 		if err != nil {
 			code := deps.Printer.Error("uninstall", output.ErrorPayload{Code: "unavailable", Message: err.Error()})
 			return &output.ExitError{Code: code, Err: err}
@@ -218,6 +222,7 @@ func runLocalUninstall(cmd *cobra.Command, deps *Deps, stateDir string, purgeDat
 		result.RemovedPlugins = removed
 		result.RemovedPaths = append(result.RemovedPaths, paths...)
 		result.PreservedPaths = append(result.PreservedPaths, preserved...)
+		result.ModifiedPaths = append(result.ModifiedPaths, modified...)
 	}
 	configRemoved, err := removeConfigFile(deps)
 	if err != nil {
@@ -242,6 +247,9 @@ func runLocalUninstall(cmd *cobra.Command, deps *Deps, stateDir string, purgeDat
 	}
 	for _, path := range result.PreservedPaths {
 		fmt.Fprintf(deps.Stdout, "Unowned files kept under %s.\n", path)
+	}
+	for _, path := range result.ModifiedPaths {
+		fmt.Fprintf(deps.Stdout, "Removed only SpecGate's entries from %s; the file was kept.\n", path)
 	}
 	return nil
 }
