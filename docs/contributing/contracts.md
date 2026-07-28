@@ -20,7 +20,7 @@ route catalog, see
 | UI | review, inspection, settings, team/workspace views, governance chat shell | hidden sample data or source-of-truth mutation outside APIs |
 | IDE plugins | skills/hooks/rules that guide a coding agent through the CLI | product scope or approval authority |
 
-Doc Registry is internal-open behind a trusted network. Alpha local identity is
+Doc Registry is internal-open behind a trusted network. Local identity is
 cooperative attribution, not authentication or RBAC.
 
 ## HTTP Surfaces

@@ -170,9 +170,11 @@ surface or web UI directly to the public internet.
 
 ## Roadmap
 
-- Continue hardening governance chat around gate failures, artifact context, and
-  thread continuity.
-- Promote the browser UI after more team use and workflow polish.
+- Stabilize the newer browser UI, governance chat, Knowledge, and model-backed
+  review surfaces around failure recovery, source attribution, and operator
+  diagnostics.
+- Improve team and repository-provider workflows without weakening the
+  local-first path or trusted-network boundary.
 
 Missing something? [Open an issue](https://github.com/thanhtung2693/specgate/issues).
 

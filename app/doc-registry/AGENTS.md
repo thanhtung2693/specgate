@@ -27,9 +27,9 @@ changes under `app/doc-registry/`.
 
 ## Database and migration rules
 
-- During pre-release development, keep the complete current schema in the
-  idempotent `migrations/postgres/0001_init.migration`; do not add compatibility
-  migrations or backfills for discarded development schemas.
+- Until migration compatibility is explicitly supported, keep the complete
+  current schema in the idempotent `migrations/postgres/0001_init.migration`;
+  do not add migrations or backfills for discarded development schemas.
 - Test the collapsed migration against a fresh database, and do not leave
   application code depending on columns absent from it.
 - Never drop or purge the database, object bucket, or MinIO data directory

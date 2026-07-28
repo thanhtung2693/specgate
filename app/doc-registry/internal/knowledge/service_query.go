@@ -152,8 +152,8 @@ func (s *Service) Search(ctx context.Context, in SearchInput) ([]SearchResult, e
 			break
 		}
 	}
-	// Section-context expansion. Vector-score order is final — there is no rerank
-	// stage in alpha. Chunk mode returns hit excerpts only; section/document mode
+	// Section-context expansion. Vector-score order is final; there is no rerank
+	// stage. Chunk mode returns hit excerpts only; section/document mode
 	// attach bounded context.
 	mode := normalizeContextMode(in.ContextMode)
 	maxChars := normalizeContextMaxChars(in.ContextMaxChars)

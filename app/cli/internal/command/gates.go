@@ -367,9 +367,8 @@ func printReadinessGates(deps *Deps, evaluations []map[string]any) {
 		gate := strings.TrimSpace(fmt.Sprint(evaluation["gate"]))
 		state := strings.TrimSpace(fmt.Sprint(evaluation["state"]))
 		line := fmt.Sprintf("  [%s] %s", state, gate)
-		// A dispatched-but-unanswered task carries a trust field for the result it
-		// will eventually hold; printing it before then would claim an attestation
-		// nobody has made.
+		// A dispatched-but-unanswered task includes the result trust field.
+		// Printing it before an answer would claim an attestation nobody has made.
 		if trust := strings.TrimSpace(fmt.Sprint(evaluation["trust"])); trust != "" && trust != "<nil>" && state != "not_run" {
 			line += styled(deps, output.StyleMuted, " ("+trust+")")
 		}
