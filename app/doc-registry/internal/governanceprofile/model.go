@@ -61,6 +61,8 @@ var (
 // the readiness gate set, so automatic policy may bind a rubric Skill to it.
 const DeliveryReviewGateKey = "delivery_review"
 
+const SpecRepoDriftRubric = "Compare the approved artifact with the repository's governed docs explicitly named by the artifact and module documentation rules. Report semantic contradictions only. The approved artifact wins; do not follow or rewrite an out-of-scope conflicting document. Submit examined_docs and repo_commit. Zero findings maps to pass; one or more findings maps to warn; this gate never fails or approves delivery."
+
 type Source string
 
 const (
@@ -200,6 +202,9 @@ func (r *ResolvedProfile) FreezeGateDefinitions(skillPrompts map[string]string) 
 		skillContent := skillPrompts[skillName]
 		if skillName != "" && strings.TrimSpace(skillContent) == "" {
 			return fmt.Errorf("%w: gate %q requires unavailable Skill %q", ErrInvalidDefinition, key, skillName)
+		}
+		if skillName == "" && key == "spec_repo_drift" {
+			skillContent = SpecRepoDriftRubric
 		}
 		definition := GateDefinition{
 			Key:          key,

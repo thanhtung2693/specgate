@@ -9,6 +9,8 @@ SpecGate works with your existing spec framework. Superpowers, OpenSpec, Spec
 Kit, and other authoring tools keep their own file locations and Git behavior.
 SpecGate registers those documents in place; `.specgate/` is for SpecGate state
 and generated work receipts, not a replacement home for framework documents.
+During preparation, the agent maps the files you selected with `repo_file` and
+shows their exact governance policy before asking to publish.
 
 ## Before you start
 

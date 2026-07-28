@@ -677,13 +677,14 @@ func TestDispatchGateTasksUsesFrozenSnapshotRubric(t *testing.T) {
 
 // TestDispatchGateTasks_SpecRepoDrift_FreezesRubricAndDigest proves AC2: dispatching
 // gates for an approved artifact whose profile enables spec_repo_drift creates a gate
-// task that carries the resolved drift rubric (built-in default here) and is
+// task that carries the frozen drift rubric from the artifact snapshot and is
 // digest-stamped to the approved artifact version — the spec content the executing
 // agent reads. Reuses the existing dispatchGateTasks path; no new dispatch code.
 func TestDispatchGateTasks_SpecRepoDrift_FreezesRubricAndDigest(t *testing.T) {
 	t.Parallel()
 	artSvc := newArtifactSvcForGatePreview(t)
-	snapshotJSON := `{"snapshot_schema_version":"specgate.policy/v1","approval_policy":"human_required","evidence_policy":"attested_ok","enabled_gates":["spec_repo_drift"],"required_roles":["spec"],"required_topics":[],"required_evidence":[],"digest":"sha256:test"}`
+	frozenDriftRubric := "Frozen publication drift rubric"
+	snapshotJSON := `{"snapshot_schema_version":"specgate.policy/v1","approval_policy":"human_required","evidence_policy":"attested_ok","enabled_gates":["spec_repo_drift"],"required_roles":["spec"],"required_topics":[],"required_evidence":[],"gate_definitions":[{"key":"spec_repo_drift","version":"v1","skill_content":"` + frozenDriftRubric + `","skill_digest":"sha256:frozen"}],"digest":"sha256:test"}`
 	art, err := artSvc.Publish(context.Background(), artifact.PublishInput{
 		WorkspaceID:        gateTaskWorkspaceID,
 		FeatureID:          "feat-drift",
@@ -720,8 +721,7 @@ func TestDispatchGateTasks_SpecRepoDrift_FreezesRubricAndDigest(t *testing.T) {
 	if task.GateKey != "spec_repo_drift" {
 		t.Fatalf("gate_key = %q, want spec_repo_drift", task.GateKey)
 	}
-	// Frozen resolved rubric: the built-in default drift rubric.
-	if task.SkillContent != defaultGateRubric("spec_repo_drift") {
+	if task.SkillContent != frozenDriftRubric {
 		t.Errorf("SkillContent did not freeze the resolved drift rubric:\n%s", task.SkillContent)
 	}
 	// Digest-stamped binding to the approved artifact version (the spec content).

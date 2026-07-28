@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"sort"
 	"testing"
 )
@@ -208,6 +210,39 @@ func TestBuiltInLevels_ExposeAutomaticGateSkills(t *testing.T) {
 			}
 			if gate != DeliveryReviewGateKey && !enabled[gate] {
 				t.Fatalf("%s binds %q without enabling it", entry.Level, gate)
+			}
+		}
+	}
+}
+
+func TestBuiltInLevelsDoNotRequireManufacturedDocuments(t *testing.T) {
+	t.Parallel()
+	wantRoles := map[GovernanceLevel][]string{
+		GovernanceLight:    {"spec"},
+		GovernanceStandard: {"plan", "spec"},
+		GovernanceEnhanced: {"plan", "spec"},
+	}
+	for _, entry := range ListBuiltInPolicyLevels() {
+		if !reflect.DeepEqual(entry.Definition.RequiredRoles, wantRoles[entry.Level]) {
+			t.Fatalf("%s required roles = %v, want %v",
+				entry.Level, entry.Definition.RequiredRoles, wantRoles[entry.Level])
+		}
+		if !slices.Contains(entry.Definition.RequiredTopics, "verification") {
+			t.Fatalf("%s must still require verification content", entry.Level)
+		}
+		if entry.Level == GovernanceStandard {
+			wantGates := []string{
+				"acceptance_criteria_verifiable",
+				"scope_clear",
+				"spec_completeness",
+				"spec_repo_drift",
+			}
+			gotGates := append([]string(nil), entry.Definition.EnabledGates...)
+			sort.Strings(gotGates)
+			sort.Strings(wantGates)
+			if !reflect.DeepEqual(gotGates, wantGates) {
+				t.Fatalf("standard enabled gates = %v, want %v",
+					entry.Definition.EnabledGates, wantGates)
 			}
 		}
 	}

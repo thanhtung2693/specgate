@@ -33,7 +33,7 @@ func TestLocalGateTaskRejectsExpiryAndReplacesItsResult(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(redispatch.CreatedTaskIDs) != 1 || len(redispatch.PendingTaskIDs) != 4 {
+	if len(redispatch.CreatedTaskIDs) != 1 || len(redispatch.PendingTaskIDs) != 3 {
 		t.Fatalf("redispatch = %#v", redispatch)
 	}
 	replacement, err := store.GetGateTask(ctx, selection.Workspace.ID, redispatch.CreatedTaskIDs[0])
@@ -175,7 +175,10 @@ func internalGateFixture(t *testing.T) (*Store, Selection, Artifact) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	artifact, err := store.PublishArtifact(ctx, selection.Workspace.ID, ArtifactInput{FeatureKey: "LOCAL-GATE", RequestType: "new_feature", Documents: []ArtifactDocumentInput{{Path: "spec.md", Role: "spec", Content: []byte("# Local gate")}}})
+	artifact, err := store.PublishArtifact(ctx, selection.Workspace.ID, ArtifactInput{FeatureKey: "LOCAL-GATE", RequestType: "new_feature", Documents: []ArtifactDocumentInput{
+		{Path: "spec.md", Role: "spec", Content: []byte("# Local gate")},
+		{Path: "plan.md", Role: "plan", Content: []byte("# Plan\n\nImplement and verify.")},
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}

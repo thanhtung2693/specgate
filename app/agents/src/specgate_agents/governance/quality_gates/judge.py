@@ -456,11 +456,11 @@ async def evaluate_all_gates(
     Each gate is routed only the labeled sections it needs:
 
     - rollback_plan_present → Spec + Reference
-    - acceptance_criteria_edge_cases → Spec + Verification
-    - acceptance_criteria_verifiable → Spec + Verification
+    - acceptance_criteria_edge_cases → Spec + Plan + optional Verification
+    - acceptance_criteria_verifiable → Spec + Plan + optional Verification
     - success_metric_measurable → Spec
     - scope_clear → Spec
-    - implementation_plan_traceable → Spec + Plan + Verification
+    - implementation_plan_traceable → Spec + optional Design + Plan + optional Verification
     - spec_completeness → all roles (minimum-executable-contract + build-readiness)
 
     Empty sections are omitted. If a gate's sections are all empty it receives
@@ -472,11 +472,10 @@ async def evaluate_all_gates(
     from specgate_agents.governance.quality_gates.completeness import evaluate_spec_completeness
 
     rollback_md = _labeled_sections(artifact_bundle, ("spec", "reference"))
-    ac_md = _labeled_sections(artifact_bundle, ("spec", "verification"))
-    ac_verifiable_md = _labeled_sections(artifact_bundle, ("spec", "verification"))
+    acceptance_md = _labeled_sections(artifact_bundle, ("spec", "plan", "verification"))
     metric_md = _labeled_sections(artifact_bundle, ("spec",))
     scope_md = _labeled_sections(artifact_bundle, ("spec",))
-    traceable_md = _labeled_sections(artifact_bundle, ("spec", "plan", "verification"))
+    traceable_md = _labeled_sections(artifact_bundle, ("spec", "design", "plan", "verification"))
 
     # The completeness judge assesses coverage across ALL documents, so it gets the
     # whole labeled bundle (every role present, in stable order) — unlike the routed
@@ -494,8 +493,7 @@ async def evaluate_all_gates(
         )
     ).strip()
     if att_md:
-        ac_md = f"{ac_md}\n\n{att_md}".strip()
-        ac_verifiable_md = f"{ac_verifiable_md}\n\n{att_md}".strip()
+        acceptance_md = f"{acceptance_md}\n\n{att_md}".strip()
         scope_md = f"{scope_md}\n\n{att_md}".strip()
 
     selected = set(enabled_gates or ALL_LLM_GATES)
@@ -505,8 +503,8 @@ async def evaluate_all_gates(
     tasks: list[Any] = []
     gate_specs = (
         (ROLLBACK_PLAN_GATE, evaluate_rollback_plan, rollback_md, None),
-        (AC_EDGE_CASES_GATE, evaluate_acceptance_criteria_edge_cases, ac_md, None),
-        (AC_VERIFIABLE_GATE, evaluate_acceptance_criteria_verifiable, ac_verifiable_md, None),
+        (AC_EDGE_CASES_GATE, evaluate_acceptance_criteria_edge_cases, acceptance_md, None),
+        (AC_VERIFIABLE_GATE, evaluate_acceptance_criteria_verifiable, acceptance_md, None),
         (SUCCESS_METRIC_GATE, evaluate_success_metric_measurable, metric_md, None),
         (SCOPE_CLEAR_GATE, evaluate_scope_clear, scope_md, None),
         (

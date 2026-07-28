@@ -30,8 +30,7 @@ var ErrApprovalRequiresHuman = errors.New("approval requires a human actor for t
 var ErrUnsupportedApprovalPolicy = errors.New("artifact has an invalid approval policy snapshot")
 
 // Service is the application-level facade over artifact persistence,
-// conflict detection, event emission, and object storage. Implementation
-// is filled in by the Implementation Agent per spec.md §6.
+// conflict detection, event emission, and object storage.
 type Service interface {
 	Publish(ctx context.Context, in PublishInput) (*Artifact, error)
 	Get(ctx context.Context, id string) (*Artifact, error)

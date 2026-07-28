@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -146,6 +147,20 @@ func (f *fakePublishSkillReader) List(_ context.Context) ([]skills.Skill, error)
 	return []skills.Skill{{Name: "prd-review", Prompt: f.prompt}}, nil
 }
 
+type policyPreviewSkillReader struct {
+	calls int
+}
+
+func (f *policyPreviewSkillReader) List(_ context.Context) ([]skills.Skill, error) {
+	f.calls++
+	return []skills.Skill{
+		{Name: "spec-review", Prompt: "spec rubric"},
+		{Name: "prd-review", Prompt: "scope rubric"},
+		{Name: "acceptance-criteria", Prompt: "acceptance rubric"},
+		{Name: "review-impl", Prompt: "delivery rubric"},
+	}, nil
+}
+
 func newPublishService(writer ArtifactWriter, features FeatureUpserter, profiles ProfileResolver, baseURL string) *Service {
 	return &Service{
 		ArtifactWriter:  writer,
@@ -156,6 +171,79 @@ func newPublishService(writer ArtifactWriter, features FeatureUpserter, profiles
 }
 
 // --- PublishArtifact tests ---
+
+func TestPreviewArtifactPolicyFreezesWorkspaceRubricsWithoutWrites(t *testing.T) {
+	t.Parallel()
+	writer := &fakeArtifactWriter{}
+	features := &fakeFeatureUpserter{}
+	skillReader := &policyPreviewSkillReader{}
+	svc := &Service{
+		ArtifactWriter:  writer,
+		FeatureUpserter: features,
+		ProfileResolver: governanceprofile.Resolver{},
+		Skills:          skillReader,
+	}
+	input := PreviewArtifactPolicyInput{
+		WorkspaceID: "ws-a",
+		RequestType: "new_feature",
+		ImpactLevel: "medium",
+		ImpactDeclaration: governanceprofile.ImpactDeclaration{
+			ProtectedDomainsStatus: governanceprofile.TriNo,
+		},
+	}
+
+	projection, err := svc.PreviewArtifactPolicy(workspace.WithID(context.Background(), "ws-a"), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if projection.GovernanceLevel != "standard" ||
+		projection.PolicyDigest == "" ||
+		!reflect.DeepEqual(projection.RequiredRoles, []string{"plan", "spec"}) ||
+		len(projection.Rubrics) != 5 {
+		t.Fatalf("projection = %#v", projection)
+	}
+	if skillReader.calls != 1 {
+		t.Fatalf("Skill reads = %d, want 1", skillReader.calls)
+	}
+	if len(writer.published) != 0 || len(features.features) != 0 {
+		t.Fatalf("preview wrote artifacts=%d features=%d", len(writer.published), len(features.features))
+	}
+}
+
+func TestPreviewAndPublishFreezeSamePolicyDigest(t *testing.T) {
+	t.Parallel()
+	writer := &fakeArtifactWriter{}
+	svc := &Service{
+		ArtifactWriter:  writer,
+		FeatureUpserter: &fakeFeatureUpserter{},
+		ProfileResolver: governanceprofile.Resolver{},
+		Skills:          &policyPreviewSkillReader{},
+	}
+	ctx := workspace.WithID(context.Background(), "ws-a")
+	impact := governanceprofile.ImpactDeclaration{ProtectedDomainsStatus: governanceprofile.TriNo}
+	preview, err := svc.PreviewArtifactPolicy(ctx, PreviewArtifactPolicyInput{
+		WorkspaceID: "ws-a", RequestType: "new_feature", ImpactLevel: "medium",
+		ImpactDeclaration: impact,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	published, err := svc.PublishArtifact(ctx, PublishArtifactInput{
+		FeatureKey: "preview-parity", WorkspaceID: "ws-a",
+		RequestType: "new_feature", ImpactLevel: "medium", ImpactDeclaration: impact,
+		Documents: []DocumentInput{
+			{Path: "spec.md", Role: "spec", Content: "# Spec"},
+			{Path: "plan.md", Role: "plan", Content: "# Plan"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.PolicyDigest != published.PolicyDigest {
+		t.Fatalf("preview digest %q != published digest %q",
+			preview.PolicyDigest, published.PolicyDigest)
+	}
+}
 
 func TestPublishArtifact_CreatesNewArtifact(t *testing.T) {
 	t.Parallel()

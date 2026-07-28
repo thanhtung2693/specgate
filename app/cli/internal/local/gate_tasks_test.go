@@ -19,7 +19,7 @@ func TestLocalGateTasksArePersistedIdempotentAndWorkspaceScoped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(first.CreatedTaskIDs) != 4 || len(first.PendingTaskIDs) != 4 {
+	if len(first.CreatedTaskIDs) != 3 || len(first.PendingTaskIDs) != 3 {
 		t.Fatalf("first dispatch = %#v", first)
 	}
 
@@ -27,7 +27,7 @@ func TestLocalGateTasksArePersistedIdempotentAndWorkspaceScoped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(second.CreatedTaskIDs) != 0 || len(second.SkippedGateKeys) != 4 || len(second.PendingTaskIDs) != 4 {
+	if len(second.CreatedTaskIDs) != 0 || len(second.SkippedGateKeys) != 3 || len(second.PendingTaskIDs) != 3 {
 		t.Fatalf("second dispatch = %#v", second)
 	}
 
@@ -35,7 +35,7 @@ func TestLocalGateTasksArePersistedIdempotentAndWorkspaceScoped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tasks) != 4 {
+	if len(tasks) != 3 {
 		t.Fatalf("tasks = %#v", tasks)
 	}
 	for _, task := range tasks {
@@ -168,12 +168,19 @@ func localGateFixture(t *testing.T) (*local.Store, local.Selection, local.Artifa
 	}
 	artifact, err := store.PublishArtifact(ctx, selection.Workspace.ID, local.ArtifactInput{
 		FeatureKey: "LOCAL-GATE", RequestType: "new_feature",
-		Documents: []local.ArtifactDocumentInput{{Path: "spec.md", Role: "spec", Content: []byte("# Local gate\n\nAcceptance criteria: works")}},
+		Documents: localGovernedDocuments("# Local gate\n\nAcceptance criteria: works"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return store, selection, artifact
+}
+
+func localGovernedDocuments(spec string) []local.ArtifactDocumentInput {
+	return []local.ArtifactDocumentInput{
+		{Path: "spec.md", Role: "spec", Content: []byte(spec)},
+		{Path: "plan.md", Role: "plan", Content: []byte("# Plan\n\nImplement and verify the approved criteria.")},
+	}
 }
 
 func validLocalGateResult(task local.GateTask) local.GateResultInput {

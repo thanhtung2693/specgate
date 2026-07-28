@@ -14,6 +14,16 @@ definitions, use the [gate catalog](gates.md).
 | `standard` | normal readiness, AC evidence, and human approval |
 | `enhanced` | expanded readiness, stronger evidence, and independent review |
 
+| Level | Required documents | Required content |
+|---|---|---|
+| `light` | spec | outcomes, scope, acceptance criteria, verification method |
+| `standard` | spec and plan | outcomes, scope, acceptance criteria, verification method |
+| `enhanced` | spec and plan | Standard content plus non-goals, constraints, and rollout/rollback |
+
+Roles route explicitly mapped content to the relevant gate. They do not require
+one file per concern: design or verification material may live in the spec or
+plan, or use the optional `design` and `verification` roles.
+
 Resolution inputs include work type, impact level, requested level, rollback
 complexity, blast radius, data/schema impact, external contracts, affected
 systems, and protected domains.
@@ -29,8 +39,14 @@ raise that recommendation, but cannot lower it.
 Every artifact version stores an immutable policy snapshot and digest. The
 snapshot names the exact gates, approval policy, and evidence policy that apply
 to that version. Gate dispatch and artifact approval fail closed when the
-snapshot is missing, changed, or unsupported. Local mode uses
-`human_required` approval with `attested_ok` evidence.
+snapshot is missing, changed, or unsupported.
+
+Full mode selects Light, Standard, or Enhanced from declared impact. Local
+artifact-backed work always uses fixed Standard governance; Quick work remains
+its lighter route. New Local and built-in Full Standard policies share required
+roles, topics, gates, human approval, and evidence meaning. Local embeds the
+default rubrics and has no rubric editor; a Full workspace may intentionally
+diverge after its team changes a bound Skill.
 
 ## Gate identity
 

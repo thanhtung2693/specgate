@@ -49,11 +49,11 @@ does not report a pass while semantic work is pending.
 |---|---|---|
 | `scope_clear` | the change is bounded, with explicit non-goals | spec |
 | `spec_completeness` | the package covers its required topics (outcomes, acceptance criteria, risks, verification, and any policy-required topics); advisory — caps at `warn` | all documents |
-| `acceptance_criteria_verifiable` | every criterion is an observable, testable outcome; vague criteria ("works well", "is fast") are named and restated as observable checks in the hint | spec + verification |
-| `acceptance_criteria_edge_cases` | criteria cover failure and edge paths, not only the happy path | spec + verification |
+| `acceptance_criteria_verifiable` | every criterion is an observable, testable outcome; vague criteria ("works well", "is fast") are named and restated as observable checks in the hint | spec + plan + optional verification |
+| `acceptance_criteria_edge_cases` | criteria cover failure and edge paths, not only the happy path | spec + plan + optional verification |
 | `success_metric_measurable` | the stated success metric can actually be measured | spec |
 | `rollback_plan_present` | a rollback or recovery path is stated | spec + reference |
-| `implementation_plan_traceable` | plan tasks trace to criteria and scope | spec + plan + verification |
+| `implementation_plan_traceable` | plan tasks trace to criteria and scope | spec + optional design + plan + optional verification |
 | `spec_repo_drift` | governed repo docs contradict the approved spec; IDE-agent-executed at pickup (needs repo checkout), warn-only, agent-attested | approved spec + governed repo docs |
 | `required_roles` | the document roles the resolved policy requires are present in the package; structural, no model | file list |
 

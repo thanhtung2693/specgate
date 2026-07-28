@@ -246,6 +246,7 @@ func TestVerifyLocalRequiresAndReportsHumanApprovedDelivery(t *testing.T) {
 		RequestType: "new_feature",
 		Documents: []local.ArtifactDocumentInput{
 			{Path: "spec.md", Role: "spec", Content: []byte("# Closeout\n\n## Acceptance criteria\n\n1. Evidence is visible.")},
+			{Path: "plan.md", Role: "plan", Content: []byte("# Plan\n\nImplement and verify the accepted behavior.")},
 		},
 	})
 	if err != nil {

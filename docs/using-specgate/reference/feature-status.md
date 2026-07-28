@@ -12,8 +12,8 @@ stability beyond the classifications below.
 - One-command workspace overrides with `--workspace` or `SPECGATE_WORKSPACE`.
 - Local and Full quick work item creation with acceptance criteria.
 - Artifact publication, versioning, status, and Context Pack handoff.
-- Automatic governance resolution across the built-in `light`, `standard`, and
-  `enhanced` tiers.
+- Full-mode automatic governance resolution across `light`, `standard`, and
+  `enhanced`; Local artifact-backed work uses fixed Standard governance.
 - Delivery report scaffolding, deterministic check bindings enforced in both
   Local and Full review, evidence-grounded citations, human delivery
   approve/reject, and `delivery submit`.

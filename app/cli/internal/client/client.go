@@ -595,6 +595,15 @@ func (c *Client) ListGovernanceLevels(ctx context.Context) ([]GovernanceLevel, e
 	return r.Levels, nil
 }
 
+// ResolveGovernancePolicy previews the exact policy a proposed artifact would freeze.
+func (c *Client) ResolveGovernancePolicy(ctx context.Context, in ResolveGovernancePolicyInput) (*PolicyProjection, error) {
+	var result PolicyProjection
+	if err := c.post(ctx, "/api/v1/policies/resolve", in, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // WorkPolicy calls GET /api/v1/work-items/{id}/policy — returns the
 // governance explanation for the lead artifact of a change request.
 func (c *Client) WorkPolicy(ctx context.Context, ref string) (*PolicyExplanation, error) {

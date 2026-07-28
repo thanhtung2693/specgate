@@ -2,6 +2,7 @@ package command_test
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -380,8 +381,9 @@ func TestArtifactPublishPreviewUsesExplicitPathsAndRolesWithoutPublishing(t *tes
 	}
 	packagePath := filepath.Join(dir, "artifact.json")
 	body, err := json.Marshal(map[string]any{
-		"feature_key": "feat-x",
-		"source_kind": "optional-label",
+		"feature_key":  "feat-x",
+		"workspace_id": "ws-core",
+		"source_kind":  "optional-label",
 		"documents": []map[string]any{{
 			"path": "any/layout/contract.md", "role": "spec", "source_file": "any/layout/contract.md",
 		}},
@@ -396,8 +398,16 @@ func TestArtifactPublishPreviewUsesExplicitPathsAndRolesWithoutPublishing(t *tes
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
 	}
-	if fc.calls != 0 {
-		t.Fatalf("preview made %d HTTP calls", fc.calls)
+	if fc.calls != 1 {
+		t.Fatalf("preview made %d HTTP calls, want one policy read", fc.calls)
+	}
+	if fc.lastPolicyResolveInput.ImpactLevel != "medium" || fc.lastPolicyResolveInput.RequestType != "unknown" {
+		t.Fatalf("policy input = %#v", fc.lastPolicyResolveInput)
+	}
+	for _, want := range []string{`"policy":{"governance_level":"standard"`, `"missing_roles":["plan"]`} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("preview missing %s: %s", want, out.String())
+		}
 	}
 	if !strings.Contains(out.String(), `"path":"any/layout/contract.md"`) || !strings.Contains(out.String(), `"human_confirmation_required":true`) {
 		t.Fatalf("preview missing source/confirmation fields: %s", out.String())
@@ -415,6 +425,62 @@ func TestArtifactPublishPreviewUsesExplicitPathsAndRolesWithoutPublishing(t *tes
 		if !strings.Contains(hint, want) {
 			t.Fatalf("governance hint does not say how to supply %q: %s", want, hint)
 		}
+	}
+}
+
+func TestArtifactPublishPreviewUsesEmbeddedLocalPolicyWithoutAPI(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	if err := (config.Config{Mode: config.ModeLocal}).SaveTo(deps.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+	packagePath := writeTempJSON(t, map[string]any{
+		"feature_key": "feat-local",
+		"documents": []map[string]any{
+			{"path": "spec.md", "role": "spec", "content": "# Spec"},
+		},
+	})
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "publish", "--preview", "--file", packagePath)
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if fc.calls != 0 {
+		t.Fatalf("local preview made %d API calls", fc.calls)
+	}
+	for _, want := range []string{
+		`"governance_level":"standard"`,
+		`"reason_codes":["local_fixed_standard"]`,
+		`"source":"embedded_default"`,
+		`"missing_roles":["plan"]`,
+		`"omitted":[]`,
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("local preview missing %s: %s", want, out.String())
+		}
+	}
+	if strings.Contains(out.String(), "Impact declaration missing") {
+		t.Fatalf("Local fixed policy requested unused impact answers: %s", out.String())
+	}
+}
+
+func TestArtifactPublishPreviewReturnsNoPartialResultWhenPolicyResolutionFails(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	fc.policyResolveErr = errors.New("policy service unavailable")
+	packagePath := writeTempJSON(t, map[string]any{
+		"workspace_id": "ws-core",
+		"documents": []map[string]any{
+			{"path": "spec.md", "role": "spec", "content": "# Spec"},
+		},
+	})
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "publish", "--preview", "--file", packagePath)
+	if code != output.ExitUnavailable {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if fc.calls != 1 || strings.Contains(out.String(), "human_confirmation_required") {
+		t.Fatalf("partial preview leaked after policy failure: calls=%d output=%s", fc.calls, out.String())
 	}
 }
 
@@ -541,8 +607,8 @@ func TestArtifactPublishPreviewCompareIsReadOnly(t *testing.T) {
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
 	}
-	if fc.calls != 2 {
-		t.Fatalf("compare preview made %d calls, want 2 reads", fc.calls)
+	if fc.calls != 3 {
+		t.Fatalf("compare preview made %d calls, want one policy and two artifact reads", fc.calls)
 	}
 	if fc.lastArtifactID != "art-base" || fc.lastFilesID != "art-base" {
 		t.Fatalf("read ids = artifact %q files %q", fc.lastArtifactID, fc.lastFilesID)
@@ -637,7 +703,7 @@ func TestArtifactPublishPreviewCompareReportsBaseLookupFailure(t *testing.T) {
 	if code == output.ExitOK {
 		t.Fatalf("exit = 0, want lookup error: %s", out.String())
 	}
-	if fc.calls != 1 || fc.lastPublishBody != nil {
+	if fc.calls != 2 || fc.lastPublishBody != nil {
 		t.Fatalf("lookup failure calls = %d, publish body = %#v", fc.calls, fc.lastPublishBody)
 	}
 	if !strings.Contains(out.String(), "artifact not found") {
@@ -689,8 +755,8 @@ func TestArtifactPublishPlainWarnsOnMissingRoles(t *testing.T) {
 	deps, fc, _, out := newFakeDeps(t)
 	fc.publishResult = map[string]any{
 		"artifact_id":    "art-1",
-		"missing_roles":  []any{"plan", "verification"},
-		"readiness_hint": "missing required roles: plan, verification",
+		"missing_roles":  []any{"plan"},
+		"readiness_hint": "missing required roles: plan",
 	}
 	f := writeTempJSON(t, map[string]any{"feature_key": "feat-x", "documents": []any{}})
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "artifact", "publish", "--file", f)
@@ -699,7 +765,7 @@ func TestArtifactPublishPlainWarnsOnMissingRoles(t *testing.T) {
 	}
 	// Publish stays non-blocking (spec-first drafts are legitimate), but a human
 	// in plain mode must see the role gap now, not at gate time.
-	if !strings.Contains(out.String(), "missing required roles: plan, verification") {
+	if !strings.Contains(out.String(), "missing required roles: plan") {
 		t.Fatalf("plain publish output must surface missing roles:\n%s", out.String())
 	}
 }
@@ -717,7 +783,7 @@ func TestArtifactPublishPlainStaysQuietWhenRolesComplete(t *testing.T) {
 	}
 }
 
-func TestArtifactPublishAliasesWorkTypeToRequestType(t *testing.T) {
+func TestArtifactPublishRejectsWorkTypeAlias(t *testing.T) {
 	t.Parallel()
 	deps, fc, _, out := newFakeDeps(t)
 	f := writeTempJSON(t, map[string]any{
@@ -727,14 +793,15 @@ func TestArtifactPublishAliasesWorkTypeToRequestType(t *testing.T) {
 	})
 
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "publish", "--file", f)
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
+	if code != output.ExitUsage {
+		t.Fatalf("exit = %d, want validation; output = %s", code, out.String())
 	}
-	if got := fc.lastPublishBody["request_type"]; got != "new_feature" {
-		t.Fatalf("request_type = %v, want new_feature", got)
+	if fc.lastPublishBody != nil {
+		t.Fatalf("publish body = %#v, want no publish", fc.lastPublishBody)
 	}
-	if _, ok := fc.lastPublishBody["work_type"]; ok {
-		t.Fatalf("work_type leaked to server payload: %#v", fc.lastPublishBody)
+	if !strings.Contains(out.String(), "unknown artifact package field") ||
+		!strings.Contains(out.String(), "work_type") {
+		t.Fatalf("output = %s", out.String())
 	}
 }
 

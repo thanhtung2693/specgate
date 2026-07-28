@@ -294,13 +294,13 @@ async def test_evaluate_all_gates_routes_sections_per_gate() -> None:
     await evaluate_all_gates(_ROUTING_BUNDLE, model=model)
     by_gate = _capture_per_gate(model)
 
-    # implementation_plan_traceable sees Spec + Plan + Verification, not Reference.
+    # implementation_plan_traceable sees Spec + Design + Plan + Verification, not Reference.
     trace = by_gate[IMPLEMENTATION_TRACEABLE_GATE]
     assert "PLAN_SENTINEL" in trace
     assert "VERIFICATION_SENTINEL" in trace
     assert "SPEC_SENTINEL" in trace
     assert "REFERENCE_SENTINEL" not in trace
-    assert "DESIGN_SENTINEL" not in trace
+    assert "DESIGN_SENTINEL" in trace
 
     # rollback_plan_present sees Spec + Reference (rollout/risks live in reference).
     rollback = by_gate[ROLLBACK_PLAN_GATE]
@@ -308,15 +308,44 @@ async def test_evaluate_all_gates_routes_sections_per_gate() -> None:
     assert "SPEC_SENTINEL" in rollback
     assert "PLAN_SENTINEL" not in rollback
 
-    # acceptance_criteria_edge_cases sees Spec + Verification (AC live in the spec role).
+    # acceptance criteria can be specified in Spec and verified from Plan/Verification.
     ac = by_gate[AC_EDGE_CASES_GATE]
     assert "SPEC_SENTINEL" in ac
     assert "VERIFICATION_SENTINEL" in ac
-    assert "PLAN_SENTINEL" not in ac
+    assert "PLAN_SENTINEL" in ac
 
     # Sections are labeled.
     assert "## Verification" in ac
     assert "## Reference" in rollback
+
+
+@pytest.mark.asyncio
+async def test_ac_gate_reads_verification_method_from_plan() -> None:
+    model = _FakeGateModel(GateJudgment(verdict="pass", confidence=0.9))
+    await evaluate_all_gates(
+        {"spec": "AC: returns 200", "plan": "Verify with the health endpoint test."},
+        model=model,
+        enabled_gates=(AC_VERIFIABLE_GATE,),
+    )
+    rendered = "\n".join(model.prompts)
+    assert "Verify with the health endpoint test." in rendered
+
+
+@pytest.mark.asyncio
+async def test_traceability_gate_reads_design_and_plan() -> None:
+    model = _FakeGateModel(GateJudgment(verdict="pass", confidence=0.9))
+    await evaluate_all_gates(
+        {
+            "spec": "AC-1",
+            "design": "Compatibility boundary",
+            "plan": "Task 1 implements AC-1 and runs test-health",
+        },
+        model=model,
+        enabled_gates=(IMPLEMENTATION_TRACEABLE_GATE,),
+    )
+    rendered = "\n".join(model.prompts)
+    assert "Compatibility boundary" in rendered
+    assert "Task 1 implements AC-1" in rendered
 
 
 @pytest.mark.asyncio

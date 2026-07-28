@@ -63,9 +63,12 @@ func TestCLIWorkItemPolicy_QuickRouteWithoutLeadArtifact(t *testing.T) {
 
 func TestCLIResolvePolicy_LowRiskBugfix(t *testing.T) {
 	t.Parallel()
-	h := &Handlers{}
+	h := &Handlers{Governance: &governanceops.Service{
+		ProfileResolver: governanceprofile.Resolver{},
+		Skills:          pipelineSkillReader{},
+	}}
 
-	out, err := h.CLIResolvePolicy(context.Background(), &CLIResolvePolicyInput{
+	out, err := h.CLIResolvePolicy(workspace.WithID(context.Background(), "ws-test"), &CLIResolvePolicyInput{
 		Body: CLIResolvePolicyBody{
 			RequestType: "bugfix",
 			ImpactLevel: "low",
@@ -77,8 +80,15 @@ func TestCLIResolvePolicy_LowRiskBugfix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CLIResolvePolicy: %v", err)
 	}
-	if out.Body.GovernanceLevel != governanceprofile.GovernanceLight {
+	if out.Body.GovernanceLevel != string(governanceprofile.GovernanceLight) {
 		t.Fatalf("governance_level = %q, want light", out.Body.GovernanceLevel)
+	}
+}
+
+func TestCLIResolvePolicyRequiresWorkspaceBoundary(t *testing.T) {
+	t.Parallel()
+	if cliWorkspaceExempt("/api/v1/policies/resolve") {
+		t.Fatal("workspace-owned rubric preview bypasses workspace resolution")
 	}
 }
 

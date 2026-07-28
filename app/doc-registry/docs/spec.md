@@ -283,6 +283,14 @@ Artifacts may carry `policy_snapshot_json`. New snapshots use
 | `policy_lineage` | Built-in automatic policy lineage |
 | `digest` | Snapshot digest |
 
+Document roles are explicit routing labels, not a one-file-per-concern schema.
+The built-in policy requires `spec` for Light and `spec` plus `plan` for
+Standard and Enhanced. Design and verification material may be mapped with
+their optional roles or included in the required spec/plan documents. The
+semantic gates still require verification content before approval, and
+delivery review still requires criterion-specific claims and observed check
+evidence after implementation.
+
 Every non-empty snapshot must carry that version marker and both policy fields.
 Approval fails closed when a snapshot is missing, unversioned, unparseable, or
 incompatible.

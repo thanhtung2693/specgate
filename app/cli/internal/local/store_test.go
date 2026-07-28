@@ -322,7 +322,7 @@ func TestReadinessMustPassBeforeHumanArtifactApproval(t *testing.T) {
 	}
 	artifact, err := store.PublishArtifact(context.Background(), selection.Workspace.ID, local.ArtifactInput{
 		FeatureKey: "LOCAL-READINESS", RequestType: "new_feature",
-		Documents: []local.ArtifactDocumentInput{{Path: "spec.md", Role: "spec", Content: []byte("acceptance criteria: works")}},
+		Documents: localGovernedDocuments("acceptance criteria: works"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -362,7 +362,7 @@ func TestWorkAuditRetainsArtifactApprovalActorAndNote(t *testing.T) {
 	}
 	artifact, err := store.PublishArtifact(context.Background(), selection.Workspace.ID, local.ArtifactInput{
 		FeatureKey: "LOCAL-AUDIT", RequestType: "new_feature",
-		Documents: []local.ArtifactDocumentInput{{Path: "spec.md", Role: "spec", Content: []byte("approved scope")}},
+		Documents: localGovernedDocuments("approved scope"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -401,7 +401,7 @@ func TestPromotedArtifactCreatesContextBoundWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	artifact, err := store.PublishArtifact(context.Background(), selection.Workspace.ID, local.ArtifactInput{FeatureKey: "LOCAL-WORK", RequestType: "new_feature", Documents: []local.ArtifactDocumentInput{{Path: "spec.md", Role: "spec", Content: []byte("# Local work\n\nAcceptance criteria: works")}}})
+	artifact, err := store.PublishArtifact(context.Background(), selection.Workspace.ID, local.ArtifactInput{FeatureKey: "LOCAL-WORK", RequestType: "new_feature", Documents: localGovernedDocuments("# Local work\n\nAcceptance criteria: works")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -575,7 +575,7 @@ func TestPeerReviewRequiresDifferentAgentAndMatchingLatestReceipt(t *testing.T) 
 	}
 	artifact, err := store.PublishArtifact(context.Background(), selection.Workspace.ID, local.ArtifactInput{
 		FeatureKey: "LOCAL-PEER", RequestType: "new_feature",
-		Documents: []local.ArtifactDocumentInput{{Path: "spec.md", Role: "spec", Content: []byte("# Spec")}},
+		Documents: localGovernedDocuments("# Spec"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -726,7 +726,7 @@ func TestDeliveryReviewRequiresOneEvidenceBackedClaimPerCriterion(t *testing.T) 
 
 func readyLocalWork(t *testing.T, store *local.Store, selection local.Selection) local.WorkItem {
 	t.Helper()
-	artifact, err := store.PublishArtifact(context.Background(), selection.Workspace.ID, local.ArtifactInput{FeatureKey: "LOCAL-DELIVERY", RequestType: "new_feature", Documents: []local.ArtifactDocumentInput{{Path: "spec.md", Role: "spec", Content: []byte("# Local delivery")}}})
+	artifact, err := store.PublishArtifact(context.Background(), selection.Workspace.ID, local.ArtifactInput{FeatureKey: "LOCAL-DELIVERY", RequestType: "new_feature", Documents: localGovernedDocuments("# Local delivery")})
 	if err != nil {
 		t.Fatal(err)
 	}

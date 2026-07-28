@@ -29,9 +29,10 @@ func TestGatesCheckNamesEachGateStateAndPendingCount(t *testing.T) {
 	}
 	artifact, err := store.PublishArtifact(t.Context(), selection.Workspace.ID, local.ArtifactInput{
 		FeatureKey: "GATES", RequestType: "new_feature",
-		Documents: []local.ArtifactDocumentInput{{
-			Path: "spec.md", Role: "spec", Content: []byte("# Spec\n\n## Acceptance criteria\n\n1. Works."),
-		}},
+		Documents: []local.ArtifactDocumentInput{
+			{Path: "spec.md", Role: "spec", Content: []byte("# Spec\n\n## Acceptance criteria\n\n1. Works.")},
+			{Path: "plan.md", Role: "plan", Content: []byte("# Plan\n\nImplement and verify.")},
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -50,7 +51,7 @@ func TestGatesCheckNamesEachGateStateAndPendingCount(t *testing.T) {
 	rendered := out.String()
 
 	// The deterministic gates that did run must be named with their state.
-	for _, want := range []string{"has_documents", "has_spec"} {
+	for _, want := range []string{"has_documents", "required_roles_present"} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("readout omits gate %q:\n%s", want, rendered)
 		}

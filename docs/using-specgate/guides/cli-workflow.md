@@ -228,6 +228,18 @@ Quick work still gets a Context Pack and the complete delivery-review loop.
 
 For larger work, preview an explicitly mapped artifact package:
 
+```json
+{
+  "feature_key": "checkout",
+  "request_type": "new_feature",
+  "documents": [{
+    "path": "openspec/changes/checkout/spec.md",
+    "role": "spec",
+    "repo_file": "openspec/changes/checkout/spec.md"
+  }]
+}
+```
+
 ```bash
 specgate artifact publish --file artifact.json --preview --json
 ```
@@ -256,7 +268,9 @@ Then resume the normal delivery loop with the returned work reference.
 
 SpecGate does not require a particular specification framework or directory.
 Your framework keeps its files where it normally creates them; the publish
-package maps those files into a versioned artifact.
+package maps those files into a versioned artifact. Use `repo_file` for normal
+repository documents, `source_file` for a file beside or below the manifest,
+and `file_url` only for an explicitly selected file outside the repository.
 
 ## Check coverage and outcomes
 

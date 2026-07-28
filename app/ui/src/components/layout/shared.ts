@@ -151,11 +151,11 @@ export const gateCatalog: Record<string, GateCatalogEntry> = {
   },
   acceptance_criteria_verifiable: {
     name: "Verifiable acceptance criteria",
-    checks: "Checks every acceptance criterion is an observable, testable outcome. Reads the spec and verification documents.",
+    checks: "Checks every acceptance criterion is an observable, testable outcome. Reads the spec, plan, and optional verification documents.",
   },
   acceptance_criteria_edge_cases: {
     name: "Edge-case coverage",
-    checks: "Checks criteria cover failure and edge paths, not just the happy path. Reads the spec and verification documents.",
+    checks: "Checks criteria cover failure and edge paths, not just the happy path. Reads the spec, plan, and optional verification documents.",
   },
   success_metric_measurable: {
     name: "Measurable success metric",
@@ -167,7 +167,7 @@ export const gateCatalog: Record<string, GateCatalogEntry> = {
   },
   implementation_plan_traceable: {
     name: "Traceable implementation plan",
-    checks: "Checks plan tasks trace to criteria and scope. Reads the spec, plan, and verification documents.",
+    checks: "Checks plan tasks trace to criteria and scope. Reads the spec, optional design, plan, and optional verification documents.",
   },
   required_roles: {
     name: "Required document roles",

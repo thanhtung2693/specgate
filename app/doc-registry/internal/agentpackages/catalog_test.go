@@ -216,6 +216,17 @@ func TestSkillsDescribeIDEAgentNoModelBoundaries(t *testing.T) {
 			t.Fatalf("skills missing %q", want)
 		}
 	}
+	for _, want := range []string{
+		"repo_file",
+		"routing labels",
+		"exact policy projection",
+		"separate verification document",
+		"originating framework owns source paths",
+	} {
+		if !strings.Contains(preparing, want) {
+			t.Fatalf("preparation skill missing framework-neutral contract %q", want)
+		}
+	}
 	for _, want := range []string{"readiness pass is not human approval", "human explicitly requests", "different review-only agent"} {
 		if !strings.Contains(router+delivering, want) {
 			t.Fatalf("skills missing boundary %q", want)

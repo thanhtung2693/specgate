@@ -44,11 +44,14 @@ code, replace CI, or make the human acceptance decision.
 When gates run, the platform fetches the artifact's documents and groups them
 by role: spec, design, plan, verification, reference. Each gate receives only
 the sections relevant to its question. The scope gate reads the spec; the
-acceptance-criteria gates read the spec plus verification documents; the
-completeness gate reads everything. Feature attachments pinned with the
-`gate` audience (bug reproductions, examples, links) are added to the
-acceptance-criteria and scope gates. The artifact's work type is included so
-a bug fix is not judged by new-feature standards.
+acceptance-criteria gates read the spec, plan, and optional verification
+material; implementation traceability also reads optional design material; the
+completeness gate reads everything. A framework may keep its verification
+method inside its native spec or plan—SpecGate does not require a separate
+verification document. Feature attachments pinned with the `gate` audience
+(bug reproductions, examples, links) are added to the acceptance-criteria and
+scope gates. The artifact's work type is included so a bug fix is not judged by
+new-feature standards.
 
 SpecGate does not intentionally truncate this bundle. A document that fails
 to fetch is skipped rather than aborting the run, and the model's own context

@@ -39,12 +39,12 @@ In raw-service mode, Vite strips `/api/doc-registry` and `/api/agents` before
 forwarding requests. Override the raw-service targets when your local compose
 ports differ, for example when another stack already owns `8080` or `2024`.
 
-When `VITE_DOC_REGISTRY_URL` is unset, the shell explains that the browser UI
-requires Full mode instead of fabricating a browser-local workspace. Configure
-the registry URL, then create or seed work through the CLI to populate the
-surfaces. When the URL is configured but the registry is unreachable or empty,
-live-mode surfaces show explicit loading, empty, or error placeholders instead
-of bundled sample rows, diffs, document bodies, or acceptance criteria.
+When `VITE_DOC_REGISTRY_URL` is unset, the shell reports a misconfigured UI
+build instead of fabricating a browser-local workspace. Released Full-appliance
+builds set the URL to the same-origin `/api/doc-registry` route. When the URL is
+configured but the registry is unreachable or empty, live-mode surfaces show
+explicit loading, empty, or error placeholders instead of bundled sample rows,
+diffs, document bodies, or acceptance criteria.
 
 Governance chat is optional. The launcher is hidden unless
 `VITE_LANGGRAPH_API_URL` is configured and its health endpoint confirms chat is

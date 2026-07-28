@@ -25,8 +25,7 @@ Choose one route with the human:
 
 Do not create a durable record until the human approves the displayed contract.
 
-Completion criterion: the human-approved preview contains every slice's title,
-scope, criteria, and non-goals, and names one route.
+Completion criterion: the human-approved preview names every slice's contract and route.
 
 ## 2A. Create quick work
 
@@ -51,25 +50,26 @@ contract exactly. Quick work ends here; switch to `specgate-work-delivery`.
 
 The originating framework owns source paths, names, lifecycle, and Git policy.
 Never relocate, copy, rename, delete, commit, or change ignore rules for source
-documents to fit SpecGate. Do not detect frameworks from directory names. Edit
-source content only when the user's preparation or readiness-repair request
-authorizes that edit.
+documents to fit SpecGate. Edit source content only when the user's preparation
+or readiness-repair request authorizes that edit.
 
-SpecGate does not detect frameworks or infer roles; the agent maps each selected
-source explicitly.
+Roles are routing labels, not one-file-per-concern requirements. Map each
+human-selected source explicitly; never detect a framework or manufacture a
+separate verification document for SpecGate.
 
 Keep the transient manifest at `.specgate/work/artifact.json`. For every mapped
 document:
 
 - set `path` to its unchanged repository-relative POSIX path;
 - set its explicit governance `role`;
+- use `repo_file` for a repository source;
 - use `source_file` only when the source is contained by the manifest directory;
 - use an explicit absolute local `file_url` when the source is outside the
   manifest directory;
-- set exactly one of `content`, `source_file`, or `file_url`.
+- set exactly one of `content`, `repo_file`, `source_file`, or `file_url`.
 
-Start from this minimum shape. The human selects `feature_key`; `request_type`
-must be `new_feature`, `change_request`, `bugfix`, or `unknown`:
+Use the human-selected `feature_key`; `request_type` is `new_feature`,
+`change_request`, `bugfix`, or `unknown`:
 
 ```json
 {
@@ -78,7 +78,7 @@ must be `new_feature`, `change_request`, `bugfix`, or `unknown`:
   "documents": [{
     "path": "docs/framework/spec.md",
     "role": "spec",
-    "file_url": "file:///absolute/path/to/docs/framework/spec.md"
+    "repo_file": "docs/framework/spec.md"
   }]
 }
 ```
@@ -97,14 +97,15 @@ specgate artifact publish --file .specgate/work/artifact.json \
   --preview --compare "$BASE_ARTIFACT_ID" --json
 ```
 
-Report added, removed, changed, and unchanged paths. If preview lists an omitted
-impact declaration, ask for the exact `yes`, `no`, or `unknown` answers it
-requires; never infer `no`. Resolve feature identity from an explicitly named
-work item or human selection rather than similarity.
+Show the source mapping and exact policy projection together. Report added,
+removed, changed, and unchanged paths. If preview lists an omitted impact
+declaration, ask for its exact `yes`, `no`, or `unknown` answers; never infer
+`no`. Resolve feature identity from an explicitly named work item or human
+selection rather than similarity.
 
-Completion criterion: every selected source appears exactly once in preview
-under its unchanged repository-relative path and explicit role; source files
-and Git policy are unchanged except for authorized content edits.
+Completion criterion: every selected source appears once under its unchanged
+path and role; source files and Git policy remain unchanged except for
+authorized edits.
 
 Only after explicit human confirmation of that preview may the agent publish:
 
