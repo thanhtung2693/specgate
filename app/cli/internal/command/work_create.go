@@ -63,12 +63,7 @@ acceptance criterion explicitly with a repeated --ac flag.`,
 					return localExitError(deps, "work.create", err)
 				}
 				if deps.Printer.Mode() == output.ModeJSON {
-					view := localWorkView(work)
-					view["change_request_id"] = work.ID
-					view["change_request_key"] = work.Key
-					view["feature_key"] = work.FeatureKey
-					view["lead_artifact_id"] = work.ArtifactID
-					deps.Printer.Success("work.create", view)
+					deps.Printer.Success("work.create", localWorkView(work))
 					return nil
 				}
 				fmt.Fprintln(deps.Stdout, notice(deps, output.StyleSuccess, "Created", work.Key))
@@ -102,8 +97,20 @@ acceptance criterion explicitly with a repeated --ac flag.`,
 	return cmd
 }
 
+// localWorkView renders one Local work item. The Full-mode aliases belong here
+// rather than in individual handlers: they were added only by `work create`, so
+// `work show` and `work list` omitted `lead_artifact_id` and an agent following
+// the preparation skill could not verify the approved artifact in Local mode.
 func localWorkView(work local.WorkItem) map[string]any {
-	return map[string]any{"id": work.ID, "key": work.Key, "workspace_id": work.WorkspaceID, "feature_id": work.FeatureID, "artifact_id": work.ArtifactID, "title": work.Title, "description": work.Description, "phase": work.Phase, "context_digest": work.ContextDigest, "acceptance_criteria": work.AcceptanceCriteria, "created_at": work.CreatedAt}
+	return map[string]any{
+		"id": work.ID, "key": work.Key, "workspace_id": work.WorkspaceID,
+		"feature_id": work.FeatureID, "feature_key": work.FeatureKey,
+		"artifact_id": work.ArtifactID, "lead_artifact_id": work.ArtifactID,
+		"change_request_id": work.ID, "change_request_key": work.Key,
+		"title": work.Title, "description": work.Description, "phase": work.Phase,
+		"context_digest": work.ContextDigest, "acceptance_criteria": work.AcceptanceCriteria,
+		"created_at": work.CreatedAt,
+	}
 }
 
 func localWorkViews(items []local.WorkItem) []map[string]any {
@@ -208,9 +215,6 @@ func newWorkCreateQuickCmd(deps *Deps) *cobra.Command {
 					return localExitError(deps, "work.create-quick", err)
 				}
 				result := localWorkView(work)
-				result["change_request_id"] = work.ID
-				result["change_request_key"] = work.Key
-				result["lead_artifact_id"] = ""
 				result["acceptance_count"] = len(work.AcceptanceCriteria)
 				if deps.Printer.Mode() == output.ModeJSON {
 					deps.Printer.Success("work.create-quick", result)

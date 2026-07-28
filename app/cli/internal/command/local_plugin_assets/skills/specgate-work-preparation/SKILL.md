@@ -49,13 +49,14 @@ contract exactly. Quick work ends here; switch to `specgate-work-delivery`.
 ## 2B. Preview and publish an artifact
 
 The originating framework owns source paths, names, lifecycle, and Git policy.
-Never relocate, copy, rename, delete, commit, or change ignore rules for source
-documents to fit SpecGate. Edit source content only when the user's preparation
-or readiness-repair request authorizes that edit.
+Never relocate, copy, rename, delete, commit, or change ignore rules for them.
+Edit source content only when the user's request authorizes that edit.
 
 Roles are routing labels, not one-file-per-concern requirements. Map each
 human-selected source explicitly; never detect a framework or manufacture a
-separate verification document for SpecGate.
+document for SpecGate. When policy requires a role one source already covers,
+map that same `path` again under the second `role`: one specification is often
+both the spec and the plan.
 
 Keep the transient manifest at `.specgate/work/artifact.json`. For every mapped
 document:
@@ -63,9 +64,8 @@ document:
 - set `path` to its unchanged repository-relative POSIX path;
 - set its explicit governance `role`;
 - use `repo_file` for a repository source;
-- use `source_file` only when the source is contained by the manifest directory;
-- use an explicit absolute local `file_url` when the source is outside the
-  manifest directory;
+- use `source_file` only inside the manifest directory, and an absolute
+  `file_url` outside it;
 - set exactly one of `content`, `repo_file`, `source_file`, or `file_url`.
 
 Use the human-selected `feature_key`; `request_type` is `new_feature`,

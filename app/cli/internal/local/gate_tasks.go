@@ -502,7 +502,12 @@ func requiredRoleCheck(required []string, documents []ArtifactDocument) map[stri
 	hint := "required document roles present"
 	if len(missing) > 0 {
 		state = "fail"
-		hint = "add documents for missing roles and publish a new version"
+		// Name the roles and both remedies. "Add documents" alone reads as
+		// "invent a document for SpecGate", which the preparation phase forbids;
+		// mapping a source that already covers the role is usually the right fix.
+		hint = fmt.Sprintf(
+			"missing role(s) %s: map an existing source under each missing role, or add a document that covers it, then publish a new version",
+			strings.Join(missing, ", "))
 	}
 	return map[string]any{
 		"gate": "required_roles_present", "state": state, "hint": hint,

@@ -392,7 +392,6 @@ func artifactPublishPreview(body map[string]any, sources []string) map[string]an
 		"source_kind": body["source_kind"], "source_id": body["source_id"], "source_revision": body["source_revision"],
 		"documents": documents, "target": target, "base_version": base, "new_artifact": base == "",
 		"omitted": omitted, "ambiguous": []string{}, "human_confirmation_required": true,
-		"non_goals": []string{"No filesystem watcher", "No implicit repository-wide upload"},
 	}
 	if len(omitted) > 0 {
 		// Name the fields, not just the gap. An author cannot answer "supply an

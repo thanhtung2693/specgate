@@ -67,7 +67,7 @@ func Open(path string) (*Store, error) {
 		`CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, slug TEXT UNIQUE NOT NULL, name TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS selection (id INTEGER PRIMARY KEY CHECK (id = 1), user_id TEXT NOT NULL, workspace_id TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), feature_key TEXT NOT NULL, request_type TEXT NOT NULL, version INTEGER NOT NULL, status TEXT NOT NULL, snapshot_digest TEXT NOT NULL, policy_digest TEXT NOT NULL DEFAULT '', policy_snapshot_json TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, UNIQUE(workspace_id, feature_key, version))`,
-		`CREATE TABLE IF NOT EXISTS artifact_documents (artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE, path TEXT NOT NULL, role TEXT NOT NULL, content BLOB NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(artifact_id, path))`,
+		`CREATE TABLE IF NOT EXISTS artifact_documents (artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE, path TEXT NOT NULL, role TEXT NOT NULL, content BLOB NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(artifact_id, path, role))`,
 		`CREATE TABLE IF NOT EXISTS artifact_readiness_runs (id TEXT PRIMARY KEY, artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE, workspace_id TEXT NOT NULL REFERENCES workspaces(id), aggregate TEXT NOT NULL, evidence TEXT NOT NULL, created_at TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS local_gate_tasks (
   id TEXT PRIMARY KEY,
@@ -111,7 +111,66 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := ensureArtifactDocumentRoleKey(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return &Store{db: db}, nil
+}
+
+// ensureArtifactDocumentRoleKey widens the artifact_documents key from
+// (artifact_id, path) to (artifact_id, path, role). A role is a routing label, so
+// one source may carry several; the old key rejected that at the database even
+// after validation allowed it, which left an author whose specification is a
+// single document unable to satisfy a multi-role policy. Existing stores keep
+// every row — the wider key admits strictly more.
+func ensureArtifactDocumentRoleKey(db *sql.DB) error {
+	var schema string
+	err := db.QueryRow(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'artifact_documents'`).Scan(&schema)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if strings.Contains(schema, "PRIMARY KEY(artifact_id, path, role)") {
+		return nil
+	}
+
+	ctx := context.Background()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+		return err
+	}
+	defer conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`) //nolint:errcheck
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, statement := range []string{
+		`DROP TABLE IF EXISTS artifact_documents_role_migration`,
+		`CREATE TABLE artifact_documents_role_migration (
+			artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
+			path TEXT NOT NULL,
+			role TEXT NOT NULL,
+			content BLOB NOT NULL,
+			digest TEXT NOT NULL,
+			PRIMARY KEY(artifact_id, path, role))`,
+		`INSERT INTO artifact_documents_role_migration (artifact_id, path, role, content, digest)
+			SELECT artifact_id, path, role, content, digest FROM artifact_documents`,
+		`DROP TABLE artifact_documents`,
+		`ALTER TABLE artifact_documents_role_migration RENAME TO artifact_documents`,
+	} {
+		if _, err := tx.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func ensureQuickWorkSchema(db *sql.DB) error {

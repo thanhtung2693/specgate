@@ -159,10 +159,19 @@ func validateArtifactDocuments(input []ArtifactDocumentInput) ([]ArtifactDocumen
 	total := 0
 	for _, inputDocument := range input {
 		documentPath, ok := normalizeArtifactDocumentPath(inputDocument.Path)
-		if !ok || seen[documentPath] {
-			return nil, "", fmt.Errorf("each document needs a unique safe repository-relative path")
+		if !ok {
+			return nil, "", fmt.Errorf("each document needs a safe repository-relative path")
 		}
 		role := normalizeArtifactDocumentRole(inputDocument.Role)
+		// A role is a routing label, so one source may carry several roles: a
+		// single spec often is both the spec and the plan. The identity is the
+		// path and role together, which is what the snapshot digest below hashes
+		// and what Full mode stores. Keying uniqueness on path alone rejected
+		// manifests the preview had already accepted and left a single-document
+		// author with no way to satisfy a multi-role policy.
+		if seen[documentPath+"\x00"+role] {
+			return nil, "", fmt.Errorf("document %q is mapped twice under the same role %q", documentPath, role)
+		}
 		if len(inputDocument.Content) > maxDocumentBytes {
 			return nil, "", fmt.Errorf("document %q exceeds the 1 MiB Local limit", documentPath)
 		}
@@ -172,10 +181,15 @@ func validateArtifactDocuments(input []ArtifactDocumentInput) ([]ArtifactDocumen
 		}
 		content := append([]byte(nil), inputDocument.Content...)
 		hash := sha256.Sum256(content)
-		seen[documentPath] = true
+		seen[documentPath+"\x00"+role] = true
 		documents = append(documents, ArtifactDocument{Path: documentPath, Role: role, Content: content, Digest: "sha256:" + hex.EncodeToString(hash[:]), SizeBytes: len(content)})
 	}
-	sort.Slice(documents, func(i, j int) bool { return documents[i].Path < documents[j].Path })
+	sort.Slice(documents, func(i, j int) bool {
+		if documents[i].Path != documents[j].Path {
+			return documents[i].Path < documents[j].Path
+		}
+		return documents[i].Role < documents[j].Role
+	})
 	hash := sha256.New()
 	for _, document := range documents {
 		_, _ = hash.Write([]byte(document.Path + "\x00" + document.Role + "\x00" + document.Digest + "\n"))

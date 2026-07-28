@@ -50,11 +50,11 @@ type QuickWorkInput struct {
 }
 
 type WorkItem struct {
-	ID                 string   `json:"id"`
-	Key                string   `json:"key"`
-	WorkspaceID        string   `json:"workspace_id"`
-	FeatureID          string   `json:"feature_id"`
-	FeatureKey         string   `json:"feature_key,omitempty"`
+	ID          string `json:"id"`
+	Key         string `json:"key"`
+	WorkspaceID string `json:"workspace_id"`
+	FeatureID   string `json:"feature_id"`
+	FeatureKey  string `json:"feature_key,omitempty"`
 	ArtifactID         string   `json:"artifact_id"`
 	Title              string   `json:"title"`
 	Description        string   `json:"description"`
