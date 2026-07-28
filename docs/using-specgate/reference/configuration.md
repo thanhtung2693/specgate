@@ -224,7 +224,7 @@ delivery review. Settings include:
 
 - server-side model provider and model (defaults to `openai` / `gpt-5.4-mini`);
 - default reasoning effort;
-- embedding provider and model for experimental Knowledge;
+- embedding provider and model for Knowledge;
 - OpenAI, Google, Anthropic, and OpenRouter API keys.
 
 Keys are encrypted at rest and masked on normal reads. Governance chat is a

@@ -33,8 +33,8 @@ from the URL. OAuth returns may use `?settings=integrations`.
 The shell has Work, Reviews, Artifacts, and Knowledge navigation; a theme toggle; an
 identity/workspace menu; Settings; and, when available, a governance-agent launcher. Desktop
 uses a persistent sidebar. Narrow viewports use the sidebar sheet so tables
-retain their usable width. The browser and sidebar title are `SpecGate
-(Experimental)`. A keyboard-visible skip control moves focus past the persistent
+retain their usable width. The browser and sidebar title are `SpecGate`.
+A keyboard-visible skip control moves focus past the persistent
 navigation to the page content, and animated agent thinking indicators respect
 the browser's reduced-motion preference.
 

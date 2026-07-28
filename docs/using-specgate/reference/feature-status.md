@@ -1,10 +1,10 @@
 # SpecGate feature status
 
-Use this reference to decide which SpecGate capabilities are ready for cautious
-v0.1 evaluation and which still need extra care. It does not promise
-stability beyond the classifications below.
+Use this reference to see which SpecGate capabilities are established and which
+are newer. Both are usable; the newer group has had less real-world mileage, so
+its interfaces are the more likely to change.
 
-## Core v0.1 paths
+## Established paths
 
 - CLI install, Local CLI initialization, and Full appliance initialization with
   `specgate init`.
@@ -40,7 +40,7 @@ stability beyond the classifications below.
 - Optional Full-mode Linear **Work tracking** handoff to one selected team;
   direct IDE-agent Context Pack handoff remains available.
 
-## Experimental v0.1 foundations
+## Newer surfaces
 
 - Web UI review, workflow scanning, settings, workspace members, and artifact
   inspection.
@@ -53,11 +53,10 @@ stability beyond the classifications below.
 - Committable delivery handoffs: `delivery handoff export` writes a review
   request into the repository and `delivery handoff show` renders it read-only
   without a workspace or server. Reviewer decisions are not carried in the file,
-  and the bundle format is new enough that its schema may still change.
+  and the bundle schema can still change.
 
-These surfaces are usable in local evaluation, but they may change during
-v0.1 and still need more real team use before they become stable
-paths.
+These surfaces work today. They have had less team mileage than the established
+paths, so their interfaces are the more likely to change.
 
 ## Deferred from the Change facade
 

@@ -36,10 +36,13 @@ Markdown, or another tool. SpecGate does not take over authoring. It manages the
 handoff from approved intent to implementation and keeps the resulting evidence
 and review history together.
 
-> **Status: v0.1 early release.** SpecGate is for cautious local evaluation and trusted
-> self-hosted trials. Start with the CLI. Use the web UI when you want to inspect
-> artifacts, review work, manage settings, or use governance chat. APIs, UI
-> details, and experimental features may still change.
+> **Run it on a trusted machine or private network.** SpecGate ships no HTTP
+> authentication layer, so put an authentication proxy and TLS in front of it
+> before exposing it beyond that boundary — see
+> [Trust and security](docs/using-specgate/concepts/trust-and-security.md).
+> Start with the CLI. Use the web UI to inspect artifacts, review work, manage
+> settings, or use governance chat. SpecGate is pre-1.0: APIs and interfaces can
+> change between minor versions.
 
 ## Why SpecGate?
 
@@ -131,7 +134,7 @@ SpecGate does not replace your authoring tool, issue tracker, coding IDE, pull
 request review, or CI. It records the governed handoff and delivery review
 across those systems.
 
-## Web UI (experimental)
+## Web UI
 
 Most implementation work stays in your IDE. Open the web UI when you need to
 inspect the governed handoff: artifact context, gates, Context Packs, delivery
