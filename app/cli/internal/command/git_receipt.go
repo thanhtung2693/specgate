@@ -63,7 +63,11 @@ func collectGitReceiptWithPriorBase(ctx context.Context, runner deploy.CommandRu
 
 	remote, err := gitOutput(ctx, runner, dir, "remote", "get-url", "origin")
 	if err != nil || strings.TrimSpace(string(remote)) == "" {
-		receipt.Warnings = append(receipt.Warnings, "Git receipt unavailable: origin remote is not configured")
+		// Name the consequence and the remedy. The bare fact left a solo author
+		// with no idea that staleness detection was silently inactive, or that
+		// configuring a remote is what turns it on.
+		receipt.Warnings = append(receipt.Warnings,
+			"Git receipt unavailable: no origin remote, so submitted evidence is not checked against later changes; configure one with `git remote add origin <url>` to enable staleness detection")
 		return receipt
 	}
 	receipt.Repository = strings.TrimSpace(string(remote))

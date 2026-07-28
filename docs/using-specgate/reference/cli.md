@@ -533,7 +533,13 @@ for the committable `delivery handoff` flow.
 ### Git receipts and freshness
 
 Git receipts retain full checkout provenance while labeling changes outside
-`affected_files` as unrelated checkout state. `change status` compares the
+`affected_files` as unrelated checkout state. A receipt needs an `origin` remote,
+because provenance a reviewer on another machine can act on requires a shared
+repository identity. Without one the receipt is `unavailable` and **staleness
+detection is inactive**: submitted evidence is never compared against later
+changes to the checkout. A solo author working before their first push sees this
+as `Git receipt unavailable` and `Freshness: No stored receipt was checked` —
+configure a remote to turn the comparison on. `change status` compares the
 stored receipt with the current repository, branch, HEAD, and diff digest.
 Mismatches are explicit stale warnings, and unavailable Git metadata never
 claims freshness.
@@ -713,7 +719,12 @@ same-name marketplace entries and removes only known managed files from marked
 plugin paths. A native Codex or Claude Code installation makes CLI install stop
 with exit code `4` before writing. Update and uninstall touch only marked CLI
 files. Unknown files inside CLI-managed directories are preserved and listed as
-`preserved_paths` in JSON output.
+`preserved_paths` in JSON output. A shared configuration SpecGate only removed
+its own entries from — a Codex `config.toml` that also holds your settings — is
+reported under `modified_paths`, not `removed_paths`, because the file is kept.
+A native plugin configuration SpecGate cannot parse is a `validation` error with
+`owner: "unknown"`: ownership was never established, so it is not reported as a
+native install to uninstall.
 Symlinked deployment, cleanup,
 plugin-target, and plugin-config paths are refused instead of followed. Full
 data purge additionally requires the exact deployment marker and refuses

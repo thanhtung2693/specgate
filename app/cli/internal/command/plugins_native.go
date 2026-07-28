@@ -97,12 +97,30 @@ func rejectNativePluginConflicts(agents []string, home string, projectLocal bool
 		recovery = append(recovery, nativePluginRemovalAction(conflict.Agent, conflict.Marketplace))
 	}
 	retryCommand := pluginRepairCommand(strings.Join(agents, ","), projectLocal) + " --no-input"
+	// Only a real installation proves native ownership. A problem means the
+	// configuration could not be read, so ownership is unknown — reporting it as
+	// "native plugin manager already owns SpecGate" sent a user with a malformed
+	// config.toml to uninstall a native plugin that does not exist.
+	if len(conflicts) == 0 {
+		return pluginInstallError{
+			kind: "validation",
+			err: fmt.Errorf("cannot read the native plugin configuration, so SpecGate will not write plugin files: %s; fix it, then retry %s; no plugin files were changed",
+				strings.Join(recovery, "; "), retryCommand),
+			details: map[string]any{
+				"owner":         "unknown",
+				"problems":      problems,
+				"recovery":      recovery,
+				"retry_command": retryCommand,
+			},
+		}
+	}
 	return pluginInstallError{
 		kind: "conflict",
 		err:  fmt.Errorf("native plugin manager already owns SpecGate; %s; then retry %s; no plugin files were changed", strings.Join(recovery, "; "), retryCommand),
 		details: map[string]any{
 			"owner":         "native",
 			"conflicts":     conflicts,
+			"problems":      problems,
 			"recovery":      recovery,
 			"retry_command": retryCommand,
 		},
