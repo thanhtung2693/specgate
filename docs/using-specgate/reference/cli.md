@@ -533,7 +533,13 @@ for the committable `delivery handoff` flow.
 ### Git receipts and freshness
 
 Git receipts retain full checkout provenance while labeling changes outside
-`affected_files` as unrelated checkout state. `change status` compares the
+`affected_files` as unrelated checkout state. A receipt needs an `origin` remote,
+because provenance a reviewer on another machine can act on requires a shared
+repository identity. Without one the receipt is `unavailable` and **staleness
+detection is inactive**: submitted evidence is never compared against later
+changes to the checkout. A solo author working before their first push sees this
+as `Git receipt unavailable` and `Freshness: No stored receipt was checked` —
+configure a remote to turn the comparison on. `change status` compares the
 stored receipt with the current repository, branch, HEAD, and diff digest.
 Mismatches are explicit stale warnings, and unavailable Git metadata never
 claims freshness.
