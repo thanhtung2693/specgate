@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -41,6 +43,45 @@ func (s *Store) RunReadiness(ctx context.Context, workspaceID, artifactID string
 	return run, nil
 }
 
+// unresolvedReadinessRemedy names the gates that are actually blocking approval
+// and each one's own hint. A single "resolve gate tasks" line sent the author to
+// `gates tasks list` even when every task was already submitted and a
+// deterministic gate such as required_roles_present was the blocker, which
+// reports nothing to do and leaves no next step.
+func unresolvedReadinessRemedy(checks map[string]any, artifactID string) string {
+	var blocked []string
+	awaitingTask := false
+	for _, raw := range checks {
+		check, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		state, _ := check["state"].(string)
+		if state == "pass" || state == "warn" || state == "not_applicable" {
+			continue
+		}
+		gate, _ := check["gate"].(string)
+		hint, _ := check["hint"].(string)
+		if state == "not_run" {
+			awaitingTask = true
+		}
+		if hint != "" {
+			blocked = append(blocked, fmt.Sprintf("%s (%s): %s", gate, state, hint))
+		} else {
+			blocked = append(blocked, fmt.Sprintf("%s (%s)", gate, state))
+		}
+	}
+	if len(blocked) == 0 {
+		return "re-run `specgate gates check " + artifactID + "`"
+	}
+	sort.Strings(blocked)
+	remedy := "blocked by " + strings.Join(blocked, "; ")
+	if awaitingTask {
+		remedy += "\nSubmit the pending IDE results with `specgate gates tasks list " + artifactID + "`."
+	}
+	return remedy
+}
+
 func (s *Store) ApproveArtifact(ctx context.Context, workspaceID, artifactID, actor, note string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -65,7 +106,7 @@ func (s *Store) ApproveArtifact(ctx context.Context, workspaceID, artifactID, ac
 	}
 	aggregate := aggregateChecks(checks)
 	if aggregate != "pass" && aggregate != "warn" {
-		return fmt.Errorf("artifact readiness is %s; resolve gate tasks with `specgate gates tasks list %s`", aggregate, artifactID)
+		return fmt.Errorf("artifact readiness is %s; %s", aggregate, unresolvedReadinessRemedy(checks, artifactID))
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE artifacts SET status = 'approved' WHERE id = ? AND workspace_id = ?`, artifactID, workspaceID)
 	if err != nil {

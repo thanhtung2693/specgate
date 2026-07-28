@@ -27,6 +27,12 @@ plus a deterministic package manifest digest.
 The role matters more than the filename. A file named `notes.md` can still be
 the authoritative spec if it is published with role `spec`.
 
+A document's identity is its `path` and `role` together, so one file may be
+mapped under several roles. When governance requires a role that an existing
+source already covers — a single specification that is also the plan — map that
+same path again under the second role instead of writing a document for
+SpecGate's benefit.
+
 ## SpecGate adds a consistent record around the documents
 
 Documents are flexible, but the artifact envelope is stable. It records:

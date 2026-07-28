@@ -55,7 +55,8 @@ does not report a pass while semantic work is pending.
 | `rollback_plan_present` | a rollback or recovery path is stated | spec + reference |
 | `implementation_plan_traceable` | plan tasks trace to criteria and scope | spec + optional design + plan + optional verification |
 | `spec_repo_drift` | governed repo docs contradict the approved spec; IDE-agent-executed at pickup (needs repo checkout), warn-only, agent-attested | approved spec + governed repo docs |
-| `required_roles` | the document roles the resolved policy requires are present in the package; structural, no model | file list |
+| `required_roles_present` | every document role the resolved policy's `required_roles` lists is present in the package; structural, no model. A document's identity is its `path` and `role` together, so one source may be mapped under several roles rather than a new document being written. Local fails this gate, which blocks approval; Full warns | file list |
+| `has_documents` | the package contains at least one immutable document; structural, no model | file list |
 
 Feature attachments with the `gate` or `both` audience are appended to the
 acceptance-criteria and scope gates. The resolved automatic policy can bind a team Skill to any

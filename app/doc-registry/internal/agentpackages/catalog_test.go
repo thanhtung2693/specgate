@@ -220,7 +220,10 @@ func TestSkillsDescribeIDEAgentNoModelBoundaries(t *testing.T) {
 		"repo_file",
 		"routing labels",
 		"exact policy projection",
-		"separate verification document",
+		// The rule is "never write a document for SpecGate's benefit". Pinning one
+		// phrasing of it failed on a reword and would have passed on a deletion.
+		"manufacture a",
+		"document for SpecGate",
 		"originating framework owns source paths",
 	} {
 		if !strings.Contains(preparing, want) {

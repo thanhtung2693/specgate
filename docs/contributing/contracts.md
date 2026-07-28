@@ -322,9 +322,15 @@ CLI scaffolds use `tests`, `lint`, `types`, and `build`. Each runnable check's
 shell `command` is retained in the append-only receipt so an independent
 reviewer can reproduce it. In Local mode, `delivery submit --run-checks`
 overwrites each executed row with the observed status and
-`source: "specgate_cli"`; Local status reports `locally reproduced` only when
-that marker is present. Full mode continues to strip caller-authored source
-fields at its trust boundary and derives assurance from server-side review.
+`source: "specgate_cli"`; status reports `locally reproduced` only when that
+marker is present. Full mode continues to strip caller-authored source fields at
+its trust boundary and derives assurance from server-side review.
+
+The `deterministic` trust tier means a bound check decided the criterion, not
+that anything re-ran it, so it reads as `bound deterministic check`. Both modes
+name the observer in a bound criterion's reason — `observed by the SpecGate CLI`
+or `reported by the coding agent, not re-run` — because the two are worth very
+different amounts to a human deciding acceptance.
 
 Acceptance criteria may include a human-authored `verification_binding`, created
 for quick work in Local or Full mode with:

@@ -102,6 +102,44 @@ test("every CLI exit code is documented as stable API", () => {
 // Paths named in prose precisely because they must NOT exist.
 const deliberatelyAbsentPaths = new Set(["plugins/specgate/"]);
 
+test("every artifact manifest source kind reaches the user docs and the skill", () => {
+  // #33 added `repo_file` as a fourth source kind. Nothing derived checked that a
+  // new manifest field reaches the people who author manifests, and the field
+  // vocabulary is what an IDE agent has to get exactly right.
+  const kinds = uniqueMatches(
+    read("app/cli/internal/command/artifact_sources.go"),
+    /"(content|repo_file|source_file|file_url)"/g,
+  );
+  assert.ok(kinds.length >= 3, "no manifest source kinds found; the declaration pattern changed");
+
+  const authoringDocs = [
+    "plugins/skills/specgate-work-preparation/SKILL.md",
+    "docs/using-specgate/concepts/artifacts-and-context-packs.md",
+  ].map(read);
+
+  const undocumented = kinds.filter((kind) => !authoringDocs.some((text) => text.includes(`\`${kind}\``)));
+  assert.deepEqual(undocumented, []);
+});
+
+test("every gate key the CLI emits is in the gate catalog", () => {
+  // The catalog documented the policy field name `required_roles` while the gate
+  // users actually see is `required_roles_present`, and `has_documents` was
+  // missing entirely. A gate an author cannot look up is a gate they cannot fix.
+  const catalog = read("docs/using-specgate/reference/gates.md");
+  const emitted = uniqueMatches(
+    read("app/cli/internal/local/gate_tasks.go"),
+    /"gate":\s*"([a-z_]+)"|"([a-z_]+)":\s*requiredRoleCheck/g,
+  ).filter(Boolean);
+  const gateKeys = new Set([
+    ...emitted,
+    ...uniqueMatches(read("app/cli/internal/local/gate_tasks.go"), /"([a-z_]+)":\s*map\[string\]any\{"gate"/g),
+  ]);
+  assert.ok(gateKeys.size > 0, "no gate keys found; the declaration pattern changed");
+
+  const undocumented = [...gateKeys].filter((key) => !catalog.includes(`\`${key}\``));
+  assert.deepEqual(undocumented, []);
+});
+
 test("every backticked repository path in tracked Markdown resolves", () => {
   // Prefixes that are unambiguously repository-root-anchored. A bare `docs/...`
   // is excluded because every module has its own `docs/`, so `docs/spec.md` in
