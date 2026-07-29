@@ -108,6 +108,9 @@ func (c *Client) newRequest(ctx context.Context, method, path string, body any) 
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
+	if c.credentialUser != "" && c.credentialSecret != "" {
+		req.SetBasicAuth(c.credentialUser, c.credentialSecret)
+	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

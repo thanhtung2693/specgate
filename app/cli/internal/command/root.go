@@ -377,7 +377,13 @@ func NewRootCommand(deps *Deps) *cobra.Command {
 
 		// Create the HTTP client if one has not been injected (e.g. in tests).
 		if deps.Client == nil {
-			deps.Client = client.New(deps.ServerURL, deps.Timeout)
+			api := client.New(deps.ServerURL, deps.Timeout)
+			// A credential is stored per server, so switching servers cannot send one
+			// appliance's secret to another host.
+			if credential, ok := cfg.CredentialFor(deps.ServerURL); ok {
+				api = api.WithGatewayCredential(credential.Username, credential.Secret)
+			}
+			deps.Client = api
 		}
 		if commandUsesSelectedWorkspace(cmd) {
 			workspaceID, err := workspaceIDForSelection(cmd.Context(), deps, resolveWorkspaceSelection(deps, cfg))

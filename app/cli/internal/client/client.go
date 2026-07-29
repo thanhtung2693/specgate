@@ -14,6 +14,23 @@ import (
 type Client struct {
 	base string
 	http *http.Client
+	// credential authenticates this client to one appliance gateway. Empty for an
+	// appliance with no gateway members, which is the default posture.
+	credentialUser   string
+	credentialSecret string
+}
+
+// WithGatewayCredential returns a client that authenticates to the appliance
+// gateway as username. The secret is never logged or printed: it travels only in
+// the Authorization header of requests to this client's own base URL.
+func (c *Client) WithGatewayCredential(username, secret string) *Client {
+	if c == nil || username == "" || secret == "" {
+		return c
+	}
+	authenticated := *c
+	authenticated.credentialUser = username
+	authenticated.credentialSecret = secret
+	return &authenticated
 }
 
 // New creates a Client for baseURL with the given request timeout.
