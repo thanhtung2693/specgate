@@ -176,7 +176,10 @@ func TestFocusedSkillsKeepOneExplicitSpecGatePhase(t *testing.T) {
 			if !strings.Contains(body, "## Route one phase") {
 				t.Fatalf("%s missing phase routing:\n%s", path, body)
 			}
-		} else if !strings.Contains(body, "SpecGate operating contract") || !strings.Contains(body, "This phase") {
+		} else if !strings.Contains(body, "SpecGate operating contract") || !strings.Contains(body, "Completion criterion:") {
+			// A phase skill inherits the shared operating contract and defines
+			// its own completion criteria. Pinning the literal words "This
+			// phase" failed on a reword while proving nothing about scoping.
 			t.Fatalf("%s does not inherit the router contract as one phase:\n%s", path, body)
 		}
 	}
@@ -325,6 +328,12 @@ func TestDeliveringWorkSkillReportsTruthfulAwaitingAcceptanceReceipt(t *testing.
 		"Decision: <decision>",
 		"Receipt: <receipt>",
 		"Freshness: <freshness>",
+		"Acceptance criteria: <total> total",
+		"<met> met",
+		"<unmet> unmet",
+		"<unclear> unclear",
+		"<total> not reviewed",
+		"[not reviewed] <criterion text>",
 		"Stale: <stale_reason>",
 		"`next_actor`",
 		"`next_command`",
