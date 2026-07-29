@@ -10,6 +10,9 @@ import (
 // --- fakes ---
 
 type fakeClient struct {
+	lastCredentialUser   string
+	lastCredentialRevoke bool
+	credentialErr        error
 	// preset return values
 	statusResult          *client.GovernanceStatus
 	metaResult            *client.Meta
@@ -800,3 +803,16 @@ func (f *fakePrompter) Confirm(title string, _ bool) (bool, error) {
 }
 
 // newFakeDeps returns test Deps with a fakeClient and fakePrompter for assertions.
+
+func (f *fakeClient) IssueGatewayCredential(_ context.Context, username string, revoke bool) (*client.GatewayCredentialResult, error) {
+	f.calls++
+	f.lastCredentialUser = username
+	f.lastCredentialRevoke = revoke
+	if f.credentialErr != nil {
+		return nil, f.credentialErr
+	}
+	if revoke {
+		return &client.GatewayCredentialResult{Username: username}, nil
+	}
+	return &client.GatewayCredentialResult{Username: username, Secret: "generated-secret", CredentialSet: true}, nil
+}

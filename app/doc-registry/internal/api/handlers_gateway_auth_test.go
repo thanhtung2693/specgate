@@ -147,3 +147,92 @@ func TestEveryActorRecordingInputCarriesTheAuthenticatedHeader(t *testing.T) {
 		}
 	}
 }
+
+// Issuing returns the secret once and stores only a hash, so the value the
+// operator copies is the only copy that exists in plaintext.
+func TestIssueGatewayCredentialReturnsTheSecretOnceAndStoresAHash(t *testing.T) {
+	t.Parallel()
+	store := &fakeIdentityStore{knownUsers: map[string]bool{"tung": true}}
+	h := &Handlers{Identity: store}
+
+	out, err := h.IssueGatewayCredential(context.Background(), &IssueCredentialInput{Username: "tung"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Body.Secret == "" || !out.Body.CredentialSet {
+		t.Fatalf("output = %#v, want a generated secret", out.Body)
+	}
+	stored := store.credentials["tung"]
+	if stored == out.Body.Secret {
+		t.Fatal("the credential was stored in plaintext")
+	}
+	if bcrypt.CompareHashAndPassword([]byte(stored), []byte(out.Body.Secret)) != nil {
+		t.Fatal("the stored hash does not verify the issued secret")
+	}
+	// The issued secret must actually authenticate afterwards.
+	if _, err := h.VerifyGatewayCredential(context.Background(), &GatewayAuthInput{
+		Authorization: basicHeader("tung", out.Body.Secret),
+	}); err != nil {
+		t.Fatalf("issued credential does not authenticate: %v", err)
+	}
+}
+
+// Two issues for the same member must not produce the same secret, or rotation
+// would not actually rotate.
+func TestIssueGatewayCredentialRotates(t *testing.T) {
+	t.Parallel()
+	store := &fakeIdentityStore{knownUsers: map[string]bool{"tung": true}}
+	h := &Handlers{Identity: store}
+
+	first, err := h.IssueGatewayCredential(context.Background(), &IssueCredentialInput{Username: "tung"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := h.IssueGatewayCredential(context.Background(), &IssueCredentialInput{Username: "tung"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Body.Secret == second.Body.Secret {
+		t.Fatal("rotation reissued the same secret")
+	}
+	if _, err := h.VerifyGatewayCredential(context.Background(), &GatewayAuthInput{
+		Authorization: basicHeader("tung", first.Body.Secret),
+	}); err == nil {
+		t.Fatal("the previous secret still authenticates after rotation")
+	}
+}
+
+func TestIssueGatewayCredentialRevokeAndUnknownMember(t *testing.T) {
+	t.Parallel()
+	store := &fakeIdentityStore{knownUsers: map[string]bool{"tung": true}}
+	h := &Handlers{Identity: store}
+	issued, err := h.IssueGatewayCredential(context.Background(), &IssueCredentialInput{Username: "tung"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	revoke := &IssueCredentialInput{Username: "tung"}
+	revoke.Body.Revoke = true
+	out, err := h.IssueGatewayCredential(context.Background(), revoke)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Body.Secret != "" || out.Body.CredentialSet {
+		t.Fatalf("revoke returned %#v, want no secret", out.Body)
+	}
+	if _, ok := store.credentials["tung"]; ok {
+		t.Fatal("revoke left the credential in place")
+	}
+	// With the last credential gone the appliance is unconfigured again, so the
+	// verifier opens rather than locking everyone out.
+	if _, err := h.VerifyGatewayCredential(context.Background(), &GatewayAuthInput{
+		Authorization: basicHeader("tung", issued.Body.Secret),
+	}); err != nil {
+		t.Fatalf("an appliance with no credentials left must stay open, got %v", err)
+	}
+
+	// Membership is granted elsewhere: issuing must not invent a member.
+	if _, err := h.IssueGatewayCredential(context.Background(), &IssueCredentialInput{Username: "ghost"}); err == nil {
+		t.Fatal("issued a credential for a member this appliance does not have")
+	}
+}

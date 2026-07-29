@@ -176,3 +176,21 @@ func (r *IdentityRepository) UserCredential(ctx context.Context, username string
 	}
 	return user.Credential, nil
 }
+
+// SetUserCredential stores or clears one member's bcrypt credential.
+func (r *IdentityRepository) SetUserCredential(ctx context.Context, username, hash string) error {
+	normalized, err := identity.NormalizeUsername(username)
+	if err != nil {
+		return identity.ErrUserNotFound
+	}
+	result := r.db.WithContext(ctx).Model(&identity.User{}).
+		Where("username = ?", normalized).
+		Updates(map[string]any{"credential": hash, "updated_at": time.Now().UTC()})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return identity.ErrUserNotFound
+	}
+	return nil
+}

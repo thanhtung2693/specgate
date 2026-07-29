@@ -80,7 +80,15 @@ type Store interface {
 	// user is unknown or has none, so a missing user is indistinguishable from a
 	// wrong password.
 	UserCredential(ctx context.Context, username string) (string, error)
+	// SetUserCredential stores a bcrypt hash for a member, or removes the
+	// credential when hash is empty. It reports ErrUserNotFound for an unknown
+	// member rather than creating one: membership is granted elsewhere.
+	SetUserCredential(ctx context.Context, username, hash string) error
 }
+
+// ErrUserNotFound reports a credential operation against a member this appliance
+// does not have.
+var ErrUserNotFound = errors.New("user not found")
 
 func NormalizeUsername(raw string) (string, error) {
 	username := strings.ToLower(strings.TrimSpace(raw))

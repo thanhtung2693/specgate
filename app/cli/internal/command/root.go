@@ -105,6 +105,7 @@ type APIClient interface {
 	ListWorkspaces(ctx context.Context) ([]client.IdentityWorkspace, error)
 	GetWorkspace(ctx context.Context, id string) (*client.IdentityWorkspace, error)
 	ListWorkspaceMembers(ctx context.Context, id, currentUserID, currentUsername string) (*client.WorkspaceMembersResult, error)
+	IssueGatewayCredential(ctx context.Context, username string, revoke bool) (*client.GatewayCredentialResult, error)
 }
 
 // Deps carries injectable dependencies shared by all commands.

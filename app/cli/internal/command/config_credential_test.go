@@ -179,3 +179,41 @@ func TestConfigCredentialJSONReportsSetStateOnly(t *testing.T) {
 		t.Fatal("envelope carried the secret")
 	}
 }
+
+// Issuing is a Full-mode appliance concern. Local has no gateway, so the command
+// must say that instead of failing obscurely against a server that isn't there.
+func TestWorkspaceCredentialRefusedInLocalMode(t *testing.T) {
+	t.Parallel()
+	deps, _, _, out := newFakeDeps(t)
+	stateDir := t.TempDir()
+	if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: stateDir}}).SaveTo(deps.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "workspace", "credential", "mai")
+	if code != output.ExitIncompatible {
+		t.Fatalf("exit = %d, want ExitIncompatible; output = %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "requires Full mode") {
+		t.Fatalf("output = %q, want it to name where credentials apply", out.String())
+	}
+}
+
+// The secret is shown once, so the human output has to carry it and say so, and
+// point at the command that stores it on the other machine.
+func TestWorkspaceCredentialShowsTheSecretOnceWithItsNextStep(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "workspace", "credential", "mai")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if fc.lastCredentialUser != "mai" || fc.lastCredentialRevoke {
+		t.Fatalf("issued for %q revoke=%v", fc.lastCredentialUser, fc.lastCredentialRevoke)
+	}
+	got := out.String()
+	for _, want := range []string{"generated-secret", "only time the secret is shown", "specgate config credential mai"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("output = %q, want %q", got, want)
+		}
+	}
+}

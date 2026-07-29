@@ -28,7 +28,7 @@ specgate workspace unbind
 specgate --workspace platform status
 SPECGATE_WORKSPACE=platform specgate work list`),
 	}
-	cmd.AddCommand(newWorkspaceCreateCmd(deps), newWorkspaceListCmd(deps), newWorkspaceCurrentCmd(deps), newWorkspaceMembersCmd(deps), newWorkspaceSelectCmd(deps), newWorkspaceBindCmd(deps), newWorkspaceUnbindCmd(deps))
+	cmd.AddCommand(newWorkspaceCreateCmd(deps), newWorkspaceListCmd(deps), newWorkspaceCurrentCmd(deps), newWorkspaceMembersCmd(deps), newWorkspaceSelectCmd(deps), newWorkspaceBindCmd(deps), newWorkspaceUnbindCmd(deps), newWorkspaceCredentialCmd(deps))
 	return cmd
 }
 
