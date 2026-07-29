@@ -40,95 +40,135 @@ the appliance with teammates. Today that turns every governance write into an
 unauthenticated operation for anyone who can reach the port, with no warning and
 no recipe — while the docs correctly say "add authentication" without saying how.
 
+The concrete target is small and known: **two or three developers on one
+self-hosted appliance inside a private network.** That size decides the design.
+Per-user credentials are a file with three lines, so the operational cost of
+real per-user identity is close to the cost of one shared secret — while the
+benefit is not close at all, because a shared secret leaves every name in the
+ledger self-declared among people who all hold it. Those developers also use the
+web UI daily, so the browser is a primary path, not an edge case.
+
+One more fact decides where the actor comes from. Today the actor travels in the
+**request body** (`approved_by`, `decided_by`), and a code comment states the
+reason: "no HTTP auth; supplied in the request". Authenticating the transport
+while still trusting a body field would be decoration: the caller would prove
+who they are and then name someone else.
+
 ## Constraints
 
 - Doc Registry must not grow JWT/RBAC middleware (module rule); the enforcement
   point has to be the gateway.
-- Local mode gets nothing: one binary, one SQLite file, one machine. Ted's
-  instruction — solo first, and Local needs no authentication.
-- No password prompts, no OAuth, no identity provider. This is a small trusted
-  team on a private network.
-- Credentials never land in CLI configuration in plaintext-by-accident: the
-  existing rule is mode `0600` and never printing secret values.
+- Local mode gets nothing: one binary, one SQLite file, one machine — solo needs
+  no authentication, and the loopback default must stay frictionless.
+- No OAuth, no identity provider, no invented passwords, and no session layer
+  built into the product.
+- Credentials keep the existing handling rule: mode `0600`, never printed, status
+  reports set/not-set only.
 
 ## Options
 
 **A. Do nothing; keep documenting the trusted-network assumption.**
-Honest and free. Leaves the shared-appliance case with no story, which is the
-case the team pitch depends on.
+Free and honest. Leaves the shared-appliance case with no story, which is the
+case the team claim depends on.
 
-**B. Shared appliance token, enforced by nginx; identity header passed through
-(chosen).** One secret for the appliance. nginx requires it on `/api/*`, strips
-any client-supplied identity header, and forwards the caller's declared user
-name only on an authenticated request. The ledger name becomes an assertion made
-by *someone holding the appliance token* rather than by anyone who can reach the
-port.
+**B. One shared appliance token, checked by nginx.** Cheapest to operate and
+enough to keep strangers out, but every name in the ledger stays self-declared
+among the people who all hold the secret — so it does not answer the question
+this work exists to answer. It also cannot gate the browser, because a browser
+holds no bearer token without a login page to put it there.
 
-**C. HTTP Basic auth at nginx.** Functionally the same shared secret, but the
-browser gets a native prompt for free, so the UI is covered by the same
-boundary. Rejected on instruction — no password ceremony — but recorded because
-it is the smaller design: option B leaves the browser path ungated (see
-Consequences), and Basic auth does not.
+**C. Per-user credentials at the gateway, identity taken from the authenticated
+user (chosen).** One line per developer in a bcrypt credential file. nginx
+authenticates, then *overwrites* the identity header from the authenticated user,
+so the name in the ledger is the one that authenticated. The browser's own
+credential manager stores the credential after one prompt, which means the
+browser is covered by the same mechanism with no session store, no cookie, no
+expiry, and no login page to build.
 
-**D. Per-user credentials, sessions, an identity provider.**
-The only option that actually proves who was at the keyboard. Out of scope for a
-trusted small team, and it would put an authentication layer inside the product.
+**D. Browser pairing code (Ted's idea).** The CLI prints a code, the developer
+types it into the UI, and the browser gets a session. A real pattern, and better
+UX than a credential prompt. It does not replace option C, it layers on top:
+the code proves the person also controls an already-authenticated CLI, so the CLI
+still needs a credential first. It costs a session store, a code
+issue/verify/expiry path, and cookie handling — an authentication layer inside
+the product, which the module rule pushes away from Doc Registry. Since the
+browser already remembers the credential in option C, this buys convenience, not
+capability. Recorded as the upgrade to reach for if the prompt proves annoying.
+
+**E. mTLS or an identity provider.** Stronger, and far more ceremony than three
+developers on a private network will accept.
 
 ## Decision
 
-Adopt **B**, scoped as narrowly as the problem:
+Adopt **C**, and keep it as small as it can be:
 
-1. **The token is optional and off by default.** With no
-   `SPECGATE_APPLIANCE_TOKEN` set, behaviour is exactly today's — the loopback
-   default stays frictionless, and nothing changes for solo users.
-2. **nginx enforces it when set**: requests to the API surface without the
-   matching token are refused at the gateway, before Doc Registry sees them.
-   Doc Registry gains no middleware.
-3. **nginx owns the identity header.** It strips any client-supplied value —
-   the same treatment `X-SpecGate-Internal-Agent` already gets — and sets the
-   forwarded identity from the authenticated request. A client can never assert
-   an identity header directly.
-4. **The CLI stores the token per server**, mode `0600`, never printed; status
-   output reports set/not-set only. A missing or wrong token maps to the
-   existing exit code for an unavailable/refused service, with a message naming
-   the fix.
-5. **Binding beyond loopback without a token warrants a warning**, so the risky
-   configuration announces itself instead of being discovered later.
+1. **Off by default.** With no credential file configured, behaviour is exactly
+   today's: loopback, no prompt, nothing to configure. Solo and Local are
+   untouched.
+2. **nginx authenticates and owns identity.** When the credential file is
+   configured, the gateway requires it for the UI and the API surface, then sets
+   the identity header from the authenticated user, overwriting whatever the
+   client sent. This is the treatment `X-SpecGate-Internal-Agent` already gets
+   and the existing release test asserts, extended to one more header. Doc
+   Registry gains no middleware.
+3. **The authenticated identity outranks the request body.** Where the header is
+   present, it *is* the actor; `approved_by` and `decided_by` are ignored rather
+   than merged, and the body fields keep working only for deployments with no
+   gateway credential. Without this step the rest is decoration — the caller
+   would authenticate and then name somebody else.
+4. **The CLI stores one credential per server**, mode `0600`, never printed, and
+   sends it on every call to that server. It records the authenticated username
+   as its local actor so the two cannot drift apart.
+5. **The appliance manages members itself.** A CLI command adds and removes
+   developers and prints a generated credential once, so nobody needs external
+   htpasswd tooling and nobody invents a password. Removing a line revokes one
+   developer without re-keying the others.
+6. **Encrypted transport is required beyond loopback**, and the recommended path
+   for this size of team is an existing private overlay network (Tailscale,
+   WireGuard) rather than certificate work: it encrypts the hop and removes the
+   public exposure question entirely. TLS at the gateway stays supported for
+   teams that prefer it. Binding beyond loopback with no credential file
+   configured must warn.
 
-Identity remains self-declared *within* the trusted circle. That is the
-deliberate boundary of this ADR: the token answers "may this caller write to the
-ledger", and the existing string comparisons answer "is this the same identity
-that filed the completion". Neither answers "who was at the keyboard", and the
-documentation must keep saying so.
+What this still does not do: it proves which credential authenticated, not who
+was at the keyboard. A developer who hands their credential to someone else — or
+to their coding agent — has delegated their name, and the ledger will say so
+without knowing it. The documentation keeps saying this plainly.
 
 ## Consequences
 
-- The skeptic's disqualifying case — an audit ledger reachable and writable by
-  anyone on the network — stops being reachable in a shared deployment, without
-  adding an authentication layer to the product.
-- The two separation-of-duties rules become meaningful in that deployment: an
-  outsider can no longer file a completion under one name and approve it under
-  another, because they cannot write at all.
-- **The browser path stays ungated.** nginx serves the UI to whoever reaches it;
-  a browser cannot hold a bearer token without a login step, which this ADR
-  excludes by instruction. If the appliance is bound beyond loopback, the UI is
-  exposed even when the API is gated. This is the price of option B over option
-  C and it must be stated in the user documentation, not discovered.
-- One shared secret means no per-user revocation: rotating it re-keys every
-  client.
-- Docs to update when this is implemented: `trust-and-security.md` (gains the
-  recipe and the browser limit), `operate-specgate.md` (sharing an appliance),
-  the configuration reference and `.env.example` (the new variable), and
-  `docs/contributing/architecture.md` plus `app/doc-registry/AGENTS.md` §7 (the
-  gateway is now an enforcement point, and why Doc Registry still has no
-  middleware).
-- Tests this needs: gateway config assertions beside the existing
-  internal-header test (identity header stripped, API refused without the token,
-  allowed with it), CLI config round-trip at mode `0600` with no secret in
-  output, and the non-loopback-without-token warning.
+- The two separation-of-duties rules stop being best-effort string comparisons
+  and start comparing an authenticated identity to the completion's agent. The
+  product's central claim — a named human approved this exact version — becomes
+  true in a shared deployment rather than assumed.
+- The disqualifying case for a shared appliance (anyone who reaches the port can
+  write governance decisions) closes, and the browser closes with it, which
+  option B could not do.
+- Per-developer revocation costs one line. There is no shared secret to rotate.
+- Basic credentials are reversible on the wire, so the transport requirement in
+  decision 6 is not advisory. A private overlay network satisfies it with less
+  work than certificates.
+- The identity header becomes a trust-boundary primitive: every gateway config
+  must set it from the authenticated user, and any new gateway or route that
+  forgets is a spoofing hole. This belongs in the release suite next to the
+  existing internal-header assertion, not in a review checklist.
+- `approved_by` / `decided_by` keep their meaning only for ungated deployments.
+  Their schema comments ("no HTTP auth; supplied in the request") need updating,
+  and the API contract has to state the precedence.
+- Docs to update on implementation: `trust-and-security.md` (recipe, transport,
+  and the delegation limit), `operate-specgate.md` (sharing an appliance, adding
+  and removing developers), the configuration reference and `.env.example`,
+  `docs/contributing/architecture.md` and `app/doc-registry/AGENTS.md` §7 (the
+  gateway is now an enforcement point and why Doc Registry still has no
+  middleware), and `docs/contributing/contracts.md` for the actor precedence.
+- Tests: gateway config assertions (identity header always set from the
+  authenticated user; API and UI refused without credentials), header-outranks-
+  body precedence in Doc Registry, CLI credential round-trip at mode `0600` with
+  no secret in output, member add/remove preserving the other members, and the
+  non-loopback-without-credentials warning.
 
 ## Not in scope
 
-Per-user authentication, sessions, SSO, per-user tokens or revocation, browser
-login, and signed acceptance records. Each is a separate decision, and none is
-needed to close the case this ADR names.
+Sessions, cookies, SSO, OAuth, per-user token scopes, browser pairing codes
+(option D), and cryptographically signed acceptance records. Each is a separate
+decision, and none is required to close the case this ADR names.
