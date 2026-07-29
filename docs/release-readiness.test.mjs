@@ -251,6 +251,24 @@ test("every installed skill stays inside a declared word budget", () => {
   );
 });
 
+test("the router names exactly the phase skills that exist", () => {
+  // A router edit can silently advertise a phase that was renamed or drop one
+  // that still ships. Either way the agent loses a phase it is told to select
+  // from, and nothing else in the suite would notice.
+  const router = read("plugins/skills/specgate/SKILL.md");
+  const named = new Set(uniqueMatches(router, /`(specgate-[a-z-]+)`/g));
+  const onDisk = new Set(
+    trackedFiles()
+      .filter((path) => /^plugins\/skills\/[^/]+\/SKILL\.md$/.test(path))
+      .map((path) => path.split("/")[2])
+      .filter((name) => name !== "specgate"),
+  );
+
+  assert.ok(onDisk.size > 0, "no phase skills found");
+  assert.deepEqual([...named].filter((name) => !onDisk.has(name)).sort(), [], "router names a skill that does not exist");
+  assert.deepEqual([...onDisk].filter((name) => !named.has(name)).sort(), [], "a shipped skill the router never names");
+});
+
 test("every installed skill declares when it applies", () => {
   assert.deepEqual(
     trackedFiles()
