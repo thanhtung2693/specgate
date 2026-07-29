@@ -33,12 +33,22 @@ The problem is that the same product concept is expressed twice with nothing
 holding the two expressions together. Four divergences surfaced in a single
 review session, all in `#34`, none caught by any existing test:
 
-- **Document identity.** Full keys an artifact document on `(path, role)` and
-  hashes both into the snapshot digest. Local enforced uniqueness on `path`
-  alone, in validation and again as a SQLite primary key. A single specification
-  covering two required roles was accepted by `artifact publish --preview` and
-  then rejected by publish, leaving an author whose spec is one document unable
-  to complete the artifact route at all.
+- **Document identity.** The two stores disagree about what a document *is*, and
+  the disagreement is still open. Local now keys on `(artifact_id, path, role)`;
+  Full keys `artifact_files` on `(artifact_id, path)` and reads content with
+  `FileContent(ctx, id, path)`, so a stored document holds exactly one role.
+  Before this was understood, Full accepted a manifest naming one path under two
+  roles, uploaded both objects, kept whichever row won at the database, and
+  reported success — a declared role vanished from an approved immutable snapshot
+  with nothing reporting it. Full now refuses the duplicate instead. Local
+  reached the opposite resolution: it admits one path under several roles,
+  because a solo author whose specification is one document otherwise cannot
+  satisfy a multi-role policy at all.
+
+  This is the divergence that matters most, and it is not vocabulary. The two
+  modes now have genuinely different capabilities, which also means a Local
+  workspace using one source for two roles has no faithful representation in
+  Full — `portable import` cannot carry it across.
 - **Work payload vocabulary.** Full emits `lead_artifact_id`. Local emitted it
   from `work create` but not from `work show` or `work list`, so the field the
   preparation skill instructs an agent to verify was absent on the command the
@@ -52,7 +62,9 @@ review session, all in `#34`, none caught by any existing test:
   period.
 
 Every one of these was invisible until both modes were driven end to end against
-the same scenario. Each looked correct in isolation. That is the signature of
+the same scenario. Each looked correct in isolation. The document-identity case
+was worse: it survived a first investigation because publish *returned success*,
+and only reading back what Full had stored revealed the loss. That is the signature of
 parallel implementation without a shared contract, and it is a cost the project
 pays in exactly the way that is hardest to notice: silently, in favour of
 whichever mode was edited second.
@@ -68,9 +80,17 @@ duplication.
 
 **A. Accept the duplication and invest in drift detection.** Keep both
 implementations. Extend the derived checks in `docs/release-readiness.test.mjs`
-to cover the rest of the shared vocabulary: work payload field names, document
-identity rules, trust tiers, gate keys, and state names. Cheap, incremental, no
-migration. It does not prevent divergence, it makes divergence fail a build.
+to cover the rest of the shared vocabulary: work payload field names, trust
+tiers, gate keys, and state names. Cheap, incremental, no migration. It does not
+prevent divergence, it makes divergence fail a build.
+
+Its blind spot is now demonstrated rather than theoretical. A derived check reads
+code and docs; it cannot compare a SQLite primary key with a Postgres one. Every
+divergence found so far except document identity was vocabulary, and A would have
+caught those. Document identity was enforced in two schemas, produced silent data
+loss, and A would not have noticed. Choosing A means accepting that
+schema-enforced rules need a different mechanism — a cross-store conformance test
+that exercises both persistence layers against the same scenario.
 
 **B. Extract a shared contract package.** Move the vocabulary and the rules that
 both modes must agree on — document identity, criterion binding, trust tiers,
@@ -93,11 +113,29 @@ both implementations in their head. The cost lands later, on whoever does not.
 
 ## Decision
 
-Not yet made.
+Not yet made. **A**, with a named addition, is the recommendation.
 
-The author's stated priority is that Local mode works perfectly, because it is
-the surface a solo developer evaluates first. That argues against **C** for now:
-the risk sits precisely on the mode that must not break.
+Every divergence found so far except one was vocabulary, and A catches vocabulary
+at build time using machinery that already exists and is negative-controlled.
+**B** buys compile-time enforcement of the same class at the price of amending
+the `AGENTS.md` module-boundary rule, and it cannot cover `delivery_review.py` at
+all — the Python side would still have to agree by test, which is A's mechanism.
+**C** is correct in the abstract and wrong now: it puts the risk on the mode that
+must not break and would cost the single static binary with no Docker
+requirement.
+
+The addition A needs is a **cross-store conformance test**: one scenario
+exercised against both the SQLite and Postgres persistence layers, asserting they
+accept and reject the same manifests and store the same rows. Document identity
+proves the derived checks alone are insufficient, because that rule lives in two
+schemas rather than in code or docs.
+
+Document identity also has to be settled on its own terms, independently of which
+option is chosen. Local admits one path under several roles and Full does not;
+one of those is wrong. The product intent stated in `#33` — roles are routing
+labels, not one-file-per-concern requirements — argues for Full adopting
+`(path, role)`, which means a Postgres key change and a `FileContent` read API
+that takes a role.
 
 ## Consequences
 
