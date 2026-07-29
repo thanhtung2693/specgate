@@ -66,6 +66,29 @@ They do not grant access.
 
 ## Work and Artifacts
 
+### Route
+
+A work item is **quick route** when it has no lead artifact, and
+**artifact-backed** when it has one. That is the whole rule, and every module must
+derive it from that fact alone: `ChangeRequest.IsQuickRoute`, the Context Pack
+builder, delivery-review policy resolution, and the UI's work-item mapper.
+
+Work type does not decide the route. It used to appear in the condition
+(`no lead artifact AND work_type == bug_fix`), which broke both directions: a
+quick item of any other type fell through to the artifact-backed path, where gates
+it could never satisfy applied and delivery review blocked it for missing a policy
+snapshot it could not have; meanwhile the UI derived the route from work type
+alone, so artifact-backed cleanup read as quick. Quick creation still stores a
+placeholder work type because the enum has no "unspecified" member; nothing routes
+on it and no surface displays it.
+
+Board **phase** is a separate question and still uses work type as a proxy for
+"quick work that has a contract". The truthful readiness signal is not on the
+change request: the demo's Intake example carries two drafted criteria and no lead
+artifact, and belongs in Intake because its feature's artifact is a draft awaiting
+approval. A read path holding the feature can decide that; the struct cannot.
+Tracked as follow-up rather than guessed at.
+
 ### Mode-aware handoff
 
 For an artifact-backed work item, the IDE agent reads every explicitly mapped

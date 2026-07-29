@@ -103,7 +103,9 @@ async def create_quick_work_item(
     Steps:
     1. Use caller-provided acceptance criteria, or draft them via LLM from title + description.
     2. Upsert the feature only when the caller supplied feature_key.
-    3. Create CR with work_type=bug_fix and the effective ACs.
+    3. Create CR with the effective ACs and no lead artifact, which is what makes
+       it quick route. The stored work_type is incidental: nothing routes on it and
+       no surface displays it.
     4. Return a Ready work item; Doc Registry derives its Context Pack on read.
     5. Return {change_request_id, change_request_key, feature_id,
                acceptance_criteria, phase}.
@@ -135,6 +137,8 @@ async def create_quick_work_item(
         feature_id = str(feature["id"])
 
     cr_body: dict[str, Any] = {
+        # Placeholder only. The route follows the absent lead artifact, not this
+        # value, and the schema has no "unspecified" member to record honestly.
         "work_type": "bug_fix",
         "title": title,
         "intent_md": description,

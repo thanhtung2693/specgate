@@ -190,7 +190,7 @@ func (s *Service) contextPackForCR(ctx context.Context, changeRequestID string) 
 		sourceArtifact = art
 	}
 	assemble := sourceArtifact != nil ||
-		(strings.TrimSpace(sourceArtifactID) == "" && cr.WorkType == workboard.WorkTypeBugFix)
+		strings.TrimSpace(sourceArtifactID) == ""  // quick route: no governed snapshot
 	if assemble {
 		rows, err := s.WorkBoard.ListAcceptanceCriteria(ctx, changeRequestID)
 		if err != nil {
@@ -203,6 +203,17 @@ func (s *Service) contextPackForCR(ctx context.Context, changeRequestID string) 
 			}
 		}
 		if len(items) == 0 {
+			// Nothing states what to build. Quick-route work with no criteria on
+			// either side simply has no contract yet, so report no pack rather than
+			// an error the caller cannot act on.
+			//
+			// A CR whose own criteria mirror is populated while the canonical store
+			// is empty is a different situation: the two disagree, and reporting "no
+			// pack" would hide that. Keep it a validation failure, as for
+			// artifact-backed work, where an approved snapshot must carry criteria.
+			if sourceArtifact == nil && !cr.HasPersistedCriteria() {
+				return ContextPackResult{State: "not_generated"}, nil
+			}
 			return ContextPackResult{}, fmt.Errorf("%w: canonical acceptance criteria are unavailable", ErrValidation)
 		}
 		encoded, err := json.Marshal(items)

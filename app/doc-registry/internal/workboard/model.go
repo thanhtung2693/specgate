@@ -215,26 +215,47 @@ type DeliveryReviewSnapshot struct {
 	Summary    string    `json:"summary,omitempty"`
 }
 
-// DerivePhase computes the fallback board phase. A quick-route bug fix is ready
-// from its persisted intent and acceptance criteria; full-route work needs an
-// artifact. A richer read path may classify a non-approved lead artifact as
-// Review.
+// DerivePhase computes the fallback board phase.
+//
+// This still uses work type as a proxy for "quick work that has a contract", and
+// that is deliberate for now: it is not the same question as the route. The
+// truthful readiness signal lives outside the struct — the demo's Intake example
+// (DEMO-201) has two drafted criteria and no lead artifact, and belongs in Intake
+// because its feature's artifact is still a draft awaiting approval. Deciding it
+// from CR fields alone is not possible; a read path with the feature in hand can
+// do better. Tracked as follow-up rather than guessed at here.
+//
+// A richer read path may classify a non-approved lead artifact as Review.
 func (cr ChangeRequest) DerivePhase() BoardPhase {
-	if cr.IsQuickRoute() {
+	if cr.LeadArtifactID != "" {
 		return BoardPhaseReady
 	}
-	if cr.LeadArtifactID != "" {
+	if cr.WorkType == WorkTypeBugFix {
 		return BoardPhaseReady
 	}
 	return BoardPhaseIntake
 }
 
-// IsQuickRoute reports whether the change request is quick-route work: a
-// bug-fix without a lead artifact. It may still link a Feature for product
-// context. Quick-route items never grow a working spec, so the
-// full-artifact-flow gates do not apply to them (see NextActions).
+// HasPersistedCriteria reports whether the stored acceptance-criteria payload
+// holds at least one criterion. The column defaults to an empty JSON array, so an
+// empty or absent list means nothing states what to build yet.
+func (cr ChangeRequest) HasPersistedCriteria() bool {
+	trimmed := strings.TrimSpace(cr.AcceptanceCriteria)
+	return trimmed != "" && trimmed != "[]" && trimmed != "null"
+}
+
+// IsQuickRoute reports whether the change request is quick-route work: work with
+// no lead artifact. It may still link a Feature for product context. Quick-route
+// items never grow a working spec, so the full-artifact-flow gates do not apply
+// to them (see NextActions).
+//
+// The route follows the artifact and nothing else. This used to also require
+// work_type == bug_fix, which made a small feature created through the quick
+// route neither quick (gates it could never satisfy applied) nor honestly
+// labelled (the ledger called it a bug fix). Work type describes the work; the
+// route describes whether a governed snapshot backs it.
 func (cr ChangeRequest) IsQuickRoute() bool {
-	return cr.LeadArtifactID == "" && cr.WorkType == WorkTypeBugFix
+	return cr.LeadArtifactID == ""
 }
 
 type AcceptanceCriterion struct {
