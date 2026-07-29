@@ -95,7 +95,7 @@ func (s *Store) ApproveArtifact(ctx context.Context, workspaceID, artifactID, ac
 	var readinessRunID string
 	err = tx.QueryRowContext(ctx, `SELECT id FROM artifact_readiness_runs WHERE workspace_id = ? AND artifact_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`, workspaceID, artifactID).Scan(&readinessRunID)
 	if err == sql.ErrNoRows {
-		return fmt.Errorf("run `specgate gates check %s` before approving this artifact", artifactID)
+		return fmt.Errorf("%w: run `specgate gates check %s` before approving this artifact", ErrPreconditionNotMet, artifactID)
 	}
 	if err != nil {
 		return err
