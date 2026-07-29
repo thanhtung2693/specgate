@@ -406,9 +406,11 @@ func printChangeApproval(
 		deps.Printer.Success("change.approve", result)
 		return nil
 	}
-	fmt.Fprintf(deps.Stdout, "%s %s (artifact %s, digest %s); canonical for feature %s (v%d)\n",
+	// ponytail: the human line names the version the human approved and says what
+	// freezing means; identifiers and digests stay in the JSON envelope above.
+	fmt.Fprintf(deps.Stdout, "%s %s %s — frozen, and now the current version of %s.\n",
 		styled(deps, output.StyleSuccess, "Approved"), styled(deps, output.StyleBold, artifactID),
-		artifactVersion, snapshotDigest, featureKey, featureVersion)
+		artifactVersion, featureKey)
 	fmt.Fprintf(deps.Stdout, "%s %s; Context Pack %s.\n", label(deps, "Work:"), styled(deps, output.StyleBold, handoff.WorkRef), handoff.ContextState)
 	fmt.Fprintln(deps.Stdout, nextStep(deps, "Start implementation by reading the exact handoff with", next))
 	return nil

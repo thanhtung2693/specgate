@@ -836,3 +836,39 @@ func TestChangeSubmitWithFileRunsFullTailWithFacadeEnvelope(t *testing.T) {
 		}
 	}
 }
+
+// TestChangeApproveHumanLineNamesVersionWithoutDigest guards the human-facing
+// surface of the single most important human decision. The line must name the
+// version that was approved; it must not label the version as the artifact, and
+// it must not spend a human's attention on a digest they cannot act on. The JSON
+// envelope keeps every identifier for callers that need them.
+func TestChangeApproveHumanLineNamesVersionWithoutDigest(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	fc.artifactResult = &client.Artifact{ID: "artifact-1", Version: "v2", Status: "draft", SnapshotDigest: "sha256:deadbeef"}
+	fc.updateStatusResult = &client.Artifact{ID: "artifact-1", Version: "v2", Status: "approved"}
+	fc.promoteResult = &client.Feature{ID: "feature-1", Key: "LOGIN", Version: 3, CanonicalArtifactID: "artifact-1"}
+	fc.createWorkItemResult = map[string]any{
+		"change_request_id": "cr-1", "change_request_key": "CR-1", "feature_key": "LOGIN",
+		"lead_artifact_id": "artifact-1", "acceptance_criteria": []any{"Login succeeds"},
+	}
+
+	code := command.ExecuteForCode(
+		command.NewRootCommand(deps),
+		"--plain", "--yes", "change", "approve", "artifact-1",
+		"--title", "Implement login", "--ac", "Login succeeds",
+	)
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "artifact-1 v2") {
+		t.Fatalf("approve line must name the approved version, got %q", got)
+	}
+	if strings.Contains(got, "deadbeef") {
+		t.Fatalf("approve line must not print a digest to a human, got %q", got)
+	}
+	if strings.Contains(got, "v3") {
+		t.Fatalf("approve line must not mix the feature counter into the approved version, got %q", got)
+	}
+}
