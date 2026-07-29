@@ -61,7 +61,10 @@ approved v3." Nobody can prove anything, and the rebuild costs a sprint.
 
 SpecGate records a **named approval against one frozen version** and a
 **named acceptance against one exact completion**, and `specgate audit` replays
-that trail in order: who decided what, against which version, when.
+that trail in order: who decided what, against which version, when. In Full
+mode each event hash-links to the one before it, so `audit --verify` can tell
+you the record was not rewritten underneath you — and names the first event that
+was, if it happens.
 
 Fair's fair, though — if your team already reviews specs as pull requests with
 branch protection, GitHub does named approvals and no-self-approval very well
@@ -95,11 +98,15 @@ written by the agent itself. That account is the thing SpecGate verifies.
 
 ## Limits, before you find them yourself
 
-- **Names are recorded, not proven.** SpecGate has no login. The name on an
-  approval is the one the caller supplied, and the service trusts whoever can
-  reach it — so run it on a trusted network, and read the trail as a record of
-  what happened, not as evidence against someone who wanted to fake it. Nothing
-  stops the same person from approving and accepting either.
+- **Names are recorded, not proven.** SpecGate has no login. The chain proves
+  the record was not edited after the fact; it does not prove who was at the
+  keyboard, because the name on a decision is whatever the caller supplied, and
+  the service trusts anyone who can reach it. Run it on a trusted network. One
+  coding agent cannot peer-review its own completion — that one is enforced —
+  but nothing stops the same person from approving and then accepting.
+- **The Local trail has no chain.** One laptop, one SQLite file: the trail
+  replays, but `--verify` has nothing to recompute and says so rather than
+  answering.
 - **Staleness detection needs a Git remote.** A repo that has never been
   pushed gets no "this evidence is older than your code" warning — and
   SpecGate tells you so instead of pretending.
