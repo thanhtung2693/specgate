@@ -119,7 +119,7 @@ export function acceptanceCriterionDone(criterion: AcceptanceCriterionSummary, d
 // Mirrors the CLI's `Enforcement:` line so a reviewer reads the same sentence
 // wherever they accept from. Absence of a badge must not be what tells someone a
 // criterion is unenforced: the shortfall is stated.
-export function criteriaEnforcementText(criteria: AcceptanceCriterionSummary[]) {
+function criteriaEnforcementText(criteria: AcceptanceCriterionSummary[]) {
   if (criteria.length === 0) return undefined
   const bound = criteria.filter((criterion) => Boolean(criterion.verificationBinding)).length
   if (bound === criteria.length) return `All ${criteria.length} criteria are bound to a check.`
