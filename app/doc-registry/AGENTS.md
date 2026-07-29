@@ -15,9 +15,18 @@ changes under `app/doc-registry/`.
 
 - Domain behavior lives in `internal/artifact/`, persistence in
   `internal/storage/db/`, and HTTP handlers in `internal/api/`.
-- This is an internal service with a network trust boundary and no HTTP
-  authentication layer. Do not add JWT/RBAC middleware without changing the
-  architecture and `docs/spec.md` §7.
+- This is an internal service behind a network trust boundary. The appliance
+  gateway authenticates callers when members hold credentials and forwards the
+  verified identity; this service verifies one Basic credential at
+  `/internal/auth` and reads the forwarded identity where it records an actor.
+  That single endpoint is the whole authentication surface — do not add JWT/RBAC
+  middleware, sessions, or roles without changing the architecture,
+  `docs/spec.md` §7, and
+  [the gateway identity ADR](../../docs/contributing/adr/2026-07-29-gateway-asserted-identity.md).
+- A new endpoint that records who decided something must read the authenticated
+  identity: embed `AuthenticatedActorHeader` and resolve through `resolveActor`.
+  A reflection test fails when one forgets, because the failure is otherwise
+  silent — the endpoint quietly accepts a self-declared name.
 - Status transitions and their `artifact_events` row are one transaction.
 - Object bodies go through the configured storage driver. Do not bypass the
   workspace-scoped repository or construct unscoped object keys.

@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed — 2026-07-29. Supersedes nothing. Constrains
+Accepted and implemented — 2026-07-29. Supersedes nothing. Constrains
 [`app/doc-registry/AGENTS.md`](../../../app/doc-registry/AGENTS.md) §7 and
 [Trust and security](../../using-specgate/concepts/trust-and-security.md).
 
