@@ -113,9 +113,13 @@ publish artifact
 -> reconcile or complete
 ```
 
-This workflow works without a server-side model. Add one in Full mode when you
-want independent readiness judgment, model-backed delivery review, governance
-chat, or platform-drafted acceptance criteria for explicit quick-route work.
+This workflow works without a server-side model, in both Local and Full mode.
+Quick work items are available in both too; Local asks you to supply each
+acceptance criterion with `--ac`.
+
+Add a server-side model in Full mode when you want independent readiness
+judgment, model-backed delivery review, governance chat, or the platform to
+draft acceptance criteria for quick work instead of writing them yourself.
 
 ## What you can do
 
