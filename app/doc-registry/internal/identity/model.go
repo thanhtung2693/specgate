@@ -11,12 +11,15 @@ import (
 var usernamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{2,39}$`)
 
 type User struct {
-	ID          string    `json:"id" gorm:"column:id;primaryKey"`
-	Username    string    `json:"username" gorm:"column:username"`
-	DisplayName string    `json:"display_name" gorm:"column:display_name"`
-	Email       string    `json:"email,omitempty" gorm:"column:email"`
-	CreatedAt   time.Time `json:"created_at" gorm:"column:created_at"`
-	UpdatedAt   time.Time `json:"updated_at" gorm:"column:updated_at"`
+	ID          string `json:"id" gorm:"column:id;primaryKey"`
+	Username    string `json:"username" gorm:"column:username"`
+	DisplayName string `json:"display_name" gorm:"column:display_name"`
+	Email       string `json:"email,omitempty" gorm:"column:email"`
+	// Credential is the bcrypt hash the gateway verifier checks. It never leaves
+	// the service: no DTO, no API response, and no log line carries it.
+	Credential string    `json:"-" gorm:"column:credential"`
+	CreatedAt  time.Time `json:"created_at" gorm:"column:created_at"`
+	UpdatedAt  time.Time `json:"updated_at" gorm:"column:updated_at"`
 }
 
 func (User) TableName() string { return "users" }
@@ -70,6 +73,13 @@ type Store interface {
 	GetUser(ctx context.Context, id string) (*User, error)
 	GetWorkspace(ctx context.Context, idOrSlug string) (*Workspace, error)
 	ListWorkspaceMembers(ctx context.Context, workspaceID string) ([]WorkspaceMemberDetail, error)
+	// CredentialsConfigured reports whether any user can authenticate. False keeps
+	// the gateway open, the posture a default loopback appliance expects.
+	CredentialsConfigured(ctx context.Context) (bool, error)
+	// UserCredential returns the stored bcrypt hash for a username, empty when the
+	// user is unknown or has none, so a missing user is indistinguishable from a
+	// wrong password.
+	UserCredential(ctx context.Context, username string) (string, error)
 }
 
 func NormalizeUsername(raw string) (string, error) {

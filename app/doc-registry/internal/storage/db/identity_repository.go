@@ -146,3 +146,33 @@ func (r *IdentityRepository) ListWorkspaceMembers(ctx context.Context, workspace
 		Scan(&members).Error
 	return members, err
 }
+
+// CredentialsConfigured reports whether any user has a gateway credential.
+func (r *IdentityRepository) CredentialsConfigured(ctx context.Context) (bool, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&identity.User{}).
+		Where("credential <> ''").Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// UserCredential returns one user's bcrypt hash, or an empty string when the
+// user does not exist or has no credential. Both cases look identical to the
+// caller on purpose: an unknown username must not be distinguishable from a
+// wrong password.
+func (r *IdentityRepository) UserCredential(ctx context.Context, username string) (string, error) {
+	normalized, err := identity.NormalizeUsername(username)
+	if err != nil {
+		return "", nil
+	}
+	var user identity.User
+	err = r.db.WithContext(ctx).Where("username = ?", normalized).First(&user).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return user.Credential, nil
+}

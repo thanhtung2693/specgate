@@ -12,6 +12,7 @@ import (
 // Local dev: no HTTP authentication — all routes are open (see docs).
 func (rt *Router) registerRoutes(api huma.API) {
 	rt.registerSystemRoutes(api)
+	rt.Handlers.registerGatewayAuth(api)
 	rt.registerSkillSettingsRoutes(api)
 	rt.registerIntegrationRoutes(api)
 	rt.registerGovernanceRoutes(api)

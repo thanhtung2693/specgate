@@ -3,6 +3,7 @@ package agentpackages
 import (
 	"encoding/json"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -223,15 +224,18 @@ func TestSkillsDescribeIDEAgentNoModelBoundaries(t *testing.T) {
 		"repo_file",
 		"routing labels",
 		"exact policy projection",
-		// The rule is "never write a document for SpecGate's benefit". Pinning one
-		// phrasing of it failed on a reword and would have passed on a deletion.
-		"manufacture a",
-		"document for SpecGate",
 		"originating framework owns source paths",
 	} {
 		if !strings.Contains(preparing, want) {
 			t.Fatalf("preparation skill missing framework-neutral contract %q", want)
 		}
+	}
+	// The rule is "never write a document for SpecGate's benefit". Two earlier
+	// attempts pinned a phrasing and broke on a reword while still passing on a
+	// deletion. Match the concept: the verb next to its object, whatever the
+	// article and number.
+	if !regexp.MustCompile(`manufactur\w*[a-z\s]{0,12}document`).MatchString(preparing) {
+		t.Fatal("preparation skill no longer forbids manufacturing documents for SpecGate")
 	}
 	for _, want := range []string{"readiness pass is not human approval", "human explicitly requests", "different review-only agent"} {
 		if !strings.Contains(router+delivering, want) {

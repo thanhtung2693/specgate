@@ -521,7 +521,23 @@ type memoryKnowledgeRepo struct {
 }
 
 type fakeIdentityStore struct {
-	workspaces map[string]*identity.Workspace
+	workspaces  map[string]*identity.Workspace
+	credentials map[string]string
+	storeErr    error
+}
+
+func (f *fakeIdentityStore) CredentialsConfigured(context.Context) (bool, error) {
+	if f.storeErr != nil {
+		return false, f.storeErr
+	}
+	return len(f.credentials) > 0, nil
+}
+
+func (f *fakeIdentityStore) UserCredential(_ context.Context, username string) (string, error) {
+	if f.storeErr != nil {
+		return "", f.storeErr
+	}
+	return f.credentials[username], nil
 }
 
 func (f *fakeIdentityStore) Bootstrap(context.Context, identity.BootstrapInput) (*identity.Selection, error) {
