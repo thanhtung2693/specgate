@@ -21,14 +21,10 @@ func requiredIntegrationWorkspaceContext(ctx context.Context, workspaceID string
 }
 
 func (h *Handlers) ListIntegrations(ctx context.Context, in *listIntegrationsInput) (*integrationListBody, error) {
-	if err := h.requireService(h.Integrations, "integrations"); err != nil {
-		return nil, err
-	}
-	workspaceID, err := requireWorkspaceID(in.WorkspaceID)
+	ctx, _, err := h.scopedIntegrations(ctx, in.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
-	ctx = integrations.WithWorkspace(ctx, workspaceID)
 	items, err := h.Integrations.List(ctx)
 	if err != nil {
 		return nil, mapIntegrationError("list integrations", err)
@@ -39,14 +35,10 @@ func (h *Handlers) ListIntegrations(ctx context.Context, in *listIntegrationsInp
 }
 
 func (h *Handlers) CreateIntegration(ctx context.Context, in *createIntegrationInput) (*integrationBody, error) {
-	if err := h.requireService(h.Integrations, "integrations"); err != nil {
-		return nil, err
-	}
-	workspaceID, err := requireWorkspaceID(in.Body.WorkspaceID)
+	ctx, workspaceID, err := h.scopedIntegrations(ctx, in.Body.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
-	ctx = integrations.WithWorkspace(ctx, workspaceID)
 	created, err := h.Integrations.Create(ctx, integrations.CreateInput{
 		WorkspaceID: workspaceID,
 		Provider:    in.Body.Provider,
@@ -115,14 +107,10 @@ func (h *Handlers) ListLinearProjects(ctx context.Context, in *listLinearProject
 }
 
 func (h *Handlers) GetIntegration(ctx context.Context, in *integrationIDInput) (*integrationBody, error) {
-	if err := h.requireService(h.Integrations, "integrations"); err != nil {
-		return nil, err
-	}
-	workspaceID, err := requireWorkspaceID(in.WorkspaceID)
+	ctx, _, err := h.scopedIntegrations(ctx, in.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
-	ctx = integrations.WithWorkspace(ctx, workspaceID)
 	item, err := h.Integrations.Get(ctx, in.ID)
 	if err != nil {
 		return nil, mapIntegrationError("get integration", err)
@@ -133,14 +121,10 @@ func (h *Handlers) GetIntegration(ctx context.Context, in *integrationIDInput) (
 }
 
 func (h *Handlers) DeleteIntegration(ctx context.Context, in *integrationIDInput) (*deleteIntegrationOutput, error) {
-	if err := h.requireService(h.Integrations, "integrations"); err != nil {
-		return nil, err
-	}
-	workspaceID, err := requireWorkspaceID(in.WorkspaceID)
+	ctx, _, err := h.scopedIntegrations(ctx, in.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
-	ctx = integrations.WithWorkspace(ctx, workspaceID)
 	if err := h.Integrations.Delete(ctx, in.ID); err != nil {
 		return nil, mapIntegrationError("delete integration", err)
 	}
@@ -375,14 +359,10 @@ func (h *Handlers) HandoffLinear(ctx context.Context, in *linearHandoffInput) (*
 // ListChangeRequestTrackerLinks returns the tracker issue links a handoff created
 // for a work item, for the work-item "linked issues" surface.
 func (h *Handlers) ListChangeRequestTrackerLinks(ctx context.Context, in *changeRequestTrackerLinksInput) (*changeRequestTrackerLinksOutput, error) {
-	if err := h.requireService(h.Integrations, "integrations"); err != nil {
-		return nil, err
-	}
-	workspaceID, err := requireWorkspaceID(in.WorkspaceID)
+	ctx, _, err := h.scopedIntegrations(ctx, in.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
-	ctx = integrations.WithWorkspace(ctx, workspaceID)
 	links, err := h.Integrations.ListTrackerLinks(ctx, in.ID)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("list tracker links", err)
@@ -403,14 +383,10 @@ func (h *Handlers) ListChangeRequestTrackerLinks(ctx context.Context, in *change
 // one work item. This endpoint is deliberately a readback, not a provider poll
 // or a computed delivery verdict.
 func (h *Handlers) ListChangeRequestDeliveryLinks(ctx context.Context, in *changeRequestDeliveryLinksInput) (*changeRequestDeliveryLinksOutput, error) {
-	if err := h.requireService(h.Integrations, "integrations"); err != nil {
-		return nil, err
-	}
-	workspaceID, err := requireWorkspaceID(in.WorkspaceID)
+	ctx, _, err := h.scopedIntegrations(ctx, in.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
-	ctx = integrations.WithWorkspace(ctx, workspaceID)
 	links, err := h.Integrations.ListDeliveryLinks(ctx, in.ID)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("list delivery links", err)
@@ -433,14 +409,10 @@ func (h *Handlers) ListChangeRequestDeliveryLinks(ctx context.Context, in *chang
 }
 
 func (h *Handlers) ListGovernanceFeedbackEvents(ctx context.Context, in *listGovernanceFeedbackEventsInput) (*governanceFeedbackEventListBody, error) {
-	if err := h.requireService(h.Integrations, "integrations"); err != nil {
-		return nil, err
-	}
-	workspaceID, err := requireWorkspaceID(in.WorkspaceID)
+	ctx, _, err := h.scopedIntegrations(ctx, in.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
-	ctx = integrations.WithWorkspace(ctx, workspaceID)
 	items, err := h.Integrations.ListGovernanceFeedbackEvents(ctx, integrations.GovernanceFeedbackFilter{
 		Status:          in.Status,
 		ChangeRequestID: in.ChangeRequestID,
@@ -459,14 +431,10 @@ func (h *Handlers) ListGovernanceFeedbackEvents(ctx context.Context, in *listGov
 // UpdateGovernanceFeedbackEventStatus sets a feedback event's triage status from the
 // inbox: accepted (resolve) or rejected (dismiss).
 func (h *Handlers) UpdateGovernanceFeedbackEventStatus(ctx context.Context, in *UpdateGovernanceFeedbackEventStatusInput) (*governanceFeedbackEventBody, error) {
-	if err := h.requireService(h.Integrations, "integrations"); err != nil {
-		return nil, err
-	}
-	workspaceID, err := requireWorkspaceID(in.WorkspaceID)
+	ctx, _, err := h.scopedIntegrations(ctx, in.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
-	ctx = integrations.WithWorkspace(ctx, workspaceID)
 	if in.Body.Status != integrations.FeedbackStatusAccepted && in.Body.Status != integrations.FeedbackStatusRejected {
 		return nil, huma.Error422UnprocessableEntity("status must be 'accepted' or 'rejected'")
 	}
@@ -477,4 +445,19 @@ func (h *Handlers) UpdateGovernanceFeedbackEventStatus(ctx context.Context, in *
 	out := &governanceFeedbackEventBody{}
 	out.Body = *ev
 	return out, nil
+}
+
+// scopedIntegrations runs the preamble every workspace-scoped integrations
+// handler repeats: guard the service, resolve the workspace, scope the context.
+// Writing it out per handler meant three chances to drop a guard or reorder it,
+// in a file with twenty-three handlers.
+func (h *Handlers) scopedIntegrations(ctx context.Context, workspaceID string) (context.Context, string, error) {
+	if err := h.requireService(h.Integrations, "integrations"); err != nil {
+		return nil, "", err
+	}
+	resolved, err := requireWorkspaceID(workspaceID)
+	if err != nil {
+		return nil, "", err
+	}
+	return integrations.WithWorkspace(ctx, resolved), resolved, nil
 }
