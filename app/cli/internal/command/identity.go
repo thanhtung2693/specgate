@@ -47,7 +47,7 @@ func newUserLoginCmd(deps *Deps) *cobra.Command {
 				if !canPrompt(deps) {
 					payload := output.ErrorPayload{
 						Code:    "validation",
-						Message: formatRequiredLoginFlags(workspaceName, displayName, username) + " are required",
+						Message: formatRequiredLoginFlags(workspaceName, displayName, username),
 					}
 					code := deps.Printer.Error("user.login", payload)
 					return &output.ExitError{Code: code}

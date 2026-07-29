@@ -9,13 +9,48 @@ to the public internet without additional access control.
 The v0.1 stack prioritizes local workflow validation:
 
 - CLI-first setup;
-- trusted network assumption;
-- no full end-user authentication layer;
+- trusted network assumption by default, with optional gateway credentials for a
+  shared appliance (see below);
+- no identity provider, sessions, or per-user roles;
 - local user and global/project workspace selection for attribution and
   filtering;
 - optional API keys for model providers and external integrations.
 
 Treat every service endpoint as internal unless you add your own boundary.
+
+## Sharing one appliance with a few developers
+
+A default appliance publishes one port on `127.0.0.1` and trusts whoever reaches
+it. That is right for one person on one machine. When two or three developers
+share an appliance, issue each of them a credential:
+
+```bash
+specgate workspace credential mai
+```
+
+The appliance generates the secret and prints it once. On that developer's
+machine:
+
+```bash
+specgate config credential mai
+```
+
+Issuing the first credential turns authentication on for everything the gateway
+serves — the API, and the browser, which prompts once and remembers. The gateway
+then tells SpecGate who the caller is, so the name recorded on an approval or an
+acceptance is the one that authenticated rather than one the caller typed.
+Revoking the last credential returns the appliance to trusting its network.
+
+Two limits worth knowing before you rely on it:
+
+- **A credential identifies a credential, not a person.** Hand yours to a
+  teammate or paste it into an agent's configuration and the ledger will record
+  your name for their decisions.
+- **Credentials are reversible on the wire.** Beyond loopback, put the appliance
+  on a private overlay network (Tailscale, WireGuard) or terminate TLS in front
+  of it. For a small team the overlay is usually less work than certificates.
+
+Local mode has no gateway and no credentials: one binary, one file, one machine.
 
 ## Trusted-network boundary
 

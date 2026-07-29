@@ -65,7 +65,9 @@ func newArtifactPromoteCmd(deps *Deps) *cobra.Command {
 					deps.Printer.Success("artifact.promote", result)
 					return nil
 				}
-				fmt.Fprintf(deps.Stdout, "%s %s to canonical for feature %s (v%d)\n", styled(deps, output.StyleSuccess, "Promoted"), styled(deps, output.StyleBold, id), feature.Key, feature.Version)
+				// ponytail: machine callers read the envelope above, so this line is for a
+				// human — it says what promotion means instead of naming the internal state.
+				fmt.Fprintf(deps.Stdout, "%s %s — now the current version of %s\n", styled(deps, output.StyleSuccess, "Promoted"), styled(deps, output.StyleBold, id), feature.Key)
 				return nil
 			}
 			proceed, err := requireConfirm(deps, fmt.Sprintf("Promote artifact %s to its feature's canonical?", id))
@@ -80,7 +82,9 @@ func newArtifactPromoteCmd(deps *Deps) *cobra.Command {
 				deps.Printer.Success("artifact.promote", feature)
 				return nil
 			}
-			fmt.Fprintf(deps.Stdout, "%s %s to canonical for feature %s (v%d)\n", styled(deps, output.StyleSuccess, "Promoted"), styled(deps, output.StyleBold, id), feature.Key, feature.Version)
+			// ponytail: machine callers read the envelope above, so this line is for a
+			// human — it says what promotion means instead of naming the internal state.
+			fmt.Fprintf(deps.Stdout, "%s %s — now the current version of %s\n", styled(deps, output.StyleSuccess, "Promoted"), styled(deps, output.StyleBold, id), feature.Key)
 			return nil
 		},
 	}

@@ -20,6 +20,7 @@ func newConfigCmd(deps *Deps) *cobra.Command {
 		},
 	}
 	cfg.AddCommand(newConfigServerCmd(deps))
+	cfg.AddCommand(newConfigCredentialCmd(deps))
 	return cfg
 }
 

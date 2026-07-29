@@ -38,12 +38,23 @@ func newAuditCmd(deps *Deps) *cobra.Command {
 				if err != nil {
 					return localExitError(deps, "audit", err)
 				}
+				// Local records the trail without a hash-linked event chain, so there
+				// is nothing to recompute. Reporting a verdict here would hand back
+				// assurance no code earned.
+				if verify {
+					payload := output.ErrorPayload{
+						Code:    "unavailable",
+						Message: "Local mode records the governance trail without a tamper-evidence event chain; --verify is available in Full mode.",
+					}
+					code := deps.Printer.Error("audit", payload)
+					return &output.ExitError{Code: code}
+				}
 				events, err := store.Audit(cmd.Context(), selection.Workspace.ID, args[0])
 				if err != nil {
 					return localExitError(deps, "audit", err)
 				}
 				if deps.Printer.Mode() == output.ModeJSON {
-					deps.Printer.Success("audit", map[string]any{"events": events, "verified": true})
+					deps.Printer.Success("audit", map[string]any{"events": events, "chain": "unavailable"})
 					return nil
 				}
 				for _, event := range events {

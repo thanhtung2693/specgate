@@ -28,6 +28,8 @@ outside that boundary.
 
 ## Understand the ideas
 
+- [Who SpecGate is for](concepts/who-specgate-is-for.md) maps solo-developer
+  and team pain points to the mechanism that answers each.
 - [How SpecGate works](concepts/how-specgate-works.md) explains the delivery
   loop and product boundaries.
 - [Artifacts and Context Packs](concepts/artifacts-and-context-packs.md)

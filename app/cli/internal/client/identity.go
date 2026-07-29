@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"net/http"
 	"net/url"
 )
 
@@ -70,6 +71,25 @@ func (c *Client) ListWorkspaceMembers(ctx context.Context, id, currentUserID, cu
 	}
 	var r WorkspaceMembersResult
 	if err := c.get(ctx, path, &r); err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// GatewayCredentialResult is the answer to issuing or revoking one member's
+// gateway credential. Secret is present only on an issue, and only once.
+type GatewayCredentialResult struct {
+	Username      string `json:"username"`
+	Secret        string `json:"secret,omitempty"`
+	CredentialSet bool   `json:"credential_set"`
+}
+
+// IssueGatewayCredential issues, rotates, or revokes a member's gateway
+// credential. The appliance generates the secret; nothing here invents one.
+func (c *Client) IssueGatewayCredential(ctx context.Context, username string, revoke bool) (*GatewayCredentialResult, error) {
+	path := "/identity/users/" + url.PathEscape(username) + "/credential"
+	var r GatewayCredentialResult
+	if err := c.do(ctx, http.MethodPut, path, map[string]any{"revoke": revoke}, &r); err != nil {
 		return nil, err
 	}
 	return &r, nil

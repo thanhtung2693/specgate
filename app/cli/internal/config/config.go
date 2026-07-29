@@ -35,6 +35,33 @@ type Config struct {
 	CurrentUser   CurrentUser              `json:"current_user,omitempty"`
 	Workspace     CurrentWorkspace         `json:"workspace,omitempty"`
 	Projects      map[string]ProjectConfig `json:"projects,omitempty"`
+	// Credentials holds one gateway credential per server URL. Keyed by server so
+	// switching servers can never send a credential to a host it was not issued
+	// for; the whole file is written at mode 0600.
+	Credentials map[string]ServerCredential `json:"credentials,omitempty"`
+}
+
+// ServerCredential is one appliance's gateway credential. The secret lives here
+// because the gateway verifies it per request; status output reports only whether
+// it is set, and no command prints the secret.
+type ServerCredential struct {
+	Username string `json:"username"`
+	Secret   string `json:"secret"`
+}
+
+// NormalizeServerURL is the credential map key: a trimmed, lowercased URL with no
+// trailing slash, so the same appliance written three ways resolves to one entry.
+func NormalizeServerURL(raw string) string {
+	return strings.TrimRight(strings.ToLower(strings.TrimSpace(raw)), "/")
+}
+
+// CredentialFor returns the credential stored for a server URL.
+func (c Config) CredentialFor(serverURL string) (ServerCredential, bool) {
+	credential, ok := c.Credentials[NormalizeServerURL(serverURL)]
+	if !ok || credential.Username == "" || credential.Secret == "" {
+		return ServerCredential{}, false
+	}
+	return credential, true
 }
 
 // CurrentUser stores the CLI-selected local user.

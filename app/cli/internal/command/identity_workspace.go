@@ -28,7 +28,7 @@ specgate workspace unbind
 specgate --workspace platform status
 SPECGATE_WORKSPACE=platform specgate work list`),
 	}
-	cmd.AddCommand(newWorkspaceCreateCmd(deps), newWorkspaceListCmd(deps), newWorkspaceCurrentCmd(deps), newWorkspaceMembersCmd(deps), newWorkspaceSelectCmd(deps), newWorkspaceBindCmd(deps), newWorkspaceUnbindCmd(deps))
+	cmd.AddCommand(newWorkspaceCreateCmd(deps), newWorkspaceListCmd(deps), newWorkspaceCurrentCmd(deps), newWorkspaceMembersCmd(deps), newWorkspaceSelectCmd(deps), newWorkspaceBindCmd(deps), newWorkspaceUnbindCmd(deps), newWorkspaceCredentialCmd(deps))
 	return cmd
 }
 
@@ -349,8 +349,17 @@ func localExitError(deps *Deps, command string, err error) error {
 		payload = output.ErrorPayload{Code: "not_found", Message: "gate task not found in the selected Local workspace"}
 	} else if errors.Is(err, local.ErrGateTaskExpired) || errors.Is(err, local.ErrGateTaskStale) || errors.Is(err, local.ErrGateTaskInvalid) {
 		payload = output.ErrorPayload{Code: "validation", Message: err.Error()}
-	} else if errors.Is(err, local.ErrDeliveryApproved) {
+	} else if errors.Is(err, local.ErrSeparationOfDuties) {
+		// A policy refusal, not an outage: exit 1 tells a caller the governance
+		// answer was no, where exit 5 would invite a retry that can never pass.
+		payload = output.ErrorPayload{Code: "governance_failed", Message: err.Error()}
+	} else if errors.Is(err, local.ErrDeliveryApproved) || errors.Is(err, local.ErrDecisionRecorded) {
 		payload = output.ErrorPayload{Code: "conflict", Message: err.Error()}
+	} else if errors.Is(err, local.ErrPreconditionNotMet) {
+		// "Not yet" is a governance answer. Exit 5 would tell an automated caller
+		// the service is down and to retry the same call, which cannot pass until
+		// the caller does the missing step.
+		payload = output.ErrorPayload{Code: "governance_failed", Message: err.Error()}
 	} else if errors.Is(err, ErrWorkRefRequired) || errors.Is(err, ErrInputRequired) {
 		// A missing argument is a usage error. Reporting it as `unavailable`
 		// tells an automated caller the service is down and to retry, which
@@ -531,25 +540,29 @@ func promptWorkspaceSelection(cmd *cobra.Command, deps *Deps) (*client.IdentityW
 	return &workspace, nil
 }
 
+// formatRequiredLoginFlags names the missing flags as flags, and agrees with its
+// own verb: one missing flag "is required", several "are required". The caller
+// used to append " are required" to a bare noun, which produced
+// "workspace are required".
 func formatRequiredLoginFlags(workspaceName, displayName, username string) string {
 	missing := make([]string, 0, 3)
 	if strings.TrimSpace(workspaceName) == "" {
-		missing = append(missing, "workspace")
+		missing = append(missing, "--workspace")
 	}
 	if strings.TrimSpace(displayName) == "" {
-		missing = append(missing, "display-name")
+		missing = append(missing, "--display-name")
 	}
 	if strings.TrimSpace(username) == "" {
-		missing = append(missing, "username")
+		missing = append(missing, "--username")
 	}
 	switch len(missing) {
 	case 0:
 		return ""
 	case 1:
-		return missing[0]
+		return missing[0] + " is required"
 	case 2:
-		return missing[0] + " and " + missing[1]
+		return missing[0] + " and " + missing[1] + " are required"
 	default:
-		return strings.Join(missing[:len(missing)-1], ", ") + ", and " + missing[len(missing)-1]
+		return strings.Join(missing[:len(missing)-1], ", ") + ", and " + missing[len(missing)-1] + " are required"
 	}
 }

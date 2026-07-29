@@ -80,6 +80,7 @@ type GetArtifactOutput struct {
 // ---------- PATCH /artifacts/{id}/status ----------
 
 type UpdateStatusInput struct {
+	AuthenticatedActorHeader
 	ID          string `path:"id"`
 	WorkspaceID string `query:"workspace_id"`
 	Body        struct {

@@ -125,16 +125,21 @@ Assurance: Agent-reported; locally reproduced; second agent affirmed
 Decision: Awaiting human acceptance
 Receipt: commit a1b2c3d
 Freshness: Stored receipt matches the current checkout.
+Acceptance criteria: 2 total · 2 met · 0 unmet · 0 unclear
+[met] Health endpoint returns 200 — integration test passed
+[met] Unhealthy dependency returns 503 — failure-path test passed
 Next (human_reviewer): specgate --yes change accept CR-123
 ```
 
 The receipt means the work is awaiting your acceptance, not accepted or
 delivered. It does not prove that SpecGate prevented bugs or saved time. A
 stale warning does not rewrite the reported state; the exact reason appears on
-a separate `Stale:` line so you can judge it before deciding.
+a separate `Stale:` line so you can judge it before deciding. Before a delivery
+review exists, criteria appear as `not reviewed`, not failed.
 
 Other states produce a delivery handoff with the blocker, missing evidence,
-next actor, and exact next command rather than success language.
+criterion summary, next actor, and exact next command rather than success
+language.
 
 ## Make the final decision
 

@@ -459,7 +459,7 @@ func TestArtifactPromotePromotesCanonical(t *testing.T) {
 	if fc.lastPromoteID != "art-1" || fc.lastPromoteActor != "thanhtung2693" {
 		t.Fatalf("promote call: id=%q actor=%q", fc.lastPromoteID, fc.lastPromoteActor)
 	}
-	if !strings.Contains(out.String(), "Promoted art-1 to canonical for feature FEAT-X (v3)") {
+	if !strings.Contains(out.String(), "Promoted art-1 — now the current version of FEAT-X") {
 		t.Fatalf("output = %q, want promote confirmation", out.String())
 	}
 }

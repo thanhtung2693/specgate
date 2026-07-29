@@ -44,7 +44,9 @@ func TestWorkCreateSendsFeatureBodyAndRendersResult(t *testing.T) {
 	if fc.lastCreateWorkItem["feature"] != "my-feat" {
 		t.Fatalf("body = %+v", fc.lastCreateWorkItem)
 	}
-	if !strings.Contains(out.String(), "Created CR-77") || !strings.Contains(out.String(), "2 acceptance criteria") {
+	// The enforcement line reports the persisted list returned by the server, not
+	// the one criterion this call sent.
+	if !strings.Contains(out.String(), "Created CR-77") || !strings.Contains(out.String(), "none of the 2 criteria are bound") {
 		t.Fatalf("render = %s", out.String())
 	}
 }

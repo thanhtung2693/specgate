@@ -182,7 +182,7 @@ func (h *Handlers) PromoteArtifactToCanonical(ctx context.Context, in *PromoteAr
 	if _, err := getFeatureForWorkspace(ctx, h.WorkBoard, workspaceID, art.FeatureID); err != nil {
 		return nil, mapWorkBoardError("promote artifact to canonical", err)
 	}
-	feature, err := h.WorkBoard.SetFeatureCanonicalArtifact(ctx, art.FeatureID, in.ID, strings.TrimSpace(in.Body.ApprovedBy))
+	feature, err := h.WorkBoard.SetFeatureCanonicalArtifact(ctx, art.FeatureID, in.ID, resolveActor(in.AuthenticatedUser, in.Body.ApprovedBy))
 	if err != nil {
 		return nil, mapWorkBoardError("promote artifact to canonical", err)
 	}
@@ -376,7 +376,7 @@ func (h *Handlers) UnarchiveChangeRequest(ctx context.Context, in *UnarchiveChan
 	if err := h.requireChangeRequestWorkspace(ctx, strings.TrimSpace(in.WorkspaceID), in.ID); err != nil {
 		return nil, mapWorkBoardError("unarchive change request", err)
 	}
-	cr, err := h.WorkBoard.UnarchiveChangeRequest(ctx, in.ID, strings.TrimSpace(in.Body.Actor))
+	cr, err := h.WorkBoard.UnarchiveChangeRequest(ctx, in.ID, resolveActor(in.AuthenticatedUser, in.Body.Actor))
 	if err != nil {
 		return nil, mapWorkBoardError("unarchive change request", err)
 	}

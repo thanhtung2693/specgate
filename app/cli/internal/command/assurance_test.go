@@ -549,3 +549,97 @@ func capabilityStates[T interface {
 	}
 	return states
 }
+
+// A separation-of-duties refusal is a governance answer, not an outage. Exit 5
+// tells an automated caller the service is down and to retry; no retry can make
+// the reporter eligible to approve its own delivery.
+func TestSelfApprovalRefusalExitsGovernanceFailedNotUnavailable(t *testing.T) {
+	t.Parallel()
+	deps, _, _, out := newFakeDeps(t)
+	stateDir := t.TempDir()
+	store, err := local.Open(filepath.Join(stateDir, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection, err := store.Initialize(t.Context(), local.InitInput{
+		WorkspaceName: "Local workspace", DisplayName: "Local developer", Username: "sweeper",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	work, err := store.CreateQuickWork(t.Context(), selection.Workspace.ID, local.QuickWorkInput{
+		Title: "Self approval", AcceptanceCriteria: []string{"Works"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	completion := map[string]any{
+		"context_digest": work.ContextDigest,
+		"event_type":     "coding_agent.completed",
+		"agent":          map[string]any{"name": "sweeper"},
+		"checks":         []any{},
+		"criteria": []any{map[string]any{
+			"criterion_id": "local-1", "claim": "satisfied",
+			"evidence": map[string]any{"kind": "test", "path": "x.go", "heading": "TestWorks"},
+		}},
+	}
+	if _, err := store.SubmitDelivery(t.Context(), selection.Workspace.ID, work.Key, completion); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: stateDir}}).SaveTo(deps.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "change", "accept", work.Key)
+	if code != output.ExitGovernanceFailed {
+		t.Fatalf("exit = %d, want ExitGovernanceFailed (%d); output = %s", code, output.ExitGovernanceFailed, out.String())
+	}
+	if !strings.Contains(out.String(), "cannot approve its own delivery") {
+		t.Fatalf("output = %q, want it to name the refusal", out.String())
+	}
+}
+
+// Governance answers must not be reported as service outages. Each of these
+// refusals is permanent until the caller does something different, so exit 5 -
+// which an automated caller reads as "retry" - is the wrong answer for all of
+// them. Local mapped several to it by default.
+func TestLocalGovernanceRefusalsUseGovernanceExitCodes(t *testing.T) {
+	t.Parallel()
+	deps, _, _, out := newFakeDeps(t)
+	stateDir := t.TempDir()
+	store, err := local.Open(filepath.Join(stateDir, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection, err := store.Initialize(t.Context(), local.InitInput{
+		WorkspaceName: "Local workspace", DisplayName: "Local developer", Username: "human",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	work, err := store.CreateQuickWork(t.Context(), selection.Workspace.ID, local.QuickWorkInput{
+		Title: "Needs evidence", AcceptanceCriteria: []string{"Works"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: stateDir}}).SaveTo(deps.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+
+	// Deciding before any completion exists is a precondition failure, not an
+	// outage: nothing about retrying the same call can satisfy it.
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "change", "accept", work.Key)
+	if code != output.ExitGovernanceFailed {
+		t.Fatalf("accept before submit exited %d, want ExitGovernanceFailed; output = %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "before a human decision") {
+		t.Fatalf("output = %q, want it to name the missing step", out.String())
+	}
+}

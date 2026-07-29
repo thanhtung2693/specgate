@@ -13,6 +13,24 @@ import (
 
 var ErrDeliveryApproved = errors.New("delivery is already approved")
 
+// ErrSeparationOfDuties reports a refusal to let one identity both file and
+// judge the same work: the completion reporter approving its own delivery, or an
+// agent peer-reviewing its own completion. These are governance decisions, not
+// service problems — reporting them as `unavailable` tells an automated caller
+// the service is down and to retry, and no retry can ever succeed.
+var ErrSeparationOfDuties = errors.New("separation of duties")
+
+// ErrPreconditionNotMet reports work that is not at the stage the caller asked
+// for — no completion to decide on, no readiness run before approval. The
+// governance answer is "not yet", so it exits as a governance failure rather
+// than as an unavailable service, which would invite a retry of the same call.
+var ErrPreconditionNotMet = errors.New("governance precondition not met")
+
+// ErrDecisionRecorded reports a human decision that already exists. It is a
+// conflict, the same classification ErrDeliveryApproved already carries; two
+// paths used to report it as an unavailable service instead.
+var ErrDecisionRecorded = errors.New("decision already recorded")
+
 type DeliveryReview struct {
 	ID            string `json:"id"`
 	WorkID        string `json:"work_id"`
@@ -131,13 +149,13 @@ func (s *Store) DecideDelivery(ctx context.Context, workspaceID, ref, decision, 
 	var review DeliveryReview
 	err = tx.QueryRowContext(ctx, `SELECT id, work_id, report_id, verdict, summary, human_decision, note, created_at FROM delivery_reviews WHERE workspace_id = ? AND work_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`, workspaceID, work.ID).Scan(&review.ID, &review.WorkID, &review.ReportID, &review.Verdict, &review.Summary, &review.HumanDecision, &review.Note, &review.CreatedAt)
 	if err == sql.ErrNoRows {
-		return fmt.Errorf("run `specgate change submit %s --file <completion.json>` before a human decision", work.Key)
+		return fmt.Errorf("%w: run `specgate change submit %s --file <completion.json>` before a human decision", ErrPreconditionNotMet, work.Key)
 	}
 	if err != nil {
 		return err
 	}
 	if review.HumanDecision != "" {
-		return fmt.Errorf("delivery decision is already recorded for %s; submit corrected evidence before another human decision", work.Key)
+		return fmt.Errorf("%w: delivery decision is already recorded for %s; submit corrected evidence before another human decision", ErrDecisionRecorded, work.Key)
 	}
 	actor = strings.TrimSpace(actor)
 	if actor == "" {
@@ -150,7 +168,7 @@ func (s *Store) DecideDelivery(ctx context.Context, workspaceID, ref, decision, 
 		}
 		if reporter := feedbackAgentName(report.Body); reporter != "" &&
 			strings.EqualFold(reporter, actor) {
-			return fmt.Errorf("completion reporter %q cannot approve its own delivery", actor)
+			return fmt.Errorf("%w: completion reporter %q cannot approve its own delivery", ErrSeparationOfDuties, actor)
 		}
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE delivery_reviews SET human_decision = ?, note = ? WHERE id = ? AND human_decision = ''`, decision, note, review.ID)
@@ -162,7 +180,7 @@ func (s *Store) DecideDelivery(ctx context.Context, workspaceID, ref, decision, 
 		return err
 	}
 	if updated != 1 {
-		return fmt.Errorf("delivery decision is already recorded for %s; submit corrected evidence before another human decision", work.Key)
+		return fmt.Errorf("%w: delivery decision is already recorded for %s; submit corrected evidence before another human decision", ErrDecisionRecorded, work.Key)
 	}
 	if decision == "approve" {
 		_, err = tx.ExecContext(ctx, `UPDATE work_items SET phase = 'delivered' WHERE id = ?`, work.ID)
@@ -251,7 +269,7 @@ func (s *Store) LatestDeliveryReport(ctx context.Context, workspaceID, ref strin
 	var encoded string
 	err = s.db.QueryRowContext(ctx, `SELECT id, body FROM delivery_reports WHERE workspace_id = ? AND work_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`, workspaceID, work.ID).Scan(&report.ID, &encoded)
 	if err == sql.ErrNoRows {
-		return DeliveryReport{}, fmt.Errorf("submit a completion report before peer review")
+		return DeliveryReport{}, fmt.Errorf("%w: submit a completion report before peer review", ErrPreconditionNotMet)
 	}
 	if err != nil {
 		return DeliveryReport{}, err
@@ -322,7 +340,7 @@ func (s *Store) PeerReviewDelivery(ctx context.Context, workspaceID, ref string,
 		return PeerReview{}, fmt.Errorf("peer review agent.name is required")
 	}
 	if strings.EqualFold(completer, peer) {
-		return PeerReview{}, fmt.Errorf("agent %q cannot peer-review its own completion", peer)
+		return PeerReview{}, fmt.Errorf("%w: agent %q cannot peer-review its own completion", ErrSeparationOfDuties, peer)
 	}
 	peerReviewOf, _ := body["peer_review_of"].(map[string]any)
 	if completionID, _ := peerReviewOf["completion_feedback_event_id"].(string); completionID != completion.ID {

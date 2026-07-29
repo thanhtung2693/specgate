@@ -107,6 +107,20 @@ func newChangeCmd(deps *Deps) *cobra.Command {
 	return cmd
 }
 
+// approvalCriteriaPrompt states the criteria count and how many of them a check
+// will decide. Approval locks the list, so a shortfall named afterwards can no
+// longer change the human's binding decision.
+func approvalCriteriaPrompt(criteria []string) string {
+	bound := boundCriteriaCount(criteria)
+	if bound == len(criteria) {
+		return fmt.Sprintf("All %d acceptance criteria are bound to a check.", len(criteria))
+	}
+	return fmt.Sprintf(
+		"%d acceptance criteria, %d bound to a check; the rest will be reviewed as the agent's claim.",
+		len(criteria), bound,
+	)
+}
+
 func newChangeApproveCmd(deps *Deps) *cobra.Command {
 	var (
 		note        string
@@ -178,16 +192,19 @@ func newChangeApproveCmd(deps *Deps) *cobra.Command {
 				if err != nil {
 					return localExitError(deps, "change.approve", err)
 				}
-				return printChangeApproval(deps, id, "v"+strconv.Itoa(artifact.Version), artifact.SnapshotDigest, feature.Key, feature.Version, handoff)
+				return printChangeApproval(deps, id, "v"+strconv.Itoa(artifact.Version), artifact.SnapshotDigest, feature.Key, feature.Version, handoff, criteria)
 			}
 
 			artifact, err := deps.Client.GetArtifact(cmd.Context(), id)
 			if err != nil {
 				return apiExitError(deps, "change.approve", err)
 			}
+			// This prompt is the moment the criteria list is still changeable, so it
+			// states how much of it review can enforce. The digest is in the JSON
+			// envelope; a human cannot act on it while answering yes or no.
 			prompt := fmt.Sprintf(
-				"Approve artifact %s (%s, digest %s) and hand off %q with %d acceptance criteria?",
-				id, artifact.Version, artifact.SnapshotDigest, title, len(criteria),
+				"Approve artifact %s %s and hand off %q? %s",
+				id, artifact.Version, title, approvalCriteriaPrompt(criteria),
 			)
 			proceed, err := requireConfirm(deps, prompt)
 			if err != nil || !proceed {
@@ -208,7 +225,7 @@ func newChangeApproveCmd(deps *Deps) *cobra.Command {
 			if err != nil {
 				return apiExitError(deps, "change.approve", err)
 			}
-			return printChangeApproval(deps, id, artifact.Version, artifact.SnapshotDigest, feature.Key, feature.Version, handoff)
+			return printChangeApproval(deps, id, artifact.Version, artifact.SnapshotDigest, feature.Key, feature.Version, handoff, criteria)
 		},
 	}
 	cmd.Flags().StringVar(&note, "note", "", "Optional reviewer note recorded with the approval")
@@ -386,6 +403,7 @@ func printChangeApproval(
 	artifactID, artifactVersion, snapshotDigest, featureKey string,
 	featureVersion int,
 	handoff changeApprovalHandoff,
+	criteria []string,
 ) error {
 	next := "specgate work context " + handoff.WorkRef + " --json"
 	state := "ready_for_implementation"
@@ -402,14 +420,21 @@ func printChangeApproval(
 	if handoff.ContextDigest != "" {
 		result["context_digest"] = handoff.ContextDigest
 	}
+	result["acceptance_count"] = len(criteria)
+	result["acceptance_criteria_bound"] = boundCriteriaCount(criteria)
 	if deps.Printer.Mode() == output.ModeJSON {
 		deps.Printer.Success("change.approve", result)
 		return nil
 	}
-	fmt.Fprintf(deps.Stdout, "%s %s (artifact %s, digest %s); canonical for feature %s (v%d)\n",
+	// ponytail: the human line names the version the human approved and says what
+	// freezing means; identifiers and digests stay in the JSON envelope above.
+	fmt.Fprintf(deps.Stdout, "%s %s %s — frozen, and now the current version of %s.\n",
 		styled(deps, output.StyleSuccess, "Approved"), styled(deps, output.StyleBold, artifactID),
-		artifactVersion, snapshotDigest, featureKey, featureVersion)
+		artifactVersion, featureKey)
 	fmt.Fprintf(deps.Stdout, "%s %s; Context Pack %s.\n", label(deps, "Work:"), styled(deps, output.StyleBold, handoff.WorkRef), handoff.ContextState)
+	if notice := criteriaEnforcementNotice(criteria); notice != "" {
+		fmt.Fprintln(deps.Stdout, notice)
+	}
 	fmt.Fprintln(deps.Stdout, nextStep(deps, "Start implementation by reading the exact handoff with", next))
 	return nil
 }

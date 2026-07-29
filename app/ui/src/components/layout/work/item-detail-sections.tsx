@@ -116,7 +116,21 @@ export function acceptanceCriterionDone(criterion: AcceptanceCriterionSummary, d
   return verdict ? verdict === "met" : criterion.done
 }
 
+// Mirrors the CLI's `Enforcement:` line so a reviewer reads the same sentence
+// wherever they accept from. Absence of a badge must not be what tells someone a
+// criterion is unenforced: the shortfall is stated.
+function criteriaEnforcementText(criteria: AcceptanceCriterionSummary[]) {
+  if (criteria.length === 0) return undefined
+  const bound = criteria.filter((criterion) => Boolean(criterion.verificationBinding)).length
+  if (bound === criteria.length) return `All ${criteria.length} criteria are bound to a check.`
+  if (bound === 0) {
+    return `None of the ${criteria.length} criteria are bound to a check, so review reports the agent's claims.`
+  }
+  return `${bound} of ${criteria.length} criteria are bound to a check; the rest are reviewed as the agent's claim.`
+}
+
 export function AcceptanceCriteriaSummary({ detail }: { detail: WorkItemDetailData }) {
+  const enforcement = criteriaEnforcementText(detail.acceptanceCriteria)
   return (
     <section className="rounded-lg border bg-background/70 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -154,6 +168,11 @@ export function AcceptanceCriteriaSummary({ detail }: { detail: WorkItemDetailDa
                       {stateText(verdict)}
                     </Badge>
                   ) : null}
+                  {criterion.verificationBinding ? (
+                    <Badge variant="outline" className="font-mono text-[11px]">
+                      check: {criterion.verificationBinding}
+                    </Badge>
+                  ) : null}
                   <Badge variant="outline" className="text-[11px]">
                     {criterion.source}
                   </Badge>
@@ -163,6 +182,9 @@ export function AcceptanceCriteriaSummary({ detail }: { detail: WorkItemDetailDa
           })
         )}
       </div>
+      {enforcement && detail.readback.acceptance !== "error" ? (
+        <p className="mt-3 text-xs leading-5 text-muted-foreground">{enforcement}</p>
+      ) : null}
     </section>
   )
 }

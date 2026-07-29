@@ -55,7 +55,13 @@ that implies unsupported behavior.
 npm run test -- --run
 npm run lint
 npm run build
+npm run api:check   # committed API contract still matches Doc Registry
+npm run deadcode    # unused files, exports, and dependencies
 ```
+
+`api:check` and `deadcode` gate CI. Adding a Doc Registry endpoint or a header
+parameter drifts the generated contract even when no UI file changes — run
+`npm run api:generate` and commit the result.
 
 - Add targeted Vitest coverage for behavior changes.
 - For layout, routing, streaming, onboarding, settings, or readback changes,

@@ -2,11 +2,14 @@ package command_test
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/command"
+	"github.com/specgate/specgate/app/cli/internal/config"
+	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
@@ -95,5 +98,70 @@ func TestAuditWithoutVerifyOmitsChainLine(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "Chain:") {
 		t.Fatalf("chain line must not render without --verify: %s", out.String())
+	}
+}
+
+// TestAuditLocalRefusesVerifyWithoutAChain pins that Local never reports a
+// tamper-evidence verdict it cannot compute. Local stores the trail without a
+// hash-linked event chain, so answering `--verify` at all would hand back
+// assurance no code earned — exactly the unearned-pass failure the delivery
+// review path exists to prevent.
+func TestAuditLocalRefusesVerifyWithoutAChain(t *testing.T) {
+	t.Parallel()
+	deps, _, _, out := newFakeDeps(t)
+	stateDir := t.TempDir()
+	store, err := local.Open(filepath.Join(stateDir, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Initialize(t.Context(), local.InitInput{
+		WorkspaceName: "Local workspace", DisplayName: "Local developer", Username: "local",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: stateDir}}).SaveTo(deps.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "audit", "CR-1", "--verify")
+	if code != output.ExitUnavailable {
+		t.Fatalf("exit = %d, want ExitUnavailable; output = %s", code, out.String())
+	}
+	if got := out.String(); !strings.Contains(got, "Full mode") {
+		t.Fatalf("output = %q, want it to name where --verify is available", got)
+	}
+}
+
+// The Local trail itself still reads, and its envelope must not claim a
+// verification happened.
+func TestAuditLocalTrailReportsNoChain(t *testing.T) {
+	t.Parallel()
+	deps, _, _, out := newFakeDeps(t)
+	stateDir := t.TempDir()
+	store, err := local.Open(filepath.Join(stateDir, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Initialize(t.Context(), local.InitInput{
+		WorkspaceName: "Local workspace", DisplayName: "Local developer", Username: "local",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: stateDir}}).SaveTo(deps.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "audit", "CR-1")
+	if code != output.ExitOK && code != output.ExitNotFound {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if strings.Contains(out.String(), `"verified":true`) {
+		t.Fatalf("Local audit must not claim a verified chain, got %s", out.String())
 	}
 }

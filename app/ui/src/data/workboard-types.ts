@@ -8,6 +8,7 @@ export type AcceptanceCriterionDTO = {
   text?: string
   done?: boolean
   source?: string
+  verification_binding?: string
 }
 
 export type NextActionDTO = {
@@ -172,6 +173,10 @@ export type AcceptanceCriterionSummary = {
   text: string
   done: boolean
   source: string
+  // A criterion bound to a check takes its verdict from that check result. An
+  // unbound one can only ever carry the implementing agent's claim, so the
+  // review surface has to say which is which rather than let absence imply it.
+  verificationBinding?: string
 }
 
 export type NextActionSummary = {

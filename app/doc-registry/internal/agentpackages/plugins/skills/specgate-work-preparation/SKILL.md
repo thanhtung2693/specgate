@@ -14,8 +14,8 @@ product code.
 Read the request, governing repository instructions, and author-selected source
 documents. Show the human the exact title, description, observable acceptance
 criteria, and non-goals. Split work that can be accepted independently. Use an
-`@check:<name>` binding only when the human confirms that exact deterministic
-check.
+`@check:<name>` binding only when the human confirms that exact check, and name
+in the preview which criteria a check enforces and which rest on your claim.
 
 Choose one route with the human:
 
@@ -49,16 +49,16 @@ contract exactly. Quick work ends here; switch to `specgate-work-delivery`.
 ## 2B. Preview and publish an artifact
 
 The originating framework owns source paths, names, lifecycle, and Git policy.
-Never relocate, copy, rename, delete, commit, or change ignore rules for them.
-Edit source content only when the user's request authorizes that edit.
+Never relocate, copy, rename, delete, commit, or change their ignore rules. Edit
+source content only when the request authorizes it.
 
 Roles are routing labels, not one-file-per-concern requirements. Map each
-human-selected source explicitly; never detect a framework or manufacture a
-document for SpecGate. When policy requires a role one source already covers,
-map that same `path` again under the second `role`: one specification is often
-both the spec and the plan.
+human-selected source explicitly; never detect a framework or manufacture
+documents. When policy requires a role one source already covers,
+map that same `path` again under the second `role` — one spec is often both spec
+and plan.
 
-Keep the transient manifest at `.specgate/work/artifact.json`. For every mapped
+Keep the transient manifest at `.specgate/work/artifact.json`. For each mapped
 document:
 
 - set `path` to its unchanged repository-relative POSIX path;
@@ -83,8 +83,8 @@ Use the human-selected `feature_key`; `request_type` is `new_feature`,
 }
 ```
 
-Do not use `..` traversal or copy sources under `.specgate/work`. Preview the
-package without a server write:
+Never use `..` traversal or copy sources under `.specgate/work`. Preview without
+a server write:
 
 ```bash
 specgate artifact publish --file .specgate/work/artifact.json --preview --json
@@ -97,24 +97,24 @@ specgate artifact publish --file .specgate/work/artifact.json \
   --preview --compare "$BASE_ARTIFACT_ID" --json
 ```
 
-Show the source mapping and exact policy projection together. Report added,
+Show the source mapping and exact policy projection together, reporting added,
 removed, changed, and unchanged paths. If preview lists an omitted impact
 declaration, ask for its exact `yes`, `no`, or `unknown` answers; never infer
-`no`. Resolve feature identity from an explicitly named work item or human
-selection rather than similarity.
+`no`. Resolve feature identity from an explicitly named work item or human selection,
+never from similarity.
 
 Completion criterion: every selected source appears once under its unchanged
 path and role; source files and Git policy remain unchanged except for
 authorized edits.
 
-Only after explicit human confirmation of that preview may the agent publish:
+Publish only after explicit human confirmation of that preview:
 
 ```bash
 specgate artifact publish --file .specgate/work/artifact.json --json
 ```
 
 Completion criterion: publication succeeded and its artifact ID and immutable
-version are recorded. On failure, stop; do not run readiness.
+version are recorded. On failure, stop before readiness.
 
 ## 3. Complete readiness
 
@@ -147,8 +147,8 @@ specgate gates tasks submit-result <task-id> \
 `artifact_digest`; do not call `tasks show` for a task it listed. Copy both
 digests exactly — a mismatched digest leaves the gate `not_run`.
 
-`aggregate=not_run` means work remains; it is never a pass. Stale digests require
-a fresh task. Readiness errors preserve the artifact and become explicit
+`aggregate=not_run` means work remains; it is never a pass. Stale digests need a
+fresh task. Readiness errors preserve the artifact and become explicit
 blockers.
 
 Completion criterion: every pending task has a submitted result for its exact

@@ -146,3 +146,51 @@ func (r *IdentityRepository) ListWorkspaceMembers(ctx context.Context, workspace
 		Scan(&members).Error
 	return members, err
 }
+
+// CredentialsConfigured reports whether any user has a gateway credential.
+func (r *IdentityRepository) CredentialsConfigured(ctx context.Context) (bool, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&identity.User{}).
+		Where("credential <> ''").Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// UserCredential returns one user's bcrypt hash, or an empty string when the
+// user does not exist or has no credential. Both cases look identical to the
+// caller on purpose: an unknown username must not be distinguishable from a
+// wrong password.
+func (r *IdentityRepository) UserCredential(ctx context.Context, username string) (string, error) {
+	normalized, err := identity.NormalizeUsername(username)
+	if err != nil {
+		return "", nil
+	}
+	var user identity.User
+	err = r.db.WithContext(ctx).Where("username = ?", normalized).First(&user).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return user.Credential, nil
+}
+
+// SetUserCredential stores or clears one member's bcrypt credential.
+func (r *IdentityRepository) SetUserCredential(ctx context.Context, username, hash string) error {
+	normalized, err := identity.NormalizeUsername(username)
+	if err != nil {
+		return identity.ErrUserNotFound
+	}
+	result := r.db.WithContext(ctx).Model(&identity.User{}).
+		Where("username = ?", normalized).
+		Updates(map[string]any{"credential": hash, "updated_at": time.Now().UTC()})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return identity.ErrUserNotFound
+	}
+	return nil
+}

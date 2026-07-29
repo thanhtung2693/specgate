@@ -3,6 +3,7 @@ package agentpackages
 import (
 	"encoding/json"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -176,7 +177,10 @@ func TestFocusedSkillsKeepOneExplicitSpecGatePhase(t *testing.T) {
 			if !strings.Contains(body, "## Route one phase") {
 				t.Fatalf("%s missing phase routing:\n%s", path, body)
 			}
-		} else if !strings.Contains(body, "SpecGate operating contract") || !strings.Contains(body, "This phase") {
+		} else if !strings.Contains(body, "SpecGate operating contract") || !strings.Contains(body, "Completion criterion:") {
+			// A phase skill inherits the shared operating contract and defines
+			// its own completion criteria. Pinning the literal words "This
+			// phase" failed on a reword while proving nothing about scoping.
 			t.Fatalf("%s does not inherit the router contract as one phase:\n%s", path, body)
 		}
 	}
@@ -220,15 +224,18 @@ func TestSkillsDescribeIDEAgentNoModelBoundaries(t *testing.T) {
 		"repo_file",
 		"routing labels",
 		"exact policy projection",
-		// The rule is "never write a document for SpecGate's benefit". Pinning one
-		// phrasing of it failed on a reword and would have passed on a deletion.
-		"manufacture a",
-		"document for SpecGate",
 		"originating framework owns source paths",
 	} {
 		if !strings.Contains(preparing, want) {
 			t.Fatalf("preparation skill missing framework-neutral contract %q", want)
 		}
+	}
+	// The rule is "never write a document for SpecGate's benefit". Two earlier
+	// attempts pinned a phrasing and broke on a reword while still passing on a
+	// deletion. Match the concept: the verb next to its object, whatever the
+	// article and number.
+	if !regexp.MustCompile(`manufactur\w*[a-z\s]{0,12}document`).MatchString(preparing) {
+		t.Fatal("preparation skill no longer forbids manufacturing documents for SpecGate")
 	}
 	for _, want := range []string{"readiness pass is not human approval", "human explicitly requests", "different review-only agent"} {
 		if !strings.Contains(router+delivering, want) {
@@ -325,6 +332,12 @@ func TestDeliveringWorkSkillReportsTruthfulAwaitingAcceptanceReceipt(t *testing.
 		"Decision: <decision>",
 		"Receipt: <receipt>",
 		"Freshness: <freshness>",
+		"Acceptance criteria: <total> total",
+		"<met> met",
+		"<unmet> unmet",
+		"<unclear> unclear",
+		"<total> not reviewed",
+		"[not reviewed] <criterion text>",
 		"Stale: <stale_reason>",
 		"`next_actor`",
 		"`next_command`",

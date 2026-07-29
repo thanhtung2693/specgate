@@ -67,6 +67,9 @@ acceptance criterion explicitly with a repeated --ac flag.`,
 					return nil
 				}
 				fmt.Fprintln(deps.Stdout, notice(deps, output.StyleSuccess, "Created", work.Key))
+				if line := criteriaEnforcementNotice(work.AcceptanceCriteria); line != "" {
+					fmt.Fprintln(deps.Stdout, line)
+				}
 				fmt.Fprintln(deps.Stdout, nextStep(deps, "Read the implementation contract with", "specgate work context "+work.Key))
 				return nil
 			}
@@ -84,8 +87,14 @@ acceptance criterion explicitly with a repeated --ac flag.`,
 			key, _ := result["change_request_key"].(string)
 			featKey, _ := result["feature_key"].(string)
 			lead, _ := result["lead_artifact_id"].(string)
-			acs, _ := result["acceptance_criteria"].([]any)
-			fmt.Fprintf(deps.Stdout, "%s %s — feature %s, lead artifact %s, %d acceptance criteria\n", styled(deps, output.StyleSuccess, "Created"), styled(deps, output.StyleBold, key), featKey, lead, len(acs))
+			total, bound := criteriaCounts(result["acceptance_criteria"])
+			if total == 0 {
+				total, bound = criteriaCounts(body["acceptance_criteria"])
+			}
+			fmt.Fprintf(deps.Stdout, "%s %s — feature %s, implementing %s\n", styled(deps, output.StyleSuccess, "Created"), styled(deps, output.StyleBold, key), featKey, lead)
+			if line := criteriaEnforcementLine(total, bound); line != "" {
+				fmt.Fprintln(deps.Stdout, line)
+			}
 			fmt.Fprintln(deps.Stdout, nextStep(deps, "Read the implementation contract with", "specgate work context "+key))
 			return nil
 		},
@@ -216,11 +225,15 @@ func newWorkCreateQuickCmd(deps *Deps) *cobra.Command {
 				}
 				result := localWorkView(work)
 				result["acceptance_count"] = len(work.AcceptanceCriteria)
+				result["acceptance_criteria_bound"] = boundCriteriaCount(work.AcceptanceCriteria)
 				if deps.Printer.Mode() == output.ModeJSON {
 					deps.Printer.Success("work.create-quick", result)
 					return nil
 				}
 				fmt.Fprintf(deps.Stdout, "%s %s\n", styled(deps, output.StyleSuccess, "Created"), styled(deps, output.StyleBold, work.Key))
+				if notice := criteriaEnforcementNotice(work.AcceptanceCriteria); notice != "" {
+					fmt.Fprintln(deps.Stdout, notice)
+				}
 				fmt.Fprintln(deps.Stdout, nextStep(deps, "Read the implementation contract with", "specgate work context "+work.Key))
 				return nil
 			}
@@ -238,6 +251,10 @@ func newWorkCreateQuickCmd(deps *Deps) *cobra.Command {
 				return nil
 			}
 
+			criteriaTotal, criteriaBound := criteriaCounts(result["acceptance_criteria"])
+			if criteriaTotal == 0 {
+				criteriaTotal, criteriaBound = criteriaCounts(body["acceptance_criteria"])
+			}
 			key, _ := result["change_request_key"].(string)
 			id, _ := result["change_request_id"].(string)
 			ref := key
@@ -253,6 +270,9 @@ func newWorkCreateQuickCmd(deps *Deps) *cobra.Command {
 				fmt.Fprintf(deps.Stdout, " (%s)", id)
 			}
 			fmt.Fprintln(deps.Stdout)
+			if notice := criteriaEnforcementLine(criteriaTotal, criteriaBound); notice != "" {
+				fmt.Fprintln(deps.Stdout, notice)
+			}
 			fmt.Fprintln(deps.Stdout, nextStep(deps, "Read the implementation contract with", "specgate work context "+ref))
 			return nil
 		},
@@ -359,6 +379,80 @@ func acceptanceCriteriaBody(criteria []string) any {
 // package because Local delivery review resolves bound criteria against it.
 func parseAcceptanceCriterionBinding(raw string) (string, string) {
 	return local.ParseAcceptanceCriterionBinding(raw)
+}
+
+// criteriaEnforcementNotice reports how many acceptance criteria have a check
+// standing behind them. This is a derived count, not a judgement about criterion
+// prose: a bound criterion takes its verdict from the check result, while an
+// unbound one can only ever be graded on the agent's claim. Saying so at the
+// moment the list is created is the honest equivalent of the artifact route's
+// verifiability gate, which quick work never runs.
+//
+// ponytail: a count, not a linter — no vague-wording heuristics, no new ceremony.
+//
+// boundCriteriaCount is the single source for both the human line and the
+// machine envelope: the IDE agent runs create-quick in machine mode, so the
+// signal has to travel in the envelope or the default path never sees it. An
+// unresolvable or ambiguous binding counts as unbound, because review will fall
+// back to the agent's claim for it.
+// criteriaCounts reports total and bound criteria from a persisted acceptance
+// list. Full mode counts the server's response rather than the request body: the
+// body is what was asked for, and reporting enforcement from it would state a
+// count for criteria the server may have normalized or refused.
+//
+// Both stored shapes are accepted — the request shape built by
+// acceptanceCriteriaBody and the API's returned rows — because each already
+// carries the `@check:` binding in its own field, so no criterion text is
+// re-parsed here.
+func criteriaCounts(raw any) (total, bound int) {
+	binding := func(row map[string]any) bool {
+		value, _ := row["verification_binding"].(string)
+		return strings.TrimSpace(value) != ""
+	}
+	switch rows := raw.(type) {
+	case []map[string]string:
+		for _, row := range rows {
+			total++
+			if strings.TrimSpace(row["verification_binding"]) != "" {
+				bound++
+			}
+		}
+	case []any:
+		for _, item := range rows {
+			total++
+			if row, ok := item.(map[string]any); ok && binding(row) {
+				bound++
+			}
+		}
+	}
+	return total, bound
+}
+
+func boundCriteriaCount(criteria []string) int {
+	bound := 0
+	for _, criterion := range criteria {
+		if _, binding := parseAcceptanceCriterionBinding(criterion); binding != "" {
+			bound++
+		}
+	}
+	return bound
+}
+
+func criteriaEnforcementNotice(criteria []string) string {
+	return criteriaEnforcementLine(len(criteria), boundCriteriaCount(criteria))
+}
+
+func criteriaEnforcementLine(total, bound int) string {
+	switch {
+	case total == 0:
+		return ""
+	case bound == total:
+		return fmt.Sprintf("Enforcement: all %d criteria are bound to a check.", total)
+	case bound == 0:
+		return fmt.Sprintf("Enforcement: none of the %d criteria are bound to a check, so review can only report the agent's claims. Bind one with `@check:<name>`.", total)
+	default:
+		return fmt.Sprintf("Enforcement: %d of %d criteria are bound to a check; the rest are graded on the agent's claim.", bound, total)
+	}
 }
 
 // specgate work policy <work-ref>

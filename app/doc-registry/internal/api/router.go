@@ -20,7 +20,10 @@ import (
 // Router wires REST endpoints per spec §6 and registers them on a Huma API
 // with generated OpenAPI 3.1 and Scalar reference pages.
 //
-// Local dev: no HTTP authentication — all routes are open (see docs).
+// This service has no authentication of its own. Where the appliance gateway is
+// configured with member credentials it refuses unauthenticated callers and
+// forwards the verified identity; with none configured every route is open. See
+// docs/contributing/adr/2026-07-29-gateway-asserted-identity.md.
 type Router struct {
 	Handlers *Handlers
 	Config   *config.Config

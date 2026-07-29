@@ -258,9 +258,16 @@ CREATE TABLE IF NOT EXISTS users (
     username     TEXT NOT NULL UNIQUE,
     display_name TEXT NOT NULL,
     email        TEXT NOT NULL DEFAULT '',
+    -- Gateway credential (bcrypt). Empty means this user cannot authenticate,
+    -- which is every user until an operator issues a credential. Members and
+    -- their credentials share one home so "who belongs here" has one answer.
+    credential   TEXT NOT NULL DEFAULT '',
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Existing appliances predate the column; CREATE TABLE IF NOT EXISTS skips them.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS credential TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS workspaces (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),

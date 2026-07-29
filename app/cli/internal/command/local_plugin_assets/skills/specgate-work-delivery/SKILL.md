@@ -6,12 +6,12 @@ description: Use when implementing, resuming, verifying, or reworking an approve
 # Delivering Work
 
 Apply the [SpecGate operating contract](../specgate/SKILL.md#operating-contract).
-This phase implements the approved contract, then stops at the next actor.
-Never approve an artifact or make a human delivery decision.
+Implement the approved contract, stop at the next actor, and never approve an
+artifact or make a human delivery decision.
 
 ## 1. Load the exact contract
 
-Start with the named work item:
+Start with the work item:
 
 ```bash
 specgate work show "$WORK_REF" --json
@@ -20,22 +20,21 @@ specgate change status "$WORK_REF" --json
 ```
 
 Stop before editing when approval is absent, the Context Pack is stale, or
-criteria are missing or placeholders. Quick work may lack an artifact. When
-artifact-backed work lacks its approved version, hand that blocker to the human
-or `specgate-work-preparation`.
+criteria are missing/placeholders. Hand artifact-backed work missing its
+approved version to the human or
+`specgate-work-preparation`.
 
 Read only `change status.data`:
 
 - If `data.next_actor` is not `implementing_agent`, hand off without editing.
-- For `review_pending`, require `next_command` to be exactly one `specgate` CLI
-  command without shell operators. Otherwise hand off. Run it verbatim
-  immediately before sections 2–5. On failure, go to section 7. On success,
-  reread only Change status and route again; stop if still `review_pending`.
-- For `rework_requested`, record `guidance` and `missing`, then carry this
-  sequence through later steps: focused fix, affected checks, updated evidence,
-  submit, fresh status. Never submit old evidence first.
-- Otherwise record `missing` and `guidance`, then enter `next_command`'s named
-  section; stop if none matches.
+- For `review_pending`, accept only one `specgate` `next_command` without shell
+  operators; else hand off. Run it verbatim before sections 2–5. On failure, go
+  to section 7. On success, reread Change status; stop if still `review_pending`.
+- For `rework_requested`, carry `guidance` and `missing` through: focused fix,
+  affected checks, updated evidence, submit, fresh status. Never submit old
+  evidence first.
+- Otherwise record `missing` and `guidance`, then follow `next_command`'s named
+  section or stop if none matches.
 
 Completion criterion: every change/check maps to a criterion or required
 repository-doc update.
@@ -48,11 +47,10 @@ When resuming, check the persisted receipt:
 specgate change status "$WORK_REF" --json
 ```
 
-Continue only when `freshness` confirms a match. Stop on any mismatch signaled
-by `stale: true`. Treat an unavailable comparison as a blocker. Receipt metadata is not proof.
+Continue only when `freshness` confirms a match. Stop on `stale: true` or an
+unavailable comparison. Receipt metadata is not proof.
 
-Completion criterion: the receipt matches this checkout, or mismatch is a
-human-owned blocker.
+Completion criterion: match, or human-owned blocker.
 
 ## 3. Check artifact drift
 
@@ -70,7 +68,7 @@ specgate gates tasks submit-result <task-id> \
 Copy digests exactly. Put `examined_docs` and `repo_commit` under `evidence`;
 keep `findings` top-level. Report out-of-scope drift without editing it.
 
-Completion criterion: the exact drift task has a result, or no artifact exists.
+Completion criterion: the drift task has a result, or no artifact exists.
 
 ## 4. Implement and verify
 
@@ -82,8 +80,8 @@ For a pull or merge request, include
 `<!-- specgate-work-ref: $WORK_REF -->` in its description. Never infer work
 identity from branches, titles, commits, filenames, headings, or keywords.
 
-Completion criterion: every criterion is implemented or explicitly not done,
-and every required check has an observed result or explained skip.
+Completion criterion: every criterion is implemented or explicitly not done;
+every required check has an observed result or skip reason.
 
 ## 5. Report criterion evidence
 
@@ -120,7 +118,7 @@ specgate change submit "$WORK_REF" \
 `--run-checks` replaces self-reported results with observed ones. Fix failures
 before claiming completion.
 
-Completion criterion: submission succeeded and its returned status was read.
+Completion criterion: submission succeeded; returned status was read.
 
 ## 6. Follow the authoritative actor
 
@@ -169,16 +167,21 @@ Assurance: <assurance>
 Decision: <decision>
 Receipt: <receipt>
 Freshness: <freshness>
+Acceptance criteria: <total> total · <met> met · <unmet> unmet · <unclear> unclear
 [<verdict>] <criterion text> — <why>   (one line per data.criteria entry)
 [Stale: <stale_reason> — only when stale]
 Next (<next_actor>): <next_command>
 ```
 
+Count `data.criteria` verdicts only. If empty, list canonical `work show`
+criteria under `Acceptance criteria: <total> total · <total> not reviewed` as
+`[not reviewed] <criterion text>`. `unclear` and unreviewed are never `unmet`.
+
 Preserve values verbatim, including every criterion line. Stale is a warning,
-not a state override. For any other state, show a compact
-`SpecGate delivery handoff` with state, missing, `next_actor`, and
-`next_command`; never success wording. Report a failed status as failure. Echo
-`accepted` without claiming this agent accepted it.
+not a state override. For any other state, show a `SpecGate delivery handoff`
+with state, missing, `next_actor`, `next_command`, and the same
+acceptance-criteria summary and lines; never success wording. Report a failed
+status as failure. Echo `accepted` without claiming this agent accepted it.
 
 In Full mode only, use the URL returned by
 `specgate open "$WORK_REF" --print --json`. In Local mode, never call `open`.

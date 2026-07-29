@@ -1075,6 +1075,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/identity/users/{username}/credential": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Issue or rotate one member's gateway credential, returning the generated secret exactly once, or revoke it. Only a bcrypt hash is stored, so a lost secret is reissued rather than recovered */
+        put: operations["gateway_credential_issue"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/integrations": {
         parameters: {
             query?: never;
@@ -1346,6 +1363,23 @@ export interface paths {
         put?: never;
         /** Record a webhook event for an integration */
         post: operations["record_integration_webhook_event"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/auth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Verify a gateway credential and return the authenticated username. Called by the gateway's auth_request, never by a client: the gateway marks its location internal. Answers 200 with an empty identity when no member has a credential, so an unconfigured appliance stays open */
+        get: operations["gateway_auth_verify"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2934,6 +2968,27 @@ export interface components {
             readonly $schema?: string;
             items: components["schemas"]["Integration"][] | null;
         };
+        IssueCredentialInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/IssueCredentialInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Remove this member's credential instead of issuing one. */
+            revoke?: boolean;
+        };
+        IssueCredentialOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/IssueCredentialOutputBody.json
+             */
+            readonly $schema?: string;
+            credential_set: boolean;
+            secret?: string;
+            username: string;
+        };
         Item: {
             /** Format: double */
             confidence?: number;
@@ -4463,7 +4518,10 @@ export interface operations {
     v1_archive_work_item: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Set by the gateway from the authenticated caller; overrides any actor supplied in the body. Clients cannot set it — the gateway blanks it on every route. */
+                "X-SpecGate-User"?: string;
+            };
             path: {
                 id: string;
             };
@@ -4529,7 +4587,10 @@ export interface operations {
     v1_delivery_decision: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Set by the gateway from the authenticated caller; overrides any actor supplied in the body. Clients cannot set it — the gateway blanks it on every route. */
+                "X-SpecGate-User"?: string;
+            };
             path: {
                 /** @description Change request ID */
                 id: string;
@@ -5140,7 +5201,10 @@ export interface operations {
             query?: {
                 workspace_id?: string;
             };
-            header?: never;
+            header?: {
+                /** @description Set by the gateway from the authenticated caller; overrides any actor supplied in the body. Clients cannot set it — the gateway blanks it on every route. */
+                "X-SpecGate-User"?: string;
+            };
             path: {
                 id: string;
             };
@@ -5944,6 +6008,42 @@ export interface operations {
             };
         };
     };
+    gateway_credential_issue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Member whose gateway credential is being issued or rotated. */
+                username: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueCredentialInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueCredentialOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     list_integrations: {
         parameters: {
             query?: {
@@ -6729,6 +6829,38 @@ export interface operations {
             };
         };
     };
+    gateway_auth_verify: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Basic credential presented by the caller. */
+                Authorization?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    "Cache-Control"?: string;
+                    "X-SpecGate-User"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     maintenance_cleanup: {
         parameters: {
             query?: {
@@ -7064,7 +7196,10 @@ export interface operations {
             query?: {
                 workspace_id?: string;
             };
-            header?: never;
+            header?: {
+                /** @description Set by the gateway from the authenticated caller; overrides any actor supplied in the body. Clients cannot set it — the gateway blanks it on every route. */
+                "X-SpecGate-User"?: string;
+            };
             path: {
                 id: string;
             };
@@ -7482,7 +7617,10 @@ export interface operations {
             query?: {
                 workspace_id?: string;
             };
-            header?: never;
+            header?: {
+                /** @description Set by the gateway from the authenticated caller; overrides any actor supplied in the body. Clients cannot set it — the gateway blanks it on every route. */
+                "X-SpecGate-User"?: string;
+            };
             path: {
                 id: string;
             };

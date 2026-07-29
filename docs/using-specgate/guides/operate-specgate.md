@@ -111,6 +111,27 @@ docker compose logs -f --tail=200 specgate
 
 Check the appliance log before changing its port or configuration.
 
+## Share the appliance with teammates
+
+An appliance trusts its network until you issue credentials. To let two or three
+developers work against one host, give each a credential and have them store it:
+
+```bash
+# on the appliance operator's machine
+specgate workspace credential mai        # prints the secret once
+specgate workspace credential mai --revoke   # when they leave
+
+# on that developer's machine
+specgate config credential mai           # prompts for the secret
+```
+
+The first credential turns authentication on for the API and the browser alike;
+revoking the last turns it off. From then on the name on an approval or an
+acceptance is the authenticated one, not a supplied string. Read
+[Trust and security](../concepts/trust-and-security.md#sharing-one-appliance-with-a-few-developers)
+for the two limits that still apply, including why the appliance belongs on a
+private overlay network or behind TLS once it leaves loopback.
+
 ## Remove a local deployment safely
 
 Stopping is non-destructive:
