@@ -47,6 +47,25 @@ lives in `docs/using-specgate/`.
   them, unless a documented compatibility constraint requires a pin.
 - Preserve unrelated work in a dirty worktree.
 
+## Frozen surfaces
+
+These surfaces are maintained, not extended. Fix defects, keep them building,
+and apply security-driven dependency updates; do not add features, options, or
+new workflows to them, and do not delete them either.
+
+| Surface | Status |
+| --- | --- |
+| Governance chat (`app/agents` chat graph, UI chat) | advisory only; no new tools or transports |
+| Knowledge / retrieval | no new providers or ranking work |
+| Linear work-tracking handoff | no new trackers or fields |
+| `delivery handoff export` bundles | no new formats |
+| `specgate stats` | report existing data; no new metrics |
+| Web UI | inspection and review surface; no UI-first workflows |
+
+Investment goes to per-criterion delivery verification, the approved-snapshot
+pin, and the acceptance record. If a request would add capability to a frozen
+surface, say so and propose the equivalent in those three areas instead.
+
 ## Spec-driven changes
 
 Code and its owning documentation change together. Do not postpone docs to a
