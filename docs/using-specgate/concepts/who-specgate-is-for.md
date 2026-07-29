@@ -60,9 +60,8 @@ page that has changed twice since. Three weeks later: "I approved v2." "You
 approved v3." Nobody can prove anything, and the rebuild costs a sprint.
 
 SpecGate records a **named approval against one frozen version** and a
-**named acceptance against one exact completion**, and `specgate audit` can
-verify nobody edited history. Also: the one who did the work doesn't get to
-accept the work. House rules.
+**named acceptance against one exact completion**, and `specgate audit` replays
+that trail in order: who decided what, against which version, when.
 
 Fair's fair, though — if your team already reviews specs as pull requests with
 branch protection, GitHub does named approvals and no-self-approval very well
@@ -94,8 +93,13 @@ The gap in that stack is small but load-bearing: between "a human approved
 this intent" and "the code merged", the only account of what happened is
 written by the agent itself. That account is the thing SpecGate verifies.
 
-## Two limits, before you find them yourself
+## Limits, before you find them yourself
 
+- **Names are recorded, not proven.** SpecGate has no login. The name on an
+  approval is the one the caller supplied, and the service trusts whoever can
+  reach it — so run it on a trusted network, and read the trail as a record of
+  what happened, not as evidence against someone who wanted to fake it. Nothing
+  stops the same person from approving and accepting either.
 - **Staleness detection needs a Git remote.** A repo that has never been
   pushed gets no "this evidence is older than your code" warning — and
   SpecGate tells you so instead of pretending.
