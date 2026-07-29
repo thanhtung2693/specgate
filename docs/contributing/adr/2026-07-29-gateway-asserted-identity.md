@@ -48,6 +48,11 @@ benefit is not close at all, because a shared secret leaves every name in the
 ledger self-declared among people who all hold it. Those developers also use the
 web UI daily, so the browser is a primary path, not an edge case.
 
+Members are already a first-class entity. Doc Registry has local users and
+workspace members with a readback API (`ListWorkspaceMembers`), so "who belongs
+to this appliance" is answered by the database today. Any credential store that
+lives somewhere else creates a second answer to the same question.
+
 One more fact decides where the actor comes from. Today the actor travels in the
 **request body** (`approved_by`, `decided_by`), and a code comment states the
 reason: "no HTTP auth; supplied in the request". Authenticating the transport
@@ -73,102 +78,126 @@ case the team claim depends on.
 
 **B. One shared appliance token, checked by nginx.** Cheapest to operate and
 enough to keep strangers out, but every name in the ledger stays self-declared
-among the people who all hold the secret — so it does not answer the question
-this work exists to answer. It also cannot gate the browser, because a browser
-holds no bearer token without a login page to put it there.
+among the people who all hold the secret, so it does not answer the question this
+work exists to answer. It also cannot gate the browser, which holds no bearer
+token without a login page to put it there.
 
-**C. Per-user credentials at the gateway, identity taken from the authenticated
-user (chosen).** One line per developer in a bcrypt credential file. nginx
-authenticates, then *overwrites* the identity header from the authenticated user,
-so the name in the ledger is the one that authenticated. The browser's own
-credential manager stores the credential after one prompt, which means the
-browser is covered by the same mechanism with no session store, no cookie, no
-expiry, and no login page to build.
+**C. Per-user credentials in a gateway credential file (htpasswd).** Real
+per-user identity, and the browser is covered because its credential manager
+stores the credential after one prompt. Rejected after building it: the file is a
+second source of truth for membership beside the database, and enabling it is
+fragile — verified empirically that nginx answers **401 to every request** when
+`auth_basic_user_file` names a missing file, so shipping the directives
+unconditionally would lock out every existing loopback appliance, and avoiding
+that needs generated configuration in a released container.
 
-**D. Browser pairing code (Ted's idea).** The CLI prints a code, the developer
-types it into the UI, and the browser gets a session. A real pattern, and better
-UX than a credential prompt. It does not replace option C, it layers on top:
+**D. Doc Registry authenticates its own API.** Puts credentials in the database
+where members already live, needs no generated configuration, and a `401` with
+`WWW-Authenticate` still makes the browser prompt. But it gates only Doc
+Registry: the agents service under `/api/agents/` and the UI shell stay open, so
+the appliance would be half-covered.
+
+**E. nginx delegates authentication to Doc Registry via `auth_request`
+(chosen).** The gateway keeps enforcing for everything it serves, while the
+credential store stays in the database with the members. nginx calls an internal
+Doc Registry endpoint per request, and takes the authenticated identity from that
+response.
+
+**F. Browser pairing code (Ted's idea).** The CLI prints a code, the developer
+types it into the UI, and the browser gets a session. A real pattern with better
+UX than a credential prompt, but it layers on top of E rather than replacing it:
 the code proves the person also controls an already-authenticated CLI, so the CLI
-still needs a credential first. It costs a session store, a code
-issue/verify/expiry path, and cookie handling — an authentication layer inside
-the product, which the module rule pushes away from Doc Registry. Since the
-browser already remembers the credential in option C, this buys convenience, not
-capability. Recorded as the upgrade to reach for if the prompt proves annoying.
+still needs a credential first. It costs a session store, an issue/verify/expiry
+path, and cookie handling. Since the browser already remembers the credential
+under E, this buys convenience, not capability. Recorded as the upgrade to reach
+for if the prompt proves annoying.
 
-**E. mTLS or an identity provider.** Stronger, and far more ceremony than three
+**G. mTLS or an identity provider.** Stronger, and far more ceremony than three
 developers on a private network will accept.
 
 ## Decision
 
-Adopt **C**, and keep it as small as it can be:
+Adopt **E**. Verified against the real gateway configuration before writing it
+down: with `auth_request` pointing at a mock verifier, an unauthenticated request
+is refused `401`, a valid credential reaches the backend, and a request that
+presents a valid credential **plus** its own `X-SpecGate-User: boss` header
+arrives at the backend as the authenticated user, not as `boss`.
 
-1. **Off by default.** With no credential file configured, behaviour is exactly
-   today's: loopback, no prompt, nothing to configure. Solo and Local are
-   untouched.
-2. **nginx authenticates and owns identity.** When the credential file is
-   configured, the gateway requires it for the UI and the API surface, then sets
-   the identity header from the authenticated user, overwriting whatever the
-   client sent. This is the treatment `X-SpecGate-Internal-Agent` already gets
-   and the existing release test asserts, extended to one more header. Doc
-   Registry gains no middleware.
-3. **The authenticated identity outranks the request body.** Where the header is
-   present, it *is* the actor; `approved_by` and `decided_by` are ignored rather
-   than merged, and the body fields keep working only for deployments with no
-   gateway credential. Without this step the rest is decoration — the caller
-   would authenticate and then name somebody else.
-4. **The CLI stores one credential per server**, mode `0600`, never printed, and
-   sends it on every call to that server. It records the authenticated username
-   as its local actor so the two cannot drift apart.
-5. **The appliance manages members itself.** A CLI command adds and removes
-   developers and prints a generated credential once, so nobody needs external
-   htpasswd tooling and nobody invents a password. Removing a line revokes one
-   developer without re-keying the others.
-6. **Encrypted transport is required beyond loopback**, and the recommended path
-   for this size of team is an existing private overlay network (Tailscale,
-   WireGuard) rather than certificate work: it encrypts the hop and removes the
-   public exposure question entirely. TLS at the gateway stays supported for
-   teams that prefer it. Binding beyond loopback with no credential file
-   configured must warn.
+1. **Off by default.** With no member credentials configured, the verifier
+   reports that authentication is not configured and nginx passes the request
+   through. A default loopback appliance keeps working with no prompt, and Local
+   mode is untouched.
+2. **Credentials live in the database with the members**, hashed with bcrypt —
+   verified that the appliance's nginx accepts bcrypt, apr1, and SHA-512 crypt
+   entries, so the strongest of the three is available. There is no credential
+   file and no second membership list.
+3. **nginx delegates and owns identity.** An internal `auth_request` location
+   calls Doc Registry; `auth_request_set` captures the authenticated username
+   from the verifier's response, and every proxying location sets
+   `X-SpecGate-User` from that captured value — never from the client. This is
+   the same treatment `X-SpecGate-Internal-Agent` already gets, extended to one
+   more header, and the existing release test grows to cover both.
+4. **Machine-to-machine endpoints skip authentication explicitly**: the health
+   probes, the OAuth provider redirect, and the integration webhooks, which
+   authenticate by payload signature. Each carries `auth_request off` with the
+   reason beside it.
+5. **The authenticated identity outranks the request body.** Where the header is
+   present it *is* the actor; `approved_by` and `decided_by` are ignored rather
+   than merged, and keep working only for deployments with no configured
+   credentials. Without this step the rest is decoration — the caller would
+   authenticate and then name someone else.
+6. **The verifier is one endpoint, not an authorization framework.** It checks a
+   Basic credential against the member store and answers with the username. No
+   sessions, no cookies, no tokens, no roles, no middleware chain: `AGENTS.md`
+   §7's ban on JWT/RBAC middleware stands, and this ADR is the architecture
+   change that permits the single endpoint.
+7. **The CLI stores one credential per server**, mode `0600`, never printed, sent
+   only to the server it was stored for, and it records the authenticated
+   username as its local actor so the two cannot drift.
+8. **Encrypted transport is required beyond loopback.** For this size of team the
+   recommended path is an existing private overlay network (Tailscale, WireGuard)
+   rather than certificate work; TLS at the gateway stays supported. Binding
+   beyond loopback with no credentials configured must warn.
 
 What this still does not do: it proves which credential authenticated, not who
-was at the keyboard. A developer who hands their credential to someone else — or
-to their coding agent — has delegated their name, and the ledger will say so
-without knowing it. The documentation keeps saying this plainly.
+was at the keyboard. A developer who hands their credential to a teammate — or to
+their coding agent — has delegated their name, and the ledger will say so without
+knowing it. The documentation keeps saying this plainly.
 
 ## Consequences
 
 - The two separation-of-duties rules stop being best-effort string comparisons
   and start comparing an authenticated identity to the completion's agent. The
-  product's central claim — a named human approved this exact version — becomes
-  true in a shared deployment rather than assumed.
-- The disqualifying case for a shared appliance (anyone who reaches the port can
-  write governance decisions) closes, and the browser closes with it, which
-  option B could not do.
-- Per-developer revocation costs one line. There is no shared secret to rotate.
-- Basic credentials are reversible on the wire, so the transport requirement in
-  decision 6 is not advisory. A private overlay network satisfies it with less
-  work than certificates.
-- The identity header becomes a trust-boundary primitive: every gateway config
-  must set it from the authenticated user, and any new gateway or route that
-  forgets is a spoofing hole. This belongs in the release suite next to the
-  existing internal-header assertion, not in a review checklist.
+  central claim — a named human approved this exact version — becomes true in a
+  shared deployment rather than assumed.
+- Membership has exactly one home. Adding or removing a developer is a database
+  change through the existing member surface, backup and restore already cover
+  it, and revocation costs no re-keying for anyone else.
+- Every request pays one internal HTTP call. On a loopback appliance serving
+  three developers this is irrelevant; it would not be on a public service, and
+  this design is not for one.
+- The verifier is a new trust-boundary primitive. If it fails open on an
+  unexpected error, the appliance silently unauthenticates; if it fails closed
+  while unconfigured, every existing install breaks. Both directions need tests,
+  not review vigilance.
 - `approved_by` / `decided_by` keep their meaning only for ungated deployments.
   Their schema comments ("no HTTP auth; supplied in the request") need updating,
   and the API contract has to state the precedence.
 - Docs to update on implementation: `trust-and-security.md` (recipe, transport,
   and the delegation limit), `operate-specgate.md` (sharing an appliance, adding
-  and removing developers), the configuration reference and `.env.example`,
-  `docs/contributing/architecture.md` and `app/doc-registry/AGENTS.md` §7 (the
-  gateway is now an enforcement point and why Doc Registry still has no
+  and removing developers), the configuration reference, `docs/contributing/architecture.md`
+  and `app/doc-registry/AGENTS.md` §7 (the gateway is an enforcement point, the
+  verifier endpoint is the permitted exception, and why there is still no
   middleware), and `docs/contributing/contracts.md` for the actor precedence.
-- Tests: gateway config assertions (identity header always set from the
-  authenticated user; API and UI refused without credentials), header-outranks-
-  body precedence in Doc Registry, CLI credential round-trip at mode `0600` with
-  no secret in output, member add/remove preserving the other members, and the
+- Tests: gateway configuration assertions (identity header set from the verifier
+  in every proxying location; `auth_request off` only on the machine endpoints),
+  verifier behaviour for unconfigured / valid / invalid / unknown-user, header
+  outranks body in Doc Registry, CLI credential round-trip at mode `0600` with no
+  secret in output and no cross-server reuse, and the
   non-loopback-without-credentials warning.
 
 ## Not in scope
 
-Sessions, cookies, SSO, OAuth, per-user token scopes, browser pairing codes
-(option D), and cryptographically signed acceptance records. Each is a separate
+Sessions, cookies, SSO, OAuth, per-user scopes or roles, browser pairing codes
+(option F), and cryptographically signed acceptance records. Each is a separate
 decision, and none is required to close the case this ADR names.
