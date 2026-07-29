@@ -128,23 +128,22 @@ func (s *RegistryService) Publish(ctx context.Context, in PublishInput) (*Artifa
 		contentSHA string
 	}
 	prepared := make([]preparedDocument, 0, len(in.Documents))
-	// `artifact_files` is keyed on (artifact_id, path) and `FileContent` reads by
-	// path, so one path is one stored document. A manifest naming the same path
-	// twice — commonly to give one source a second role — uploaded both objects
-	// and then kept whichever row won at the database, reporting success while a
-	// declared role silently vanished. Refuse instead: losing part of an
-	// approved snapshot is worse than rejecting the manifest.
-	seenPaths := make(map[string]Role, len(in.Documents))
+	// A document's identity is its path and role together, so one source may be
+	// mapped under several roles. The same path under the *same* role twice is
+	// still a mistake, and it has to be refused rather than silently collapsed:
+	// losing part of an approved snapshot is worse than rejecting the manifest.
+	seenPaths := make(map[string]bool, len(in.Documents))
 	for _, doc := range in.Documents {
 		normalizedPath, valid := normalizeDocPath(doc.Path)
 		if !valid {
 			return nil, fmt.Errorf("%w: %q", ErrInvalidPath, doc.Path)
 		}
-		if kept, dup := seenPaths[normalizedPath]; dup {
-			return nil, fmt.Errorf("%w: %q is mapped twice, as %q and %q; a stored document holds one role, so give each role its own document",
-				ErrInvalidPath, normalizedPath, kept, NormalizeRole(doc.Role))
+		role := NormalizeRole(doc.Role)
+		identity := normalizedPath + "\x00" + string(role)
+		if seenPaths[identity] {
+			return nil, fmt.Errorf("%w: %q is mapped twice under the same role %q", ErrInvalidPath, normalizedPath, role)
 		}
-		seenPaths[normalizedPath] = NormalizeRole(doc.Role)
+		seenPaths[identity] = true
 		if doc.Content != nil {
 			objectKey := scopedObjectKey(in.WorkspaceID, s.objectKey(id, in.Version, normalizedPath))
 			prepared = append(prepared, preparedDocument{

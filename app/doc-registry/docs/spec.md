@@ -146,7 +146,7 @@ Document `path` is caller-provided and validated: no empty path, absolute path,
 | Table | Purpose |
 | --- | --- |
 | `artifacts` | Artifact metadata, lifecycle state, version, lineage, policy snapshot |
-| `artifact_files` | Immutable file metadata keyed by `(artifact_id, path)` |
+| `artifact_files` | Immutable file metadata keyed by `(artifact_id, path, role)`; one source may carry several roles, and every role of a path addresses the same stored object |
 | `artifact_services` | Impacted services/apps for conflict checks |
 | `artifact_events` | Append-only artifact and workboard event log |
 | `gate_tasks` | Workspace-owned frozen IDE-agent gate requests |

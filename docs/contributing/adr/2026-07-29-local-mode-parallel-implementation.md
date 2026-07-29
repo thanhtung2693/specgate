@@ -33,22 +33,24 @@ The problem is that the same product concept is expressed twice with nothing
 holding the two expressions together. Four divergences surfaced in a single
 review session, all in `#34`, none caught by any existing test:
 
-- **Document identity.** The two stores disagree about what a document *is*, and
-  the disagreement is still open. Local now keys on `(artifact_id, path, role)`;
-  Full keys `artifact_files` on `(artifact_id, path)` and reads content with
-  `FileContent(ctx, id, path)`, so a stored document holds exactly one role.
-  Before this was understood, Full accepted a manifest naming one path under two
-  roles, uploaded both objects, kept whichever row won at the database, and
-  reported success — a declared role vanished from an approved immutable snapshot
-  with nothing reporting it. Full now refuses the duplicate instead. Local
-  reached the opposite resolution: it admits one path under several roles,
-  because a solo author whose specification is one document otherwise cannot
-  satisfy a multi-role policy at all.
+- **Document identity.** *Resolved: both stores now key on `(path, role)`.* Full
+  keyed `artifact_files` on `(artifact_id, path)` while Local keyed on path and
+  role. Full accepted a manifest naming one path under two roles, uploaded both
+  objects, kept whichever row won at the database, and reported success — a
+  declared role vanished from an approved immutable snapshot with nothing
+  reporting it, verified against a running appliance as `rows stored: 1`.
 
-  This is the divergence that matters most, and it is not vocabulary. The two
-  modes now have genuinely different capabilities, which also means a Local
-  workspace using one source for two roles has no faithful representation in
-  Full — `portable import` cannot carry it across.
+  The resolution follows the intent stated in `#33`: a role is a routing label,
+  not a one-file-per-concern requirement, so a single specification can be both
+  the spec and the plan. Full's primary key now includes role, matching Local and
+  matching the snapshot digest, which has always hashed path and role together.
+  The read path needed no change — the object key derives from the path, so every
+  role of one path addresses the same stored object. The same path under the
+  *same* role is still refused in both modes.
+
+  This is the divergence that mattered most, and it was not vocabulary: it lived
+  in two schemas, produced silent data loss, and no derived check could have seen
+  it.
 - **Work payload vocabulary.** Full emits `lead_artifact_id`. Local emitted it
   from `work create` but not from `work show` or `work list`, so the field the
   preparation skill instructs an agent to verify was absent on the command the
@@ -130,12 +132,10 @@ accept and reject the same manifests and store the same rows. Document identity
 proves the derived checks alone are insufficient, because that rule lives in two
 schemas rather than in code or docs.
 
-Document identity also has to be settled on its own terms, independently of which
-option is chosen. Local admits one path under several roles and Full does not;
-one of those is wrong. The product intent stated in `#33` — roles are routing
-labels, not one-file-per-concern requirements — argues for Full adopting
-`(path, role)`, which means a Postgres key change and a `FileContent` read API
-that takes a role.
+Document identity has been settled on its own terms and is no longer part of
+this decision: Full adopted `(path, role)`, so both stores agree and
+`portable import` can carry a Local workspace that maps one source under several
+roles.
 
 ## Consequences
 
