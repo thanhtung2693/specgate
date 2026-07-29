@@ -102,8 +102,9 @@ written by the agent itself. That account is the thing SpecGate verifies.
   the record was not edited after the fact; it does not prove who was at the
   keyboard, because the name on a decision is whatever the caller supplied, and
   the service trusts anyone who can reach it. Run it on a trusted network. One
-  coding agent cannot peer-review its own completion — that one is enforced —
-  but nothing stops the same person from approving and then accepting.
+  coding agent cannot peer-review its own completion, and whoever filed the
+  completion cannot approve it either — both are enforced by name — but a
+  determined impersonator only has to type a different name.
 - **The Local trail has no chain.** One laptop, one SQLite file: the trail
   replays, but `--verify` has nothing to recompute and says so rather than
   answering.
