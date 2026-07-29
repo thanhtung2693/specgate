@@ -545,6 +545,7 @@ func TestWorkCreateQuickRunsEntirelyInLocalMode(t *testing.T) {
 			Key             string `json:"change_request_key"`
 			LeadArtifactID  string `json:"lead_artifact_id"`
 			AcceptanceCount int    `json:"acceptance_count"`
+			BoundCount      int    `json:"acceptance_criteria_bound"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
@@ -552,6 +553,58 @@ func TestWorkCreateQuickRunsEntirelyInLocalMode(t *testing.T) {
 	}
 	if envelope.Data.Key == "" || envelope.Data.LeadArtifactID != "" || envelope.Data.AcceptanceCount != 1 {
 		t.Fatalf("result = %#v, output = %s", envelope.Data, out.String())
+	}
+	// The IDE agent runs this command in machine mode, so the enforcement signal
+	// has to reach the envelope; a human-only line would leave the default path
+	// silent about which criteria review can actually enforce.
+	if envelope.Data.BoundCount != 1 {
+		t.Fatalf("bound criteria count = %d, want 1; output = %s", envelope.Data.BoundCount, out.String())
+	}
+}
+
+// TestWorkCreateQuickLocalEnvelopeCountsUnboundCriteria pins the case the count
+// exists for: a criterion with no resolvable check is reported as unenforced
+// rather than folded into the total.
+func TestWorkCreateQuickLocalEnvelopeCountsUnboundCriteria(t *testing.T) {
+	t.Parallel()
+	deps, _, _, out := newFakeDeps(t)
+	stateDir := t.TempDir()
+	store, err := local.Open(filepath.Join(stateDir, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Initialize(t.Context(), local.InitInput{
+		WorkspaceName: "Local workspace", DisplayName: "Local developer", Username: "local",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: stateDir}}).SaveTo(deps.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+
+	code := command.ExecuteForCode(
+		command.NewRootCommand(deps),
+		"--json", "work", "create-quick", "Fix crash",
+		"--ac", "Login succeeds @check:unit",
+		"--ac", "Error message is friendly",
+	)
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	var envelope struct {
+		Data struct {
+			AcceptanceCount int `json:"acceptance_count"`
+			BoundCount      int `json:"acceptance_criteria_bound"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.Data.AcceptanceCount != 2 || envelope.Data.BoundCount != 1 {
+		t.Fatalf("counts = %#v, want 2 criteria with 1 bound; output = %s", envelope.Data, out.String())
 	}
 }
 
@@ -792,5 +845,28 @@ func TestWorkShowRichOutputStylesPhaseAndCriteria(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("output missing %q: %q", want, out.String())
 		}
+	}
+}
+
+// TestWorkCreateQuickFullReportsEnforcementCoverage pins that Full mode reports
+// the same enforcement count as Local. The request body stores each `@check:`
+// binding in its own field, so a reader that recovers only criterion text would
+// count every criterion as unbound and quietly report the opposite of the truth.
+func TestWorkCreateQuickFullReportsEnforcementCoverage(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	fc.createResult = map[string]any{"change_request_key": "CR-9", "change_request_id": "cr-9"}
+
+	code := command.ExecuteForCode(
+		command.NewRootCommand(deps),
+		"--plain", "work", "create-quick", "Fix crash",
+		"--ac", "Login succeeds @check:unit",
+		"--ac", "Error message is friendly",
+	)
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if got := out.String(); !strings.Contains(got, "1 of 2 criteria are bound") {
+		t.Fatalf("output = %q, want it to report 1 of 2 criteria bound", got)
 	}
 }
