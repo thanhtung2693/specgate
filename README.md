@@ -27,7 +27,7 @@
 </p>
 
 SpecGate is a local-first governance layer for AI-assisted software delivery.
-It remembers exactly which version your team approved, gives the coding agent a
+It remembers exactly which version you approved, gives the coding agent a
 focused Context Pack, and checks the returned evidence against your acceptance
 criteria.
 
@@ -132,9 +132,9 @@ draft acceptance criteria for quick work instead of writing them yourself.
 - IDE plugin files for Codex, Claude Code, and Cursor.
 - Automatic governance policy, readiness gates, delivery evidence, and delivery review.
 - Deterministic check bindings for acceptance criteria with `@check:<name>`.
-- Workspace-scoped Knowledge and integration foundations.
-- `specgate stats` for first-pass yield, caught gaps, rework depth, and cycle
-  time from real run data, in both Local and Full mode.
+- `specgate stats` for workflow signals — first-pass yield, rework depth, and
+  cycle time — from recorded runs, in both Local and Full mode.
+- Full mode adds workspace-scoped Knowledge and Git/tracker integrations.
 
 SpecGate does not replace your authoring tool, issue tracker, coding IDE, pull
 request review, or CI. It records the governed handoff and delivery review
