@@ -657,6 +657,29 @@ test("release automation rejects an already-published GitHub Release before veri
   assert.ok(preflight < checkout, "release-state validation must run before expensive verification");
 });
 
+test("re-running a version reuses its draft instead of adding a second", () => {
+  // A second draft for one tag is not a cosmetic duplicate: `gh release upload`
+  // resolves by tag name and wrote the appliance bundle to the older draft while
+  // the binaries went to the newer one, then the smoke job refused a tag with
+  // more than one draft. The release shipped only after both drafts were deleted
+  // by hand. goreleaser must replace the existing draft.
+  const goreleaser = read(".goreleaser.yaml");
+  const releaseBlock = goreleaser.slice(goreleaser.indexOf("\nrelease:"));
+  assert.match(releaseBlock, /^\s*draft: true$/m, "assets must stay private until the smoke job passes");
+  assert.match(
+    releaseBlock,
+    /^\s*mode: replace$/m,
+    "goreleaser must replace an existing draft; creating a second one splits a release's assets across two records",
+  );
+
+  const workflow = read(".github/workflows/release.yml");
+  assert.match(
+    workflow,
+    /expected exactly one draft release/,
+    "the smoke job's one-draft assertion is what catches a split release; keep it",
+  );
+});
+
 test("release verification covers every module a release ships", () => {
   const verifyJob = read(".github/workflows/release.yml");
 

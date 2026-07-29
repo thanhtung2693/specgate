@@ -53,6 +53,11 @@ release:
     name: specgate
   # Keep assets private until image manifests, scans, bundle, and smoke pass.
   draft: true
+  # Re-running a version must reuse its draft, not add a second one. Two drafts
+  # for one tag broke a release: `gh release upload` resolves by tag and wrote the
+  # appliance bundle to the older draft while the binaries went to the newer, and
+  # the smoke job requires exactly one draft.
+  mode: replace
   name_template: "{{ .Tag }}"
   # Publish the public installer alongside binary archives. The compose bundle
   # (specgate-compose_<version>.tar.gz + checksums) is built and uploaded by
