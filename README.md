@@ -54,6 +54,8 @@ changes.
 SpecGate keeps that handoff outside your code repository. It records the
 approved artifact version, gives the coding agent a focused Context Pack, and
 makes delivery reviewable against the original acceptance criteria.
+[Who SpecGate is for](docs/using-specgate/concepts/who-specgate-is-for.md) maps
+solo-developer and team pain points to the mechanism that answers each.
 
 ## Quickstart
 
