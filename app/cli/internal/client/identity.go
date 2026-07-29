@@ -82,7 +82,6 @@ type GatewayCredentialResult struct {
 	Username      string `json:"username"`
 	Secret        string `json:"secret,omitempty"`
 	CredentialSet bool   `json:"credential_set"`
-	IssuedBy      string `json:"issued_by,omitempty"`
 }
 
 // IssueGatewayCredential issues, rotates, or revokes a member's gateway

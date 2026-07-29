@@ -37,7 +37,6 @@ type GatewayAuthOutput struct {
 	// User is read by nginx via auth_request_set and forwarded as the caller's
 	// identity. It is empty when authentication is not configured.
 	User        string `header:"X-SpecGate-User"`
-	Realm       string `header:"WWW-Authenticate"`
 	CacheStatus string `header:"Cache-Control"`
 }
 
@@ -98,14 +97,29 @@ func (h *Handlers) VerifyGatewayCredential(ctx context.Context, in *GatewayAuthI
 	return &GatewayAuthOutput{User: username, CacheStatus: "no-store"}, nil
 }
 
-// timingReferenceHash is a bcrypt hash of a value nobody uses, compared against
-// when the username is unknown so the response time does not reveal whether the
-// user exists.
-var timingReferenceHash = []byte("$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy")
+// timingReferenceHash is compared against when the username is unknown, so an
+// unknown user costs the same bcrypt round as a wrong password and the response
+// time does not reveal which it was. It is generated at startup from throwaway
+// randomness: a literal hash in the source reads like a leaked credential to a
+// scanner, and nothing needs this value to be stable.
+var timingReferenceHash = func() []byte {
+	seed := make([]byte, 32)
+	if _, err := rand.Read(seed); err != nil {
+		// Fall back to a fixed cost rather than failing startup; the only property
+		// that matters here is that a comparison happens at all.
+		seed = []byte("specgate-timing-reference")
+	}
+	hash, err := bcrypt.GenerateFromPassword(seed, bcrypt.DefaultCost)
+	if err != nil {
+		return []byte{}
+	}
+	return hash
+}()
 
+// gatewayAuthChallenge keeps every refusal identical: a wrong password, an
+// unknown user, and a malformed header must not be distinguishable.
 func gatewayAuthChallenge() error {
-	err := huma.Error401Unauthorized("gateway credential required")
-	return err
+	return huma.Error401Unauthorized("gateway credential required")
 }
 
 // basicCredential decodes an HTTP Basic Authorization header.
@@ -138,7 +152,6 @@ func basicCredential(header string) (username, password string, ok bool) {
 // authenticated members. Roles are out of scope for a three-developer appliance
 // and the documentation says so.
 type IssueCredentialInput struct {
-	AuthenticatedActorHeader
 	Username string `path:"username" doc:"Member whose gateway credential is being issued or rotated."`
 	Body     struct {
 		Revoke bool `json:"revoke,omitempty" doc:"Remove this member's credential instead of issuing one."`
@@ -151,7 +164,6 @@ type IssueCredentialOutput struct {
 		// Secret is returned once, at issue time, and never stored in plaintext.
 		Secret        string `json:"secret,omitempty"`
 		CredentialSet bool   `json:"credential_set"`
-		IssuedBy      string `json:"issued_by,omitempty"`
 	}
 }
 
@@ -165,7 +177,6 @@ func (h *Handlers) IssueGatewayCredential(ctx context.Context, in *IssueCredenti
 	}
 	out := &IssueCredentialOutput{}
 	out.Body.Username = username
-	out.Body.IssuedBy = strings.TrimSpace(in.AuthenticatedUser)
 
 	if in.Body.Revoke {
 		if err := h.Identity.SetUserCredential(ctx, username, ""); err != nil {

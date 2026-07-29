@@ -64,7 +64,19 @@ specgate container
 ```
 
 It publishes one port and uses one named volume. Postgres and internal APIs bind
-inside the container. Redis and MinIO are not part of the local appliance.
+inside the container.
+
+The gateway is the appliance's authentication boundary. When any member holds a
+credential it verifies every request through `auth_request` against Doc
+Registry's `/internal/auth`, then sets `X-SpecGate-User` from the verifier's
+answer on every proxying route — so a caller can never assert its own identity,
+and the verified username becomes the actor on recorded decisions. Health probes,
+the provider redirect, and the integration webhooks skip verification because a
+probe carries no governance data, a redirect cannot present a credential, and a
+webhook authenticates by payload signature. With no credentials configured the
+gateway passes everything through, which keeps a default loopback install and
+Local mode unchanged. See
+[the gateway identity ADR](adr/2026-07-29-gateway-asserted-identity.md). Redis and MinIO are not part of the local appliance.
 Repository-level local development uses this same appliance and
 `deploy/local/compose.yml`; it does not layer module-specific Compose files.
 

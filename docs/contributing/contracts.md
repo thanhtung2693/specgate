@@ -226,10 +226,23 @@ the same `workspace_id`; a file from another workspace is indistinguishable from
 an unknown ID. Development data with a NULL owner is rejected at write time;
 there is no unscoped user-facing fallback.
 
-The registry remains internal-open and has no HTTP authentication; artifact
-submission source fields are provenance, not cryptographic caller identity. A deployment
-that must prevent a user from spoofing an IDE agent needs a trusted CLI/IDE
-credential or signed ingress in addition to this route policy.
+The registry has no authentication of its own. The appliance gateway
+authenticates callers when members hold credentials and forwards the verified
+username in `X-SpecGate-User`, which the gateway sets on every proxying route and
+never accepts from a client; the registry verifies one Basic credential at
+`/internal/auth` for that purpose. With no member credentials configured the
+gateway passes every request through, which is the default posture.
+
+**Actor precedence.** Where the forwarded identity is present it *is* the actor on
+a recorded decision, and `approved_by` / `decided_by` in the request body are
+ignored. Those body fields remain authoritative only for a deployment with no
+gateway credentials. Any new endpoint that records who decided something must
+follow this precedence; see
+[the gateway identity ADR](adr/2026-07-29-gateway-asserted-identity.md).
+
+Artifact submission source fields remain provenance, not cryptographic caller
+identity, and a credential identifies a credential rather than a person: one
+lent to a teammate or to an agent records its owner's name for their decisions.
 
 Policy snapshots use `specgate.policy/v1` and include:
 

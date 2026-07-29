@@ -23,6 +23,23 @@ specgate init --mode local --no-input \
 specgate init --mode full --no-input
 ```
 
+### Gateway credentials (Full mode)
+
+An appliance shared by several developers issues each of them a credential. The
+appliance generates the secret; you never invent one:
+
+```bash
+specgate workspace credential mai          # on the appliance operator's machine
+specgate config credential mai             # on that developer's machine
+specgate config credential --clear         # remove the stored credential
+```
+
+Credentials are stored per server URL in the per-user CLI config, written with
+owner-only permissions, so selecting a different server never sends one
+appliance's secret to another host. The secret is never printed back: human
+output and `--json` report only whether one is set. An appliance with no member
+credentials needs none, which is the default.
+
 Switching topology clears the other mode's server/deployment or Local-only
 identity and project bindings. Create or select an identity after setup in the
 new mode. It does not delete Local SQLite state; use a portable export before
