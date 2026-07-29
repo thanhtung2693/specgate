@@ -64,7 +64,14 @@ CREATE INDEX IF NOT EXISTS idx_artifact_events_type       ON artifact_events (ev
 CREATE INDEX IF NOT EXISTS idx_artifact_events_artifact_created
     ON artifact_events (artifact_id, created_at);
 
--- ─── artifact_files (path-keyed, with role) ──────────────────────────────────
+-- ─── artifact_files ((path, role)-keyed) ─────────────────────────────────────
+--
+-- A role is a routing label, not a one-file-per-concern requirement, so one
+-- source may carry several. The identity is the path and role together, which
+-- is what the snapshot digest hashes and what Local mode stores. Keying on the
+-- path alone silently kept one row when a manifest declared two roles for it.
+-- Content is unaffected: the object key is derived from the path, so every role
+-- of one path addresses the same stored object.
 
 CREATE TABLE IF NOT EXISTS artifact_files (
     artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
@@ -73,8 +80,32 @@ CREATE TABLE IF NOT EXISTS artifact_files (
     object_key  TEXT NOT NULL,
     size_bytes  BIGINT NOT NULL DEFAULT 0,
     content_sha256 TEXT NOT NULL,
-    PRIMARY KEY (artifact_id, path)
+    PRIMARY KEY (artifact_id, path, role)
 );
+
+-- A database created before role joined the key keeps the two-column primary key,
+-- because CREATE TABLE IF NOT EXISTS does not alter an existing table. The upsert
+-- targets (artifact_id, path, role), so leaving the old key in place fails every
+-- publish with SQLSTATE 42P10. Widen it in place; the wider key admits strictly
+-- more rows, so no data is lost and re-running is a no-op.
+DO $$
+DECLARE
+    key_columns TEXT;
+BEGIN
+    SELECT string_agg(a.attname, ',' ORDER BY k.ord)
+      INTO key_columns
+      FROM pg_constraint c
+      JOIN LATERAL unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord) ON TRUE
+      JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+     WHERE c.conrelid = 'artifact_files'::regclass
+       AND c.contype = 'p';
+
+    IF key_columns = 'artifact_id,path' THEN
+        ALTER TABLE artifact_files DROP CONSTRAINT artifact_files_pkey;
+        ALTER TABLE artifact_files ADD PRIMARY KEY (artifact_id, path, role);
+    END IF;
+END
+$$;
 
 
 -- ─── artifact_services ───────────────────────────────────────────────────────

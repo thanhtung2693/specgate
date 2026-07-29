@@ -137,9 +137,11 @@ func (ServiceRef) TableName() string { return "artifact_services" }
 
 // File maps to `artifact_files`.
 type File struct {
-	ArtifactID    string `gorm:"column:artifact_id;primaryKey"`
-	Path          string `gorm:"column:path;primaryKey"`
-	Role          Role   `gorm:"column:role;not null;default:unspecified"`
+	ArtifactID string `gorm:"column:artifact_id;primaryKey"`
+	Path       string `gorm:"column:path;primaryKey"`
+	// Role is part of the key: one source may carry several roles, and the
+	// snapshot digest hashes path and role together.
+	Role          Role   `gorm:"column:role;primaryKey;not null;default:unspecified"`
 	ObjectKey     string `gorm:"column:object_key;not null"`
 	SizeBytes     int64  `gorm:"column:size_bytes;not null"`
 	ContentSHA256 string `gorm:"column:content_sha256;not null"`
