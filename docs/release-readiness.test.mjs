@@ -561,8 +561,18 @@ test("the installer never trades away download verification or rate-limited disc
   assert.match(installer, /Cannot verify the download/, "the installer must say why it stopped");
 });
 
+const GATEWAYS = ["docker/local/nginx.conf", "app/ui/docker/nginx-default.conf"];
+
+// Split a gateway config into its location blocks, keyed by the matcher.
+function gatewayLocations(text) {
+  return text
+    .split(/\n\s*(?=location )/)
+    .slice(1)
+    .map((block) => ({ name: block.split("{")[0].trim(), body: block.split("\n    }")[0] }));
+}
+
 test("both gateways strip the internal header and accept the documented limits", () => {
-  for (const gateway of ["docker/local/nginx.conf", "app/ui/docker/nginx-default.conf"]) {
+  for (const gateway of GATEWAYS) {
     const text = read(gateway);
     assert.match(text, /proxy_set_header X-SpecGate-Internal-Agent "";/, `${gateway} leaks the internal header`);
     assert.match(text, /client_max_body_size 32m;/);
@@ -571,6 +581,42 @@ test("both gateways strip the internal header and accept the documented limits",
       text,
       /location ~ \^\/integrations\/\[\^\/\]\+\/resources\/\[\^\/\]\+\/\(github\|gitlab\|linear\)\/webhook\$/,
     );
+  }
+});
+
+test("no gateway route can forward a caller-supplied identity", () => {
+  // Identity is the actor recorded against an approval, so a route that passes a
+  // client's own X-SpecGate-User through would let anyone approve under any name.
+  // The invariant has no exceptions on purpose: every proxying location either
+  // sets the header from the verifier or blanks it, and reviewing a diff is not a
+  // substitute for asserting it.
+  for (const gateway of GATEWAYS) {
+    const text = read(gateway);
+    assert.match(text, /auth_request \/internal\/gateway-auth;/, `${gateway} does not verify callers`);
+    assert.match(
+      text,
+      /auth_request_set \$specgate_user \$upstream_http_x_specgate_user;/,
+      `${gateway} does not take the identity from the verifier`,
+    );
+    const unset = gatewayLocations(text).filter(
+      ({ name, body }) =>
+        body.includes("proxy_pass") && !name.includes("/internal/gateway-auth") && !body.includes("X-SpecGate-User"),
+    );
+    assert.deepEqual(unset.map(({ name }) => name), [], `${gateway} forwards a client identity`);
+  }
+});
+
+test("only machine-to-machine gateway routes skip verification", () => {
+  // A probe answers monitoring, a provider redirect cannot hold a credential, and
+  // a webhook authenticates by payload signature. Anything else skipping
+  // verification is an unauthenticated hole into governance state.
+  const allowedToSkip = /healthz|oauth-callback|webhook/;
+  for (const gateway of GATEWAYS) {
+    const skipped = gatewayLocations(read(gateway))
+      .filter(({ body }) => body.includes("auth_request off"))
+      .map(({ name }) => name)
+      .filter((name) => !allowedToSkip.test(name));
+    assert.deepEqual(skipped, [], `${gateway} skips verification on a governance route`);
   }
 });
 
