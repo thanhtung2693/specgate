@@ -872,3 +872,34 @@ func TestChangeApproveHumanLineNamesVersionWithoutDigest(t *testing.T) {
 		t.Fatalf("approve line must not mix the feature counter into the approved version, got %q", got)
 	}
 }
+
+// TestChangeApproveStatesEnforcementAfterApproval pins that the approval output
+// reports how much of the criteria list review can enforce. The confirmation
+// prompt carries the same fact before the list locks; that string is covered by
+// TestApprovalCriteriaPromptNamesBoundCount, because a non-TTY test session
+// never reaches the prompt.
+func TestChangeApproveStatesEnforcementAfterApproval(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	fc.artifactResult = &client.Artifact{ID: "artifact-1", Version: "v2", Status: "draft", SnapshotDigest: "sha256:deadbeef"}
+	fc.updateStatusResult = &client.Artifact{ID: "artifact-1", Version: "v2", Status: "approved"}
+	fc.promoteResult = &client.Feature{ID: "feature-1", Key: "LOGIN", Version: 1, CanonicalArtifactID: "artifact-1"}
+	fc.createWorkItemResult = map[string]any{
+		"change_request_id": "cr-1", "change_request_key": "CR-1", "feature_key": "LOGIN",
+		"lead_artifact_id": "artifact-1", "acceptance_criteria": []any{"Login succeeds", "Errors read clearly"},
+	}
+
+	code := command.ExecuteForCode(
+		command.NewRootCommand(deps),
+		"--plain", "--yes", "change", "approve", "artifact-1",
+		"--title", "Implement login",
+		"--ac", "Login succeeds @check:unit",
+		"--ac", "Errors read clearly",
+	)
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if got := out.String(); !strings.Contains(got, "1 of 2 criteria are bound to a check") {
+		t.Fatalf("output = %q, want the enforcement line after approval", got)
+	}
+}

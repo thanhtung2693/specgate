@@ -73,3 +73,21 @@ func TestCriteriaEnforcementNoticeIgnoresAmbiguousBindings(t *testing.T) {
 		t.Fatalf("notice = %q, want an ambiguous binding to count as unbound", got)
 	}
 }
+
+// The confirmation prompt is the last moment a binding decision can change the
+// criteria list, so it states the bound count and spends no attention on a
+// digest the human cannot act on while answering yes or no.
+func TestApprovalCriteriaPromptNamesBoundCount(t *testing.T) {
+	t.Parallel()
+	partial := approvalCriteriaPrompt([]string{"Login succeeds @check:unit", "Errors read clearly"})
+	if !strings.Contains(partial, "2 acceptance criteria, 1 bound to a check") {
+		t.Fatalf("prompt = %q, want the total and bound counts", partial)
+	}
+	if !strings.Contains(partial, "agent's claim") {
+		t.Fatalf("prompt = %q, want it to name what happens to the unbound rest", partial)
+	}
+	full := approvalCriteriaPrompt([]string{"Login succeeds @check:unit"})
+	if !strings.Contains(full, "All 1 acceptance criteria are bound") {
+		t.Fatalf("prompt = %q, want the fully bound wording", full)
+	}
+}

@@ -418,13 +418,20 @@ must match a later `delivery report` / `delivery submit` `checks[].name`; the
 delivery reviewer treats that criterion deterministically from the submitted
 check result. Do not invent bindings on behalf of the human.
 
-In Local mode, `work create-quick` reports how many criteria are bound in its
-human output, for example `Enforcement: 1 of 2 criteria are bound to a check;
-the rest are graded on the agent's claim.` The line is a count of resolvable
-bindings, not a judgement about criterion wording, and an ambiguous binding
-counts as unbound. Quick work does not run the artifact route's
-`acceptance_criteria_verifiable` gate, so this count is the only enforcement
-signal available at creation time.
+Every command that establishes acceptance criteria reports how many of them a
+check will decide: `work create-quick`, `work create`, and `change approve`, in
+both modes. The human output carries a line such as `Enforcement: 1 of 2
+criteria are bound to a check; the rest are graded on the agent's claim.`, and
+`change approve` states the same counts in its confirmation prompt, while the
+list can still change. `work create-quick` and `change approve` also return
+`acceptance_count` and `acceptance_criteria_bound` in their JSON envelopes.
+
+The count is of resolvable bindings, not a judgement about criterion wording; an
+ambiguous binding counts as unbound, because review falls back to the agent's
+claim for it. Full mode counts the criteria the server persisted rather than the
+ones the request sent. Quick work never runs the artifact route's
+`acceptance_criteria_verifiable` gate, so for quick work this count is the only
+enforcement signal available at creation time.
 
 Both modes take a bound criterion's verdict from its named check, and the stored
 acceptance criterion is the authority for the binding: omitting

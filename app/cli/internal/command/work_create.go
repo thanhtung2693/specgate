@@ -67,6 +67,9 @@ acceptance criterion explicitly with a repeated --ac flag.`,
 					return nil
 				}
 				fmt.Fprintln(deps.Stdout, notice(deps, output.StyleSuccess, "Created", work.Key))
+				if line := criteriaEnforcementNotice(work.AcceptanceCriteria); line != "" {
+					fmt.Fprintln(deps.Stdout, line)
+				}
 				fmt.Fprintln(deps.Stdout, nextStep(deps, "Read the implementation contract with", "specgate work context "+work.Key))
 				return nil
 			}
@@ -84,8 +87,14 @@ acceptance criterion explicitly with a repeated --ac flag.`,
 			key, _ := result["change_request_key"].(string)
 			featKey, _ := result["feature_key"].(string)
 			lead, _ := result["lead_artifact_id"].(string)
-			acs, _ := result["acceptance_criteria"].([]any)
-			fmt.Fprintf(deps.Stdout, "%s %s — feature %s, lead artifact %s, %d acceptance criteria\n", styled(deps, output.StyleSuccess, "Created"), styled(deps, output.StyleBold, key), featKey, lead, len(acs))
+			total, bound := criteriaCounts(result["acceptance_criteria"])
+			if total == 0 {
+				total, bound = criteriaCounts(body["acceptance_criteria"])
+			}
+			fmt.Fprintf(deps.Stdout, "%s %s — feature %s, implementing %s\n", styled(deps, output.StyleSuccess, "Created"), styled(deps, output.StyleBold, key), featKey, lead)
+			if line := criteriaEnforcementLine(total, bound); line != "" {
+				fmt.Fprintln(deps.Stdout, line)
+			}
 			fmt.Fprintln(deps.Stdout, nextStep(deps, "Read the implementation contract with", "specgate work context "+key))
 			return nil
 		},
@@ -242,7 +251,10 @@ func newWorkCreateQuickCmd(deps *Deps) *cobra.Command {
 				return nil
 			}
 
-			criteriaTotal, criteriaBound := bodyCriteriaCounts(body["acceptance_criteria"])
+			criteriaTotal, criteriaBound := criteriaCounts(result["acceptance_criteria"])
+			if criteriaTotal == 0 {
+				criteriaTotal, criteriaBound = criteriaCounts(body["acceptance_criteria"])
+			}
 			key, _ := result["change_request_key"].(string)
 			id, _ := result["change_request_id"].(string)
 			ref := key
@@ -383,19 +395,34 @@ func parseAcceptanceCriterionBinding(raw string) (string, string) {
 // signal has to travel in the envelope or the default path never sees it. An
 // unresolvable or ambiguous binding counts as unbound, because review will fall
 // back to the agent's claim for it.
-// bodyCriteriaCounts reports total and bound criteria from the request body built
-// by acceptanceCriteriaBody, which has already split each `@check:` binding into
-// its own field. Reading the binding field directly keeps Full mode's count
-// identical to Local's without re-parsing criterion text.
-func bodyCriteriaCounts(raw any) (total, bound int) {
-	rows, ok := raw.([]map[string]string)
-	if !ok {
-		return 0, 0
+// criteriaCounts reports total and bound criteria from a persisted acceptance
+// list. Full mode counts the server's response rather than the request body: the
+// body is what was asked for, and reporting enforcement from it would state a
+// count for criteria the server may have normalized or refused.
+//
+// Both stored shapes are accepted — the request shape built by
+// acceptanceCriteriaBody and the API's returned rows — because each already
+// carries the `@check:` binding in its own field, so no criterion text is
+// re-parsed here.
+func criteriaCounts(raw any) (total, bound int) {
+	binding := func(row map[string]any) bool {
+		value, _ := row["verification_binding"].(string)
+		return strings.TrimSpace(value) != ""
 	}
-	for _, row := range rows {
-		total++
-		if strings.TrimSpace(row["verification_binding"]) != "" {
-			bound++
+	switch rows := raw.(type) {
+	case []map[string]string:
+		for _, row := range rows {
+			total++
+			if strings.TrimSpace(row["verification_binding"]) != "" {
+				bound++
+			}
+		}
+	case []any:
+		for _, item := range rows {
+			total++
+			if row, ok := item.(map[string]any); ok && binding(row) {
+				bound++
+			}
 		}
 	}
 	return total, bound
