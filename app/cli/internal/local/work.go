@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -50,11 +51,11 @@ type QuickWorkInput struct {
 }
 
 type WorkItem struct {
-	ID          string `json:"id"`
-	Key         string `json:"key"`
-	WorkspaceID string `json:"workspace_id"`
-	FeatureID   string `json:"feature_id"`
-	FeatureKey  string `json:"feature_key,omitempty"`
+	ID                 string   `json:"id"`
+	Key                string   `json:"key"`
+	WorkspaceID        string   `json:"workspace_id"`
+	FeatureID          string   `json:"feature_id"`
+	FeatureKey         string   `json:"feature_key,omitempty"`
 	ArtifactID         string   `json:"artifact_id"`
 	Title              string   `json:"title"`
 	Description        string   `json:"description"`
@@ -248,27 +249,57 @@ func scanWork(scanner workScanner, work *WorkItem, criteria *string) error {
 // against this parse, never against the agent-supplied completion body.
 func ParseAcceptanceCriterionBinding(raw string) (string, string) {
 	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return "", ""
-	}
-	fields := strings.Fields(trimmed)
-	if len(fields) == 0 {
-		return "", ""
-	}
-	last := fields[len(fields)-1]
-	const prefix = "@check:"
-	if !strings.HasPrefix(last, prefix) {
+	matches := bindingToken.FindAllStringSubmatchIndex(trimmed, -1)
+	if len(matches) != 1 {
+		// No binding, or an ambiguous one. AcceptanceCriterionBindingProblem
+		// reports the ambiguous case so callers refuse it at input rather than
+		// silently treating the criterion as unbound.
 		return trimmed, ""
 	}
-	binding := strings.TrimSpace(strings.TrimPrefix(last, prefix))
+	m := matches[0]
+	binding := strings.Trim(trimmed[m[2]:m[3]], ".,;:!?)]}\"'")
 	if binding == "" {
 		return trimmed, ""
 	}
-	text := strings.TrimSpace(strings.TrimSuffix(trimmed, last))
+	text := strings.TrimSpace(trimmed[:m[0]] + " " + trimmed[m[1]:])
+	text = strings.Join(strings.Fields(text), " ")
 	if text == "" {
 		return trimmed, ""
 	}
 	return text, binding
+}
+
+// bindingToken matches an intended `@check:<name>` anywhere in the criterion and
+// in any case. Requiring it to be the final whitespace-separated field in exact
+// lower case meant `@CHECK:unit`, a leading binding, or `@check:unit.` each
+// parsed as no binding at all — the criterion looked bound to its author while
+// delivery review fell back to the agent's own claim, with nothing reporting the
+// downgrade.
+var bindingToken = regexp.MustCompile(`(?i)@check:([^\s]*)`)
+
+// AcceptanceCriterionBindingProblem describes an intended binding that cannot be
+// resolved, so a criterion is rejected when written instead of silently losing
+// its deterministic check. It returns an empty string when the criterion is
+// fine, bound or not.
+func AcceptanceCriterionBindingProblem(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	matches := bindingToken.FindAllStringSubmatch(trimmed, -1)
+	switch {
+	case len(matches) == 0:
+		if strings.Contains(strings.ToLower(trimmed), "@check") {
+			return "looks like it names a check but is missing the colon; write `@check:<name>`"
+		}
+		return ""
+	case len(matches) > 1:
+		return "names more than one check; bind a criterion to exactly one, or split it into separate criteria"
+	}
+	if strings.Trim(matches[0][1], ".,;:!?)]}\"'") == "" {
+		return "has `@check:` with no check name after it; write `@check:<name>` with no space"
+	}
+	if text, binding := ParseAcceptanceCriterionBinding(trimmed); binding == "" || text == "" {
+		return "names a check but has no criterion text left; write the outcome, then `@check:<name>`"
+	}
+	return ""
 }
 
 func cleanCriteria(input []string) []string {
