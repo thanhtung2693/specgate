@@ -144,6 +144,7 @@ export function mapAcceptanceCriterion(item: AcceptanceCriterionDTO, index: numb
     text: item.text || "Untitled acceptance criterion",
     done: item.done ?? false,
     source: item.source || "unknown",
+    verificationBinding: item.verification_binding?.trim() || undefined,
   }
 }
 

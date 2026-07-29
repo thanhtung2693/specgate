@@ -609,6 +609,37 @@ describe("SpecGate UI shell: work detail", () => {
     expect(screen.queryByText("2/3")).not.toBeInTheDocument()
   })
 
+  it("names which acceptance criteria a check enforces", async () => {
+    // Absence of a badge must not be the only signal that a criterion rests on
+    // the agent's claim: the shortfall is stated in words, the same sentence the
+    // CLI prints, because this is a surface someone accepts delivery from.
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = fixtureURL(input)
+      if (url.endsWith("/workboard/change-requests/SG-155/acceptance-criteria")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                { id: "ac-1", text: "Tags persist on save", done: false, source: "spec", verification_binding: "unit" },
+                { id: "ac-2", text: "Error message is friendly", done: false, source: "spec" },
+              ],
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        )
+      }
+      return defaultRegistryResponse(input, init)
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    renderApp("/work/SG-155")
+
+    expect(await screen.findByText("Tags persist on save")).toBeInTheDocument()
+    expect(screen.getByText("check: unit")).toBeInTheDocument()
+    expect(
+      screen.getByText("1 of 2 criteria are bound to a check; the rest are reviewed as the agent's claim."),
+    ).toBeInTheDocument()
+  })
+
   it("prioritizes a human-review delivery verdict in the work detail header", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = fixtureURL(input)
