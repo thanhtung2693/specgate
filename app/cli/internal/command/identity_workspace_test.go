@@ -693,7 +693,7 @@ func TestUserLoginJSONRequiresRequiredFields(t *testing.T) {
 	if fc.calls != 0 {
 		t.Fatalf("client calls = %d, want 0", fc.calls)
 	}
-	if !strings.Contains(out.String(), "workspace and display-name are required") {
+	if !strings.Contains(out.String(), "--workspace and --display-name are required") {
 		t.Fatalf("output missing validation message: %s", out.String())
 	}
 }
@@ -713,7 +713,7 @@ func TestUserLoginPlainDoesNotPromptForRequiredFields(t *testing.T) {
 	if fp.inputCalls != 0 {
 		t.Fatalf("plain login prompted %d time(s)", fp.inputCalls)
 	}
-	if !strings.Contains(out.String(), "workspace, display-name, and username are required") {
+	if !strings.Contains(out.String(), "--workspace, --display-name, and --username are required") {
 		t.Fatalf("output missing validation message: %s", out.String())
 	}
 }

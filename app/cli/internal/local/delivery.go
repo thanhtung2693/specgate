@@ -13,6 +13,13 @@ import (
 
 var ErrDeliveryApproved = errors.New("delivery is already approved")
 
+// ErrSeparationOfDuties reports a refusal to let one identity both file and
+// judge the same work: the completion reporter approving its own delivery, or an
+// agent peer-reviewing its own completion. These are governance decisions, not
+// service problems — reporting them as `unavailable` tells an automated caller
+// the service is down and to retry, and no retry can ever succeed.
+var ErrSeparationOfDuties = errors.New("separation of duties")
+
 type DeliveryReview struct {
 	ID            string `json:"id"`
 	WorkID        string `json:"work_id"`
@@ -150,7 +157,7 @@ func (s *Store) DecideDelivery(ctx context.Context, workspaceID, ref, decision, 
 		}
 		if reporter := feedbackAgentName(report.Body); reporter != "" &&
 			strings.EqualFold(reporter, actor) {
-			return fmt.Errorf("completion reporter %q cannot approve its own delivery", actor)
+			return fmt.Errorf("%w: completion reporter %q cannot approve its own delivery", ErrSeparationOfDuties, actor)
 		}
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE delivery_reviews SET human_decision = ?, note = ? WHERE id = ? AND human_decision = ''`, decision, note, review.ID)
@@ -322,7 +329,7 @@ func (s *Store) PeerReviewDelivery(ctx context.Context, workspaceID, ref string,
 		return PeerReview{}, fmt.Errorf("peer review agent.name is required")
 	}
 	if strings.EqualFold(completer, peer) {
-		return PeerReview{}, fmt.Errorf("agent %q cannot peer-review its own completion", peer)
+		return PeerReview{}, fmt.Errorf("%w: agent %q cannot peer-review its own completion", ErrSeparationOfDuties, peer)
 	}
 	peerReviewOf, _ := body["peer_review_of"].(map[string]any)
 	if completionID, _ := peerReviewOf["completion_feedback_event_id"].(string); completionID != completion.ID {
