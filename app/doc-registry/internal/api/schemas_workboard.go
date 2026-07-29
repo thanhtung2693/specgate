@@ -36,11 +36,13 @@ type FeatureOutput struct {
 }
 
 type PromoteArtifactCanonicalInput struct {
+	AuthenticatedActorHeader
 	ID          string `path:"id"`
 	WorkspaceID string `query:"workspace_id"`
 	Body        struct {
-		// ApprovedBy records who promoted the artifact (no HTTP auth; supplied in
-		// body). Optional; audited on the feature.canonical_changed event.
+		// ApprovedBy records who promoted the artifact. A gateway-authenticated
+		// caller's identity outranks it; see resolveActor. Optional; audited on the
+		// feature.canonical_changed event.
 		ApprovedBy string `json:"approved_by,omitempty"`
 	}
 }
@@ -71,10 +73,12 @@ type ChangeRequestOutput struct {
 }
 
 type UnarchiveChangeRequestInput struct {
+	AuthenticatedActorHeader
 	ID          string `path:"id"`
 	WorkspaceID string `query:"workspace_id"`
 	Body        struct {
-		// Actor that performed the unarchive (no HTTP auth; supplied in body).
+		// Actor that performed the unarchive. A gateway-authenticated caller's
+		// identity outranks this value; see resolveActor.
 		Actor string `json:"actor,omitempty"`
 	}
 }

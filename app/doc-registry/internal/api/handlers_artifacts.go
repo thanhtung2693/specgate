@@ -236,7 +236,7 @@ func (h *Handlers) UpdateStatus(ctx context.Context, in *UpdateStatusInput) (*Up
 	}
 	a, err := h.Artifacts.UpdateStatus(ctx, in.ID, artifact.StatusUpdate{
 		Status:       artifact.Status(in.Body.Status),
-		Actor:        in.Body.ApprovedBy,
+		Actor:        resolveActor(in.AuthenticatedUser, in.Body.ApprovedBy),
 		ReviewRating: in.Body.ReviewRating,
 		Note:         in.Body.Note,
 		ActorKind:    in.Body.ActorKind,

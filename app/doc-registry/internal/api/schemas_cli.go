@@ -138,6 +138,7 @@ type CLIRawOutput struct {
 }
 
 type CLIArchiveWorkItemInput struct {
+	AuthenticatedActorHeader
 	ID   string `path:"id"`
 	Body struct {
 		Reason string `json:"reason,omitempty"`
@@ -257,6 +258,7 @@ type CLIDeliveryStatusOutput struct {
 // --- POST /api/v1/work-items/{id}/delivery-decision ---
 
 type CLIDeliveryDecisionInput struct {
+	AuthenticatedActorHeader
 	ID string `path:"id" doc:"Change request ID"`
 	// Facade-local body: the change-request id comes from the path only. Reusing
 	// governanceops.DeliveryDecisionInput here made its change_request_id a

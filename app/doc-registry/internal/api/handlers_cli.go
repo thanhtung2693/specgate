@@ -355,7 +355,7 @@ func (h *Handlers) CLIDeliveryDecision(ctx context.Context, in *CLIDeliveryDecis
 	result, err := svc.DecideDelivery(ctx, governanceops.DeliveryDecisionInput{
 		ChangeRequestID:           in.ID,
 		Decision:                  in.Body.Decision,
-		Actor:                     in.Body.Actor,
+		Actor:                     resolveActor(in.AuthenticatedUser, in.Body.Actor),
 		Note:                      in.Body.Note,
 		ReviewedGateRunID:         in.Body.ReviewedGateRunID,
 		CompletionFeedbackEventID: in.Body.CompletionFeedbackEventID,
@@ -439,7 +439,7 @@ func (h *Handlers) CLIArchiveWorkItem(ctx context.Context, in *CLIArchiveWorkIte
 	if err != nil {
 		return nil, mapGovernanceError("archive-work-item", err)
 	}
-	actor := strings.TrimSpace(in.Body.Actor)
+	actor := resolveActor(in.AuthenticatedUser, in.Body.Actor)
 	if actor == "" {
 		actor = "specgate-cli"
 	}

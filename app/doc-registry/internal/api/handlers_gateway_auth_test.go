@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"reflect"
 	"testing"
 
 	"golang.org/x/crypto/bcrypt"
@@ -98,5 +99,51 @@ func TestVerifyGatewayCredentialFailsClosedOnStoreError(t *testing.T) {
 		Authorization: basicHeader("tung", "s3cret"),
 	}); err == nil {
 		t.Fatal("a broken credential store must refuse, not open the gateway")
+	}
+}
+
+// The whole point of authenticating a caller is that the ledger records who they
+// are. If a body-supplied actor could still win, someone would authenticate as
+// themselves and approve under a colleague's name.
+func TestResolveActorPrefersTheAuthenticatedIdentity(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name          string
+		authenticated string
+		declared      string
+		want          string
+	}{
+		{"authenticated identity wins over a different body actor", "tung", "boss", "tung"},
+		{"authenticated identity wins over an empty body actor", "tung", "", "tung"},
+		{"body actor is used when no gateway authenticated the caller", "", "tung", "tung"},
+		{"whitespace-only header does not mask the body actor", "   ", "tung", "tung"},
+		{"both empty stays empty for the caller to reject", "", "", ""},
+		{"values are trimmed", " tung ", "boss", "tung"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := resolveActor(tc.authenticated, tc.declared); got != tc.want {
+				t.Fatalf("resolveActor(%q, %q) = %q, want %q", tc.authenticated, tc.declared, got, tc.want)
+			}
+		})
+	}
+}
+
+// Every write that records who decided something must read the header. A new
+// endpoint that records an actor and forgets it would silently accept a
+// self-declared name again, and no other test would notice.
+func TestEveryActorRecordingInputCarriesTheAuthenticatedHeader(t *testing.T) {
+	t.Parallel()
+	for _, in := range []any{
+		&CLIDeliveryDecisionInput{},
+		&CLIArchiveWorkItemInput{},
+		&UpdateStatusInput{},
+		&PromoteArtifactCanonicalInput{},
+		&UnarchiveChangeRequestInput{},
+	} {
+		value := reflect.ValueOf(in).Elem()
+		if _, ok := value.Type().FieldByName("AuthenticatedActorHeader"); !ok {
+			t.Fatalf("%s records an actor without embedding AuthenticatedActorHeader", value.Type().Name())
+		}
 	}
 }
