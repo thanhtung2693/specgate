@@ -71,6 +71,34 @@ test("every doc-registry config env var reaches the operator docs", () => {
   );
 });
 
+test("both modes emit the same delivery-assurance vocabulary", () => {
+  // These strings are the reader-facing verdict language, and they are written
+  // out twice — once in Go for Local, once in Python for Full. They have already
+  // drifted once: Full said "(deterministic)" for a check nobody re-ran while
+  // Local named the observer. There is no shared constant across the language
+  // boundary, so contracts.md is the authority and this is what notices.
+  const contracts = read("docs/contributing/contracts.md");
+  const vocabulary = uniqueMatches(
+    contracts.slice(contracts.indexOf("The `deterministic` trust tier")),
+    /`(observed by the SpecGate CLI|reported by the coding agent, not re-run|bound deterministic check)`/g,
+  );
+  assert.equal(vocabulary.length, 3, "contracts.md no longer declares the three assurance phrases");
+
+  const localReadback = read("app/cli/internal/command/assurance.go");
+  const localAssurance = read("app/cli/internal/command/delivery_status.go");
+  const fullReview = read("app/agents/src/specgate_agents/governance/quality_gates/delivery_review.py");
+
+  for (const phrase of vocabulary) {
+    const inGo = localReadback.includes(phrase) || localAssurance.includes(phrase);
+    assert.ok(inGo, `Local no longer emits ${JSON.stringify(phrase)}`);
+  }
+  // The observer phrases are the pair both modes must agree on; the tier label
+  // is rendered by the CLI alone.
+  for (const phrase of vocabulary.filter((value) => value.startsWith("observed") || value.startsWith("reported"))) {
+    assert.ok(fullReview.includes(phrase), `Full no longer emits ${JSON.stringify(phrase)}`);
+  }
+});
+
 test("every workboard warning code reaches the shared contract and the registry docs", () => {
   const contracts = read("docs/contributing/contracts.md");
   const registryContract = `${read("app/doc-registry/docs/spec.md")}\n${read("app/doc-registry/docs/api.md")}`;
@@ -249,6 +277,24 @@ test("every installed skill stays inside a declared word budget", () => {
       .filter(({ words, budget }) => words > budget),
     [],
   );
+});
+
+test("the router names exactly the phase skills that exist", () => {
+  // A router edit can silently advertise a phase that was renamed or drop one
+  // that still ships. Either way the agent loses a phase it is told to select
+  // from, and nothing else in the suite would notice.
+  const router = read("plugins/skills/specgate/SKILL.md");
+  const named = new Set(uniqueMatches(router, /`(specgate-[a-z-]+)`/g));
+  const onDisk = new Set(
+    trackedFiles()
+      .filter((path) => /^plugins\/skills\/[^/]+\/SKILL\.md$/.test(path))
+      .map((path) => path.split("/")[2])
+      .filter((name) => name !== "specgate"),
+  );
+
+  assert.ok(onDisk.size > 0, "no phase skills found");
+  assert.deepEqual([...named].filter((name) => !onDisk.has(name)).sort(), [], "router names a skill that does not exist");
+  assert.deepEqual([...onDisk].filter((name) => !named.has(name)).sort(), [], "a shipped skill the router never names");
 });
 
 test("every installed skill declares when it applies", () => {

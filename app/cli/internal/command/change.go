@@ -142,6 +142,13 @@ func newChangeApproveCmd(deps *Deps) *cobra.Command {
 				code := deps.Printer.Error("change.approve", payload)
 				return &output.ExitError{Code: code}
 			}
+			// An unresolvable `@check:` binding must not reach an approved
+			// snapshot: the criterion would look enforced to whoever approved it
+			// while review fell back to the agent's claim.
+			if err := rejectUnresolvableBindings(criteria); err != nil {
+				code := deps.Printer.Error("change.approve", output.ErrorPayload{Code: "usage", Message: err.Error()})
+				return &output.ExitError{Code: code, Err: err}
+			}
 			if deps.Topology == config.ModeLocal {
 				store, err := openLocalStore(deps)
 				if err != nil {

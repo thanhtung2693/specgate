@@ -96,10 +96,19 @@ refused later by a Full appliance.
 
 ## Bound criteria
 
-An acceptance criterion ending in `@check:<name>` is verified from the named
+An acceptance criterion carrying `@check:<name>` is verified from the named
 `checks[]` row rather than from its prose claim, in both Local and Full mode.
 The stored acceptance criterion is the authority for the binding, so a
 completion cannot escape enforcement by omitting `verification_binding`.
+
+The binding may sit anywhere in the criterion, is matched case-insensitively,
+and may carry trailing punctuation — `@check:unit.`, `@CHECK:unit`, and a
+leading `@check:unit` all bind to `unit`. What SpecGate will not do is guess.
+A criterion is rejected when it is written if its binding cannot be resolved:
+`@check:` with a space before the name, two bindings on one criterion, `@check`
+without the colon, or a binding with no criterion text left. Silently treating
+those as unbound would leave a criterion its author believes is enforced by a
+deterministic check while review judged it on the agent's own claim.
 
 | Bound check | Result |
 |---|---|

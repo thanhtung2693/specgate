@@ -300,7 +300,22 @@ func localQuickWorkInput(body map[string]any) (local.QuickWorkInput, error) {
 	if len(input.AcceptanceCriteria) == 0 {
 		return local.QuickWorkInput{}, fmt.Errorf("at least one acceptance criterion is required in Local mode; repeat --ac")
 	}
+	// Refuse a binding that cannot be resolved. Accepting it would store a
+	// criterion its author believes is enforced by a deterministic check while
+	// delivery review silently judges it on the agent's own claim.
+	if err := rejectUnresolvableBindings(input.AcceptanceCriteria); err != nil {
+		return local.QuickWorkInput{}, err
+	}
 	return input, nil
+}
+
+func rejectUnresolvableBindings(criteria []string) error {
+	for index, criterion := range criteria {
+		if problem := local.AcceptanceCriterionBindingProblem(criterion); problem != "" {
+			return fmt.Errorf("acceptance criterion %d %s: %q", index+1, problem, strings.TrimSpace(criterion))
+		}
+	}
+	return nil
 }
 
 func appendLocalQuickCriterion(criteria []string, text, binding string) []string {

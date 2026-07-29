@@ -152,15 +152,10 @@ func (h *Handlers) dispatchGateTasks(ctx context.Context, in *dispatchGateTasksI
 	if h.Artifacts == nil {
 		return nil, huma.Error503ServiceUnavailable("artifact service not configured")
 	}
-	if h.GateTaskStore == nil {
-		return nil, huma.Error503ServiceUnavailable("gate task store not configured")
-	}
-	workspaceID, err := requireWorkspaceID(in.WorkspaceID)
+	ctx, workspaceID, err := h.scopedGateTasks(ctx, in.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
-	ctx = policy.WithWorkspace(ctx, workspaceID)
-	ctx = artifact.WithWorkspace(ctx, workspaceID)
 	art, err := getArtifactForWorkspace(ctx, h.Artifacts, workspaceID, in.ArtifactID)
 	if err != nil {
 		if errors.Is(err, artifact.ErrNotFound) {
@@ -285,15 +280,10 @@ func frozenGateDefinition(snapshot governanceprofile.ParsedSnapshot, gateKey str
 }
 
 func (h *Handlers) listGateTasks(ctx context.Context, in *listGateTasksInput) (*listGateTasksOutput, error) {
-	if h.GateTaskStore == nil {
-		return nil, huma.Error503ServiceUnavailable("gate task store not configured")
-	}
-	workspaceID, err := requireWorkspaceID(in.WorkspaceID)
+	ctx, _, err := h.scopedGateTasks(ctx, in.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
-	ctx = policy.WithWorkspace(ctx, workspaceID)
-	ctx = artifact.WithWorkspace(ctx, workspaceID)
 	tasks, err := h.GateTaskStore.ListTasksForArtifact(ctx, in.ArtifactID)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("list gate tasks", err)
@@ -310,15 +300,10 @@ func (h *Handlers) getGateTask(ctx context.Context, in *struct {
 	TaskID      string `path:"task_id"`
 	WorkspaceID string `query:"workspace_id" required:"true"`
 }) (*singleGateTaskOutput, error) {
-	if h.GateTaskStore == nil {
-		return nil, huma.Error503ServiceUnavailable("gate task store not configured")
-	}
-	workspaceID, err := requireWorkspaceID(in.WorkspaceID)
+	ctx, _, err := h.scopedGateTasks(ctx, in.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
-	ctx = policy.WithWorkspace(ctx, workspaceID)
-	ctx = artifact.WithWorkspace(ctx, workspaceID)
 	t, err := h.GateTaskStore.GetTask(ctx, in.TaskID)
 	if err != nil {
 		if errors.Is(err, policy.ErrGateTaskNotFound) {
@@ -330,15 +315,10 @@ func (h *Handlers) getGateTask(ctx context.Context, in *struct {
 }
 
 func (h *Handlers) submitGateResult(ctx context.Context, in *submitGateResultInput) (*submitGateResultOutput, error) {
-	if h.GateTaskStore == nil {
-		return nil, huma.Error503ServiceUnavailable("gate task store not configured")
-	}
-	workspaceID, err := requireWorkspaceID(in.WorkspaceID)
+	ctx, _, err := h.scopedGateTasks(ctx, in.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
-	ctx = policy.WithWorkspace(ctx, workspaceID)
-	ctx = artifact.WithWorkspace(ctx, workspaceID)
 	// Load the task up front so drift validation and the readiness fold share one
 	// authoritative gate key (the client-supplied Gate field is not trusted here).
 	task, terr := h.GateTaskStore.GetTask(ctx, in.TaskID)
@@ -487,4 +467,20 @@ func (h *Handlers) gatePreview(ctx context.Context, in *gatePreviewInput) (*gate
 		})
 	}
 	return out, nil
+}
+
+// scopedGateTasks runs the preamble the gate-task handlers repeat: guard the
+// store, resolve the workspace, and scope the context for both policy and
+// artifact reads. Both scopes matter — a handler that set only one would read
+// policy from the right workspace and artifacts from none.
+func (h *Handlers) scopedGateTasks(ctx context.Context, workspaceID string) (context.Context, string, error) {
+	if h.GateTaskStore == nil {
+		return nil, "", huma.Error503ServiceUnavailable("gate task store not configured")
+	}
+	resolved, err := requireWorkspaceID(workspaceID)
+	if err != nil {
+		return nil, "", err
+	}
+	ctx = policy.WithWorkspace(ctx, resolved)
+	return artifact.WithWorkspace(ctx, resolved), resolved, nil
 }
