@@ -365,7 +365,13 @@ func acceptanceCriteriaBody(criteria []string) any {
 	}
 	out := make([]map[string]string, 0, len(parsed))
 	for _, ac := range parsed {
-		row := map[string]string{"text": ac.Text}
+		// Every criterion the CLI sends was typed or confirmed by a human: both
+		// `work create-quick` and `change approve` require them explicitly, and the
+		// installed skills must not create the record until the displayed contract
+		// is approved. Recording that keeps the stored provenance a fact rather than
+		// the schema's `llm` default, which is what a human-approved contract used to
+		// be filed as.
+		row := map[string]string{"text": ac.Text, "source": "human"}
 		if ac.VerificationBinding != "" {
 			row["verification_binding"] = ac.VerificationBinding
 		}

@@ -87,11 +87,27 @@ placeholder work type because the enum has no "unspecified" member; nothing rout
 on it and no surface displays it.
 
 Board **phase** is a separate question and still uses work type as a proxy for
-"quick work that has a contract". The truthful readiness signal is not on the
-change request: the demo's Intake example carries two drafted criteria and no lead
-artifact, and belongs in Intake because its feature's artifact is a draft awaiting
-approval. A read path holding the feature can decide that; the struct cannot.
-Tracked as follow-up rather than guessed at.
+"quick work that has an approved contract". Attempting to remove that proxy found
+why it cannot be removed yet, and the reason is a storage gap rather than a
+missing query.
+
+`Intake` means the work has not been approved into a handoff: no pinned artifact,
+and no approved contract of its own. `Ready` means one of those exists. Quick-route
+work is Ready because the human approves its criteria at creation. The demo's
+Intake example has drafted criteria and no pinned artifact, and its feature has an
+approved canonical artifact, so no fact about the feature separates the two cases
+either.
+
+What separates them is whether the criteria were **approved** or merely drafted.
+Storage accepts a `source` of `human` or `llm` per criterion, and the CLI now sends
+`human` for every criterion it persists, because both `work create-quick` and
+`change approve` require the human to supply them and the installed skills must not
+create the record until the displayed contract is approved. Criteria arriving
+without a source still default to `llm`, which is correct for a draft.
+
+That makes `source` a usable readiness signal once every writer sets it
+truthfully — the governance-chat quick-work path still leaves it defaulted. Until
+then phase keeps the work-type proxy, with this note instead of a guess.
 
 ### Mode-aware handoff
 
