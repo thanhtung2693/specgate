@@ -661,15 +661,20 @@ test("re-running a version reuses its draft instead of adding a second", () => {
   // A second draft for one tag is not a cosmetic duplicate: `gh release upload`
   // resolves by tag name and wrote the appliance bundle to the older draft while
   // the binaries went to the newer one, then the smoke job refused a tag with
-  // more than one draft. The release shipped only after both drafts were deleted
-  // by hand. goreleaser must replace the existing draft.
+  // more than one draft. GoReleaser must reuse the existing draft and replace
+  // matching binary assets when a release is retried.
   const goreleaser = read(".goreleaser.yaml");
   const releaseBlock = goreleaser.slice(goreleaser.indexOf("\nrelease:"));
   assert.match(releaseBlock, /^\s*draft: true$/m, "assets must stay private until the smoke job passes");
   assert.match(
     releaseBlock,
-    /^\s*mode: replace$/m,
-    "goreleaser must replace an existing draft; creating a second one splits a release's assets across two records",
+    /^\s*use_existing_draft: true$/m,
+    "goreleaser must reuse the existing draft; creating a second one splits a release's assets across two records",
+  );
+  assert.match(
+    releaseBlock,
+    /^\s*replace_existing_artifacts: true$/m,
+    "a retried release must replace stale CLI assets in the reused draft",
   );
 
   const workflow = read(".github/workflows/release.yml");

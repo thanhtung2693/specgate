@@ -124,9 +124,10 @@ Check:
 
 The workflow publishes the draft only after those checks pass. A failed build,
 scan, bundle upload, or smoke test leaves the release private for maintainer
-inspection. The blocking scan is limited to fixed high and critical findings;
-lower-severity and currently unfixed findings are handled through routine base
-image and dependency upgrades.
+inspection. Retrying the same version reuses that draft and replaces matching
+CLI assets; do not create another draft manually. The blocking scan is limited
+to fixed high and critical findings; lower-severity and currently unfixed
+findings are handled through routine base image and dependency upgrades.
 
 Workflow-level token access is read-only. Only the jobs that publish GitHub
 release assets or GHCR manifests receive the corresponding `contents: write`
