@@ -173,6 +173,11 @@ func (h *Handlers) IssueGatewayCredential(ctx context.Context, in *IssueCredenti
 	if err := h.requireService(h.Identity, "identity"); err != nil {
 		return nil, err
 	}
+	// The workspace travels in the request context for CLI callers; record the one
+	// the operator was acting in rather than leaving the access row unscoped.
+	if err := applyCLIWorkspace(ctx, &in.Body.WorkspaceID); err != nil {
+		return nil, err
+	}
 	username, err := identity.NormalizeUsername(in.Username)
 	if err != nil {
 		return nil, huma.Error422UnprocessableEntity(err.Error())

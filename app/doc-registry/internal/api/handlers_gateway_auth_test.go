@@ -10,6 +10,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/specgate/doc-registry/internal/identity"
+	"github.com/specgate/doc-registry/internal/workspace"
 )
 
 func credentialHash(t *testing.T, password string) string {
@@ -247,10 +248,12 @@ func TestIssueGatewayCredentialRecordsTheAccessChange(t *testing.T) {
 	store := &fakeIdentityStore{knownUsers: map[string]bool{"mai": true}}
 	h := &Handlers{Identity: store}
 
+	// The workspace arrives in the request scope, the way the CLI sends it; a body
+	// value that disagrees with the scope is refused by applyCLIWorkspace.
+	ctx := workspace.WithID(context.Background(), "workspace-1")
 	issue := &IssueCredentialInput{Username: "mai"}
 	issue.AuthenticatedUser = "tung"
-	issue.Body.WorkspaceID = "workspace-1"
-	if _, err := h.IssueGatewayCredential(context.Background(), issue); err != nil {
+	if _, err := h.IssueGatewayCredential(ctx, issue); err != nil {
 		t.Fatal(err)
 	}
 	if len(store.events) != 1 {
@@ -267,7 +270,7 @@ func TestIssueGatewayCredentialRecordsTheAccessChange(t *testing.T) {
 	revoke := &IssueCredentialInput{Username: "mai"}
 	revoke.AuthenticatedUser = "tung"
 	revoke.Body.Revoke = true
-	if _, err := h.IssueGatewayCredential(context.Background(), revoke); err != nil {
+	if _, err := h.IssueGatewayCredential(ctx, revoke); err != nil {
 		t.Fatal(err)
 	}
 	if len(store.events) != 2 || store.events[1].EventType != identity.EventCredentialRevoked {

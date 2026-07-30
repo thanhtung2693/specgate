@@ -285,3 +285,24 @@ func TestWorkspaceMembersReportsAccessStateOnlyWhenCredentialsExist(t *testing.T
 		})
 	}
 }
+
+// The access record names the workspace the operator was acting in, so it has to
+// travel with the request. `workspace` commands are not workspace-scoped as a
+// family, so this one attaches it explicitly and a regression would silently
+// leave every access row unscoped.
+func TestWorkspaceCredentialSendsTheSelectedWorkspace(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
+	if err := (config.Config{
+		Workspace: config.CurrentWorkspace{ID: "ws-1", Slug: "platform", Name: "Platform"},
+	}).SaveTo(deps.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "workspace", "credential", "mai"); code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if fc.lastCredentialWorkspace != "ws-1" {
+		t.Fatalf("request workspace = %q, want ws-1", fc.lastCredentialWorkspace)
+	}
+}
