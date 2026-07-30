@@ -42,20 +42,29 @@ class _ACList(BaseModel):
 
 def _normalize_acceptance_criteria(
     acceptance_criteria: list[str | dict[str, Any]] | None,
-) -> list[str | dict[str, str]]:
-    normalized: list[str | dict[str, str]] = []
+    *,
+    source: str,
+) -> list[dict[str, str]]:
+    """Normalize criteria and record where each one came from.
+
+    `acceptance_criteria.source` is stored provenance, and the column defaults to
+    `llm`, so a criterion the caller supplied from an approved contract used to be
+    filed as machine-drafted. Callers pass the source that is true for their path:
+    supplied criteria are `human`, criteria this module drafts are `llm`.
+    """
+    normalized: list[dict[str, str]] = []
     for item in acceptance_criteria or []:
         if isinstance(item, str):
             text = item.strip()
             if text:
-                normalized.append(text)
+                normalized.append({"text": text, "source": source})
             continue
         if isinstance(item, dict):
             text = str(item.get("text") or "").strip()
             if not text:
                 continue
+            row = {"text": text, "source": source}
             binding = str(item.get("verification_binding") or "").strip()
-            row = {"text": text}
             if binding:
                 row["verification_binding"] = binding
             normalized.append(row)
@@ -103,7 +112,8 @@ async def create_quick_work_item(
     Steps:
     1. Use caller-provided acceptance criteria, or draft them via LLM from title + description.
     2. Upsert the feature only when the caller supplied feature_key.
-    3. Create CR with the effective ACs and no lead artifact, which is what makes
+    3. Create CR with the effective ACs, each carrying its true provenance, and no
+       lead artifact, which is what makes
        it quick route. The stored work_type is incidental: nothing routes on it and
        no surface displays it.
     4. Return a Ready work item; Doc Registry derives its Context Pack on read.
@@ -118,9 +128,13 @@ async def create_quick_work_item(
         doc_registry_base_url(), timeout_s=governance_registry_timeout_seconds()
     )
 
-    acs = _normalize_acceptance_criteria(acceptance_criteria)
+    # Supplied criteria come from a contract a human approved; drafted ones are the
+    # model's suggestion. The stored source has to say which.
+    acs = _normalize_acceptance_criteria(acceptance_criteria, source="human")
     if not acs:
-        acs = await _draft_acceptance_criteria(title, description)
+        acs = _normalize_acceptance_criteria(
+            await _draft_acceptance_criteria(title, description), source="llm"
+        )
     if not acs:
         raise ValueError(
             "acceptance criteria could not be drafted; pass acceptance_criteria "

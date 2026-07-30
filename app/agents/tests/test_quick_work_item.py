@@ -1,5 +1,7 @@
 """Unit tests for quick_work_item AC drafting and creation."""
 
+import json
+
 import pytest
 
 
@@ -68,12 +70,15 @@ async def test_create_quick_work_item_uses_supplied_acceptance_criteria(monkeypa
     )
 
     assert result["phase"] == "ready"
+    # Supplied criteria carry human provenance: the column defaults to `llm`, so a
+    # criterion from an approved contract would otherwise be filed as a draft.
     assert result["acceptance_criteria"] == [
-        "Users can log in.",
-        "Invalid login shows an error.",
+        {"text": "Users can log in.", "source": "human"},
+        {"text": "Invalid login shows an error.", "source": "human"},
     ]
     assert created_cr_body["acceptance_criteria_json"] == (
-        '["Users can log in.", "Invalid login shows an error."]'
+        '[{"text": "Users can log in.", "source": "human"}, '
+        '{"text": "Invalid login shows an error.", "source": "human"}]'
     )
 
 
@@ -165,12 +170,17 @@ async def test_create_quick_work_item_preserves_human_authored_bindings(monkeypa
     )
 
     assert result["acceptance_criteria"] == [
-        {"text": "Users can log in.", "verification_binding": "integration"},
-        {"text": "Invalid login shows an error."},
+        {
+            "text": "Users can log in.",
+            "source": "human",
+            "verification_binding": "integration",
+        },
+        {"text": "Invalid login shows an error.", "source": "human"},
     ]
     assert created_cr_body["acceptance_criteria_json"] == (
-        '[{"text": "Users can log in.", "verification_binding": "integration"}, '
-        '{"text": "Invalid login shows an error."}]'
+        '[{"text": "Users can log in.", "source": "human", '
+        '"verification_binding": "integration"}, '
+        '{"text": "Invalid login shows an error.", "source": "human"}]'
     )
 
 
@@ -234,3 +244,43 @@ async def test_create_quick_work_item_is_ready_without_a_persisted_pack(monkeypa
     )
 
     assert result["phase"] == "ready"
+
+
+@pytest.mark.asyncio
+async def test_create_quick_work_item_marks_drafted_criteria_as_llm(monkeypatch):
+    """Criteria the model drafts are stored as `llm`, not as `human`.
+
+    Both paths write the same column, so labelling them alike would make the
+    provenance meaningless in the direction that matters: a drafted suggestion
+    must not read as an approved contract.
+    """
+    import specgate_agents.governance.board.quick_work_item as quick
+
+    created_cr_body: dict = {}
+
+    class FakeClient:
+        def __init__(self, _base_url: str, **_kwargs):
+            pass
+
+        async def acreate_change_request(self, body, *, workspace_id: str):
+            created_cr_body.update(body)
+            return {"id": "cr-drafted", "key": "CR-DRAFTED"}
+
+        async def alist_acceptance_criteria(self, _change_request_id: str, *, workspace_id: str):
+            return []
+
+    async def drafted(_title: str, _description: str):
+        return ["Login succeeds for a valid password."]
+
+    monkeypatch.setattr(quick, "DocRegistryClient", FakeClient)
+    monkeypatch.setattr(quick, "doc_registry_base_url", lambda: "http://registry")
+    monkeypatch.setattr(quick, "_draft_acceptance_criteria", drafted)
+
+    await quick.create_quick_work_item(
+        title="Fix login",
+        description="Users cannot log in",
+        workspace_id="ws-quick",
+    )
+
+    stored = json.loads(created_cr_body["acceptance_criteria_json"])
+    assert stored == [{"text": "Login succeeds for a valid password.", "source": "llm"}], stored

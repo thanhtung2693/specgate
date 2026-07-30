@@ -105,9 +105,15 @@ Storage accepts a `source` of `human` or `llm` per criterion, and the CLI now se
 create the record until the displayed contract is approved. Criteria arriving
 without a source still default to `llm`, which is correct for a draft.
 
-That makes `source` a usable readiness signal once every writer sets it
-truthfully — the governance-chat quick-work path still leaves it defaulted. Until
-then phase keeps the work-type proxy, with this note instead of a guess.
+Every writer now sets it: the CLI sends `human` for criteria it persists, and the
+governance-chat quick-work path sends `human` for criteria the caller supplied and
+`llm` for criteria the model drafted, which is the distinction that path actually
+has. A criterion arriving without a source still defaults to `llm`.
+
+Board phase still keeps the work-type proxy. `source` is now truthful enough to
+derive readiness from, but changing what Intake and Ready mean is a behaviour
+change with its own tests and demo-data expectations, so it is a separate change
+rather than a rider on this one.
 
 ### Mode-aware handoff
 
