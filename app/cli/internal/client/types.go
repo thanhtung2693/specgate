@@ -119,7 +119,13 @@ type WorkspaceMember struct {
 	Email       string `json:"email,omitempty"`
 	Role        string `json:"role"`
 	CreatedAt   string `json:"created_at,omitempty"`
-	Current     bool   `json:"current,omitempty"`
+	// CredentialSet reports whether this member can authenticate to the appliance
+	// gateway; CredentialChangedBy and CredentialChangedAt attribute the most
+	// recent grant or revoke. The secret itself never leaves the server.
+	CredentialSet       bool   `json:"credential_set,omitempty"`
+	CredentialChangedBy string `json:"credential_changed_by,omitempty"`
+	CredentialChangedAt string `json:"credential_changed_at,omitempty"`
+	Current             bool   `json:"current,omitempty"`
 }
 
 type WorkspaceMembersResult struct {

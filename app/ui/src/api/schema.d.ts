@@ -2977,6 +2977,8 @@ export interface components {
             readonly $schema?: string;
             /** @description Remove this member's credential instead of issuing one. */
             revoke?: boolean;
+            /** @description Workspace the operator is acting in; recorded on the access-change event. */
+            workspace_id?: string;
         };
         IssueCredentialOutputBody: {
             /**
@@ -3815,6 +3817,10 @@ export interface components {
         WorkspaceMemberDetail: {
             /** Format: date-time */
             created_at: string;
+            /** Format: date-time */
+            credential_changed_at?: string;
+            credential_changed_by?: string;
+            credential_set: boolean;
             current?: boolean;
             display_name: string;
             email?: string;
@@ -6011,7 +6017,10 @@ export interface operations {
     gateway_credential_issue: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Set by the gateway from the authenticated caller; overrides any actor supplied in the body. Clients cannot set it — the gateway blanks it on every route. */
+                "X-SpecGate-User"?: string;
+            };
             path: {
                 /** @description Member whose gateway credential is being issued or rotated. */
                 username: string;

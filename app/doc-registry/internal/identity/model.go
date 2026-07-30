@@ -52,6 +52,14 @@ type WorkspaceMemberDetail struct {
 	Role        string    `json:"role" gorm:"column:role"`
 	CreatedAt   time.Time `json:"created_at" gorm:"column:created_at"`
 	Current     bool      `json:"current,omitempty" gorm:"-"`
+	// CredentialSet reports whether this member can authenticate to the gateway.
+	// The hash itself never leaves the service.
+	CredentialSet bool `json:"credential_set" gorm:"-"`
+	// CredentialChangedBy and CredentialChangedAt attribute the member's most
+	// recent access change, so an operator reading the member list can see who
+	// granted or revoked it rather than only the current state.
+	CredentialChangedBy string     `json:"credential_changed_by,omitempty" gorm:"-"`
+	CredentialChangedAt *time.Time `json:"credential_changed_at,omitempty" gorm:"-"`
 }
 
 type Selection struct {
@@ -84,7 +92,52 @@ type Store interface {
 	// credential when hash is empty. It reports ErrUserNotFound for an unknown
 	// member rather than creating one: membership is granted elsewhere.
 	SetUserCredential(ctx context.Context, username, hash string) error
+	// RecordCredentialEvent appends one access-change record, resolving the member
+	// by username so callers never handle internal ids. A failure to record must
+	// fail the operation that caused it: an unlogged credential change is exactly
+	// the gap this trail exists to close.
+	RecordCredentialEvent(ctx context.Context, in CredentialEventInput) error
+	// LatestCredentialEvent returns the most recent access change for a username,
+	// or nil when that member has none.
+	LatestCredentialEvent(ctx context.Context, username string) (*IdentityEvent, error)
 }
+
+// IdentityEvent records a change to who can authenticate. Granting or revoking a
+// gateway credential is a governance act, so it leaves a row rather than only
+// mutating state.
+//
+// The trail is append-only by convention and carries no hash chain, so it shows
+// what the service recorded, not that the database was never edited afterwards.
+// Documentation must not describe it as tamper-evident.
+type IdentityEvent struct {
+	ID string `json:"id" gorm:"column:id;primaryKey"`
+	// WorkspaceID is a pointer because the column is a nullable UUID foreign key:
+	// an empty string is not valid UUID input, and an access change made before a
+	// workspace is selected still has to be recorded.
+	WorkspaceID *string   `json:"workspace_id,omitempty" gorm:"column:workspace_id"`
+	SubjectID   string    `json:"subject_id" gorm:"column:subject_id"`
+	EventType   string    `json:"event_type" gorm:"column:event_type"`
+	Actor       string    `json:"actor,omitempty" gorm:"column:actor"`
+	Detail      string    `json:"detail,omitempty" gorm:"column:detail"`
+	CreatedAt   time.Time `json:"created_at" gorm:"column:created_at"`
+}
+
+func (IdentityEvent) TableName() string { return "identity_events" }
+
+// CredentialEventInput describes one access change to record.
+type CredentialEventInput struct {
+	Username    string
+	EventType   string
+	Actor       string
+	Detail      string
+	WorkspaceID string
+}
+
+// Identity event types.
+const (
+	EventCredentialIssued  = "identity.credential_issued"
+	EventCredentialRevoked = "identity.credential_revoked"
+)
 
 // ErrUserNotFound reports a credential operation against a member this appliance
 // does not have.

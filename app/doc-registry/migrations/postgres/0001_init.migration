@@ -288,6 +288,23 @@ CREATE TABLE IF NOT EXISTS workspace_members (
 CREATE INDEX IF NOT EXISTS idx_workspace_members_user_id
     ON workspace_members (user_id);
 
+-- Access changes are governance acts, so granting or revoking a gateway
+-- credential leaves a row here. Append-only by convention: nothing updates or
+-- deletes these rows, and no hash chain links them, so this trail proves what the
+-- service recorded rather than that the database was never edited.
+CREATE TABLE IF NOT EXISTS identity_events (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id UUID REFERENCES workspaces(id) ON DELETE SET NULL,
+    subject_id   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    event_type   TEXT NOT NULL,
+    actor        TEXT NOT NULL DEFAULT '',
+    detail       TEXT NOT NULL DEFAULT '',
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_identity_events_subject_created
+    ON identity_events (subject_id, created_at DESC);
+
 -- ─── skills ──────────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS skills (

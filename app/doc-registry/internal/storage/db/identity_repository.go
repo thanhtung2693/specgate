@@ -136,15 +136,45 @@ func (r *IdentityRepository) GetWorkspace(ctx context.Context, idOrSlug string) 
 }
 
 func (r *IdentityRepository) ListWorkspaceMembers(ctx context.Context, workspaceID string) ([]identity.WorkspaceMemberDetail, error) {
-	var members []identity.WorkspaceMemberDetail
+	// Reports whether each member can authenticate, and who last changed that,
+	// without exposing the hash: an operator asking "who has access here" should
+	// not need a second command, and the access-change trail is only useful if
+	// something reads it. The lateral join takes each member's newest event.
+	type memberRow struct {
+		identity.WorkspaceMemberDetail
+		Credential string
+		EventActor string
+		EventAt    *time.Time
+		EventType  string
+	}
+	var rows []memberRow
 	err := r.db.WithContext(ctx).
 		Table("workspace_members AS wm").
-		Select("wm.workspace_id, wm.user_id, wm.role, wm.created_at, u.username, u.display_name, u.email").
+		Select(`wm.workspace_id, wm.user_id, wm.role, wm.created_at,
+			u.username, u.display_name, u.email, u.credential,
+			ev.actor AS event_actor, ev.created_at AS event_at, ev.event_type AS event_type`).
 		Joins("JOIN users AS u ON u.id = wm.user_id").
+		Joins(`LEFT JOIN LATERAL (
+			SELECT actor, created_at, event_type FROM identity_events
+			WHERE subject_id = u.id ORDER BY created_at DESC LIMIT 1
+		) AS ev ON TRUE`).
 		Where("wm.workspace_id = ?", workspaceID).
 		Order("u.username ASC").
-		Scan(&members).Error
-	return members, err
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	members := make([]identity.WorkspaceMemberDetail, 0, len(rows))
+	for _, row := range rows {
+		member := row.WorkspaceMemberDetail
+		member.CredentialSet = strings.TrimSpace(row.Credential) != ""
+		if row.EventType != "" {
+			member.CredentialChangedBy = row.EventActor
+			member.CredentialChangedAt = row.EventAt
+		}
+		members = append(members, member)
+	}
+	return members, nil
 }
 
 // CredentialsConfigured reports whether any user has a gateway credential.
@@ -193,4 +223,69 @@ func (r *IdentityRepository) SetUserCredential(ctx context.Context, username, ha
 		return identity.ErrUserNotFound
 	}
 	return nil
+}
+
+// RecordCredentialEvent appends one access-change record for a member.
+func (r *IdentityRepository) RecordCredentialEvent(ctx context.Context, in identity.CredentialEventInput) error {
+	subjectID, err := r.userIDForUsername(ctx, in.Username)
+	if err != nil {
+		return err
+	}
+	row := identity.IdentityEvent{
+		// The column defaults to gen_random_uuid(), but GORM sends the zero value,
+		// and "" is not valid UUID input. Generate it here, as the sibling stores do.
+		ID:        uuid.NewString(),
+		SubjectID: subjectID,
+		EventType: strings.TrimSpace(in.EventType),
+		Actor:     strings.TrimSpace(in.Actor),
+		Detail:    strings.TrimSpace(in.Detail),
+		CreatedAt: time.Now().UTC(),
+	}
+	if workspaceID := strings.TrimSpace(in.WorkspaceID); workspaceID != "" {
+		row.WorkspaceID = &workspaceID
+	}
+	return r.db.WithContext(ctx).Create(&row).Error
+}
+
+// LatestCredentialEvent returns a member's most recent access change.
+func (r *IdentityRepository) LatestCredentialEvent(ctx context.Context, username string) (*identity.IdentityEvent, error) {
+	normalized, err := identity.NormalizeUsername(username)
+	if err != nil {
+		return nil, nil
+	}
+	var user identity.User
+	if err := r.db.WithContext(ctx).Where("username = ?", normalized).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var event identity.IdentityEvent
+	err = r.db.WithContext(ctx).
+		Where("subject_id = ?", user.ID).
+		Order("created_at DESC").
+		First(&event).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &event, nil
+}
+
+// userIDForUsername resolves a username to its user id for event subjects.
+func (r *IdentityRepository) userIDForUsername(ctx context.Context, username string) (string, error) {
+	normalized, err := identity.NormalizeUsername(username)
+	if err != nil {
+		return "", identity.ErrUserNotFound
+	}
+	var user identity.User
+	if err := r.db.WithContext(ctx).Where("username = ?", normalized).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", identity.ErrUserNotFound
+		}
+		return "", err
+	}
+	return user.ID, nil
 }

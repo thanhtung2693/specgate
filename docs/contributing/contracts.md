@@ -263,6 +263,21 @@ gateway credentials. Any new endpoint that records who decided something must
 follow this precedence; see
 [the gateway identity ADR](adr/2026-07-29-gateway-asserted-identity.md).
 
+**Access changes are recorded.** Issuing, rotating, or revoking a member's gateway
+credential appends an `identity.credential_issued` or
+`identity.credential_revoked` row naming the member, the authenticated actor, and
+the workspace the operator acted in. A change that cannot be recorded fails the
+request, because access granted with no trace of it is the gap the record exists
+to close. The first credential on an open appliance is issued by an
+unauthenticated caller by necessity; that row carries an empty actor and says so
+in its detail rather than attributing the change to nobody.
+
+The trail is append-only by convention and carries **no hash chain**, unlike
+`artifact_events`. It shows what the service recorded; it does not show that the
+database was never edited afterwards, and no surface may describe it as
+tamper-evident. `workspace members` reads back each member's credential state and
+its most recent change.
+
 Artifact submission source fields remain provenance, not cryptographic caller
 identity, and a credential identifies a credential rather than a person: one
 lent to a teammate or to an agent records its owner's name for their decisions.

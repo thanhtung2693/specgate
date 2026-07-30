@@ -152,9 +152,11 @@ func basicCredential(header string) (username, password string, ok bool) {
 // authenticated members. Roles are out of scope for a three-developer appliance
 // and the documentation says so.
 type IssueCredentialInput struct {
+	AuthenticatedActorHeader
 	Username string `path:"username" doc:"Member whose gateway credential is being issued or rotated."`
 	Body     struct {
-		Revoke bool `json:"revoke,omitempty" doc:"Remove this member's credential instead of issuing one."`
+		Revoke      bool   `json:"revoke,omitempty" doc:"Remove this member's credential instead of issuing one."`
+		WorkspaceID string `json:"workspace_id,omitempty" doc:"Workspace the operator is acting in; recorded on the access-change event."`
 	}
 }
 
@@ -182,6 +184,9 @@ func (h *Handlers) IssueGatewayCredential(ctx context.Context, in *IssueCredenti
 		if err := h.Identity.SetUserCredential(ctx, username, ""); err != nil {
 			return nil, mapIdentityCredentialError(err)
 		}
+		if err := h.recordCredentialChange(ctx, in, username, identity.EventCredentialRevoked); err != nil {
+			return nil, err
+		}
 		return out, nil
 	}
 
@@ -196,9 +201,36 @@ func (h *Handlers) IssueGatewayCredential(ctx context.Context, in *IssueCredenti
 	if err := h.Identity.SetUserCredential(ctx, username, string(hash)); err != nil {
 		return nil, mapIdentityCredentialError(err)
 	}
+	if err := h.recordCredentialChange(ctx, in, username, identity.EventCredentialIssued); err != nil {
+		return nil, err
+	}
 	out.Body.Secret = secret
 	out.Body.CredentialSet = true
 	return out, nil
+}
+
+// recordCredentialChange appends the access-change record. A failure here fails
+// the request: a credential change nobody can see afterwards is the gap this
+// record exists to close, and reporting success would hide it.
+func (h *Handlers) recordCredentialChange(
+	ctx context.Context, in *IssueCredentialInput, username, eventType string,
+) error {
+	actor := strings.TrimSpace(in.AuthenticatedUser)
+	detail := "issued by an unauthenticated caller on an appliance with no gateway credentials"
+	if actor != "" {
+		detail = ""
+	}
+	err := h.Identity.RecordCredentialEvent(ctx, identity.CredentialEventInput{
+		Username:    username,
+		EventType:   eventType,
+		Actor:       actor,
+		Detail:      detail,
+		WorkspaceID: strings.TrimSpace(in.Body.WorkspaceID),
+	})
+	if err != nil {
+		return huma.Error503ServiceUnavailable("the access change could not be recorded")
+	}
+	return nil
 }
 
 func mapIdentityCredentialError(err error) error {

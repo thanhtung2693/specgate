@@ -181,7 +181,10 @@ func newWorkspaceMembersCmd(deps *Deps) *cobra.Command {
 				if member.Current {
 					marker = " (you)"
 				}
-				fmt.Fprintf(deps.Stdout, "%s %-24s %s%s\n", styled(deps, output.StyleBold, fmt.Sprintf("%-20s", member.Username)), member.DisplayName, styledStatusPadded(deps, member.Role, 10), marker)
+				fmt.Fprintf(deps.Stdout, "%s %-24s %s%s%s\n",
+					styled(deps, output.StyleBold, fmt.Sprintf("%-20s", member.Username)),
+					member.DisplayName, styledStatusPadded(deps, member.Role, 10), marker,
+					memberAccessNote(member))
 			}
 			return nil
 		},
@@ -544,6 +547,26 @@ func promptWorkspaceSelection(cmd *cobra.Command, deps *Deps) (*client.IdentityW
 // own verb: one missing flag "is required", several "are required". The caller
 // used to append " are required" to a bare noun, which produced
 // "workspace are required".
+// memberAccessNote reports whether a member can authenticate to the gateway and
+// who last changed that. It stays silent on an appliance with no gateway
+// credentials, where nobody authenticates and the column would be noise.
+func memberAccessNote(member client.WorkspaceMember) string {
+	changed := ""
+	if by := strings.TrimSpace(member.CredentialChangedBy); by != "" {
+		changed = ", last changed by " + by
+	} else if strings.TrimSpace(member.CredentialChangedAt) != "" {
+		changed = ", last changed by an unauthenticated caller"
+	}
+	switch {
+	case member.CredentialSet:
+		return "  credential: set" + changed
+	case changed != "":
+		return "  credential: revoked" + changed
+	default:
+		return ""
+	}
+}
+
 func formatRequiredLoginFlags(workspaceName, displayName, username string) string {
 	missing := make([]string, 0, 3)
 	if strings.TrimSpace(workspaceName) == "" {
