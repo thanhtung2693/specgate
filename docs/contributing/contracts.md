@@ -20,8 +20,12 @@ route catalog, see
 | UI | review, inspection, settings, team/workspace views, governance chat shell | hidden sample data or source-of-truth mutation outside APIs |
 | IDE plugins | skills/hooks/rules that guide a coding agent through the CLI | product scope or approval authority |
 
-Doc Registry is internal-open behind a trusted network. Local identity is
-cooperative attribution, not authentication or RBAC.
+Doc Registry is internal-open behind a trusted network: it has no authentication
+of its own, and an appliance with no member credentials accepts any caller the
+gateway lets through. Where credentials exist the gateway authenticates and
+forwards the verified identity, so attribution stops being cooperative — see
+Actor precedence below. There is still no RBAC anywhere: an authenticated caller
+may do anything the API allows.
 
 ## HTTP Surfaces
 

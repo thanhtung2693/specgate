@@ -143,6 +143,9 @@ func TestEveryActorRecordingInputCarriesTheAuthenticatedHeader(t *testing.T) {
 		&UpdateStatusInput{},
 		&PromoteArtifactCanonicalInput{},
 		&UnarchiveChangeRequestInput{},
+		// Issuing a credential records an actor on its access-change row, so it is
+		// bound by the same rule as the decision endpoints.
+		&IssueCredentialInput{},
 	} {
 		value := reflect.ValueOf(in).Elem()
 		if _, ok := value.Type().FieldByName("AuthenticatedActorHeader"); !ok {
