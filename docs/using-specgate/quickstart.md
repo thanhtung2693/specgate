@@ -109,7 +109,6 @@ specgate artifact publish --file artifact.json --preview --json
 specgate artifact publish --file artifact.json --json
 specgate gates check <artifact-id> --json --summary
 specgate gates tasks list <artifact-id> --json
-specgate gates tasks show <task-id> --json
 specgate gates tasks submit-result <task-id> \
   --file .specgate/work/gate-<task-id>.json --json
 specgate gates results <artifact-id> --json

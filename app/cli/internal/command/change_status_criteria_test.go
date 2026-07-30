@@ -43,7 +43,7 @@ func TestChangeStatusExposesPerCriterionVerdictAndDecidingCheck(t *testing.T) {
 		t.Fatalf("status exit = %d, output = %s", code, out.String())
 	}
 	payload := out.String()
-	for _, want := range []string{`"criteria"`, `"verdict"`, `"why"`} {
+	for _, want := range []string{`"criteria"`, `"verdict":"unclear"`, `"why"`} {
 		if !strings.Contains(payload, want) {
 			t.Fatalf("change status payload missing %q:\n%s", want, payload)
 		}
