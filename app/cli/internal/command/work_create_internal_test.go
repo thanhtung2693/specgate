@@ -91,3 +91,22 @@ func TestApprovalCriteriaPromptNamesBoundCount(t *testing.T) {
 		t.Fatalf("prompt = %q, want the fully bound wording", full)
 	}
 }
+
+// A criterion the human typed must not be filed as an LLM suggestion. The column
+// defaults to `llm`, and the UI renders that value as provenance, so a
+// human-approved contract used to display as machine-drafted.
+func TestAcceptanceCriteriaBodyRecordsHumanProvenance(t *testing.T) {
+	t.Parallel()
+	rows, ok := acceptanceCriteriaBody([]string{"Tags persist @check:unit", "Errors read clearly"}).([]map[string]string)
+	if !ok || len(rows) != 2 {
+		t.Fatalf("body = %#v, want two criterion rows", rows)
+	}
+	for _, row := range rows {
+		if row["source"] != "human" {
+			t.Fatalf("criterion %q source = %q, want human", row["text"], row["source"])
+		}
+	}
+	if rows[0]["verification_binding"] != "unit" {
+		t.Fatalf("binding lost: %#v", rows[0])
+	}
+}
