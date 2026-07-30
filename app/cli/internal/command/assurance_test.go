@@ -337,7 +337,7 @@ func TestVerifyLocalRequiresAndReportsHumanApprovedDelivery(t *testing.T) {
 	if env.Data.Mode != "local" || env.Data.DeliveryVerdict != "passed" || !env.Data.CleanupEligible {
 		t.Fatalf("closeout = %+v", env.Data)
 	}
-	if len(env.Data.Criteria) != 1 || env.Data.Criteria[0].Verdict != "pass" || len(env.Data.Checks) != 1 {
+	if len(env.Data.Criteria) != 1 || env.Data.Criteria[0].Verdict != "met" || len(env.Data.Checks) != 1 {
 		t.Fatalf("evidence = %+v", env.Data)
 	}
 	if env.Data.NextCommand != "specgate cleanup --work --dry-run" {
@@ -471,8 +471,8 @@ func TestVerifyLocalReportsBoundCriterionFromItsCheckNotItsClaim(t *testing.T) {
 		t.Fatalf("criteria = %#v", envelope.Data.Criteria)
 	}
 	criterion := envelope.Data.Criteria[0]
-	if criterion.Verdict != "fail" {
-		t.Fatalf("bound criterion verdict = %q, want fail to match the stored review", criterion.Verdict)
+	if criterion.Verdict != "unclear" {
+		t.Fatalf("bound criterion verdict = %q, want unclear for a skipped check", criterion.Verdict)
 	}
 	if !strings.Contains(criterion.Why, "unit") {
 		t.Fatalf("why = %q, want the bound check named", criterion.Why)

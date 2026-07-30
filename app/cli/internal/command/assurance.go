@@ -415,11 +415,11 @@ func localReportEvidence(criteria []string, report local.DeliveryReport) ([]clie
 			continue
 		}
 		claim := strings.TrimSpace(fmt.Sprint(row["claim"]))
-		verdict := "pending"
+		verdict := "unclear"
 		if claim == "satisfied" {
-			verdict = "pass"
-		} else if claim != "" && claim != "not_done" {
-			verdict = "fail"
+			verdict = "met"
+		} else if claim == "partial" || claim == "not_done" {
+			verdict = "unmet"
 		}
 		reviews[index].Verdict = verdict
 		reviews[index].Why = evidenceSummary(row)
@@ -488,14 +488,14 @@ func boundCriterionOutcome(binding string, checks []client.CheckResult) (string,
 		}
 		switch check.Status {
 		case "pass":
-			return "pass", fmt.Sprintf("check %q passed (%s)", binding, origin)
+			return "met", fmt.Sprintf("check %q passed (%s)", binding, origin)
 		case "fail":
-			return "fail", fmt.Sprintf("check %q failed (%s)", binding, origin)
+			return "unmet", fmt.Sprintf("check %q failed (%s)", binding, origin)
 		default:
-			return "fail", fmt.Sprintf("check %q reported %q — cannot verify deterministically", binding, check.Status)
+			return "unclear", fmt.Sprintf("check %q reported %q — cannot verify deterministically", binding, check.Status)
 		}
 	}
-	return "fail", fmt.Sprintf("check %q not found in report — cannot verify deterministically", binding)
+	return "unclear", fmt.Sprintf("check %q not found in report — cannot verify deterministically", binding)
 }
 
 func evidenceSummary(row map[string]any) string {

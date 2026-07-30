@@ -24,19 +24,19 @@ func TestBoundCriterionOutcomeNamesWhoObservedTheCheck(t *testing.T) {
 		{
 			name:    "agent-claimed pass says nothing re-ran it",
 			check:   client.CheckResult{Name: "unit", Status: "pass"},
-			verdict: "pass",
+			verdict: "met",
 			reason:  "reported by the coding agent, not re-run",
 		},
 		{
 			name:    "re-executed pass names the CLI",
 			check:   client.CheckResult{Name: "unit", Status: "pass", Source: "specgate_cli"},
-			verdict: "pass",
+			verdict: "met",
 			reason:  "observed by the SpecGate CLI",
 		},
 		{
 			name:    "re-executed failure names the CLI",
 			check:   client.CheckResult{Name: "unit", Status: "fail", Source: "specgate_cli"},
-			verdict: "fail",
+			verdict: "unmet",
 			reason:  "observed by the SpecGate CLI",
 		},
 	} {
@@ -53,6 +53,47 @@ func TestBoundCriterionOutcomeNamesWhoObservedTheCheck(t *testing.T) {
 				t.Fatalf("why = %q still claims determinism without naming the observer", why)
 			}
 		})
+	}
+}
+
+func TestLocalReportEvidenceUsesCanonicalCriterionVerdicts(t *testing.T) {
+	t.Parallel()
+	reviews, _ := localReportEvidence(
+		[]string{
+			"Claim satisfied",
+			"Claim partial",
+			"Claim not done",
+			"Bound pass @check:passing",
+			"Bound fail @check:failing",
+			"Bound skipped @check:skipped",
+			"Bound missing @check:missing",
+		},
+		local.DeliveryReport{Body: map[string]any{
+			"checks": []any{
+				map[string]any{"name": "passing", "status": "pass"},
+				map[string]any{"name": "failing", "status": "fail"},
+				map[string]any{"name": "skipped", "status": "skipped"},
+			},
+			"criteria": []any{
+				map[string]any{"criterion_id": "local-1", "claim": "satisfied"},
+				map[string]any{"criterion_id": "local-2", "claim": "partial"},
+				map[string]any{"criterion_id": "local-3", "claim": "not_done"},
+				map[string]any{"criterion_id": "local-4", "claim": "satisfied"},
+				map[string]any{"criterion_id": "local-5", "claim": "satisfied"},
+				map[string]any{"criterion_id": "local-6", "claim": "satisfied"},
+				map[string]any{"criterion_id": "local-7", "claim": "satisfied"},
+			},
+		}},
+	)
+
+	want := []string{"met", "unmet", "unmet", "met", "unmet", "unclear", "unclear"}
+	if len(reviews) != len(want) {
+		t.Fatalf("reviews = %+v, want %d", reviews, len(want))
+	}
+	for index, verdict := range want {
+		if reviews[index].Verdict != verdict {
+			t.Fatalf("criterion %d verdict = %q, want %q", index+1, reviews[index].Verdict, verdict)
+		}
 	}
 }
 
@@ -106,8 +147,8 @@ func TestLocalReportEvidenceShowsCitationWeaknessWithoutFlippingTheVerdict(t *te
 			if len(reviews) != 1 {
 				t.Fatalf("reviews = %+v, want one", reviews)
 			}
-			if reviews[0].Verdict != "pass" {
-				t.Fatalf("verdict = %q, want pass — the bound check decides", reviews[0].Verdict)
+			if reviews[0].Verdict != "met" {
+				t.Fatalf("verdict = %q, want met — the bound check decides", reviews[0].Verdict)
 			}
 			if tc.note == "" {
 				if strings.Contains(reviews[0].Why, ";") {
