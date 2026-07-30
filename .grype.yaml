@@ -3,3 +3,11 @@ ignore:
     package:
       name: python
     reason: The only listed fix is unreleased Python 3.15; remove this exception when a supported runtime ships the fix.
+  - vulnerability: CVE-2026-11940
+    package:
+      name: python
+    reason: The tarfile-only fix is Python 3.15 beta; SpecGate does not extract archives in Python. Remove when a supported runtime ships the fix.
+  - vulnerability: CVE-2026-11972
+    package:
+      name: python
+    reason: The tarfile-only fix is Python 3.15 beta; SpecGate does not extract archives in Python. Remove when a supported runtime ships the fix.
