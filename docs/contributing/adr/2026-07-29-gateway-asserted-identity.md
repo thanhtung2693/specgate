@@ -196,6 +196,17 @@ knowing it. The documentation keeps saying this plainly.
   secret in output and no cross-server reuse, and the
   non-loopback-without-credentials warning.
 
+## Follow-up completed — 2026-07-30
+
+Issuing and revoking a credential left no trail, which this ADR shipped without
+and the sweep recorded as an open gap. Closed with an `identity_events` table:
+every access change appends a row naming the member, the actor, and the
+workspace, a change that cannot be recorded fails the request, and
+`workspace members` reports each member's credential state with its most recent
+change. The rows are append-only by convention and are not hash-chained, so the
+documentation says the trail shows what the service recorded rather than calling
+it tamper-evident.
+
 ## Not in scope
 
 Sessions, cookies, SSO, OAuth, per-user scopes or roles, browser pairing codes

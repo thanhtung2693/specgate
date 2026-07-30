@@ -20,8 +20,12 @@ route catalog, see
 | UI | review, inspection, settings, team/workspace views, governance chat shell | hidden sample data or source-of-truth mutation outside APIs |
 | IDE plugins | skills/hooks/rules that guide a coding agent through the CLI | product scope or approval authority |
 
-Doc Registry is internal-open behind a trusted network. Local identity is
-cooperative attribution, not authentication or RBAC.
+Doc Registry is internal-open behind a trusted network: it has no authentication
+of its own, and an appliance with no member credentials accepts any caller the
+gateway lets through. Where credentials exist the gateway authenticates and
+forwards the verified identity, so attribution stops being cooperative — see
+Actor precedence below. There is still no RBAC anywhere: an authenticated caller
+may do anything the API allows.
 
 ## HTTP Surfaces
 
@@ -65,6 +69,29 @@ They do not grant access.
   not an authorization denial.
 
 ## Work and Artifacts
+
+### Route
+
+A work item is **quick route** when it has no lead artifact, and
+**artifact-backed** when it has one. That is the whole rule, and every module must
+derive it from that fact alone: `ChangeRequest.IsQuickRoute`, the Context Pack
+builder, delivery-review policy resolution, and the UI's work-item mapper.
+
+Work type does not decide the route. It used to appear in the condition
+(`no lead artifact AND work_type == bug_fix`), which broke both directions: a
+quick item of any other type fell through to the artifact-backed path, where gates
+it could never satisfy applied and delivery review blocked it for missing a policy
+snapshot it could not have; meanwhile the UI derived the route from work type
+alone, so artifact-backed cleanup read as quick. Quick creation still stores a
+placeholder work type because the enum has no "unspecified" member; nothing routes
+on it and no surface displays it.
+
+Board **phase** is a separate question and still uses work type as a proxy for
+"quick work that has a contract". The truthful readiness signal is not on the
+change request: the demo's Intake example carries two drafted criteria and no lead
+artifact, and belongs in Intake because its feature's artifact is a draft awaiting
+approval. A read path holding the feature can decide that; the struct cannot.
+Tracked as follow-up rather than guessed at.
 
 ### Mode-aware handoff
 
@@ -239,6 +266,21 @@ ignored. Those body fields remain authoritative only for a deployment with no
 gateway credentials. Any new endpoint that records who decided something must
 follow this precedence; see
 [the gateway identity ADR](adr/2026-07-29-gateway-asserted-identity.md).
+
+**Access changes are recorded.** Issuing, rotating, or revoking a member's gateway
+credential appends an `identity.credential_issued` or
+`identity.credential_revoked` row naming the member, the authenticated actor, and
+the workspace the operator acted in. A change that cannot be recorded fails the
+request, because access granted with no trace of it is the gap the record exists
+to close. The first credential on an open appliance is issued by an
+unauthenticated caller by necessity; that row carries an empty actor and says so
+in its detail rather than attributing the change to nobody.
+
+The trail is append-only by convention and carries **no hash chain**, unlike
+`artifact_events`. It shows what the service recorded; it does not show that the
+database was never edited afterwards, and no surface may describe it as
+tamper-evident. `workspace members` reads back each member's credential state and
+its most recent change.
 
 Artifact submission source fields remain provenance, not cryptographic caller
 identity, and a credential identifies a credential rather than a person: one

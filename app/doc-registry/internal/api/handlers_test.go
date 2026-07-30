@@ -525,6 +525,8 @@ type fakeIdentityStore struct {
 	credentials map[string]string
 	knownUsers  map[string]bool
 	storeErr    error
+	events      []identity.CredentialEventInput
+	eventErr    error
 }
 
 func (f *fakeIdentityStore) CredentialsConfigured(context.Context) (bool, error) {
@@ -532,6 +534,29 @@ func (f *fakeIdentityStore) CredentialsConfigured(context.Context) (bool, error)
 		return false, f.storeErr
 	}
 	return len(f.credentials) > 0, nil
+}
+
+func (f *fakeIdentityStore) RecordCredentialEvent(_ context.Context, in identity.CredentialEventInput) error {
+	if f.eventErr != nil {
+		return f.eventErr
+	}
+	f.events = append(f.events, in)
+	return nil
+}
+
+func (f *fakeIdentityStore) LatestCredentialEvent(_ context.Context, username string) (*identity.IdentityEvent, error) {
+	if f.storeErr != nil {
+		return nil, f.storeErr
+	}
+	for i := len(f.events) - 1; i >= 0; i-- {
+		if f.events[i].Username == username {
+			e := f.events[i]
+			return &identity.IdentityEvent{
+				SubjectID: e.Username, EventType: e.EventType, Actor: e.Actor, Detail: e.Detail,
+			}, nil
+		}
+	}
+	return nil, nil
 }
 
 func (f *fakeIdentityStore) SetUserCredential(_ context.Context, username, hash string) error {

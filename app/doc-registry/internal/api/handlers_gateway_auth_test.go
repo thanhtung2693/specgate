@@ -8,6 +8,9 @@ import (
 	"testing"
 
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/specgate/doc-registry/internal/identity"
+	"github.com/specgate/doc-registry/internal/workspace"
 )
 
 func credentialHash(t *testing.T, password string) string {
@@ -140,6 +143,9 @@ func TestEveryActorRecordingInputCarriesTheAuthenticatedHeader(t *testing.T) {
 		&UpdateStatusInput{},
 		&PromoteArtifactCanonicalInput{},
 		&UnarchiveChangeRequestInput{},
+		// Issuing a credential records an actor on its access-change row, so it is
+		// bound by the same rule as the decision endpoints.
+		&IssueCredentialInput{},
 	} {
 		value := reflect.ValueOf(in).Elem()
 		if _, ok := value.Type().FieldByName("AuthenticatedActorHeader"); !ok {
@@ -234,5 +240,77 @@ func TestIssueGatewayCredentialRevokeAndUnknownMember(t *testing.T) {
 	// Membership is granted elsewhere: issuing must not invent a member.
 	if _, err := h.IssueGatewayCredential(context.Background(), &IssueCredentialInput{Username: "ghost"}); err == nil {
 		t.Fatal("issued a credential for a member this appliance does not have")
+	}
+}
+
+// Granting and revoking access are governance acts. Before this, both changed who
+// could authenticate and left nothing behind — on a product whose claim is an
+// acceptance ledger.
+func TestIssueGatewayCredentialRecordsTheAccessChange(t *testing.T) {
+	t.Parallel()
+	store := &fakeIdentityStore{knownUsers: map[string]bool{"mai": true}}
+	h := &Handlers{Identity: store}
+
+	// The workspace arrives in the request scope, the way the CLI sends it; a body
+	// value that disagrees with the scope is refused by applyCLIWorkspace.
+	ctx := workspace.WithID(context.Background(), "workspace-1")
+	issue := &IssueCredentialInput{Username: "mai"}
+	issue.AuthenticatedUser = "tung"
+	if _, err := h.IssueGatewayCredential(ctx, issue); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.events) != 1 {
+		t.Fatalf("events = %d, want one issue record", len(store.events))
+	}
+	got := store.events[0]
+	if got.EventType != identity.EventCredentialIssued || got.Username != "mai" || got.Actor != "tung" {
+		t.Fatalf("event = %#v, want an issue record for mai by tung", got)
+	}
+	if got.WorkspaceID != "workspace-1" {
+		t.Fatalf("event workspace = %q, want the workspace the operator acted in", got.WorkspaceID)
+	}
+
+	revoke := &IssueCredentialInput{Username: "mai"}
+	revoke.AuthenticatedUser = "tung"
+	revoke.Body.Revoke = true
+	if _, err := h.IssueGatewayCredential(ctx, revoke); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.events) != 2 || store.events[1].EventType != identity.EventCredentialRevoked {
+		t.Fatalf("events = %#v, want the revoke appended", store.events)
+	}
+}
+
+// An unauthenticated caller can issue the first credential, since that is how a
+// gated appliance gets started. The record has to say so rather than attributing
+// the change to nobody in particular.
+func TestIssueGatewayCredentialRecordsAnUnauthenticatedIssuer(t *testing.T) {
+	t.Parallel()
+	store := &fakeIdentityStore{knownUsers: map[string]bool{"mai": true}}
+	h := &Handlers{Identity: store}
+
+	if _, err := h.IssueGatewayCredential(context.Background(), &IssueCredentialInput{Username: "mai"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.events) != 1 {
+		t.Fatalf("events = %d, want one", len(store.events))
+	}
+	if store.events[0].Actor != "" || store.events[0].Detail == "" {
+		t.Fatalf("event = %#v, want an empty actor and a detail naming the situation", store.events[0])
+	}
+}
+
+// A credential change that cannot be recorded must fail. Reporting success would
+// hand out access with no trace of it, which is worse than refusing.
+func TestIssueGatewayCredentialFailsWhenTheChangeCannotBeRecorded(t *testing.T) {
+	t.Parallel()
+	store := &fakeIdentityStore{
+		knownUsers: map[string]bool{"mai": true},
+		eventErr:   errors.New("identity_events unavailable"),
+	}
+	h := &Handlers{Identity: store}
+
+	if _, err := h.IssueGatewayCredential(context.Background(), &IssueCredentialInput{Username: "mai"}); err == nil {
+		t.Fatal("issuing succeeded while its access-change record failed")
 	}
 }

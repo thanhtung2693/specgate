@@ -41,6 +41,12 @@ then tells SpecGate who the caller is, so the name recorded on an approval or an
 acceptance is the one that authenticated rather than one the caller typed.
 Revoking the last credential returns the appliance to trusting its network.
 
+Access changes are recorded. Issuing or revoking a credential appends a row
+naming the member and whoever made the change, and `specgate workspace members`
+shows who currently holds one and who last changed it. The record is append-only
+but not hash-linked, so it shows what SpecGate recorded rather than proving the
+database was never edited underneath it.
+
 Two limits worth knowing before you rely on it:
 
 - **A credential identifies a credential, not a person.** Hand yours to a

@@ -153,8 +153,14 @@ export function AcceptanceCriteriaSummary({ detail }: { detail: WorkItemDetailDa
             const verdict = acceptanceCriterionVerdict(criterion, detail.deliveryStatus)
             const done = verdict ? verdict === "met" : criterion.done
             return (
-              <div key={criterion.id} className="flex items-start justify-between gap-3 rounded-md border bg-card/70 p-3">
-                <div className="flex min-w-0 items-start gap-2 text-sm">
+              <div
+                key={criterion.id}
+                // Wraps rather than squeezing: with a verdict, a check name, and a
+                // source badge, a non-wrapping row leaves the criterion text a few
+                // characters wide on a phone.
+                className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2 rounded-md border bg-card/70 p-3"
+              >
+                <div className="flex min-w-[12rem] flex-1 items-start gap-2 text-sm">
                   {done ? (
                     <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-success" />
                   ) : (

@@ -344,39 +344,38 @@ async def review_change_request_delivery(
     completion_feedback_event_id = str(completed_event.get("id") or "")
 
     # Resolve evidence_policy from the CR's lead artifact snapshot so the
-    # delivery review knows whether corroborated evidence is required. Only
-    # quick-route bug fixes use the built-in default; every other route fails
-    # closed when its frozen snapshot is unavailable.
+    # delivery review knows whether corroborated evidence is required. Quick-route
+    # work has no snapshot and uses the built-in default; artifact-backed work
+    # fails closed when its frozen snapshot is unavailable.
+    #
+    # Work that names a feature but carries no lead artifact is feature-backed:
+    # its policy lives in the feature's canonical artifact, so resolve that and
+    # fail closed when it cannot be read. Work with neither is quick route, where
+    # no snapshot exists to read and the built-in default is the truthful answer.
+    # The gate used to be work_type != bug_fix, which sent every non-bugfix quick
+    # item down the feature path and blocked it for lacking a policy it could
+    # never have had.
     evidence_policy = "attested_ok"
     artifact: dict[str, Any] = {}
     lead_artifact_id = str(change_request.get("lead_artifact_id") or "").strip()
-    is_quick_route = (
-        not lead_artifact_id and str(change_request.get("work_type") or "").strip() == "bug_fix"
-    )
-    if not lead_artifact_id and not is_quick_route:
+    if not lead_artifact_id:
         feature_id = str(change_request.get("feature_id") or "").strip()
-        if not feature_id:
-            return await _persist_policy_unavailable(
-                client,
-                change_request_id,
-                workspace_id=workspace_id,
-                completion_feedback_event_id=completion_feedback_event_id,
-            )
-        try:
-            feature = await asyncio.to_thread(
-                client.get_workboard_feature, feature_id, **workspace_kw
-            )
-            lead_artifact_id = str(feature.get("canonical_artifact_id") or "").strip()
-            if not lead_artifact_id:
-                raise ValueError("feature canonical policy artifact unavailable")
-        except Exception:
-            logger.warning("Delivery review policy feature unavailable", exc_info=True)
-            return await _persist_policy_unavailable(
-                client,
-                change_request_id,
-                workspace_id=workspace_id,
-                completion_feedback_event_id=completion_feedback_event_id,
-            )
+        if feature_id:
+            try:
+                feature = await asyncio.to_thread(
+                    client.get_workboard_feature, feature_id, **workspace_kw
+                )
+                lead_artifact_id = str(feature.get("canonical_artifact_id") or "").strip()
+                if not lead_artifact_id:
+                    raise ValueError("feature canonical policy artifact unavailable")
+            except Exception:
+                logger.warning("Delivery review policy feature unavailable", exc_info=True)
+                return await _persist_policy_unavailable(
+                    client,
+                    change_request_id,
+                    workspace_id=workspace_id,
+                    completion_feedback_event_id=completion_feedback_event_id,
+                )
     if lead_artifact_id:
         try:
             artifact = await client.aget_artifact(lead_artifact_id, **workspace_kw)

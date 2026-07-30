@@ -46,9 +46,12 @@ function parseStringList(value: string | undefined): string[] {
   return []
 }
 
-function routeForWorkType(workType: string | undefined): WorkItem["route"] {
-  if (workType === "new_feature" || workType === "feature_change") return "full"
-  return "quick"
+// The route is decided by whether a governed snapshot backs the work, which is
+// exactly what a lead artifact is. Deriving it from the work type disagreed with
+// the backend in both directions: a quick item typed new_feature read as "full",
+// and artifact-backed cleanup read as "quick".
+function routeForWorkItem(item: ChangeRequestDTO): WorkItem["route"] {
+  return item.lead_artifact_id ? "full" : "quick"
 }
 
 function lifecycleForChangeRequest(item: ChangeRequestDTO): string {
@@ -108,7 +111,7 @@ export function mapChangeRequestToWorkItem(item: ChangeRequestDTO): WorkItem {
     leadArtifactId: item.lead_artifact_id,
     key,
     title: item.title || "Untitled work item",
-    route: routeForWorkType(item.work_type),
+    route: routeForWorkItem(item),
     createdBy: item.created_by || "Unknown",
     agent: "Governance",
     lifecycle,

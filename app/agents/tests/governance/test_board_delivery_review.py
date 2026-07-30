@@ -283,7 +283,16 @@ async def test_review_blocks_when_feature_has_no_canonical_policy_artifact(monke
 
 
 @pytest.mark.asyncio
-async def test_review_blocks_non_quick_work_without_a_policy_artifact(monkeypatch) -> None:
+async def test_review_treats_work_without_an_artifact_or_feature_as_quick_route(
+    monkeypatch,
+) -> None:
+    """Work with neither a lead artifact nor a feature is quick route whatever its
+    work type, so it reviews against the built-in evidence policy.
+
+    This used to require work_type == bug_fix to count as quick route, so a
+    documentation or feature item created through the quick route went down the
+    feature-policy path and was blocked as policy_unavailable for lacking a
+    snapshot it could never have had."""
     import specgate_agents.governance.board.delivery_review as board_review
 
     posted: list[dict] = []
@@ -335,18 +344,26 @@ async def test_review_blocks_non_quick_work_without_a_policy_artifact(monkeypatc
             posted.extend(evaluations)
             return [{"change_request_id": change_request_id, **evaluations[0]}]
 
-    async def unexpected_model_setup():
-        pytest.fail("non-quick work without policy must stop before model setup")
+    reached_model_setup: list[bool] = []
+
+    async def record_model_setup():
+        reached_model_setup.append(True)
 
     monkeypatch.setattr(board_review, "DocRegistryClient", FakeClient)
     monkeypatch.setattr(board_review, "doc_registry_base_url", lambda: "http://registry")
-    monkeypatch.setattr(board_review, "_hydrate_model_settings", unexpected_model_setup)
+    monkeypatch.setattr(board_review, "_hydrate_model_settings", record_model_setup)
 
     result = await review_change_request_delivery("cr-1", workspace_id="ws-a")
 
-    assert result["verdict"] == "needs_human_review"
-    assert result["reason_code"] == "policy_unavailable"
-    assert json.loads(posted[0]["evidence"])["reason_code"] == "policy_unavailable"
+    assert reached_model_setup, (
+        "quick-route work must proceed into review rather than stopping at policy resolution"
+    )
+    assert result.get("reason_code") != "policy_unavailable", (
+        "quick-route work has no snapshot to read; blocking it for a missing policy "
+        "leaves it with no way forward"
+    )
+    assert posted, "the review must still record a verdict"
+    assert json.loads(posted[0]["evidence"]).get("reason_code") != "policy_unavailable"
 
 
 @pytest.mark.asyncio

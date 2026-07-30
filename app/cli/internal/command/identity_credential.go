@@ -5,6 +5,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/specgate/specgate/app/cli/internal/client"
+	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
@@ -37,7 +39,16 @@ func newWorkspaceCredentialCmd(deps *Deps) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// ponytail: the command catalog already refuses Full-mode-only commands in
 			// Local mode, naming the command and the fix. No second check here.
-			result, err := deps.Client.IssueGatewayCredential(cmd.Context(), args[0], revoke)
+			//
+			// `workspace` commands are not workspace-scoped as a family — they operate
+			// on workspaces — so the selected workspace is attached here, for the
+			// access-change record rather than for scoping the write.
+			ctx := cmd.Context()
+			cfg, _ := config.LoadFrom(deps.ConfigPath)
+			if workspaceID, err := workspaceIDForSelection(ctx, deps, resolveWorkspaceSelection(deps, cfg)); err == nil && workspaceID != "" {
+				ctx = client.WithWorkspace(ctx, workspaceID)
+			}
+			result, err := deps.Client.IssueGatewayCredential(ctx, args[0], revoke)
 			if err != nil {
 				return apiExitError(deps, "workspace.credential", err)
 			}

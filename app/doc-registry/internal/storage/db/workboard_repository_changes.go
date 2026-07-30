@@ -198,8 +198,13 @@ func (r *WorkBoardRepository) derivedChangeRequestPhase(
 	ctx context.Context,
 	cr workboard.ChangeRequest,
 ) (workboard.BoardPhase, error) {
-	if cr.IsQuickRoute() {
-		return workboard.BoardPhaseReady, nil
+	// Mirrors ChangeRequest.DerivePhase, including its work-type proxy for
+	// quick-route readiness and the reason that proxy is still here.
+	if cr.LeadArtifactID == "" {
+		if cr.WorkType == workboard.WorkTypeBugFix {
+			return workboard.BoardPhaseReady, nil
+		}
+		return workboard.BoardPhaseIntake, nil
 	}
 	if cr.LeadArtifactID != "" {
 		var lead artifact.Artifact

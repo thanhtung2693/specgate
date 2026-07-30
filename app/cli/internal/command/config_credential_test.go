@@ -5,9 +5,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/command"
 	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/output"
@@ -215,5 +217,92 @@ func TestWorkspaceCredentialShowsTheSecretOnceWithItsNextStep(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output = %q, want %q", got, want)
 		}
+	}
+}
+
+// The member list is where an operator asks who can reach a shared appliance, so
+// it reports credential state and who last changed it. On an appliance with no
+// gateway credentials it stays silent rather than adding a column of "not set".
+func TestWorkspaceMembersReportsAccessStateOnlyWhenCredentialsExist(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		members []client.WorkspaceMember
+		want    []string
+		absent  []string
+	}{
+		{
+			name: "ungated appliance says nothing about credentials",
+			members: []client.WorkspaceMember{
+				{Username: "tung", DisplayName: "Tung", Role: "owner"},
+			},
+			absent: []string{"credential"},
+		},
+		{
+			name: "a member who can authenticate, and who granted it",
+			members: []client.WorkspaceMember{
+				{Username: "mai", DisplayName: "Mai", Role: "member", CredentialSet: true,
+					CredentialChangedBy: "tung", CredentialChangedAt: "2026-07-30T09:00:00Z"},
+			},
+			want: []string{"credential: set", "last changed by tung"},
+		},
+		{
+			name: "a revoked member still shows who revoked it",
+			members: []client.WorkspaceMember{
+				{Username: "mai", DisplayName: "Mai", Role: "member",
+					CredentialChangedBy: "tung", CredentialChangedAt: "2026-07-30T10:00:00Z"},
+			},
+			want: []string{"credential: revoked", "last changed by tung"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			deps, fc, _, out := newFakeDeps(t)
+			deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
+			if err := (config.Config{
+				Workspace: config.CurrentWorkspace{ID: "ws-1", Slug: "platform", Name: "Platform"},
+			}).SaveTo(deps.ConfigPath); err != nil {
+				t.Fatal(err)
+			}
+			fc.workspaceMembers = &client.WorkspaceMembersResult{
+				Workspace: client.IdentityWorkspace{ID: "ws-1", Slug: "platform", Name: "Platform"},
+				Members:   tc.members,
+			}
+			if code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "workspace", "members"); code != output.ExitOK {
+				t.Fatalf("exit = %d, output = %s", code, out.String())
+			}
+			got := out.String()
+			for _, want := range tc.want {
+				if !strings.Contains(got, want) {
+					t.Fatalf("output = %q, want %q", got, want)
+				}
+			}
+			for _, absent := range tc.absent {
+				if strings.Contains(got, absent) {
+					t.Fatalf("output = %q, want no mention of %q", got, absent)
+				}
+			}
+		})
+	}
+}
+
+// The access record names the workspace the operator was acting in, so it has to
+// travel with the request. `workspace` commands are not workspace-scoped as a
+// family, so this one attaches it explicitly and a regression would silently
+// leave every access row unscoped.
+func TestWorkspaceCredentialSendsTheSelectedWorkspace(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
+	if err := (config.Config{
+		Workspace: config.CurrentWorkspace{ID: "ws-1", Slug: "platform", Name: "Platform"},
+	}).SaveTo(deps.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "workspace", "credential", "mai"); code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if fc.lastCredentialWorkspace != "ws-1" {
+		t.Fatalf("request workspace = %q, want ws-1", fc.lastCredentialWorkspace)
 	}
 }
