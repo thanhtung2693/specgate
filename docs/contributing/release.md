@@ -132,10 +132,12 @@ Workflow-level token access is read-only. Only the jobs that publish GitHub
 release assets or GHCR manifests receive the corresponding `contents: write`
 or `packages: write` permission.
 
-`.grype.yaml` contains the only temporary exception: Python `CVE-2026-15308`,
-whose listed fix is unreleased Python 3.15. Remove it when a supported runtime
-ships the fix; every other fixed high or critical finding continues to block a
-release.
+`.grype.yaml` contains temporary exceptions for Python `CVE-2026-15308`,
+`CVE-2026-11940`, and `CVE-2026-11972`. Their listed fixes require the
+unsupported Python 3.15 prerelease; the latter two affect `tarfile`, which the
+SpecGate Python runtime does not use. Remove each exception when a supported
+runtime ships its fix. Every other fixed high or critical finding continues to
+block a release.
 
 Because draft assets have no public download URL, the smoke job fetches the CLI
 and appliance bundle with the authenticated GitHub CLI, verifies the bundle
