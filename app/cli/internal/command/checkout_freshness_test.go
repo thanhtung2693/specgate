@@ -61,6 +61,43 @@ func TestCompareCheckoutReceiptReportsChangedHead(t *testing.T) {
 	}
 }
 
+func TestCompareCheckoutReceiptMatchesOriginlessLocalCheckout(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	runner := &gitReceiptRunner{
+		outputs: map[string][]byte{
+			receiptCommand(dir, "rev-parse", "--show-toplevel"):                            []byte(dir + "\n"),
+			receiptCommand(dir, "branch", "--show-current"):                                []byte("solo\n"),
+			receiptCommand(dir, "rev-parse", "HEAD"):                                       []byte("head-1\n"),
+			receiptCommand(dir, "status", "--porcelain=v1", "-z", "--untracked-files=all"): []byte(" M local.go\x00"),
+		},
+		errors: map[string]error{
+			receiptCommand(dir, "remote", "get-url", "origin"): context.Canceled,
+		},
+	}
+	deps := &Deps{WorkingDir: dir, DeployRunner: runner}
+	stored := collectGitReceipt(context.Background(), runner, dir, nil)
+
+	got := compareCheckoutReceipt(context.Background(), deps, stored)
+	if !got.Checked || !got.Matches || got.Stale {
+		t.Fatalf("comparison = %#v, want checked local match", got)
+	}
+	if !strings.Contains(strings.ToLower(got.Message), "this local checkout") {
+		t.Fatalf("message = %q", got.Message)
+	}
+}
+
+func TestMapGitReceiptPreservesFreshnessScope(t *testing.T) {
+	got := mapGitReceipt(map[string]any{"git_receipt": map[string]any{
+		"availability":    "available",
+		"freshness_scope": "local_checkout",
+		"head_revision":   "head-1",
+	}})
+	if got.FreshnessScope != "local_checkout" {
+		t.Fatalf("freshness scope = %q, want local_checkout", got.FreshnessScope)
+	}
+}
+
 func TestCompareCheckoutReceiptDoesNotClaimCheckWhenGitUnavailable(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

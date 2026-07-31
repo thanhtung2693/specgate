@@ -492,23 +492,33 @@ func changeStatusLocal(cmd *cobra.Command, deps *Deps, ref string) (changeStatus
 	if err != nil {
 		return changeStatusResult{}, err
 	}
-	review, err := store.DeliveryStatus(cmd.Context(), selection.Workspace.ID, work.Key)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return changeStatusResult{}, err
-	}
-	if err != nil {
-		return deriveLocalChangeStatus(work, nil, nil, local.PeerReviewStatus{State: "not_run"}), nil
-	}
-	report, err := store.DeliveryReportForReview(cmd.Context(), selection.Workspace.ID, review)
+	result, report, err := deriveLocalChangeStatusFromStore(cmd.Context(), store, selection.Workspace.ID, work)
 	if err != nil {
 		return changeStatusResult{}, err
 	}
-	peer, err := store.PeerReviewStatus(cmd.Context(), selection.Workspace.ID, work.Key)
-	if err != nil {
-		return changeStatusResult{}, err
+	if report == nil {
+		return result, nil
 	}
-	result := deriveLocalChangeStatus(work, &review, &report, peer)
 	return applyCheckoutFreshness(cmd.Context(), deps, result, mapGitReceipt(report.Body)), nil
+}
+
+func deriveLocalChangeStatusFromStore(ctx context.Context, store *local.Store, workspaceID string, work local.WorkItem) (changeStatusResult, *local.DeliveryReport, error) {
+	review, err := store.DeliveryStatus(ctx, workspaceID, work.Key)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return changeStatusResult{}, nil, err
+	}
+	if err != nil {
+		return deriveLocalChangeStatus(work, nil, nil, local.PeerReviewStatus{State: "not_run"}), nil, nil
+	}
+	report, err := store.DeliveryReportForReview(ctx, workspaceID, review)
+	if err != nil {
+		return changeStatusResult{}, nil, err
+	}
+	peer, err := store.PeerReviewStatus(ctx, workspaceID, work.Key)
+	if err != nil {
+		return changeStatusResult{}, nil, err
+	}
+	return deriveLocalChangeStatus(work, &review, &report, peer), &report, nil
 }
 
 func deriveFullChangeStatus(work *client.ResolvedWork, delivery *client.DeliveryStatusResult) changeStatusResult {

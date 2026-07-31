@@ -146,6 +146,9 @@ func localDeliveryReceiptLabel(body map[string]any) string {
 	if head == "" {
 		return "No Git receipt recorded" + suffix
 	}
+	if strings.TrimSpace(fmt.Sprint(receipt["freshness_scope"])) == "local_checkout" {
+		return "local checkout commit " + shortGitRevision(head) + suffix
+	}
 	return "commit " + shortGitRevision(head) + suffix
 }
 
@@ -360,6 +363,9 @@ func deliveryReceiptLabel(receipt *client.GitReceipt) string {
 	}
 	if strings.TrimSpace(receipt.HeadRevision) == "" {
 		return "No Git receipt recorded" + suffix
+	}
+	if strings.TrimSpace(receipt.FreshnessScope) == "local_checkout" {
+		return "local checkout commit " + shortGitRevision(receipt.HeadRevision) + suffix
 	}
 	return "commit " + shortGitRevision(receipt.HeadRevision) + suffix
 }

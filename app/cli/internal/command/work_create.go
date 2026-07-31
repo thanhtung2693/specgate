@@ -122,14 +122,6 @@ func localWorkView(work local.WorkItem) map[string]any {
 	}
 }
 
-func localWorkViews(items []local.WorkItem) []map[string]any {
-	views := make([]map[string]any, 0, len(items))
-	for _, item := range items {
-		views = append(views, localWorkView(item))
-	}
-	return views
-}
-
 // specgate work create-quick ["Title"] [--description <text>] [--ac <criterion>]... [--file <path>]
 func newWorkCreateQuickCmd(deps *Deps) *cobra.Command {
 	var (

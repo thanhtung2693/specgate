@@ -390,7 +390,7 @@ Important facades:
 | `POST` | `/api/v1/work-items/{id}/archive` | Archive CR |
 | `GET` | `/api/v1/work-items/{id}/gates` | Read current gate state |
 | `GET` | `/api/v1/work-items/{id}/gate-history` | Read gate run history |
-| `GET` | `/api/v1/work-items/{id}/delivery-status` | Read authoritative delivery review. Optional `assurance_sources` reports server-observed `repository_observed` corroboration independently of per-criterion trust and human acceptance. `detail=true` includes the latest completion receipt and informational `peer_review` state: `not_run`, `passed`, `failed`, or `stale`. A peer state is evidence only and never replaces a human delivery decision. |
+| `GET` | `/api/v1/work-items/{id}/delivery-status` | Read authoritative delivery review. Optional `assurance_sources` reports server-observed `repository_observed` corroboration independently of per-criterion trust and human acceptance. `detail=true` includes the latest completion receipt and informational `peer_review` state: `not_run`, `passed`, `failed`, or `stale`. A receipt may include `freshness_scope=shared_repository` or `local_checkout`; only shared repository identity can support provider corroboration. A peer state is evidence only and never replaces a human delivery decision. |
 | `GET` | `/api/v1/work-items/{id}/policy` | Explain work-item policy |
 | `GET` | `/api/v1/audit/{ref}` | Chronological governance audit trail for a work ref |
 | `POST` | `/api/v1/artifacts/publish` | CLI/IDE artifact publish; the shared Local/Full boundary caps each inline document at 1 MiB and the decoded package at 10 MiB |

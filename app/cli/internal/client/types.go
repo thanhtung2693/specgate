@@ -493,14 +493,15 @@ type CheckResult struct {
 // GitReceipt is the repository identity persisted with completion evidence.
 // It contains metadata and a digest only; source contents are never uploaded.
 type GitReceipt struct {
-	Repository   string   `json:"repository"`
-	Availability string   `json:"availability"`
-	Branch       string   `json:"branch"`
-	BaseRevision string   `json:"base_revision"`
-	HeadRevision string   `json:"head_revision"`
-	ChangedFiles []string `json:"changed_files"`
-	DiffDigest   string   `json:"diff_digest"`
-	Warnings     []string `json:"warnings"`
+	Repository     string   `json:"repository"`
+	Availability   string   `json:"availability"`
+	FreshnessScope string   `json:"freshness_scope"`
+	Branch         string   `json:"branch"`
+	BaseRevision   string   `json:"base_revision"`
+	HeadRevision   string   `json:"head_revision"`
+	ChangedFiles   []string `json:"changed_files"`
+	DiffDigest     string   `json:"diff_digest"`
+	Warnings       []string `json:"warnings"`
 }
 
 type PeerReviewState struct {
