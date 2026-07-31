@@ -2724,6 +2724,7 @@ export interface components {
             branch: string;
             changed_files: string[] | null;
             diff_digest: string;
+            freshness_scope: string;
             head_revision: string;
             repository: string;
             warnings: string[] | null;
