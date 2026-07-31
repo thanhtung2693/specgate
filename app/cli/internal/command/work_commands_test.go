@@ -126,6 +126,99 @@ func TestWorkListByPhaseJSONReturnsItems(t *testing.T) {
 	}
 }
 
+func TestWorkListByPhaseJSONIncludesActionableStatus(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	setWorkListWorkspace(t, deps)
+	fc.workItems = []client.WorkItemSummary{
+		{ID: "cr-100", Key: "CR-100", Title: "Implement", Phase: "Ready"},
+		{ID: "cr-200", Key: "CR-200", Title: "Await acceptance", Phase: "Ready"},
+	}
+	fc.deliveryStatusByID = map[string]*client.DeliveryStatusResult{
+		"cr-100": {ChangeRequestID: "cr-100", Found: false},
+		"cr-200": {ChangeRequestID: "cr-200", Found: true, Verdict: "pass"},
+	}
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "work", "list", "--phase", "ready")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	var env struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Items []struct {
+				Key         string `json:"key"`
+				ChangeState string `json:"change_state"`
+				NextActor   string `json:"next_actor"`
+				NextCommand string `json:"next_command"`
+			} `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal: %v; out=%s", err, out.String())
+	}
+	if !env.OK || len(env.Data.Items) != 2 {
+		t.Fatalf("items = %+v", env.Data.Items)
+	}
+	if got := env.Data.Items[0]; got.Key != "CR-100" || got.ChangeState != "implementation" || got.NextActor != "implementing_agent" || got.NextCommand == "" {
+		t.Fatalf("first item = %+v", got)
+	}
+	if got := env.Data.Items[1]; got.Key != "CR-200" || got.ChangeState != "awaiting_acceptance" || got.NextActor != "human_reviewer" || got.NextCommand == "" {
+		t.Fatalf("second item = %+v", got)
+	}
+}
+
+func TestWorkListByPhaseFailsWhenStatusCannotBeDerived(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	setWorkListWorkspace(t, deps)
+	fc.workItems = []client.WorkItemSummary{{ID: "cr-100", Key: "CR-100", Title: "Implement", Phase: "Ready"}}
+	fc.deliveryStatusErrByID = map[string]error{"cr-100": errors.New("delivery status unavailable")}
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "work", "list", "--phase", "ready")
+	if code == output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if strings.Contains(out.String(), `"ok":true`) {
+		t.Fatalf("unsafe partial success: %s", out.String())
+	}
+}
+
+func TestLocalWorkListByPhaseIncludesActionableStatus(t *testing.T) {
+	deps, _, _, out := newFakeDeps(t)
+	stateDir, store, _, work := newLocalChangeWork(t, deps)
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: stateDir}}).SaveTo(deps.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "work", "list", "--phase", "ready")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	var env struct {
+		Data struct {
+			Items []struct {
+				Key         string `json:"key"`
+				ChangeState string `json:"change_state"`
+				NextActor   string `json:"next_actor"`
+				NextCommand string `json:"next_command"`
+			} `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal: %v; out=%s", err, out.String())
+	}
+	if len(env.Data.Items) != 1 {
+		t.Fatalf("items = %+v", env.Data.Items)
+	}
+	if got := env.Data.Items[0]; got.Key != work.Key || got.ChangeState != "implementation" || got.NextActor != "implementing_agent" || got.NextCommand == "" {
+		t.Fatalf("item = %+v", got)
+	}
+}
+
 func TestWorkListByPhaseRejectsAllWorkspaces(t *testing.T) {
 	t.Parallel()
 	deps, fc, _, out := newFakeDeps(t)

@@ -255,14 +255,15 @@ type ContextPackInput struct {
 // GitReceipt binds completion evidence to local repository metadata without
 // uploading source contents or a patch.
 type GitReceipt struct {
-	Repository   string   `json:"repository"`
-	Availability string   `json:"availability"`
-	Branch       string   `json:"branch"`
-	BaseRevision string   `json:"base_revision"`
-	HeadRevision string   `json:"head_revision"`
-	ChangedFiles []string `json:"changed_files"`
-	DiffDigest   string   `json:"diff_digest"`
-	Warnings     []string `json:"warnings"`
+	Repository     string   `json:"repository"`
+	Availability   string   `json:"availability"`
+	FreshnessScope string   `json:"freshness_scope"`
+	Branch         string   `json:"branch"`
+	BaseRevision   string   `json:"base_revision"`
+	HeadRevision   string   `json:"head_revision"`
+	ChangedFiles   []string `json:"changed_files"`
+	DiffDigest     string   `json:"diff_digest"`
+	Warnings       []string `json:"warnings"`
 }
 
 // FeedbackEvidence is one piece of evidence backing a feedback event or criterion.

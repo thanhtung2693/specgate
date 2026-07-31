@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -353,11 +354,14 @@ func TestGitReceiptUnavailableOutsideGit(t *testing.T) {
 	}
 }
 
-func TestGitReceiptUnavailableWithoutOrigin(t *testing.T) {
+func TestGitReceiptUsesLocalCheckoutScopeWithoutOrigin(t *testing.T) {
 	dir := t.TempDir()
 	runner := &gitReceiptRunner{
 		outputs: map[string][]byte{
-			receiptCommand(dir, "rev-parse", "--show-toplevel"): []byte(dir + "\n"),
+			receiptCommand(dir, "rev-parse", "--show-toplevel"):                            []byte(dir + "\n"),
+			receiptCommand(dir, "branch", "--show-current"):                                []byte("solo\n"),
+			receiptCommand(dir, "rev-parse", "HEAD"):                                       []byte("head\n"),
+			receiptCommand(dir, "status", "--porcelain=v1", "-z", "--untracked-files=all"): []byte(" M local.go\x00"),
 		},
 		errors: map[string]error{
 			receiptCommand(dir, "remote", "get-url", "origin"): errors.New("fatal: No such remote 'origin'"),
@@ -365,13 +369,24 @@ func TestGitReceiptUnavailableWithoutOrigin(t *testing.T) {
 	}
 
 	receipt := collectGitReceipt(context.Background(), runner, dir, nil)
-	if receipt.Availability != "unavailable" {
-		t.Fatalf("availability = %q, want unavailable", receipt.Availability)
+	if receipt.Availability != "available" {
+		t.Fatalf("availability = %q, want available", receipt.Availability)
 	}
-	if receipt.Repository != "" || receipt.HeadRevision != "" {
-		t.Errorf("receipt fabricated remote/revision: %+v", receipt)
+	if receipt.Repository != "" || receipt.BaseRevision != "" || receipt.HeadRevision != "head" || !strings.HasPrefix(receipt.DiffDigest, "sha256:") {
+		t.Errorf("receipt = %+v, want local checkout identity", receipt)
 	}
-	if len(receipt.Warnings) == 0 || !strings.Contains(strings.ToLower(receipt.Warnings[0]), "origin") {
-		t.Errorf("warnings = %#v, want missing-origin warning", receipt.Warnings)
+	encoded, err := json.Marshal(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["freshness_scope"] != "local_checkout" {
+		t.Errorf("freshness_scope = %#v, want local_checkout", payload["freshness_scope"])
+	}
+	if len(receipt.Warnings) == 0 || !strings.Contains(strings.ToLower(receipt.Warnings[0]), "shared") {
+		t.Errorf("warnings = %#v, want shared-provenance warning", receipt.Warnings)
 	}
 }

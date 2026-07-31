@@ -34,6 +34,8 @@ type fakeClient struct {
 	gatesStatusResult     *client.GatesStatusResult
 	gateHistoryResult     *client.GateHistoryResult
 	deliveryStatusResult  *client.DeliveryStatusResult
+	deliveryStatusByID    map[string]*client.DeliveryStatusResult
+	deliveryStatusErrByID map[string]error
 	readinessResult       map[string]any
 	governanceLevels      []client.GovernanceLevel
 	policyProjection      *client.PolicyProjection
@@ -561,6 +563,12 @@ func (f *fakeClient) DeliveryStatus(_ context.Context, id string, detail bool) (
 	f.calls++
 	f.lastGatesID = id
 	f.lastDetailFlag = detail
+	if err := f.deliveryStatusErrByID[id]; err != nil {
+		return nil, err
+	}
+	if result, ok := f.deliveryStatusByID[id]; ok {
+		return result, nil
+	}
 	if f.deliveryStatusResult != nil {
 		return f.deliveryStatusResult, nil
 	}

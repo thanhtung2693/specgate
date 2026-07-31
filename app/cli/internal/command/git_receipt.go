@@ -16,14 +16,15 @@ import (
 // gitReceipt is local repository identity and status metadata. It deliberately
 // contains no patch text or file contents; the digest is computed locally.
 type gitReceipt struct {
-	Repository   string   `json:"repository"`
-	Availability string   `json:"availability"`
-	Branch       string   `json:"branch"`
-	BaseRevision string   `json:"base_revision"`
-	HeadRevision string   `json:"head_revision"`
-	ChangedFiles []string `json:"changed_files"`
-	DiffDigest   string   `json:"diff_digest"`
-	Warnings     []string `json:"warnings"`
+	Repository     string   `json:"repository"`
+	Availability   string   `json:"availability"`
+	FreshnessScope string   `json:"freshness_scope"`
+	Branch         string   `json:"branch"`
+	BaseRevision   string   `json:"base_revision"`
+	HeadRevision   string   `json:"head_revision"`
+	ChangedFiles   []string `json:"changed_files"`
+	DiffDigest     string   `json:"diff_digest"`
+	Warnings       []string `json:"warnings"`
 }
 
 type gitStatusEntry struct {
@@ -32,8 +33,8 @@ type gitStatusEntry struct {
 }
 
 // collectGitReceipt gathers enough local Git identity to bind a delivery
-// report to a checkout. A missing repository or origin is intentionally an
-// unavailable receipt rather than a fabricated identity.
+// report to a checkout. A missing origin yields a local-only receipt; a missing
+// Git repository remains unavailable.
 func collectGitReceipt(ctx context.Context, runner deploy.CommandRunner, dir string, reported []string) gitReceipt {
 	return collectGitReceiptWithPriorBase(ctx, runner, dir, reported, "")
 }
@@ -61,17 +62,16 @@ func collectGitReceiptWithPriorBase(ctx context.Context, runner deploy.CommandRu
 	}
 	repoRoot := filepath.Clean(strings.TrimSpace(string(root)))
 
-	remote, err := gitOutput(ctx, runner, dir, "remote", "get-url", "origin")
-	if err != nil || strings.TrimSpace(string(remote)) == "" {
-		// Name the consequence and the remedy. The bare fact left a solo author
-		// with no idea that staleness detection was silently inactive, or that
-		// configuring a remote is what turns it on.
-		receipt.Warnings = append(receipt.Warnings,
-			"Git receipt unavailable: no origin remote, so submitted evidence is not checked against later changes; configure one with `git remote add origin <url>` to enable staleness detection")
-		return receipt
-	}
-	receipt.Repository = strings.TrimSpace(string(remote))
 	receipt.Availability = "available"
+	remote, err := gitOutput(ctx, runner, dir, "remote", "get-url", "origin")
+	if err == nil && strings.TrimSpace(string(remote)) != "" {
+		receipt.Repository = strings.TrimSpace(string(remote))
+		receipt.FreshnessScope = "shared_repository"
+	} else {
+		receipt.FreshnessScope = "local_checkout"
+		receipt.Warnings = append(receipt.Warnings,
+			"Shared repository provenance is unavailable: no origin remote; SpecGate can still detect changes in this local checkout")
+	}
 
 	if branch, err := gitOutput(ctx, runner, dir, "branch", "--show-current"); err == nil {
 		receipt.Branch = strings.TrimSpace(string(branch))
@@ -93,35 +93,37 @@ func collectGitReceiptWithPriorBase(ctx context.Context, runner deploy.CommandRu
 		statusEntries = parseGitStatus(status)
 	}
 
-	baseRef := "origin/HEAD"
-	if receipt.Branch != "" {
-		baseRef = "origin/" + receipt.Branch
-	}
-	base, baseErr := gitOutput(ctx, runner, dir, "merge-base", "HEAD", baseRef)
-	if baseErr != nil && baseRef != "origin/HEAD" {
-		// Feature branches commonly have no pushed origin/<branch>; the
-		// origin/HEAD default branch is still a useful local base.
-		base, baseErr = gitOutput(ctx, runner, dir, "merge-base", "HEAD", "origin/HEAD")
-	}
-	if baseErr == nil {
-		receipt.BaseRevision = strings.TrimSpace(string(base))
-		if receipt.BaseRevision == receipt.HeadRevision && receipt.HeadRevision != "" {
-			if prior := strings.TrimSpace(priorBase); prior != "" && prior != receipt.HeadRevision {
-				if _, err := gitOutput(ctx, runner, dir, "merge-base", "--is-ancestor", prior, receipt.HeadRevision); err == nil {
-					receipt.BaseRevision = prior
+	committedEntries := []gitStatusEntry{}
+	if receipt.FreshnessScope == "shared_repository" {
+		baseRef := "origin/HEAD"
+		if receipt.Branch != "" {
+			baseRef = "origin/" + receipt.Branch
+		}
+		base, baseErr := gitOutput(ctx, runner, dir, "merge-base", "HEAD", baseRef)
+		if baseErr != nil && baseRef != "origin/HEAD" {
+			// Feature branches commonly have no pushed origin/<branch>; the
+			// origin/HEAD default branch is still a useful local base.
+			base, baseErr = gitOutput(ctx, runner, dir, "merge-base", "HEAD", "origin/HEAD")
+		}
+		if baseErr == nil {
+			receipt.BaseRevision = strings.TrimSpace(string(base))
+			if receipt.BaseRevision == receipt.HeadRevision && receipt.HeadRevision != "" {
+				if prior := strings.TrimSpace(priorBase); prior != "" && prior != receipt.HeadRevision {
+					if _, err := gitOutput(ctx, runner, dir, "merge-base", "--is-ancestor", prior, receipt.HeadRevision); err == nil {
+						receipt.BaseRevision = prior
+					}
 				}
 			}
-		}
-	} else {
-		receipt.Warnings = append(receipt.Warnings, "Git base revision could not be determined")
-	}
-	committedEntries := []gitStatusEntry{}
-	if receipt.BaseRevision != "" && receipt.HeadRevision != "" {
-		committed, diffErr := gitOutput(ctx, runner, dir, "diff", "--name-only", receipt.BaseRevision, receipt.HeadRevision)
-		if diffErr != nil {
-			receipt.Warnings = append(receipt.Warnings, "Git committed file history could not be determined")
 		} else {
-			committedEntries = parseGitDiffNames(committed)
+			receipt.Warnings = append(receipt.Warnings, "Git base revision could not be determined")
+		}
+		if receipt.BaseRevision != "" && receipt.HeadRevision != "" {
+			committed, diffErr := gitOutput(ctx, runner, dir, "diff", "--name-only", receipt.BaseRevision, receipt.HeadRevision)
+			if diffErr != nil {
+				receipt.Warnings = append(receipt.Warnings, "Git committed file history could not be determined")
+			} else {
+				committedEntries = parseGitDiffNames(committed)
+			}
 		}
 	}
 	allEntries := append(append([]gitStatusEntry{}, statusEntries...), committedEntries...)

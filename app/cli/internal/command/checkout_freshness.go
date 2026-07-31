@@ -41,31 +41,47 @@ func compareCheckoutReceipt(ctx context.Context, deps *Deps, stored gitReceipt) 
 		}
 	}
 
+	scope := receiptFreshnessScope(stored)
 	var differences []string
 	compareReceiptField := func(label, before, after string) {
 		if strings.TrimSpace(before) != "" && strings.TrimSpace(before) != strings.TrimSpace(after) {
 			differences = append(differences, label)
 		}
 	}
-	compareReceiptField("repository", stored.Repository, current.Repository)
+	if scope != "local_checkout" {
+		compareReceiptField("repository", stored.Repository, current.Repository)
+		compareReceiptField("base revision", stored.BaseRevision, current.BaseRevision)
+	}
 	compareReceiptField("branch", stored.Branch, current.Branch)
-	compareReceiptField("base revision", stored.BaseRevision, current.BaseRevision)
 	compareReceiptField("HEAD", stored.HeadRevision, current.HeadRevision)
 	compareReceiptField("working tree digest", stored.DiffDigest, current.DiffDigest)
+	matchMessage := "Stored receipt matches the current checkout."
+	differenceMessage := "Current checkout differs from the stored receipt: "
+	if scope == "local_checkout" {
+		matchMessage = "Stored receipt matches this local checkout."
+		differenceMessage = "This local checkout differs from the stored receipt: "
+	}
 
 	if len(differences) == 0 {
 		return checkoutReceiptComparison{
 			Checked: true,
 			Matches: true,
-			Message: "Stored receipt matches the current checkout.",
+			Message: matchMessage,
 		}
 	}
 	return checkoutReceiptComparison{
 		Checked: true,
 		Stale:   true,
-		Message: "Current checkout differs from the stored receipt: " + strings.Join(differences, ", ") + ".",
+		Message: differenceMessage + strings.Join(differences, ", ") + ".",
 		Reason:  "Checkout differs from stored Git receipt",
 	}
+}
+
+func receiptFreshnessScope(receipt gitReceipt) string {
+	if scope := strings.TrimSpace(receipt.FreshnessScope); scope != "" {
+		return scope
+	}
+	return "shared_repository"
 }
 
 func clientGitReceipt(receipt *client.GitReceipt) gitReceipt {
@@ -74,7 +90,8 @@ func clientGitReceipt(receipt *client.GitReceipt) gitReceipt {
 	}
 	return gitReceipt{
 		Repository: receipt.Repository, Availability: receipt.Availability,
-		Branch: receipt.Branch, BaseRevision: receipt.BaseRevision,
+		FreshnessScope: receipt.FreshnessScope,
+		Branch:         receipt.Branch, BaseRevision: receipt.BaseRevision,
 		HeadRevision: receipt.HeadRevision, ChangedFiles: receipt.ChangedFiles,
 		DiffDigest: receipt.DiffDigest, Warnings: receipt.Warnings,
 	}
@@ -86,14 +103,15 @@ func mapGitReceipt(body map[string]any) gitReceipt {
 		return gitReceipt{}
 	}
 	return gitReceipt{
-		Repository:   strings.TrimSpace(fmt.Sprint(raw["repository"])),
-		Availability: strings.TrimSpace(fmt.Sprint(raw["availability"])),
-		Branch:       strings.TrimSpace(fmt.Sprint(raw["branch"])),
-		BaseRevision: strings.TrimSpace(fmt.Sprint(raw["base_revision"])),
-		HeadRevision: strings.TrimSpace(fmt.Sprint(raw["head_revision"])),
-		ChangedFiles: stringSlice(raw["changed_files"]),
-		DiffDigest:   strings.TrimSpace(fmt.Sprint(raw["diff_digest"])),
-		Warnings:     stringSlice(raw["warnings"]),
+		Repository:     strings.TrimSpace(fmt.Sprint(raw["repository"])),
+		Availability:   strings.TrimSpace(fmt.Sprint(raw["availability"])),
+		FreshnessScope: strings.TrimSpace(fmt.Sprint(raw["freshness_scope"])),
+		Branch:         strings.TrimSpace(fmt.Sprint(raw["branch"])),
+		BaseRevision:   strings.TrimSpace(fmt.Sprint(raw["base_revision"])),
+		HeadRevision:   strings.TrimSpace(fmt.Sprint(raw["head_revision"])),
+		ChangedFiles:   stringSlice(raw["changed_files"]),
+		DiffDigest:     strings.TrimSpace(fmt.Sprint(raw["diff_digest"])),
+		Warnings:       stringSlice(raw["warnings"]),
 	}
 }
 

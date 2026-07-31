@@ -543,6 +543,13 @@ Delivery-status readback projects the matched repository signal through
 optional `assurance_sources`: `repository_observed`. It supplements
 per-criterion trust tiers and never represents human acceptance.
 
+Completion `git_receipt` payloads may set `freshness_scope=shared_repository`
+when an origin URL identifies the checkout, or `local_checkout` when no origin
+exists. Local scope supports CLI staleness comparison of branch, HEAD, and
+working-tree digest in that checkout only; it never supports
+`repository_observed` corroboration. Missing scope remains compatible with old
+origin-backed receipts.
+
 ## Knowledge
 
 Governance Knowledge is workspace-scoped reference material. It is distinct from

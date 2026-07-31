@@ -45,6 +45,16 @@ sequence into the prompt.
 
 ## What the agent does
 
+When no work reference was supplied, the agent first runs:
+
+```bash
+specgate work list --phase ready --json
+```
+
+It selects only one row whose `next_actor` is `implementing_agent`. A row in
+the Ready lifecycle phase can instead await a human reviewer. If no eligible
+row exists, or several need a human priority choice, the agent stops and asks.
+
 ### 1. Read the approved contract
 
 The agent starts from the Context Pack:

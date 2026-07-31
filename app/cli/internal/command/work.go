@@ -1,6 +1,7 @@
 package command
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/config"
+	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
@@ -69,12 +71,16 @@ func newWorkListCmd(deps *Deps) *cobra.Command {
 					}
 					items = filtered
 				}
+				views, err := localWorkListViews(cmd.Context(), store, selection.Workspace.ID, items)
+				if err != nil {
+					return localExitError(deps, "work.list", err)
+				}
 				if deps.Printer.Mode() == output.ModeJSON {
-					deps.Printer.Success("work.list", map[string]any{"items": localWorkViews(items)})
+					deps.Printer.Success("work.list", map[string]any{"items": views})
 					return nil
 				}
-				for _, item := range items {
-					fmt.Fprintf(deps.Stdout, "%s  [%s]  %s\n", item.Key, item.Phase, item.Title)
+				for _, item := range views {
+					fmt.Fprintf(deps.Stdout, "%s  [%s / %s -> %s]  %s\n", item["key"], item["phase"], item["change_state"], item["next_actor"], item["title"])
 				}
 				return nil
 			}
@@ -157,20 +163,70 @@ func runWorkListByPhase(cmd *cobra.Command, deps *Deps, workspaceID, phaseCSV st
 			filtered = append(filtered, it)
 		}
 	}
+	views, err := fullWorkListViews(cmd.Context(), deps, filtered)
+	if err != nil {
+		return apiExitError(deps, "work.list", err)
+	}
 
 	if deps.Printer.Mode() == output.ModeJSON {
-		deps.Printer.Success("work.list", map[string]any{"items": filtered})
+		deps.Printer.Success("work.list", map[string]any{"items": views})
 		return nil
 	}
-	if len(filtered) == 0 {
+	if len(views) == 0 {
 		fmt.Fprintf(deps.Stdout, "No work items in phase(s) %s.\n", phaseCSV)
 		return nil
 	}
-	for _, it := range filtered {
-		fmt.Fprintf(deps.Stdout, "%s  [%s]  %s\n", styled(deps, output.StyleBold, it.Key), styledStatus(deps, it.Phase), it.Title)
+	for _, it := range views {
+		fmt.Fprintf(deps.Stdout, "%s  [%s / %s -> %s]  %s\n", styled(deps, output.StyleBold, it.Key), styledStatus(deps, it.Phase), it.ChangeState, it.NextActor, it.Title)
 	}
 	fmt.Fprintln(deps.Stdout, nextStep(deps, "Show details with", "specgate work show <ref>"))
 	return nil
+}
+
+type workListItemView struct {
+	client.WorkItemSummary
+	ChangeState string `json:"change_state"`
+	NextActor   string `json:"next_actor"`
+	NextCommand string `json:"next_command"`
+}
+
+func localWorkListViews(ctx context.Context, store *local.Store, workspaceID string, items []local.WorkItem) ([]map[string]any, error) {
+	views := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		status, _, err := deriveLocalChangeStatusFromStore(ctx, store, workspaceID, item)
+		if err != nil {
+			return nil, err
+		}
+		view := localWorkView(item)
+		view["change_state"] = status.State
+		view["next_actor"] = status.NextActor
+		view["next_command"] = status.NextCommand
+		views = append(views, view)
+	}
+	return views, nil
+}
+
+func fullWorkListViews(ctx context.Context, deps *Deps, items []client.WorkItemSummary) ([]workListItemView, error) {
+	views := make([]workListItemView, 0, len(items))
+	for _, item := range items {
+		delivery, err := deps.Client.DeliveryStatus(ctx, item.ID, true)
+		if err != nil {
+			return nil, err
+		}
+		status := deriveFullChangeStatus(&client.ResolvedWork{
+			ChangeRequestID:  item.ID,
+			ChangeRequestKey: item.Key,
+			Title:            item.Title,
+			Phase:            item.Phase,
+		}, delivery)
+		views = append(views, workListItemView{
+			WorkItemSummary: item,
+			ChangeState:     status.State,
+			NextActor:       status.NextActor,
+			NextCommand:     status.NextCommand,
+		})
+	}
+	return views, nil
 }
 
 func printNoWorkNeedsAttention(deps *Deps, st *client.GovernanceStatus, unscoped bool) {

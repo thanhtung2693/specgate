@@ -399,6 +399,10 @@ mismatch is a conflict that requires refresh and reconfirmation.
 decision in `verdict` and, for human runs, the reviewed platform assessment in
 optional `evidence_verdict`. `reason_code=policy_unavailable` is the
 deterministic fail-closed policy guard.
+Completion receipts may declare `freshness_scope=shared_repository` when an
+origin URL identifies the repository, or `local_checkout` when no origin
+exists. Local scope supports only same-checkout staleness detection and cannot
+support provider corroboration.
 Optional `assurance_sources` is derived only from persisted server-observed
 delivery evidence. `repository_observed` means a merged-PR/MR event whose
 normalized payload `head_sha` equals the latest completion receipt's normalized

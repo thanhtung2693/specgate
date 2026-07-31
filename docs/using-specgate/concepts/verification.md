@@ -151,7 +151,7 @@ pretend to prove that an automated check exercised the acceptance criterion.
 ### Git-bound resume receipt
 
 The CLI may attach a `git_receipt` containing repository/branch/revision
-metadata, changed-file names, and a local digest. This is self-attested
+metadata, changed-file names, a local digest, and `freshness_scope`. This is self-attested
 (`agent_attested`): it detects checkout staleness or drift between report and
 submit and gives a new IDE agent a compare-target, but it is not cryptographic
 proof of what was built. It contains no source diff or file contents. A merged
@@ -164,10 +164,12 @@ the prior receipt base only if it is still an ancestor of `HEAD`; this preserves
 the delivered commit range instead of treating an up-to-date tracking branch as
 an empty change. Unrelated dirty files remain warnings.
 
-`specgate change status` compares that stored receipt with the current
-repository, branch, HEAD, and working-tree digest. A match is reported
-explicitly. A mismatch is a stale warning; unavailable Git metadata is reported
-as unverified rather than guessed.
+`freshness_scope=shared_repository` compares the stored receipt with the
+current repository, branch, base, HEAD, and working-tree digest.
+`freshness_scope=local_checkout` compares branch, HEAD, and working-tree digest
+in the checkout that recorded it; it is not portable provenance. A match is
+reported explicitly. A mismatch is a stale warning; unavailable non-Git
+metadata is reported as unverified rather than guessed.
 
 ## Corroborated evidence
 
