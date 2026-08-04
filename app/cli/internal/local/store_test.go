@@ -241,6 +241,7 @@ func TestPublishArtifactVersionsAreImmutableAndWorkspaceScoped(t *testing.T) {
 	second, err := store.PublishArtifact(context.Background(), alpha.Workspace.ID, local.ArtifactInput{
 		FeatureKey:  "LOCAL-ARTIFACTS",
 		RequestType: "new_feature",
+		BaseVersion: "v1",
 		Documents:   []local.ArtifactDocumentInput{{Path: "spec.md", Role: "spec", Content: []byte("second")}},
 	})
 	if err != nil {
@@ -265,6 +266,40 @@ func TestPublishArtifactVersionsAreImmutableAndWorkspaceScoped(t *testing.T) {
 	}
 	if len(items) != 0 {
 		t.Fatalf("beta artifacts = %#v", items)
+	}
+}
+
+func TestPublishArtifactRequiresExactLatestBaseVersion(t *testing.T) {
+	store, err := local.Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	selection, err := store.Initialize(context.Background(), local.InitInput{WorkspaceName: "Alpha", DisplayName: "Human", Username: "human"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := local.ArtifactInput{
+		FeatureKey: "LOCAL-BASE", RequestType: "change_request",
+		Documents: []local.ArtifactDocumentInput{{Path: "spec.md", Role: "spec", Content: []byte("v1")}},
+	}
+	if _, err := store.PublishArtifact(context.Background(), selection.Workspace.ID, input); err != nil {
+		t.Fatal(err)
+	}
+	input.Documents[0].Content = []byte("v2")
+	for _, base := range []string{"", "v0", "v2"} {
+		input.BaseVersion = base
+		if _, err := store.PublishArtifact(context.Background(), selection.Workspace.ID, input); err == nil || !strings.Contains(err.Error(), "base_version") {
+			t.Fatalf("base_version %q error = %v, want rejection", base, err)
+		}
+	}
+	input.BaseVersion = "v1"
+	updated, err := store.PublishArtifact(context.Background(), selection.Workspace.ID, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Version != 2 {
+		t.Fatalf("version = %d, want 2", updated.Version)
 	}
 }
 

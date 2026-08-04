@@ -285,6 +285,17 @@ func TestLocalArtifactPublishPreviewCompareNeedNoHTTP(t *testing.T) {
 			t.Fatalf("compare preview missing %s: %s", want, out.String())
 		}
 	}
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "publish", "--file", previewPath); code != output.ExitOK {
+		t.Fatalf("publish update exit = %d; output=%s", code, out.String())
+	}
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "publish", "--file", previewPath); code == output.ExitOK {
+		t.Fatalf("stale direct publication was accepted: %s", out.String())
+	}
+	if !strings.Contains(out.String(), "base_version") || !strings.Contains(out.String(), "latest version") {
+		t.Fatalf("stale direct publication error = %s", out.String())
+	}
 	if deps.Client != nil {
 		t.Fatal("Local compare preview created an HTTP client")
 	}

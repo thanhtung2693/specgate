@@ -735,6 +735,7 @@ func TestDeliverySubmitAcceptsExistingEvidencePathsAndSkipsEmpty(t *testing.T) {
 	t.Parallel()
 	deps, fc, _, out := newFakeDeps(t)
 	existing := filepath.Join(t.TempDir(), "handler.go")
+	deps.WorkingDir = filepath.Dir(existing)
 	if err := os.WriteFile(existing, []byte("package api\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -768,6 +769,7 @@ func TestDeliverySubmitGroundsCriterionEvidenceFromCitedFile(t *testing.T) {
 	t.Parallel()
 	deps, fc, _, out := newFakeDeps(t)
 	dir := t.TempDir()
+	deps.WorkingDir = dir
 	existing := filepath.Join(dir, "handler.go")
 	if err := os.WriteFile(existing, []byte("package api\n\nfunc Handler() {}\n"), 0o644); err != nil {
 		t.Fatal(err)

@@ -174,6 +174,9 @@ func newDeliveryPeerReviewCmd(deps *Deps) *cobra.Command {
 			if err := validateCompletionReport(deps, "delivery.peer-review", body); err != nil {
 				return err
 			}
+			if err := verifyCompletionEvidence(deps, "delivery.peer-review", body); err != nil {
+				return err
+			}
 			if deps.Topology == config.ModeLocal {
 				if len(args) == 0 {
 					return localExitError(deps, "delivery.peer-review", ErrWorkRefRequired)

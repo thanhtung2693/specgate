@@ -351,11 +351,26 @@ func (s *Store) PeerReviewDelivery(ctx context.Context, workspaceID, ref string,
 	if completionReceipt == nil || peerReceipt == nil || !reflect.DeepEqual(completionReceipt, peerReceipt) {
 		return PeerReview{}, fmt.Errorf("peer review git_receipt must match the latest completion receipt")
 	}
-	if err := validateLocalPeerCriteria(body, work.AcceptanceCriteria); err != nil {
+	if err := validateLocalPeerCriteria(body, completion.Body, work.AcceptanceCriteria); err != nil {
 		return PeerReview{}, err
 	}
 	encoded, err := json.Marshal(body)
 	if err != nil {
+		return PeerReview{}, err
+	}
+	var existing PeerReview
+	err = s.db.QueryRowContext(
+		ctx,
+		`SELECT id, work_id, agent_name, created_at FROM delivery_peer_reviews WHERE workspace_id = ? AND work_id = ? AND agent_name = ? AND CAST(body AS TEXT) = ? LIMIT 1`,
+		workspaceID,
+		work.ID,
+		peer,
+		string(encoded),
+	).Scan(&existing.ID, &existing.WorkID, &existing.AgentName, &existing.CreatedAt)
+	if err == nil {
+		return existing, nil
+	}
+	if err != sql.ErrNoRows {
 		return PeerReview{}, err
 	}
 	id, err := newID()
@@ -363,7 +378,7 @@ func (s *Store) PeerReviewDelivery(ctx context.Context, workspaceID, ref string,
 		return PeerReview{}, err
 	}
 	peerReview := PeerReview{ID: id, WorkID: work.ID, AgentName: peer, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO delivery_peer_reviews(id, workspace_id, work_id, agent_name, body, created_at) VALUES (?, ?, ?, ?, ?, ?)`, peerReview.ID, workspaceID, peerReview.WorkID, peerReview.AgentName, encoded, peerReview.CreatedAt); err != nil {
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO delivery_peer_reviews(id, workspace_id, work_id, agent_name, body, created_at) VALUES (?, ?, ?, ?, ?, ?)`, peerReview.ID, workspaceID, peerReview.WorkID, peerReview.AgentName, string(encoded), peerReview.CreatedAt); err != nil {
 		return PeerReview{}, err
 	}
 	if err := s.recordAudit(ctx, workspaceID, work.ID, "delivery.peer_reviewed", "peer review recorded by "+peer); err != nil {
@@ -378,7 +393,7 @@ func feedbackAgentName(body map[string]any) string {
 	return strings.TrimSpace(name)
 }
 
-func validateLocalPeerCriteria(body map[string]any, requiredCriteria []string) error {
+func validateLocalPeerCriteria(body, completion map[string]any, requiredCriteria []string) error {
 	count := len(requiredCriteria)
 	seen := make(map[string]struct{}, count)
 	criteria, _ := body["criteria"].([]any)
@@ -403,7 +418,7 @@ func validateLocalPeerCriteria(body map[string]any, requiredCriteria []string) e
 	if len(seen) != count {
 		return fmt.Errorf("peer review must cover every acceptance criterion exactly once")
 	}
-	if unmet := unmetBoundCriteria(body, requiredCriteria); unmet != "" {
+	if unmet := unmetBoundCriteria(completion, requiredCriteria); unmet != "" {
 		return fmt.Errorf("peer review %s", unmet)
 	}
 	return nil

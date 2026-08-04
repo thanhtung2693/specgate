@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/deploy"
 	"github.com/specgate/specgate/app/cli/internal/fsutil"
 	"github.com/specgate/specgate/app/cli/internal/output"
@@ -133,24 +135,10 @@ func readJSONBodyFile(deps *Deps, command, filePath string) (map[string]any, err
 	return body, nil
 }
 
-// collectMissingCompletionPaths returns evidence paths and affected_files
-// entries from a completion body that do not exist on disk, resolved against
-// the current working directory. Empty paths (scaffold placeholders) are
-// skipped.
-func collectMissingCompletionPaths(body map[string]any) (evidence []string, affected []string) {
-	criteria, _ := body["criteria"].([]any)
-	for _, raw := range criteria {
-		entry, _ := raw.(map[string]any)
-		ev, _ := entry["evidence"].(map[string]any)
-		path, _ := ev["path"].(string)
-		path = strings.TrimSpace(path)
-		if path == "" {
-			continue
-		}
-		if _, err := os.Stat(path); err != nil {
-			evidence = append(evidence, path)
-		}
-	}
+// collectMissingAffectedPaths returns affected_files entries that do not exist
+// on disk. Missing entries only warn because deleted files are legitimate.
+func collectMissingAffectedPaths(deps *Deps, body map[string]any) (affected []string) {
+	workingDir := deliveryWorkingDir(deps)
 	files, _ := body["affected_files"].([]any)
 	for _, raw := range files {
 		path, _ := raw.(string)
@@ -158,11 +146,15 @@ func collectMissingCompletionPaths(body map[string]any) (evidence []string, affe
 		if path == "" {
 			continue
 		}
-		if _, err := os.Stat(path); err != nil {
+		candidate := path
+		if !filepath.IsAbs(candidate) {
+			candidate = filepath.Join(workingDir, candidate)
+		}
+		if _, err := os.Stat(candidate); err != nil {
 			affected = append(affected, path)
 		}
 	}
-	return evidence, affected
+	return affected
 }
 
 // verifyCompletionEvidence enforces that cited evidence paths exist before the
@@ -171,23 +163,19 @@ func collectMissingCompletionPaths(body map[string]any) (evidence []string, affe
 // unchecked. Missing affected_files entries only warn — deletions are
 // legitimate. Returns an *output.ExitError when verification fails.
 func verifyCompletionEvidence(deps *Deps, command string, body map[string]any) error {
-	missingEvidence, missingAffected := collectMissingCompletionPaths(body)
-	if len(missingEvidence) > 0 {
+	if err := groundCompletionEvidence(deps, body); err != nil {
 		payload := output.ErrorPayload{
-			Code: "validation",
-			Message: fmt.Sprintf(
-				"completion evidence cites paths that do not exist in the working tree: %s — fix the paths (relative to the directory specgate runs from) or pass --skip-evidence-check",
-				strings.Join(missingEvidence, ", ")),
-			Details: map[string]any{"missing_paths": missingEvidence},
+			Code:    "validation",
+			Message: fmt.Sprintf("completion evidence must cite regular files inside the working tree: %v — fix the path or pass --skip-evidence-check", err),
 		}
 		code := deps.Printer.Error(command, payload)
 		return &output.ExitError{Code: code}
 	}
+	missingAffected := collectMissingAffectedPaths(deps, body)
 	if len(missingAffected) > 0 && deps.Printer.Mode() != output.ModeJSON {
 		fmt.Fprintf(deps.Stderr, "Warning: affected_files entries not found in the working tree (deleted files are expected): %s\n",
 			strings.Join(missingAffected, ", "))
 	}
-	groundCompletionEvidence(body)
 	return nil
 }
 
@@ -299,7 +287,11 @@ func completionValidationError(deps *Deps, command, message string) error {
 	return &output.ExitError{Code: code}
 }
 
-func groundCompletionEvidence(body map[string]any) {
+func groundCompletionEvidence(deps *Deps, body map[string]any) error {
+	workingDir, root, err := completionEvidenceBoundary(deps)
+	if err != nil {
+		return err
+	}
 	criteria, _ := body["criteria"].([]any)
 	for _, raw := range criteria {
 		entry, _ := raw.(map[string]any)
@@ -312,9 +304,9 @@ func groundCompletionEvidence(body map[string]any) {
 		if path == "" {
 			continue
 		}
-		data, err := os.ReadFile(path)
+		data, err := readCompletionEvidence(workingDir, root, path)
 		if err != nil {
-			continue
+			return fmt.Errorf("%s: %w", path, err)
 		}
 		heading, _ := ev["heading"].(string)
 		excerpt, status := evidenceExcerpt(data, evidenceLine(ev["line"]), strings.TrimSpace(heading))
@@ -328,6 +320,62 @@ func groundCompletionEvidence(body map[string]any) {
 		}
 		ev["grounding"] = grounding
 	}
+	return nil
+}
+
+func completionEvidenceBoundary(deps *Deps) (workingDir, root string, err error) {
+	workingDir, err = filepath.Abs(deliveryWorkingDir(deps))
+	if err != nil {
+		return "", "", err
+	}
+	workingDir, err = filepath.EvalSymlinks(workingDir)
+	if err != nil {
+		return "", "", err
+	}
+	root = workingDir
+	if projectRoot, ok := config.FindProjectRoot(workingDir); ok {
+		root = projectRoot
+	}
+	return workingDir, root, nil
+}
+
+func readCompletionEvidence(workingDir, root, path string) ([]byte, error) {
+	candidate := path
+	if !filepath.IsAbs(candidate) {
+		candidate = filepath.Join(workingDir, candidate)
+	}
+	candidate = filepath.Clean(candidate)
+	info, err := os.Lstat(candidate)
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("symlinks are not allowed")
+	}
+	realPath, err := filepath.EvalSymlinks(candidate)
+	if err != nil {
+		return nil, err
+	}
+	relative, err := filepath.Rel(root, realPath)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return nil, fmt.Errorf("path is outside the Git repository")
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("path is not a regular file")
+	}
+	file, err := os.Open(candidate)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	opened, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !opened.Mode().IsRegular() || !os.SameFile(info, opened) {
+		return nil, fmt.Errorf("path changed while it was being opened")
+	}
+	return io.ReadAll(file)
 }
 
 func evidenceLine(raw any) int {
