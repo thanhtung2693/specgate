@@ -136,6 +136,32 @@ def test_refresh_artifact_readiness_runs_posts_evaluations() -> None:
     assert out == [{"gate": "scope_clear", "state": "pass"}]
 
 
+def test_refresh_change_request_gate_runs_posts_evaluations() -> None:
+    seen: list[tuple[str, str, dict | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = request.read()
+        seen.append((request.method, request.url.path, None if not body else json.loads(body)))
+        if request.url.path == "/workboard/change-requests/cr-1/gate-runs/refresh":
+            return httpx.Response(
+                200,
+                json={"body": {"items": [{"gate": "rollback_plan_present", "state": "pass"}]}},
+            )
+        return httpx.Response(404)
+
+    client = DocRegistryClient("http://registry.test", transport=httpx.MockTransport(handler))
+    evaluations = [
+        {"gate": "rollback_plan_present", "state": "needs_human_review", "confidence": 0.5}
+    ]
+
+    rows = client.refresh_change_request_gate_runs("cr-1", evaluations)
+    assert rows and rows[0]["gate"] == "rollback_plan_present"
+    assert seen[-1][2] == {"evaluations": evaluations}
+
+    client.refresh_change_request_gate_runs("cr-1", evaluations, evaluations_only=True)
+    assert seen[-1][2] == {"evaluations": evaluations, "evaluations_only": True}
+
+
 def test_list_artifact_readiness_runs_reads_items() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/artifacts/art-1/readiness-runs"

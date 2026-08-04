@@ -296,11 +296,12 @@ func FindProjectRoot(start string) (string, bool) {
 }
 
 // EnsureSpecgateDirGitignore writes a .gitignore inside the .specgate working
-// directory so its transient delivery scaffolds (completion-<ref>.json) are
-// ignored, while the committed config and the .gitignore itself stay tracked.
-// A nested .gitignore keeps this self-contained: git honors it whether or not it
-// is committed, so scaffolds are ignored locally right away, and the repo's root
-// .gitignore is never touched. Idempotent — an existing file is left untouched.
+// directory so its transient delivery scaffolds (completion-<ref>.json) and the
+// generated ignore file stay private, while config and review handoffs can be
+// committed deliberately. A nested .gitignore keeps this self-contained: git
+// honors it even when it ignores itself, so the repo's root .gitignore is never
+// touched. Exact generated content from older releases is upgraded; user-edited
+// files are left untouched.
 func EnsureSpecgateDirGitignore(dir string) error {
 	info, err := os.Lstat(dir)
 	switch {
@@ -316,17 +317,28 @@ func EnsureSpecgateDirGitignore(dir string) error {
 		return err
 	}
 
+	const legacyContent = "# SpecGate working dir: ignore transient delivery scaffolds,\n" +
+		"# keep the committed config, review handoffs, and this file.\n" +
+		"*\n!.gitignore\n!config\n!handoffs/\n!handoffs/**\n"
+	const initialLegacyContent = "# SpecGate working dir: ignore transient delivery scaffolds,\n" +
+		"# keep the committed config and this file.\n" +
+		"*\n!.gitignore\n!config\n"
+	const content = "# SpecGate working dir: ignore generated files and transient delivery scaffolds.\n" +
+		"*\n!config\n!handoffs/\n!handoffs/**\n"
+
 	path := filepath.Join(dir, ".gitignore")
-	if _, err := os.Lstat(path); err == nil {
-		return nil // already present; leave the user's file alone
+	if info, err := os.Lstat(path); err == nil {
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		body, readErr := os.ReadFile(path)
+		if readErr != nil || (string(body) != legacyContent && string(body) != initialLegacyContent) {
+			return nil
+		}
+		return fsutil.AtomicWriteFile(path, []byte(content), info.Mode().Perm())
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	// `*` matches at every level, so re-including a directory takes both the
-	// directory entry and its contents.
-	const content = "# SpecGate working dir: ignore transient delivery scaffolds,\n" +
-		"# keep the committed config, review handoffs, and this file.\n" +
-		"*\n!.gitignore\n!config\n!handoffs/\n!handoffs/**\n"
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if os.IsExist(err) {
 		return nil

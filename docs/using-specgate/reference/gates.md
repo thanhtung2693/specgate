@@ -90,7 +90,8 @@ The reviewer does not read the git diff; see
 the `corroborated_required` evidence policy, a pass without a matched
 merged PR/MR repository event whose `head_sha` matches the latest completion
 receipt's `head_revision`, or deterministic bindings for every criterion, is
-clamped to `needs_human_review`. CI is not a first-release assurance source.
+clamped to `needs_human_review`. CI results do not automatically become
+SpecGate-produced assurance.
 
 ## Related
 

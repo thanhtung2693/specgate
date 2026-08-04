@@ -64,8 +64,8 @@ acceptance decision, and the recorded Git receipt. It also exposes the reviewer,
 peer-review freshness, per-criterion trust tier, and verification binding.
 Server-observed `repository_observed` assurance comes from delivery status only
 when a merged PR/MR event matches the latest completion head, so it remains
-visible even when no individual criterion carries that trust tier. CI is not a
-first-release assurance source.
+visible even when no individual criterion carries that trust tier. CI results
+do not automatically become SpecGate-produced assurance.
 The displayed provider `merge_commit_sha` is inspection metadata; it never
 replaces the submitted PR/MR `head_sha` in that comparison.
 Evidence readiness alone never renders as human acceptance. Model-reviewed

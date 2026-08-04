@@ -237,8 +237,8 @@ func TestLocalArtifactPublishListAndShowNeedNoHTTP(t *testing.T) {
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "show", published.Data.ArtifactID); code != output.ExitOK {
 		t.Fatalf("show exit = %d; output=%s", code, out.String())
 	}
-	if !strings.Contains(out.String(), "immutable spec") || !strings.Contains(out.String(), "immutable plan") {
-		t.Fatalf("show output = %s", out.String())
+	if !strings.Contains(out.String(), published.Data.ArtifactID) || strings.Contains(out.String(), "immutable spec") || strings.Contains(out.String(), "immutable plan") {
+		t.Fatalf("metadata-only show output = %s", out.String())
 	}
 	if body, _ := os.ReadFile(specPath); string(body) != "immutable spec" {
 		t.Fatalf("framework source changed: %q", body)

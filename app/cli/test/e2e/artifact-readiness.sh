@@ -5,7 +5,7 @@
 #
 # The script uses a temporary HOME, logs in as a disposable local user, publishes
 # a full role-tagged artifact package, verifies stored files, runs artifact
-# readiness, and exercises IDE-agent gate task preview/dispatch.
+# readiness, and exercises IDE-agent gate task dispatch.
 set -euo pipefail
 
 SPECGATE_SERVER="${SPECGATE_SERVER:-http://localhost:3000/api/doc-registry}"
@@ -51,7 +51,7 @@ Allow a new workspace user to publish a governed feature artifact and verify it 
 - Publish an artifact with role-tagged documents.
 - Review the stored document list and content.
 - Run artifact-scoped readiness checks.
-- Preview and dispatch IDE-agent gate tasks.
+- Dispatch IDE-agent gate tasks.
 
 ## Non-goals
 - No production deployment.
@@ -61,7 +61,7 @@ Allow a new workspace user to publish a governed feature artifact and verify it 
 1. The artifact publishes as a draft with a server-assigned version.
 2. The artifact exposes the original spec document through the files API.
 3. Readiness checks return an aggregate result and gate evidence.
-4. Gate-task preview and dispatch identify the expected artifact gates.
+4. Gate-task dispatch identifies the expected artifact gates.
 
 ## Constraints
 Use only the local SpecGate stack and disposable test data.

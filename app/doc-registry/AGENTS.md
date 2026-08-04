@@ -36,11 +36,12 @@ changes under `app/doc-registry/`.
 
 ## Database and migration rules
 
-- Until migration compatibility is explicitly supported, keep the complete
-  current schema in the idempotent `migrations/postgres/0001_init.migration`;
-  do not add migrations or backfills for discarded development schemas.
-- Test the collapsed migration against a fresh database, and do not leave
-  application code depending on columns absent from it.
+- Treat released migration files as immutable. Keep
+  `migrations/postgres/0001_init.migration` as the initial release baseline and
+  add a numbered, idempotent migration for every later schema change.
+- Test the complete migration set against both a fresh database and the prior
+  released schema affected by the change. Do not leave application code
+  depending on columns absent after migration.
 - Never drop or purge the database, object bucket, or MinIO data directory
   without explicit confirmation and a verified target.
 

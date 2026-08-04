@@ -182,7 +182,8 @@ the latest completion receipt:
   corroborate;
 - under the `corroborated_required` evidence policy, a pass without that
   repository observation or deterministic bindings for every criterion is
-  clamped to `needs_human_review`. CI is not a first-release assurance source.
+  clamped to `needs_human_review`. CI results do not automatically become
+  SpecGate-produced assurance.
 
 ## Verification without a server model
 

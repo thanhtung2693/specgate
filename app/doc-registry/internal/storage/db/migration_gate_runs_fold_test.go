@@ -1,27 +1,22 @@
 package db
 
 import (
-	"reflect"
 	"testing"
 
 	migrationpostgres "github.com/specgate/doc-registry/migrations/postgres"
 	"gorm.io/gorm"
 )
 
-func TestDevelopmentSchemaIsCollapsed(t *testing.T) {
+func TestMigrationSetKeepsInitialReleaseBaseline(t *testing.T) {
 	entries, err := migrationpostgres.FS.ReadDir(".")
 	if err != nil {
 		t.Fatal(err)
 	}
-	var migrations []string
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			migrations = append(migrations, entry.Name())
-		}
+	if len(entries) == 0 {
+		t.Fatal("migration set is empty")
 	}
-	want := []string{"0001_init.migration"}
-	if !reflect.DeepEqual(migrations, want) {
-		t.Fatalf("migrations = %v, want collapsed schema %v", migrations, want)
+	if got := entries[0].Name(); got != "0001_init.migration" {
+		t.Fatalf("first migration = %q, want initial release baseline", got)
 	}
 }
 

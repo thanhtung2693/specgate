@@ -91,6 +91,6 @@ SpecGate needs one trusted registry because multi-agent delivery fails when:
 | Risk | Mitigation |
 | --- | --- |
 | Spec/docs drift from route code | Keep route catalog in spec and verify with release-readiness/doc tests |
-| Unsupported schema-compatibility paths accumulate | Do not add them; delete unreachable callers and validate only the collapsed fresh-install schema |
+| Schema upgrades drift from fresh installs | Keep released migrations immutable and test the complete idempotent set against fresh and affected prior schemas |
 | Internal endpoints exposed publicly | Deploy behind trusted network/proxy; expose only needed Bearer-gated paths |
 | Evidence trust becomes ambiguous | Persist executor, actor, source, trust tier, and human decision metadata |

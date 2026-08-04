@@ -226,8 +226,8 @@ Governance Knowledge API:
 
 ## Schema compatibility
 
-The embedded `migrations/postgres/0001_init.migration` is the complete current
-fresh-install schema. It deliberately does not upgrade development databases
-created by discarded schema revisions. At startup, the registry checks the
-mounted database and exits before serving requests when its required schema is
-missing or incompatible. Create a fresh development database before retrying.
+The embedded `migrations/postgres/` set is the schema authority.
+`0001_init.migration` is the initial release baseline; later numbered migrations
+upgrade existing installs and are safe to replay. A fresh database runs the same
+complete set. At startup, the registry checks the resulting schema and exits
+before serving requests when required columns or constraints are missing.

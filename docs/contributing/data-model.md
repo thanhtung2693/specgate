@@ -2,8 +2,8 @@
 
 Use this reference when changing persistence, entity relationships, or data
 ownership. It describes the product-level model rather than every table; the
-authoritative development schema is
-[app/doc-registry/migrations/postgres/0001_init.migration](../../app/doc-registry/migrations/postgres/0001_init.migration).
+authoritative schema is the migration set under
+[app/doc-registry/migrations/postgres/](../../app/doc-registry/migrations/postgres/).
 
 ## Storage
 

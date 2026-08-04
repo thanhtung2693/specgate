@@ -198,8 +198,8 @@ func (r *WorkBoardRepository) derivedChangeRequestPhase(
 	ctx context.Context,
 	cr workboard.ChangeRequest,
 ) (workboard.BoardPhase, error) {
-	// Mirrors ChangeRequest.DerivePhase, including its work-type proxy for
-	// quick-route readiness and the reason that proxy is still here.
+	// Mirrors ChangeRequest.DerivePhase for no-lead work; see that method for
+	// why the quick-work placeholder remains the bounded readiness proxy.
 	if cr.LeadArtifactID == "" {
 		if cr.WorkType == workboard.WorkTypeBugFix {
 			return workboard.BoardPhaseReady, nil

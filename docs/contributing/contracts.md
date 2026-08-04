@@ -77,43 +77,17 @@ A work item is **quick route** when it has no lead artifact, and
 derive it from that fact alone: `ChangeRequest.IsQuickRoute`, the Context Pack
 builder, delivery-review policy resolution, and the UI's work-item mapper.
 
-Work type does not decide the route. It used to appear in the condition
-(`no lead artifact AND work_type == bug_fix`), which broke both directions: a
-quick item of any other type fell through to the artifact-backed path, where gates
-it could never satisfy applied and delivery review blocked it for missing a policy
-snapshot it could not have; meanwhile the UI derived the route from work type
-alone, so artifact-backed cleanup read as quick. Quick creation still stores a
-placeholder work type because the enum has no "unspecified" member; nothing routes
-on it and no surface displays it.
+Work type never decides the route. Quick creation still stores a placeholder
+work type because the enum has no `unspecified` member; no routing logic or user
+surface may interpret it as the route.
 
-Board **phase** is a separate question and still uses work type as a proxy for
-"quick work that has an approved contract". Attempting to remove that proxy found
-why it cannot be removed yet, and the reason is a storage gap rather than a
-missing query.
-
-`Intake` means the work has not been approved into a handoff: no pinned artifact,
-and no approved contract of its own. `Ready` means one of those exists. Quick-route
-work is Ready because the human approves its criteria at creation. The demo's
-Intake example has drafted criteria and no pinned artifact, and its feature has an
-approved canonical artifact, so no fact about the feature separates the two cases
-either.
-
-What separates them is whether the criteria were **approved** or merely drafted.
-Storage accepts a `source` of `human` or `llm` per criterion, and the CLI now sends
-`human` for every criterion it persists, because both `work create-quick` and
-`change approve` require the human to supply them and the installed skills must not
-create the record until the displayed contract is approved. Criteria arriving
-without a source still default to `llm`, which is correct for a draft.
-
-Every writer now sets it: the CLI sends `human` for criteria it persists, and the
-governance-chat quick-work path sends `human` for criteria the caller supplied and
-`llm` for criteria the model drafted, which is the distinction that path actually
-has. A criterion arriving without a source still defaults to `llm`.
-
-Board phase still keeps the work-type proxy. `source` is now truthful enough to
-derive readiness from, but changing what Intake and Ready mean is a behaviour
-change with its own tests and demo-data expectations, so it is a separate change
-rather than a rider on this one.
+Board **phase** is separate. A lead artifact is `Review` until approved and then
+`Ready`. For work without a lead, the persisted model has no explicit
+contract-approval field. The Full-mode fallback therefore treats the quick-work
+placeholder type as `Ready` and other no-lead records as `Intake`. This proxy must
+not spread into routing or policy decisions. Acceptance-criterion `source`
+records authorship (`human` or `llm`), not approval, so it cannot safely replace
+the missing approval fact.
 
 ### Mode-aware handoff
 

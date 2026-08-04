@@ -350,16 +350,8 @@ func localArtifactComparisonBase(artifact local.Artifact) (*client.Artifact, []c
 	return base, files
 }
 
-func localArtifactView(artifact local.Artifact, includeContent bool) map[string]any {
-	view := map[string]any{"id": artifact.ID, "workspace_id": artifact.WorkspaceID, "feature_key": artifact.FeatureKey, "request_type": artifact.RequestType, "version": artifact.Version, "status": artifact.Status, "snapshot_digest": artifact.SnapshotDigest, "created_at": artifact.CreatedAt}
-	if includeContent {
-		documents := make([]map[string]any, 0, len(artifact.Documents))
-		for _, document := range artifact.Documents {
-			documents = append(documents, map[string]any{"path": document.Path, "role": document.Role, "content": string(document.Content), "digest": document.Digest, "size_bytes": document.SizeBytes})
-		}
-		view["documents"] = documents
-	}
-	return view
+func localArtifactView(artifact local.Artifact) map[string]any {
+	return map[string]any{"id": artifact.ID, "workspace_id": artifact.WorkspaceID, "feature_key": artifact.FeatureKey, "request_type": artifact.RequestType, "version": artifact.Version, "status": artifact.Status, "snapshot_digest": artifact.SnapshotDigest, "created_at": artifact.CreatedAt}
 }
 
 func artifactPublishPreview(body map[string]any, sources []string) map[string]any {

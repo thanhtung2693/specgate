@@ -63,7 +63,7 @@ server validation contract.
 
 The artifact-readiness smoke logs in with a disposable user/workspace, publishes
 a role-tagged artifact package, verifies stored file content, runs artifact
-readiness checks, and exercises IDE-agent gate task preview/dispatch.
+readiness checks, and exercises IDE-agent gate task dispatch.
 
 The delivery-outcomes smoke temporarily points delivery review at a provider
 without a configured key so the agents service takes the deterministic

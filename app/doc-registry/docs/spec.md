@@ -106,12 +106,12 @@ Board phase derivation (which work items are ready for this loop) is defined in
 ## 3. Storage Model
 
 Postgres is the only database backend and `POSTGRES_DSN` must be set. The
-embedded Postgres migration file is the schema
-authority; GORM `AutoMigrate` is not used. During development the schema is a
-collapsed fresh-install `0001_init.migration`, replayed idempotently on every
-start. It does not upgrade older databases. Startup checks the required columns
-and stops with a clear incompatibility error when an older database is mounted;
-reset that development database before starting this build.
+embedded Postgres migration set is the schema authority; GORM `AutoMigrate` is
+not used. Migrations are numbered, idempotent, and replayed in order on every
+start. `0001_init.migration` is the initial release baseline; later schema
+changes use additional migration files so existing installs and fresh databases
+reach the same required schema. Startup checks that required columns and
+constraints are present before serving requests.
 
 Object storage is selected by `STORAGE_DRIVER`:
 

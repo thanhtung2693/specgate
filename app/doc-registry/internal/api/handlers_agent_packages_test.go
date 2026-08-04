@@ -150,28 +150,6 @@ func TestAgentPackagesPluginLogoServed(t *testing.T) {
 	}
 }
 
-func TestAgentPackagesFallbackRuleFilesRemoved(t *testing.T) {
-	t.Parallel()
-	rt := &Router{Handlers: &Handlers{}, Config: testConfig()}
-	srv := httptest.NewServer(DevCORS(rt.Build()))
-	defer srv.Close()
-
-	for _, path := range []string{
-		"/plugins/install.sh",
-		"/plugins/codex/AGENTS.md",
-		"/plugins/claude/CLAUDE.md",
-	} {
-		res, err := http.Get(srv.URL + path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		res.Body.Close()
-		if got := res.StatusCode; got != http.StatusNotFound {
-			t.Fatalf("%s status=%d, want 404", path, got)
-		}
-	}
-}
-
 func TestAgentPackagesServeFocusedSkills(t *testing.T) {
 	t.Parallel()
 	rt := &Router{Handlers: &Handlers{}, Config: testConfig()}

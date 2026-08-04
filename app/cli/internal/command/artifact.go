@@ -156,7 +156,7 @@ func newArtifactListCmd(deps *Deps) *cobra.Command {
 					if featureID != "" && artifact.FeatureKey != featureID {
 						continue
 					}
-					items = append(items, localArtifactView(artifact, false))
+					items = append(items, localArtifactView(artifact))
 					if limit > 0 && len(items) == limit {
 						break
 					}
@@ -255,15 +255,12 @@ func newArtifactShowCmd(deps *Deps) *cobra.Command {
 				if err != nil {
 					return localExitError(deps, "artifact.show", err)
 				}
-				view := localArtifactView(artifact, true)
+				view := localArtifactView(artifact)
 				if deps.Printer.Mode() == output.ModeJSON {
 					deps.Printer.Success("artifact.show", view)
 					return nil
 				}
 				fmt.Fprintf(deps.Stdout, "%s %s\n%s %d\n%s %s\n%s %s\n", label(deps, "ID:"), styled(deps, output.StyleBold, artifact.ID), label(deps, "Version:"), artifact.Version, label(deps, "Status:"), styledStatus(deps, artifact.Status), label(deps, "Feature:"), artifact.FeatureKey)
-				for _, document := range artifact.Documents {
-					fmt.Fprintf(deps.Stdout, "\n--- %s ---\n%s", document.Path, document.Content)
-				}
 				return nil
 			}
 			workspaceID, werr := currentWorkspaceID(cmd.Context(), deps)
