@@ -180,7 +180,7 @@ func (DeliveryLink) TableName() string { return "integration_delivery_links" }
 
 // TrackerLink is the persisted Linear issue handoff for a work item. The
 // selected Linear team resource is immutable handoff context; one work item has
-// one primary tracker link in this first-release schema.
+// one primary tracker link in the current schema.
 type TrackerLink struct {
 	ID              string `json:"id" gorm:"column:id;primaryKey"`
 	IntegrationID   string `json:"integration_id" gorm:"column:integration_id"`

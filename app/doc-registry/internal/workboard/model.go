@@ -217,15 +217,11 @@ type DeliveryReviewSnapshot struct {
 
 // DerivePhase computes the fallback board phase.
 //
-// This still uses work type as a proxy for "quick work that has a contract", and
-// that is deliberate for now: it is not the same question as the route. The
-// truthful readiness signal lives outside the struct — the demo's Intake example
-// (DEMO-201) has two drafted criteria and no lead artifact, and belongs in Intake
-// because its feature's artifact is still a draft awaiting approval. Deciding it
-// from CR fields alone is not possible; a read path with the feature in hand can
-// do better. Tracked as follow-up rather than guessed at here.
-//
-// A richer read path may classify a non-approved lead artifact as Review.
+// A lead artifact is enough for this pointer-only fallback to report Ready; the
+// database read path refines a non-approved lead to Review. Without a lead, the
+// persisted model has no explicit contract-approval field, so the quick-work
+// placeholder type remains the bounded Ready proxy. Criterion source records
+// authorship, not approval, and cannot replace that missing fact.
 func (cr ChangeRequest) DerivePhase() BoardPhase {
 	if cr.LeadArtifactID != "" {
 		return BoardPhaseReady

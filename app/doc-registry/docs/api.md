@@ -343,12 +343,12 @@ requires `workspace_id`. A Skill has `id`, `workspace_id`, `name`,
 within one workspace. Development data must assign every row before final
 ownership constraints are enabled.
 
-Workspace ownership is mandatory and non-blank on every workspace root. The development
-schema is fresh-install only: there is no ownership backfill or legacy
-compatibility path. Startup rejects an older database before it can serve
-requests. Derived reads, including artifact-backed Context Packs, verify that
-their resolved root belongs to the trusted workspace and, for a ChangeRequest,
-to that ChangeRequest's workspace before any readiness or file read.
+Workspace ownership is mandatory and non-blank on every workspace root.
+Migrations bring supported released schemas to that constraint before startup
+accepts requests. Derived reads, including artifact-backed Context Packs,
+verify that their resolved root belongs to the trusted workspace and, for a
+ChangeRequest, to that ChangeRequest's workspace before any readiness or file
+read.
 
 Automatic policy snapshots bind Skills to gates through `gate_skills`.
 Readiness and delivery judges inject the bound Skill prompt as team rubric text.

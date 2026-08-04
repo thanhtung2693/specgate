@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -493,9 +494,10 @@ func TestEnsureSpecgateDirGitignore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gitignore not written: %v", err)
 	}
-	// Scaffolds ignored (*), with the config and the .gitignore itself kept.
+	// Scaffolds and the generated ignore file stay private; config and handoffs
+	// can still be committed deliberately.
 	s := string(body)
-	if !strings.Contains(s, "*") || !strings.Contains(s, "!config") || !strings.Contains(s, "!.gitignore") {
+	if !strings.Contains(s, "*") || !strings.Contains(s, "!config") || strings.Contains(s, "!.gitignore") {
 		t.Fatalf("unexpected content:\n%s", s)
 	}
 
@@ -509,6 +511,67 @@ func TestEnsureSpecgateDirGitignore(t *testing.T) {
 	again, _ := os.ReadFile(gi)
 	if string(again) != "custom\n" {
 		t.Fatalf("existing .gitignore must be left untouched, got:\n%s", again)
+	}
+}
+
+func TestEnsureSpecgateDirGitignoreKeepsNewGitRepositoryClean(t *testing.T) {
+	repo := t.TempDir()
+	if out, err := exec.Command("git", "-C", repo, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+	dir := filepath.Join(repo, ".specgate")
+	if err := config.EnsureSpecgateDirGitignore(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "completion-CR-1.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command("git", "-C", repo, "status", "--short").CombinedOutput()
+	if err != nil {
+		t.Fatalf("git status: %v: %s", err, out)
+	}
+	if len(out) != 0 {
+		t.Fatalf("generated SpecGate files dirty a new repository: %s", out)
+	}
+}
+
+func TestEnsureSpecgateDirGitignoreUpgradesOwnedLegacyContent(t *testing.T) {
+	legacyFiles := map[string]string{
+		"initial": "# SpecGate working dir: ignore transient delivery scaffolds,\n" +
+			"# keep the committed config and this file.\n" +
+			"*\n!.gitignore\n!config\n",
+		"handoffs": "# SpecGate working dir: ignore transient delivery scaffolds,\n" +
+			"# keep the committed config, review handoffs, and this file.\n" +
+			"*\n!.gitignore\n!config\n!handoffs/\n!handoffs/**\n",
+	}
+	for name, legacy := range legacyFiles {
+		t.Run(name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), ".specgate")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(dir, ".gitignore")
+			if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := config.EnsureSpecgateDirGitignore(dir); err != nil {
+				t.Fatal(err)
+			}
+			body, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(body), "!.gitignore") || !strings.Contains(string(body), "!handoffs/**") {
+				t.Fatalf("legacy generated file was not upgraded:\n%s", body)
+			}
+			info, err := os.Stat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if info.Mode().Perm() != 0o600 {
+				t.Fatalf("mode after upgrade = %v", info.Mode().Perm())
+			}
+		})
 	}
 }
 

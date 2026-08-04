@@ -93,8 +93,8 @@ merged PR/MR repository event whose `head_sha` matches the latest completion
 receipt's `head_revision`, or deterministic bindings for every criterion.
 Either merge the submitted commit (the event arrives through the git
 integration), add canonical check bindings and re-run the review, or have a
-human approve on the strength of the existing evidence. CI is not a
-first-release assurance source.
+human approve on the strength of the existing evidence. CI results do not
+automatically become SpecGate-produced assurance.
 
 ## Related
 

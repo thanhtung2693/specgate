@@ -63,7 +63,8 @@ review pass may rest on the agent's own report:
   either a merged PR/MR repository event whose `head_sha` matches the latest
   completion receipt's `head_revision`, or every criterion resolved through
   canonical deterministic check bindings. Without that, the verdict is clamped
-  to `needs_human_review`. CI is not a first-release assurance source.
+  to `needs_human_review`. CI results do not automatically become
+  SpecGate-produced assurance.
 
 Use `corroborated_required` once a git integration or deterministic check
 bindings are available and you want no delivery accepted on self-reported

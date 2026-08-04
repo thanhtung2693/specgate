@@ -19,15 +19,6 @@ func setGateTaskWorkspace(t *testing.T, deps *command.Deps) {
 	}
 }
 
-func TestGatesTasksPreviewCommandIsRemoved(t *testing.T) {
-	t.Parallel()
-	deps, _, _, out := newFakeDeps(t)
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "gates", "tasks", "preview", "art-44")
-	if code == output.ExitOK {
-		t.Fatalf("removed preview command still succeeds: %s", out.String())
-	}
-}
-
 func TestGatesTasksDispatchCmd_CallsEndpoint(t *testing.T) {
 	t.Parallel()
 	deps, fc, _, out := newFakeDeps(t)

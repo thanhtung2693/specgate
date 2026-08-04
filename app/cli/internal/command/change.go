@@ -647,7 +647,7 @@ func reworkRequestedChangeStatus(result changeStatusResult) changeStatusResult {
 	result.State = "rework_requested"
 	result.NextActor = "implementing_agent"
 	result.Missing = []string{"Revised completion addressing requested changes"}
-	result.NextCommand = deliveryReportScaffold(result.Ref)
+	result.NextCommand = deliveryReportResubmit(result.Ref)
 	return result
 }
 
@@ -655,12 +655,16 @@ func implementationRequiredChangeStatus(result changeStatusResult) changeStatusR
 	result.State = "implementation"
 	result.NextActor = "implementing_agent"
 	result.Missing = []string{"Passing delivery evidence"}
-	result.NextCommand = deliveryReportScaffold(result.Ref)
+	result.NextCommand = deliveryReportResubmit(result.Ref)
 	return result
 }
 
 func deliveryReportScaffold(ref string) string {
 	return "specgate delivery report " + ref + " --init"
+}
+
+func deliveryReportResubmit(ref string) string {
+	return "specgate --yes change submit " + ref + " --run-checks --json"
 }
 
 func deliveryGitReceiptAvailable(receipt *client.GitReceipt) bool {

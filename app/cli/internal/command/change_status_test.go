@@ -505,7 +505,7 @@ func TestChangeStatusFullHumanRejectionRequestsRework(t *testing.T) {
 
 	got := runChangeStatusJSON(t, deps, out, "CR-101")
 	if got.State != "rework_requested" || got.NextActor != "implementing_agent" ||
-		got.NextCommand != "specgate delivery report CR-101 --init" ||
+		got.NextCommand != "specgate --yes change submit CR-101 --run-checks --json" ||
 		len(got.Missing) != 1 || got.Missing[0] != "Revised completion addressing requested changes" ||
 		got.Guidance != "Restore the missing rollback test." {
 		t.Fatalf("rework status = %#v", got)
@@ -523,7 +523,8 @@ func TestChangeStatusFullNeedsChangesReportsEvidenceGap(t *testing.T) {
 	}
 
 	got := runChangeStatusJSON(t, deps, out, "CR-101")
-	if got.State != "implementation" || got.Evidence != "Evidence gaps found" {
+	if got.State != "implementation" || got.Evidence != "Evidence gaps found" ||
+		got.NextCommand != "specgate --yes change submit CR-101 --run-checks --json" {
 		t.Fatalf("status = %#v, want actionable evidence gap", got)
 	}
 }
@@ -699,7 +700,7 @@ func TestChangeStatusLocalHumanRejectionRequestsRework(t *testing.T) {
 
 	got := runChangeStatusJSON(t, deps, out, work.Key)
 	if got.State != "rework_requested" || got.NextActor != "implementing_agent" ||
-		got.NextCommand != "specgate delivery report "+work.Key+" --init" ||
+		got.NextCommand != "specgate --yes change submit "+work.Key+" --run-checks --json" ||
 		len(got.Missing) != 1 || got.Missing[0] != "Revised completion addressing requested changes" ||
 		got.Guidance != "rework" {
 		t.Fatalf("rework status = %#v", got)

@@ -1,5 +1,5 @@
-# SpecGate working dir: ignore transient delivery scaffolds,
-# keep the committed config and this file.
+# SpecGate working dir: ignore generated files and transient delivery scaffolds.
 *
-!.gitignore
 !config
+!handoffs/
+!handoffs/**

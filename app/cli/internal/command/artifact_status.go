@@ -137,7 +137,7 @@ func runArtifactStatusChange(cmd *cobra.Command, deps *Deps, op, id, status, not
 			return localExitError(deps, op, err)
 		}
 		if deps.Printer.Mode() == output.ModeJSON {
-			deps.Printer.Success(op, localArtifactView(artifact, false))
+			deps.Printer.Success(op, localArtifactView(artifact))
 			return nil
 		}
 		fmt.Fprintf(deps.Stdout, "%s %s (v%d)\n", styled(deps, output.StyleSuccess, "Approved"), styled(deps, output.StyleBold, artifact.ID), artifact.Version)

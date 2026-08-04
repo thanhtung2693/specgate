@@ -49,7 +49,7 @@ make test      # Go race suite; Postgres integration tests use testcontainers
 ```bash
 cd app/agents
 uv run ruff check src tests    # lint
-uv run ruff format src tests   # format
+uv run ruff format --check src tests  # format check
 uv run pytest                  # unit + harness (excludes live smoke by default)
 ```
 

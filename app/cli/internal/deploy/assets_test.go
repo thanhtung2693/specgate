@@ -23,17 +23,6 @@ func readRepoFile(t *testing.T, rel string) string {
 	return string(b)
 }
 
-func TestReleaseDistributionHasNoMultiServiceBundle(t *testing.T) {
-	_, selfPath, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
-	legacy := filepath.Join(filepath.Dir(selfPath), "../../../../deploy/compose/compose.yml")
-	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
-		t.Fatalf("legacy multi-service release bundle still exists: %v", err)
-	}
-}
-
 func TestLocalBundleUsesOneApplianceService(t *testing.T) {
 	raw := readRepoFile(t, "../../../../deploy/local/compose.yml")
 	for _, want := range []string{

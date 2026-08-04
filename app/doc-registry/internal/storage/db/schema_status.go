@@ -21,9 +21,9 @@ type requiredColumn struct {
 }
 
 // requiredSchemaColumns are the columns that a running Doc Registry needs.
-// The development schema is a collapsed fresh-install schema, so checking them
-// at boot turns an old persisted database into a clear startup failure instead
-// of a later missing-column error on an arbitrary request.
+// Checking the post-migration schema at boot turns an incompatible persisted
+// database into a clear startup failure instead of a later missing-column error
+// on an arbitrary request.
 var requiredSchemaColumns = []requiredColumn{
 	{"artifacts", "artifact_completeness", false},
 	{"artifacts", "artifact_phase", false},

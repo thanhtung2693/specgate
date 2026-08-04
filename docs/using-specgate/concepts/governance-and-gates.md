@@ -74,7 +74,8 @@ An agent's own report is useful, but independent evidence is stronger. A merged
 PR/MR provides repository observation only when its submitted `head_sha` matches
 the latest completion receipt head. An enhanced policy may require that
 observation or deterministic bindings for every criterion before a delivery
-review can pass; CI is not a first-release assurance source.
+review can pass. CI results do not automatically become SpecGate-produced
+assurance.
 
 ## Skills act as team rubrics
 

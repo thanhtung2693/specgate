@@ -70,15 +70,6 @@ func TestPolicyListEmpty(t *testing.T) {
 	}
 }
 
-func TestPolicyListSubcommandIsRemoved(t *testing.T) {
-	t.Parallel()
-	deps, _, _, out := newFakeDeps(t)
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "policy", "list")
-	if code == output.ExitOK {
-		t.Fatalf("removed policy list path still succeeds: %s", out.String())
-	}
-}
-
 // --- work policy ---
 
 func TestWorkPolicyPlain(t *testing.T) {

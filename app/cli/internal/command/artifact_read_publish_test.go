@@ -235,6 +235,27 @@ func TestArtifactShowJSON(t *testing.T) {
 	}
 }
 
+func TestArtifactShowLocalJSONOmitsDocumentContent(t *testing.T) {
+	t.Parallel()
+	deps, _, _, out := newFakeDeps(t)
+	stateDir, store, _, work := newLocalChangeWork(t, deps)
+	closeLocalChangeStore(t, deps, stateDir, store)
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "show", work.ArtifactID)
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	var envelope struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if _, found := envelope.Data["documents"]; found || strings.Contains(out.String(), "# Change") {
+		t.Fatalf("artifact show leaked document content; use artifact files --content instead: %s", out.String())
+	}
+}
+
 // --- artifact files ---
 
 func TestArtifactFilesRequireWorkspace(t *testing.T) {
