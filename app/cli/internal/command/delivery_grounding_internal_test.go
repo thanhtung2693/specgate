@@ -83,7 +83,9 @@ func TestGroundCompletionEvidenceMarksAFabricatedHeading(t *testing.T) {
 		}},
 	}}
 
-	groundCompletionEvidence(body)
+	if err := groundCompletionEvidence(&Deps{WorkingDir: "."}, body); err != nil {
+		t.Fatal(err)
+	}
 
 	criteria, _ := body["criteria"].([]any)
 	for index, wantStatus := range []string{"heading_not_found", "grounded"} {

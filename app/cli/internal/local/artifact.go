@@ -26,6 +26,7 @@ var artifactRequestTypes = map[string]struct{}{
 type ArtifactInput struct {
 	FeatureKey  string
 	RequestType string
+	BaseVersion string
 	Documents   []ArtifactDocumentInput
 }
 
@@ -75,10 +76,21 @@ func (s *Store) PublishArtifact(ctx context.Context, workspaceID string, input A
 		return Artifact{}, err
 	}
 	defer tx.Rollback()
-	var version int
-	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(version), 0) + 1 FROM artifacts WHERE workspace_id = ? AND feature_key = ?`, workspaceID, input.FeatureKey).Scan(&version); err != nil {
+	var latestVersion int
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(version), 0) FROM artifacts WHERE workspace_id = ? AND feature_key = ?`, workspaceID, input.FeatureKey).Scan(&latestVersion); err != nil {
 		return Artifact{}, err
 	}
+	wantBase := ""
+	if latestVersion > 0 {
+		wantBase = fmt.Sprintf("v%d", latestVersion)
+	}
+	if strings.TrimSpace(input.BaseVersion) != wantBase {
+		if wantBase == "" {
+			return Artifact{}, fmt.Errorf("base_version must be empty when publishing the first version")
+		}
+		return Artifact{}, fmt.Errorf("base_version %q does not match latest version %q", input.BaseVersion, wantBase)
+	}
+	version := latestVersion + 1
 	policySnapshot, policyDigest, err := localPolicySnapshot()
 	if err != nil {
 		return Artifact{}, err

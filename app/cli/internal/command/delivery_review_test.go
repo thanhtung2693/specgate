@@ -224,6 +224,9 @@ func TestDeliveryPeerReviewPreservesBoundCompletionReceipt(t *testing.T) {
 	dir := t.TempDir()
 	deps.WorkingDir = dir
 	deps.DeployRunner = deliveryGitRunner(dir, nil)
+	if err := os.WriteFile(filepath.Join(dir, "implementation.go"), []byte("package implementation\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	body := map[string]any{
 		"event_type": "coding_agent.peer_reviewed",
 		"summary":    "Reviewed the implementation.",
@@ -331,6 +334,69 @@ func TestLocalDeliveryReportFromFileReturnsActionableError(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "specgate change submit") || !strings.Contains(out.String(), "--file") {
 		t.Fatalf("error does not route Local completion to change submit: %s", out.String())
+	}
+}
+
+func TestDeliveryPeerReviewRejectsMissingEvidenceBeforeNetworkCall(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	deps.WorkingDir = t.TempDir()
+	path := writeDeliveryJSON(t, map[string]any{
+		"event_type": "coding_agent.peer_reviewed",
+		"agent":      map[string]any{"name": "reviewer"},
+		"criteria": []any{map[string]any{
+			"criterion_id": "ac-1",
+			"claim":        "satisfied",
+			"evidence":     map[string]any{"kind": "test", "path": "missing-proof.txt", "line": 1},
+		}},
+	})
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "delivery", "peer-review", "CR-101", "--file", path)
+	if code == output.ExitOK {
+		t.Fatalf("missing peer evidence was accepted: %s", out.String())
+	}
+	if fc.calls != 0 || fc.lastFeedbackBody != nil {
+		t.Fatalf("missing peer evidence reached the server: calls=%d body=%#v", fc.calls, fc.lastFeedbackBody)
+	}
+	if !strings.Contains(out.String(), "missing-proof.txt") {
+		t.Fatalf("error does not identify missing evidence: %s", out.String())
+	}
+}
+
+func TestDeliveryReportRejectsSymlinkedEvidenceOutsideRepository(t *testing.T) {
+	deps, fc, _, out := newFakeDeps(t)
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	secret := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(secret, []byte("outside repository secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(repo, "proof.txt")
+	if err := os.Symlink(secret, link); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+	deps.WorkingDir = repo
+	path := writeDeliveryJSON(t, map[string]any{
+		"event_type": "coding_agent.completed",
+		"agent":      map[string]any{"name": "builder"},
+		"criteria": []any{map[string]any{
+			"criterion_id": "ac-1",
+			"claim":        "satisfied",
+			"evidence":     map[string]any{"kind": "test", "path": link, "line": 1},
+		}},
+	})
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "delivery", "report", "CR-101", "--file", path)
+	if code == output.ExitOK {
+		t.Fatalf("symlinked evidence was accepted: %s", out.String())
+	}
+	if fc.calls != 0 || fc.lastFeedbackBody != nil {
+		t.Fatalf("symlinked evidence reached the server: calls=%d body=%#v", fc.calls, fc.lastFeedbackBody)
+	}
+	if strings.Contains(out.String(), "outside repository secret") {
+		t.Fatalf("outside content leaked into output: %s", out.String())
 	}
 }
 

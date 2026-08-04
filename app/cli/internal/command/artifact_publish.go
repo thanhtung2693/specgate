@@ -310,6 +310,7 @@ func localArtifactInput(body map[string]any) (local.ArtifactInput, error) {
 	input := local.ArtifactInput{}
 	input.FeatureKey, _ = body["feature_key"].(string)
 	input.RequestType, _ = body["request_type"].(string)
+	input.BaseVersion, _ = body["base_version"].(string)
 	rawDocuments, ok := body["documents"].([]any)
 	if !ok {
 		return input, fmt.Errorf("documents must be an array")

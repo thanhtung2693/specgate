@@ -91,10 +91,11 @@ enforcement covers a missing or skipped check; it cannot detect a falsely claime
 
 ## Evidence grounding and peer review
 
-The CLI opens each cited local evidence path before report submission and stores
-a short excerpt plus SHA-256 digest. This prevents fabricated paths and makes
-the delivery record inspectable, but it does not prove that a check exercised
-the criterion.
+The CLI opens each cited local evidence path before completion or peer-review
+submission and stores a short excerpt plus SHA-256 digest. It refuses paths
+that resolve outside the current project and final symlinks before reading
+them. This prevents fabricated paths and accidental capture of unrelated local
+data, but it does not prove that a check exercised the criterion.
 
 A `coding_agent.peer_reviewed` event is accepted only when it:
 

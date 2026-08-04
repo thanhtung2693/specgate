@@ -515,8 +515,11 @@ runnable commands — all before any network call.
 and its exact Git receipt. The reviewer must cover every canonical criterion
 exactly once, and the peer must differ from the completion agent. The CLI
 preserves the receipt in the bound scaffold so the server verifies the same
-completion. `agent_attested` passes require a bound peer review or human
-review.
+completion. For a check-bound Local criterion, the peer review uses the check
+result from that bound completion instead of asking the reviewer to duplicate
+the completion's `checks[]`. Replaying the same Local peer-review file returns
+the existing record. `agent_attested` passes require a bound peer review or
+human review.
 
 A human may accept an advisory or false-negative review without hiding its
 evidence verdict. The completion reporter cannot approve its own delivery, and
@@ -526,10 +529,12 @@ Human `delivery status --detail` output separates evidence assessment,
 assurance source, human decision, and recorded Git receipt. JSON exposes the
 authoritative `verdict` and the optional `evidence_verdict`.
 
-Cited local evidence paths are existence-checked, and each citation records a
-SHA-256 digest of the file plus a `grounding.status` saying how the excerpt was
-anchored: `grounded` when an explicit `line` or a `heading` present in the file
-located it, `heading_not_found` when the cited heading is absent,
+Cited local evidence paths must resolve to regular files inside the current
+project; symlinked or outside-project files are rejected before they are read.
+Each citation records a SHA-256 digest of the file plus a `grounding.status`
+saying how the excerpt was anchored: `grounded` when an explicit `line` or a
+`heading` present in the file located it, `heading_not_found` when the cited
+heading is absent,
 `line_out_of_range` when the cited line is past the end, `empty_at_anchor` when
 the anchor resolves to a blank line, and `unanchored` when the citation names
 only a path. Only `grounded` carries an excerpt — a path
@@ -829,7 +834,9 @@ or summaries:
   work kind; omitted values default conservatively to the structured `unknown`
   value, without inferring intent from document prose. `version` is
   server-assigned; use
-  `base_version` only when publishing an update from an existing version.
+  `base_version` only when publishing an update from an existing version. Local
+  mode requires it to match the latest stored version on publication, not only
+  during preview comparison, so a stale agent cannot create a new version.
 - `specgate skill list --json` omits full prompts; add `--include-prompt` only
   when an agent needs the rubric body.
 - `specgate delivery submit <ref> --file completion.json` replaces the
