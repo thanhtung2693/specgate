@@ -280,7 +280,7 @@ func TestLocalArtifactPublishPreviewCompareNeedNoHTTP(t *testing.T) {
 	if code != output.ExitOK {
 		t.Fatalf("compare preview exit = %d; output=%s", code, out.String())
 	}
-	for _, want := range []string{`"base_artifact_id":"` + published.Data.ArtifactID + `"`, `"base_version":"v1"`, `"changed":1`, `"changes":["content","role"]`} {
+	for _, want := range []string{`"base_artifact_id":"` + published.Data.ArtifactID + `"`, `"base_version":"v1"`, `"added":1`, `"removed":1`} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("compare preview missing %s: %s", want, out.String())
 		}

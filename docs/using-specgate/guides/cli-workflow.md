@@ -120,10 +120,10 @@ specgate delivery report <work-ref> --init
 ```
 
 Fill in the coding agent name, summary, affected files, checks, and evidence for
-each acceptance criterion. Replace every generated `pending` check with an
-observed `pass`, `fail`, or an explained `skipped`. The generated file is
-intentionally incomplete, and SpecGate rejects untouched pending checks before
-recording anything.
+each acceptance criterion. Set an observed `pass`, `fail`, or explained
+`skipped`; alternatively, leave a check `pending`, give it a runnable command,
+and submit with `--run-checks` so SpecGate records the observed result. A
+pending check without execution is rejected before anything is recorded.
 
 For machine-readable setup:
 

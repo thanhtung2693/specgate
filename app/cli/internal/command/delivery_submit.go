@@ -73,7 +73,7 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 			if strings.TrimSpace(eventType) != "coding_agent.completed" {
 				return completionValidationError(deps, spec.Operation, "event_type must be coding_agent.completed")
 			}
-			if err := validateCompletionReport(deps, spec.Operation, body); err != nil {
+			if err := validateCompletionReport(deps, spec.Operation, body, runChecks); err != nil {
 				return err
 			}
 			if !skipEvidenceCheck {
@@ -94,6 +94,9 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 						return err
 					}
 					executeCompletionChecks(cmd.Context(), deps, body)
+					if err := validateCompletionReport(deps, spec.Operation, body, false); err != nil {
+						return err
+					}
 				}
 				store, err := openLocalStore(deps)
 				if err != nil {
@@ -153,6 +156,9 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 					return err
 				}
 				executeCompletionChecks(cmd.Context(), deps, body)
+				if err := validateCompletionReport(deps, spec.Operation, body, false); err != nil {
+					return err
+				}
 			}
 			normalizeCompletionChecksForSubmit(body)
 

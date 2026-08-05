@@ -561,6 +561,27 @@ test("the installer never trades away download verification or rate-limited disc
   assert.match(installer, /Cannot verify the download/, "the installer must say why it stopped");
 });
 
+test("the public installer explains its flags without installing", () => {
+  const help = execFileSync("sh", ["scripts/install-cli.sh", "--help"], { cwd: root }).toString("utf8");
+
+  assert.match(help, /Usage:/);
+  assert.match(help, /--version/);
+  assert.match(help, /--install-dir/);
+  assert.match(help, /--server/);
+});
+
+test("the public installer explains missing flag values", () => {
+  for (const flag of ["--version", "--install-dir", "--server"]) {
+    for (const args of [[flag], [flag, "--no-config"]]) {
+      assert.throws(
+        () => execFileSync("sh", ["scripts/install-cli.sh", ...args], { cwd: root, stdio: "pipe" }),
+        (error) => error.status === 1 && error.stderr.toString("utf8").includes(`${flag} requires a value`),
+        args.join(" "),
+      );
+    }
+  }
+});
+
 const GATEWAYS = ["docker/local/nginx.conf", "app/ui/docker/nginx-default.conf"];
 
 // Split a gateway config into its location blocks, keyed by the matcher.

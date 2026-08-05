@@ -32,6 +32,22 @@ func TestOneSourceCanCarrySeveralRoles(t *testing.T) {
 	}
 }
 
+func TestContextPackRendersSharedRoleSourceOnce(t *testing.T) {
+	t.Parallel()
+	const content = "# Shared contract\n\nOne source, two roles."
+	markdown := contextMarkdown("LOCAL-1", "Implement shared contract", Artifact{
+		ID: "artifact-1", Version: 1, SnapshotDigest: "sha256:snapshot",
+		Documents: []ArtifactDocument{
+			{Path: "docs/spec.md", Role: "plan", Content: []byte(content), Digest: "sha256:same"},
+			{Path: "docs/spec.md", Role: "spec", Content: []byte(content), Digest: "sha256:same"},
+		},
+	}, []string{"The contract is implemented"})
+
+	if got := strings.Count(markdown, content); got != 1 {
+		t.Fatalf("shared source rendered %d times:\n%s", got, markdown)
+	}
+}
+
 // Duplicate paths make the order between rows ambiguous unless role breaks the
 // tie, and an unstable order changes the snapshot digest for identical input.
 func TestSnapshotDigestIsStableAcrossInputOrder(t *testing.T) {

@@ -48,6 +48,29 @@ func TestContextPackForArtifact(t *testing.T) {
 	}
 }
 
+func TestContextPackRendersSharedRoleSourceOnce(t *testing.T) {
+	t.Parallel()
+	const content = "# Shared contract\n\nOne source, two roles."
+	art := &artifact.Artifact{
+		ID: "art-shared",
+		Files: []artifact.File{
+			{ArtifactID: "art-shared", Path: "docs/spec.md", Role: artifact.RoleSpec},
+			{ArtifactID: "art-shared", Path: "docs/spec.md", Role: artifact.RolePlan},
+		},
+	}
+	svc := &Service{Artifacts: &fakeContextPackArtifactReader{
+		art: art, files: map[string]string{"docs/spec.md": content},
+	}}
+
+	got, err := svc.ContextPack(context.Background(), ContextPackInput{Kind: "artifact", ID: art.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count := strings.Count(got.Markdown, content); count != 1 {
+		t.Fatalf("shared source rendered %d times:\n%s", count, got.Markdown)
+	}
+}
+
 func TestContextPackForArtifactFailsWhenReaderIsUnavailable(t *testing.T) {
 	t.Parallel()
 	svc := &Service{}

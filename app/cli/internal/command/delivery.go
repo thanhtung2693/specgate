@@ -179,7 +179,7 @@ func verifyCompletionEvidence(deps *Deps, command string, body map[string]any) e
 	return nil
 }
 
-func validateCompletionReport(deps *Deps, command string, body map[string]any) error {
+func validateCompletionReport(deps *Deps, command string, body map[string]any, allowPendingChecks bool) error {
 	if strings.TrimSpace(fmt.Sprint(body["event_type"])) == "coding_agent.completed" {
 		if completionAgentName(body) == "" {
 			return completionValidationError(deps, command, "completion agent.name is required")
@@ -220,10 +220,18 @@ func validateCompletionReport(deps *Deps, command string, body map[string]any) e
 		check, _ := raw.(map[string]any)
 		status := strings.TrimSpace(fmt.Sprint(check["status"]))
 		if status == "pending" {
+			commandValue, _ := check["command"].(string)
+			if allowPendingChecks && strings.TrimSpace(commandValue) != "" {
+				continue
+			}
+			message := fmt.Sprintf("check %s is still pending; run it and set status to pass, fail, or skipped; skipped requires a reason", check["name"])
+			if allowPendingChecks {
+				message = fmt.Sprintf("pending check %s requires a runnable command with --run-checks", check["name"])
+			}
 			return completionValidationError(
 				deps,
 				command,
-				fmt.Sprintf("check %s is still pending; run it and set status to pass, fail, or skipped; skipped requires a reason", check["name"]),
+				message,
 			)
 		}
 		switch status {

@@ -62,7 +62,9 @@ publication succeeds.
 
 For updates, an IDE agent can compare an explicitly mapped local package with
 one selected artifact version. The CLI reads stored file hashes, not old file
-content, and reports added, removed, changed, or unchanged paths. Comparison is
+content, and reports added, removed, changed, or unchanged path-role mappings.
+Changing a role adds the new mapping and removes the old one because `path` and
+`role` together identify a document. Comparison is
 preparation evidence only: it does not publish, approve,
 promote, link work, or rebuild a Context Pack.
 
@@ -90,6 +92,9 @@ A Context Pack is the agent's implementation brief. It can include:
 
 The agent should start from the Context Pack instead of reconstructing the task
 from memory or chat history.
+
+One source may satisfy several artifact roles. Its body appears only once in
+the Context Pack, so role coverage does not duplicate model input.
 
 ## Quick and artifact-backed routes
 

@@ -132,8 +132,13 @@ func collectGitReceiptWithPriorBase(ctx context.Context, runner deploy.CommandRu
 	// the completion scaffold does before the user fills affected_files. An
 	// explicit empty scope still participates in mismatch detection.
 	if reported != nil {
-		if mismatch := reportedFilesWarning(normalizeReportedPaths(reported, dir, repoRoot), receipt.ChangedFiles); mismatch != "" {
-			receipt.Warnings = append(receipt.Warnings, mismatch)
+		// Without a remote base, a clean checkout cannot reveal which committed
+		// files belong to this delivery. Do not call those files absent when Git
+		// provided no comparison set.
+		if receipt.FreshnessScope == "shared_repository" || len(receipt.ChangedFiles) > 0 {
+			if mismatch := reportedFilesWarning(normalizeReportedPaths(reported, dir, repoRoot), receipt.ChangedFiles); mismatch != "" {
+				receipt.Warnings = append(receipt.Warnings, mismatch)
+			}
 		}
 	}
 	// Include identity in the digest even when status is clean. Recompute after

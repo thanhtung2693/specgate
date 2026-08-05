@@ -162,6 +162,7 @@ func renderRoleBasedPack(
 
 	section("Applicable Skills", applicableSkillsSection(ctx, skillReader, profile.GateSkills))
 
+	renderedPaths := map[string]bool{}
 	readRole := func(role artifact.Role) (string, error) {
 		paths, ok := byRole[role]
 		if !ok || len(paths) == 0 {
@@ -169,11 +170,15 @@ func renderRoleBasedPack(
 		}
 		var parts []string
 		for _, p := range paths {
+			if renderedPaths[p] {
+				continue
+			}
 			c, err := read(p)
 			if err != nil {
 				return "", err
 			}
 			if c != "" {
+				renderedPaths[p] = true
 				parts = append(parts, c)
 			}
 		}
@@ -208,11 +213,15 @@ func renderRoleBasedPack(
 	sort.Strings(additionalPaths)
 	var additionalParts []string
 	for _, path := range additionalPaths {
+		if renderedPaths[path] {
+			continue
+		}
 		content, err := read(path)
 		if err != nil {
 			return "", err
 		}
 		if content != "" {
+			renderedPaths[path] = true
 			additionalParts = append(additionalParts, content)
 		}
 	}

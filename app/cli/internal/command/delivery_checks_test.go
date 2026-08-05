@@ -119,6 +119,34 @@ func TestDeliverySubmitRunChecksRequiresYesOutsideInteractiveTerminal(t *testing
 	}
 }
 
+func TestDeliverySubmitRunChecksExecutesPendingScaffoldCheck(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	deps.RunCheckCommand = func(_ context.Context, command string) (int, string) {
+		if command != "go test ./..." {
+			t.Fatalf("command = %q", command)
+		}
+		return 0, "ok"
+	}
+	f := writeDeliveryJSON(t, map[string]any{
+		"event_type": "coding_agent.completed",
+		"summary":    "done",
+		"checks": []map[string]any{{
+			"name": "tests", "command": "go test ./...", "status": "pending",
+		}},
+		"criteria": []map[string]any{},
+	})
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "delivery", "submit", "CR-101", "--file", f, "--run-checks")
+	if code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	checks := fc.lastFeedbackBody["checks"].([]any)
+	if got := checks[0].(map[string]any)["status"]; got != "pass" {
+		t.Fatalf("observed status = %#v, want pass", got)
+	}
+}
+
 func TestDeliverySubmitRunChecksShowsCommandsBeforeInteractiveConfirmation(t *testing.T) {
 	deps, _, fp, out := newFakeDeps(t)
 	deps.StdinIsTTY = func() bool { return true }

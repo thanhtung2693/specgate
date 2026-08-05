@@ -186,7 +186,9 @@ specgate change submit https://github.com/acme/shop/issues/42 --file "$COMPLETIO
 ```
 
 `--run-checks` re-executes non-skipped checks through `sh -c` after previewing
-their commands; noninteractive callers must also pass `--yes`. Use
+their commands; a scaffolded `pending` row is accepted when it has a runnable
+command, then replaced with the observed `pass` or `fail`. Noninteractive
+callers must also pass `--yes`. Use
 non-interactive POSIX shell commands. `--skip-evidence-check` bypasses
 local citation validation and should be reserved for recovery when the cited
 paths cannot exist in the current checkout.
@@ -499,15 +501,17 @@ declared verification binding (or a `tests` fallback), and `not_done` criterion
 claims. Fill `agent.name` with the coding agent's stable name before
 submission.
 
-`pending` is a scaffold-only placeholder. Submission rejects it until the agent
-records `pass`, `fail`, or an explained `skipped`. The scaffold captures Git
-identity but defers delivery-scope comparison until `affected_files` is
-supplied at submission.
+`pending` is a scaffold placeholder. Submission without `--run-checks` rejects
+it until the agent records `pass`, `fail`, or an explained `skipped`.
+Submission with `--run-checks` accepts it only with a runnable command and
+replaces it with the observed result. The scaffold captures Git identity but
+defers delivery-scope comparison until `affected_files` is supplied at
+submission.
 
 `delivery submit` accepts only `coding_agent.completed`. Both the direct and
-scaffolded paths reject missing completion-agent identity, untouched pending
-checks, `satisfied` claims without evidence, and passing checks without
-runnable commands — all before any network call.
+scaffolded paths reject missing completion-agent identity, pending checks that
+will not be executed, `satisfied` claims without evidence, and passing checks
+without runnable commands — all before any network call.
 
 ### Review and assurance
 
@@ -559,6 +563,8 @@ branch, base, HEAD, and diff digest. A solo checkout without `origin` has
 `freshness_scope=local_checkout`: it compares branch, HEAD, and working-tree
 digest only in that checkout and never claims shared provenance. Configure an
 origin when another machine must independently identify the repository.
+When that local checkout is clean, SpecGate does not claim committed
+`affected_files` are absent because no remote base exists to compute them.
 Mismatches are explicit stale warnings, and unavailable non-Git metadata never
 claims freshness.
 
@@ -818,7 +824,7 @@ or summaries:
   lookup is constrained to the package's explicit workspace or the selected
   workspace; it fails locally when neither is available. It reads
   artifact metadata and file hashes, never prior content, and reports added,
-  removed, changed, and unchanged paths; it still performs no
+  removed, changed, and unchanged path-role mappings; it still performs no
   publication. `--compare` requires `--preview`. The publish command accepts
   Git-root-relative `repo_file`, manifest-relative `source_file`, or absolute
   local `file_url` entries in `documents[]`; every document must set exactly one
