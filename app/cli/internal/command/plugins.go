@@ -404,8 +404,8 @@ func resolvePluginScopePrompt(cmd *cobra.Command, deps *Deps, projectLocal *bool
 		return nil
 	}
 	scope, err := deps.Prompter.Select("Install scope", []interactive.Option{
-		{Label: "Global user files", Value: "global"},
-		{Label: "This project", Value: "project"},
+		{Label: "Global — available in every project; does not modify this repository", Value: "global"},
+		{Label: "This project — writes IDE files into this repository", Value: "project"},
 	})
 	if err != nil {
 		return err
@@ -415,10 +415,16 @@ func resolvePluginScopePrompt(cmd *cobra.Command, deps *Deps, projectLocal *bool
 }
 
 func defaultPluginAgents(deps *Deps) []string {
+	var defaults []string
 	if deps.PluginAgentDefaults != nil {
-		return normalizePluginAgentDefaults(deps.PluginAgentDefaults())
+		defaults = normalizePluginAgentDefaults(deps.PluginAgentDefaults())
+	} else {
+		defaults = normalizePluginAgentDefaults(detectPluginAgentDefaults())
 	}
-	return normalizePluginAgentDefaults(detectPluginAgentDefaults())
+	if len(defaults) > 1 {
+		return nil
+	}
+	return defaults
 }
 
 func detectPluginAgentDefaults() []string {

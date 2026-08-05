@@ -320,7 +320,17 @@ func contextMarkdown(key, title string, artifact Artifact, criteria []string) st
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Context Pack: %s\n\n%s\n\n", key, title)
 	fmt.Fprintf(&b, "Approved artifact: %s (v%d, %s)\n\n", artifact.ID, artifact.Version, artifact.SnapshotDigest)
+	rendered := map[string]bool{}
 	for _, document := range artifact.Documents {
+		digest := document.Digest
+		if digest == "" {
+			digest = digestText(string(document.Content))
+		}
+		key := document.Path + "\x00" + digest
+		if rendered[key] {
+			continue
+		}
+		rendered[key] = true
 		fmt.Fprintf(&b, "## %s\n\n%s\n\n", document.Path, document.Content)
 	}
 	b.WriteString("## Acceptance criteria\n\n")

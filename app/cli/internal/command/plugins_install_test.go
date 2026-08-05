@@ -731,6 +731,26 @@ func TestPluginsInstallUsesDetectedAgentDefaults(t *testing.T) {
 	}
 }
 
+func TestPluginsInstallDoesNotPreselectSeveralDetectedIDEs(t *testing.T) {
+	srv := newPluginRegistry(t)
+	deps, out := newPluginDeps(t.TempDir())
+	deps.PluginAgentDefaults = func() []string { return []string{"cursor", "codex", "claude"} }
+	prompter := &fakePrompter{multiValues: []string{"codex"}}
+	deps.Prompter = prompter
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--server", srv.URL, "plugins", "install")
+	if code != output.ExitOK {
+		t.Fatalf("install exit = %d, output = %s", code, out.String())
+	}
+	if len(prompter.multiDefaults) != 0 {
+		t.Fatalf("multi-select defaults = %#v, want an explicit choice when several IDEs are detected", prompter.multiDefaults)
+	}
+	labels := []string{prompter.selectOptions[0].Label, prompter.selectOptions[1].Label}
+	if !strings.Contains(labels[0], "does not modify this repository") || !strings.Contains(labels[1], "writes IDE files into this repository") {
+		t.Fatalf("scope labels do not explain repository impact: %#v", labels)
+	}
+}
+
 func TestPluginsInstallPlainModeDoesNotPromptForAgent(t *testing.T) {
 	srv := newPluginRegistry(t)
 	home := t.TempDir()

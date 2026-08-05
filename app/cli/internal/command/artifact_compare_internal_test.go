@@ -32,7 +32,7 @@ func TestBuildArtifactComparisonClassifiesExplicitDocuments(t *testing.T) {
 	if got.BaseArtifactID != "art-base" || got.BaseVersion != "v0.2" || got.BaseSnapshotDigest != "sha256:package" {
 		t.Fatalf("base identity = %#v", got)
 	}
-	wantCounts := artifactComparisonCounts{Added: 2, Removed: 1, Changed: 1, Unchanged: 1}
+	wantCounts := artifactComparisonCounts{Added: 3, Removed: 2, Unchanged: 1}
 	if got.Counts != wantCounts {
 		t.Fatalf("counts = %#v, want %#v", got.Counts, wantCounts)
 	}
@@ -48,13 +48,13 @@ func TestBuildArtifactComparisonClassifiesExplicitDocuments(t *testing.T) {
 	if !reflect.DeepEqual(paths, wantPaths) {
 		t.Fatalf("paths = %#v, want %#v", paths, wantPaths)
 	}
-	if states["docs/new.md"] != "added" || states["docs/plan.md"] != "unchanged" || states["docs/spec.md"] != "changed" || states["docs/legacy.md"] != "added" {
+	if states["docs/new.md"] != "added" || states["docs/plan.md"] != "unchanged" || states["docs/spec.md"] != "added" || states["docs/legacy.md"] != "added" {
 		t.Fatalf("states = %#v", states)
 	}
-	if !reflect.DeepEqual(changes["docs/spec.md"], []string{"content", "role"}) {
-		t.Fatalf("spec changes = %#v", changes["docs/spec.md"])
+	if len(changes["docs/spec.md"]) != 0 {
+		t.Fatalf("a new path-role mapping should be added, not guessed as a role change: %#v", changes["docs/spec.md"])
 	}
-	if len(got.Removed) != 1 || got.Removed[0].Path != "docs/removed.md" || got.Removed[0].State != "removed" {
+	if len(got.Removed) != 2 || got.Removed[0].Path != "docs/removed.md" || got.Removed[1].Path != "docs/spec.md" || got.Removed[1].Role != "design" {
 		t.Fatalf("removed = %#v", got.Removed)
 	}
 }
@@ -81,8 +81,29 @@ func TestBuildArtifactComparisonRejectsDuplicateNormalizedPaths(t *testing.T) {
 		map[string]any{"path": "docs/spec.md", "role": "spec", "content": "two"},
 	}}
 	_, err := buildArtifactComparison(body, &client.Artifact{ID: "base"}, nil)
-	if err == nil || !strings.Contains(err.Error(), "duplicate") {
-		t.Fatalf("err = %v, want duplicate path error", err)
+	if err == nil || !strings.Contains(err.Error(), "mapped twice") || !strings.Contains(err.Error(), "spec") {
+		t.Fatalf("err = %v, want duplicate path-role error", err)
+	}
+}
+
+func TestBuildArtifactComparisonAllowsOnePathUnderSeveralRoles(t *testing.T) {
+	t.Parallel()
+
+	body := map[string]any{"documents": []any{
+		map[string]any{"path": "docs/spec.md", "role": "spec", "content": "updated"},
+		map[string]any{"path": "docs/spec.md", "role": "plan", "content": "updated"},
+	}}
+	baseFiles := []client.ArtifactFile{
+		{Path: "docs/spec.md", Role: "spec", ContentSHA256: digestArtifactContent("original")},
+		{Path: "docs/spec.md", Role: "plan", ContentSHA256: digestArtifactContent("original")},
+	}
+
+	got, err := buildArtifactComparison(body, &client.Artifact{ID: "base"}, baseFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Counts.Changed != 2 || len(got.Files) != 2 {
+		t.Fatalf("comparison = %#v, want two changed path-role mappings", got)
 	}
 }
 

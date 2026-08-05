@@ -58,7 +58,7 @@ func newDeliveryReportCmd(deps *Deps) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				if err := validateCompletionReport(deps, "delivery.report", body); err != nil {
+				if err := validateCompletionReport(deps, "delivery.report", body, false); err != nil {
 					return err
 				}
 				if !skipEvidenceCheck {
@@ -93,7 +93,7 @@ func newDeliveryReportCmd(deps *Deps) *cobra.Command {
 					"summary":    summary,
 					"agent":      map[string]any{"name": strings.TrimSpace(agentName)},
 				}
-				if err := validateCompletionReport(deps, "delivery.report", body); err != nil {
+				if err := validateCompletionReport(deps, "delivery.report", body, false); err != nil {
 					return err
 				}
 			}
@@ -171,7 +171,7 @@ func newDeliveryPeerReviewCmd(deps *Deps) *cobra.Command {
 			if completionAgentName(body) == "" {
 				return completionValidationError(deps, "delivery.peer-review", "agent.name is required")
 			}
-			if err := validateCompletionReport(deps, "delivery.peer-review", body); err != nil {
+			if err := validateCompletionReport(deps, "delivery.peer-review", body, false); err != nil {
 				return err
 			}
 			if err := verifyCompletionEvidence(deps, "delivery.peer-review", body); err != nil {

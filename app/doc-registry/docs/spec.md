@@ -85,7 +85,8 @@ The renderer groups artifact documents by role in this order: Spec, Design,
 Implementation Plan, Verification, Research, Reference, Additional Documents.
 Roles come only from published artifact metadata. Filenames and paths never
 assign document meaning; custom or unspecified roles render under Additional
-Documents.
+Documents. When one source path carries several roles, its body renders once
+under the first role in that order; the artifact retains every role mapping.
 Applicable Skill names come from the frozen policy snapshot. A current catalog
 lookup may add descriptions and IDs, but an unavailable catalog cannot erase
 the frozen names or change the gate rubric used for evaluation.

@@ -390,3 +390,23 @@ func TestGitReceiptUsesLocalCheckoutScopeWithoutOrigin(t *testing.T) {
 		t.Errorf("warnings = %#v, want shared-provenance warning", receipt.Warnings)
 	}
 }
+
+func TestGitReceiptDoesNotCompareCommittedScopeWithoutOriginBase(t *testing.T) {
+	dir := t.TempDir()
+	runner := &gitReceiptRunner{
+		outputs: map[string][]byte{
+			receiptCommand(dir, "rev-parse", "--show-toplevel"):                            []byte(dir + "\n"),
+			receiptCommand(dir, "branch", "--show-current"):                                []byte("solo\n"),
+			receiptCommand(dir, "rev-parse", "HEAD"):                                       []byte("head\n"),
+			receiptCommand(dir, "status", "--porcelain=v1", "-z", "--untracked-files=all"): nil,
+		},
+		errors: map[string]error{
+			receiptCommand(dir, "remote", "get-url", "origin"): errors.New("fatal: No such remote 'origin'"),
+		},
+	}
+
+	receipt := collectGitReceipt(context.Background(), runner, dir, []string{"committed.go"})
+	if len(receipt.Warnings) != 1 || !strings.Contains(receipt.Warnings[0], "no origin remote") {
+		t.Fatalf("warnings = %#v, want only the provenance warning", receipt.Warnings)
+	}
+}

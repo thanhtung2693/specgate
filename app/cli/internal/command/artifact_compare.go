@@ -83,21 +83,22 @@ func buildArtifactComparison(body map[string]any, base *client.Artifact, baseFil
 		Removed:            []artifactComparisonFile{},
 	}
 
-	baseByPath := make(map[string]client.ArtifactFile, len(baseFiles))
+	baseByKey := make(map[string]client.ArtifactFile, len(baseFiles))
 	for _, file := range baseFiles {
 		normalized, ok := normalizeArtifactDocumentPath(file.Path)
 		if !ok {
 			return artifactComparison{}, fmt.Errorf("unsafe base document path %q", file.Path)
 		}
-		if _, exists := baseByPath[normalized]; exists {
-			return artifactComparison{}, fmt.Errorf("duplicate base document path %q", normalized)
+		file.Role = normalizeArtifactDocumentRole(file.Role)
+		key := normalized + "\x00" + file.Role
+		if _, exists := baseByKey[key]; exists {
+			return artifactComparison{}, fmt.Errorf("base document %q is mapped twice under role %q", normalized, file.Role)
 		}
 		if file.ContentSHA256 == "" {
 			return artifactComparison{}, fmt.Errorf("base document %q is missing content_sha256", normalized)
 		}
 		file.Path = normalized
-		file.Role = normalizeArtifactDocumentRole(file.Role)
-		baseByPath[normalized] = file
+		baseByKey[key] = file
 	}
 
 	seen := map[string]struct{}{}
@@ -112,20 +113,21 @@ func buildArtifactComparison(body map[string]any, base *client.Artifact, baseFil
 		if !ok {
 			return artifactComparison{}, fmt.Errorf("unsafe document path %q", rawPath)
 		}
-		if _, exists := seen[normalized]; exists {
-			return artifactComparison{}, fmt.Errorf("duplicate document path %q", normalized)
-		}
-		seen[normalized] = struct{}{}
-
 		role, _ := document["role"].(string)
 		role = normalizeArtifactDocumentRole(role)
+		key := normalized + "\x00" + role
+		if _, exists := seen[key]; exists {
+			return artifactComparison{}, fmt.Errorf("document %q is mapped twice under role %q", normalized, role)
+		}
+		seen[key] = struct{}{}
+
 		content, _ := document["content"].(string)
 		current := artifactComparisonFile{
 			Path:          normalized,
 			Role:          role,
 			ContentSHA256: digestArtifactContent(content),
 		}
-		previous, exists := baseByPath[normalized]
+		previous, exists := baseByKey[key]
 		switch {
 		case !exists:
 			current.State = "added"
@@ -133,9 +135,6 @@ func buildArtifactComparison(body map[string]any, base *client.Artifact, baseFil
 		default:
 			if previous.ContentSHA256 != current.ContentSHA256 {
 				current.Changes = append(current.Changes, "content")
-			}
-			if previous.Role != role {
-				current.Changes = append(current.Changes, "role")
 			}
 			if len(current.Changes) == 0 {
 				current.State = "unchanged"
@@ -148,12 +147,12 @@ func buildArtifactComparison(body map[string]any, base *client.Artifact, baseFil
 		comparison.Files = append(comparison.Files, current)
 	}
 
-	for filePath, file := range baseByPath {
-		if _, exists := seen[filePath]; exists {
+	for key, file := range baseByKey {
+		if _, exists := seen[key]; exists {
 			continue
 		}
 		comparison.Removed = append(comparison.Removed, artifactComparisonFile{
-			Path:          filePath,
+			Path:          file.Path,
 			Role:          file.Role,
 			ContentSHA256: file.ContentSHA256,
 			State:         "removed",
@@ -161,8 +160,18 @@ func buildArtifactComparison(body map[string]any, base *client.Artifact, baseFil
 		comparison.Counts.Removed++
 	}
 
-	sort.Slice(comparison.Files, func(i, j int) bool { return comparison.Files[i].Path < comparison.Files[j].Path })
-	sort.Slice(comparison.Removed, func(i, j int) bool { return comparison.Removed[i].Path < comparison.Removed[j].Path })
+	sort.Slice(comparison.Files, func(i, j int) bool {
+		if comparison.Files[i].Path != comparison.Files[j].Path {
+			return comparison.Files[i].Path < comparison.Files[j].Path
+		}
+		return comparison.Files[i].Role < comparison.Files[j].Role
+	})
+	sort.Slice(comparison.Removed, func(i, j int) bool {
+		if comparison.Removed[i].Path != comparison.Removed[j].Path {
+			return comparison.Removed[i].Path < comparison.Removed[j].Path
+		}
+		return comparison.Removed[i].Role < comparison.Removed[j].Role
+	})
 	return comparison, nil
 }
 

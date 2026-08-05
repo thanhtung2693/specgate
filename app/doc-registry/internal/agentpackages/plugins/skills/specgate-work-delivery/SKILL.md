@@ -96,18 +96,18 @@ regular scaffold's exact `error.details.path` only when its `change_request_id`
 matches `work show` and any `context_digest` matches the Context Pack. Never
 overwrite automatically; stop when attribution is unsafe.
 
-Fill `agent.name`, `summary`, `affected_files`, `checks[]`, and exactly one `criteria[]`
-entry per canonical criterion. Give each criterion an independently reviewable
-claim and evidence. Anchor a local path with `line`, or with a `heading` that
-appears verbatim in that file: a path alone records `unanchored` and a wrong
-heading records `heading_not_found`, and neither carries an excerpt for the
-reviewer. A command name alone is not evidence. Replace every `pending` check with `pass`, `fail`, or `skipped` plus
-observed detail; submission rejects untouched placeholders. Evidence paths must
-exist. `satisfied` cannot depend on a failed, missing, or skipped required check.
+Fill `agent.name`, `summary`, `affected_files`, `checks[]`, and exactly one
+`criteria[]` entry per canonical criterion. Each claim must be independently
+reviewable. Anchor evidence with `line` or a verbatim `heading`; a path is
+`unanchored`, and a missing heading is `heading_not_found`. Neither has an
+excerpt. A command name alone is not evidence. Set every check to `pass`,
+`fail`, or `skipped`, or leave it `pending` with a runnable command and use
+`--run-checks` for observation. Evidence paths must exist. `satisfied` cannot
+depend on a failed, missing, or skipped required check.
 Every non-skipped `checks[].command` must be non-interactive and valid for
 `sh -c`.
 
-Review the completion file, especially its shell commands, then submit:
+Review its shell commands, then submit:
 
 ```bash
 specgate change submit "$WORK_REF" \
@@ -115,8 +115,7 @@ specgate change submit "$WORK_REF" \
 ```
 
 `change submit` returns the same status payload; use its `data`, never refetch.
-`--run-checks` replaces self-reported results with observed ones. Fix failures
-before claiming completion.
+`--run-checks` replaces self-reported results with observed ones. Fix failures.
 
 Completion criterion: submission succeeded; returned status was read.
 

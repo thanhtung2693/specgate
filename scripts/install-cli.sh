@@ -21,26 +21,54 @@ NO_CONFIG=0
 GITHUB_REPO="thanhtung2693/specgate"
 BINARY_NAME="specgate"
 
+usage() {
+  cat <<'EOF'
+Usage: install-cli.sh [options]
+
+Options:
+  --version <tag>       CLI version to install (default: latest stable public release)
+  --install-dir <path>  Installation directory (default: current specgate dir, else ~/.local/bin, else /usr/local/bin)
+  --server <url>        SpecGate server URL to configure after install
+  --no-config           Skip post-install server configuration
+  -h, --help            Show this help
+EOF
+}
+
+require_value() {
+  if [ $# -ge 2 ] && [ -n "$2" ]; then
+    case "$2" in -*) ;; *) return ;; esac
+  fi
+  echo "$1 requires a value" >&2
+  exit 1
+}
+
 # ---------------------------------------------------------------------------
 # Parse flags
 # ---------------------------------------------------------------------------
 while [ $# -gt 0 ]; do
   case "$1" in
     --version)
+      require_value "$@"
       SPECGATE_VERSION="$2"
       shift 2
       ;;
     --install-dir)
+      require_value "$@"
       INSTALL_DIR="$2"
       shift 2
       ;;
     --server)
+      require_value "$@"
       SERVER_URL="$2"
       shift 2
       ;;
     --no-config)
       NO_CONFIG=1
       shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
       ;;
     *)
       echo "Unknown flag: $1" >&2

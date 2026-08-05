@@ -162,6 +162,10 @@ Default install is user-global. It writes files under your home directory and
 works across repositories. In an interactive terminal, `plugins install` asks
 for this scope unless `--project-local` is passed.
 
+When exactly one installed IDE is detected, it is preselected. When several
+are detected, choose explicitly so SpecGate does not install files for IDEs you
+do not use.
+
 Use project-local scope only when a repository should vendor its SpecGate IDE
 files:
 

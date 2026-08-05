@@ -637,7 +637,7 @@ func TestArtifactPublishPreviewCompareIsReadOnly(t *testing.T) {
 	if fc.lastPublishBody != nil {
 		t.Fatalf("compare preview published body: %#v", fc.lastPublishBody)
 	}
-	for _, want := range []string{`"base_artifact_id":"art-base"`, `"base_version":"v0.2"`, `"base_snapshot_digest":"sha256:package"`, `"changed":1`, `"changes":["content","role"]`} {
+	for _, want := range []string{`"base_artifact_id":"art-base"`, `"base_version":"v0.2"`, `"base_snapshot_digest":"sha256:package"`, `"added":1`, `"removed":1`} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("preview missing %s: %s", want, out.String())
 		}
