@@ -75,6 +75,25 @@ function isReadyPhase(phase: string | undefined): boolean {
   return normalizedPhase(phase) === "ready"
 }
 
+// What the item is waiting for, in the words of whoever has to act. The phase
+// already carries this: Intake means no approved scope exists, Review means an
+// artifact is drafted and unapproved. Ready and Delivered wait on nobody, and
+// "none" is the value the blocked filter and the blocked count both read.
+// A recorded verdict is checked before the phase, in the same order
+// deliveryForChangeRequest uses. Reading the phase first let a Ready item with a
+// passing review render "Ready for human review" beside "waiting on nobody".
+// Consequence, chosen deliberately: such an item now also counts as blocked,
+// which is true — it cannot progress until a human accepts it.
+function blockerForChangeRequest(item: ChangeRequestDTO): string {
+  if (isDeliveredPhase(item.phase)) return "none"
+  const verdict = item.delivery_review?.verdict?.trim()
+  if (verdict === "pass") return "You — accept the delivery"
+  if (verdict) return "The agent — fix and resubmit"
+  if (isReadyPhase(item.phase)) return "none"
+  if (normalizedPhase(item.phase) === "review") return "You — approve the spec"
+  return "You — approve it for handoff"
+}
+
 function deliveryForChangeRequest(item: ChangeRequestDTO): WorkItem["delivery"] {
   if (isDeliveredPhase(item.phase)) return "accepted"
   const verdict = item.delivery_review?.verdict?.trim()
@@ -120,24 +139,12 @@ export function mapChangeRequestToWorkItem(item: ChangeRequestDTO): WorkItem {
     delivery: deliveryForChangeRequest(item),
     deliveryVerdict: item.delivery_review?.verdict?.trim() || undefined,
     deliveryHint: item.delivery_review?.hint?.trim() || undefined,
-    blocker: isDeliveredPhase(item.phase) || isReadyPhase(item.phase) ? "none" : "needs governance progress",
+    blocker: blockerForChangeRequest(item),
     age: formatDateTime(item.created_at ?? item.updated_at),
     updated: formatDateTime(item.updated_at),
     skills: [],
     summary: summaryFromIntent(item.intent_md),
     acceptance: parseStringList(item.acceptance_criteria_json),
-    activity: [
-      item.lead_artifact_id
-        ? "Lead artifact linked"
-        : item.work_type === "bug_fix"
-          ? "Quick route uses persisted work as the handoff source"
-          : "Waiting for lead artifact",
-      item.lead_artifact_id
-        ? "Context Pack derives on demand from the approved artifact"
-        : item.work_type === "bug_fix"
-          ? "Quick-route Context Pack derives on demand from persisted work"
-          : "Context Pack becomes available from an approved artifact",
-    ],
   }
 }
 

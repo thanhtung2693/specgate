@@ -122,7 +122,7 @@ export function LinkIntegrationResourceDialog({
               </div>
             </div>
           ) : null}
-          <div className="overflow-hidden rounded-lg border bg-background/70">
+          <div className="overflow-hidden sg-inset">
             {loading ? <div className="p-3 text-sm text-muted-foreground">Loading {candidateLabel}...</div> : null}
             {!loading && candidates.length === 0 ? (
               <div className="p-3 text-sm text-muted-foreground">
@@ -267,7 +267,7 @@ export function AddIntegrationDialog({
                   key={entry.id}
                   type="button"
                   className={cn(
-                    "grid gap-2 rounded-lg border bg-background/70 p-3 text-left transition-colors hover:bg-muted/40",
+                    "grid gap-2 sg-inset p-3 text-left transition-colors hover:bg-muted/40",
                     provider === entry.id && "border-primary/70 bg-primary/5 ring-1 ring-primary/30",
                   )}
                   onClick={() => setProvider(entry.id)}
@@ -293,7 +293,7 @@ export function AddIntegrationDialog({
                   key={method}
                   type="button"
                   className={cn(
-                    "rounded-lg border bg-background/70 px-3 py-2 text-left transition-colors hover:bg-muted/40",
+                    "sg-inset px-3 py-2 text-left transition-colors hover:bg-muted/40",
                     authMethod === method && "border-primary/70 bg-primary/5 ring-1 ring-primary/30",
                   )}
                   onClick={() => setAuthMethod(method)}
@@ -307,7 +307,7 @@ export function AddIntegrationDialog({
             </div>
           </div>
           {authMethod === "pat" && supportsSelfHosted ? (
-            <label className="flex items-start gap-3 rounded-md border bg-card/70 px-3 py-2">
+            <label className="flex items-start gap-3 sg-inset px-3 py-2">
               <input
                 type="checkbox"
                 className="mt-1 size-4 accent-primary"
@@ -347,7 +347,7 @@ export function AddIntegrationDialog({
               <span className="text-xs text-muted-foreground">Sent once to Doc Registry and stored encrypted. The UI never reads it back.</span>
             </label>
           ) : (
-            <p className="rounded-md border bg-card/70 px-3 py-2 text-xs leading-5 text-muted-foreground">
+            <p className="sg-inset px-3 py-2 text-xs leading-5 text-muted-foreground">
               OAuth uses the hosted {selectedProvider.name} flow and returns to Settings when authorization succeeds.
             </p>
           )}

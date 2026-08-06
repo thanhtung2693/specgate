@@ -110,6 +110,13 @@ export function gateText(gate: string) {
   }[gate] ?? readableKey(gate)
 }
 
+/** Human label for a work item's route. "full" is an internal value; showing it
+ * makes readers think Full mode is required to approve a spec, which is the
+ * vocabulary guard recorded in docs/contributing/contracts.md. */
+export function routeText(route: string) {
+  return route === "full" ? "Approved spec" : "Quick contract"
+}
+
 export function stateText(state: string) {
   return {
     pass: "Passed",

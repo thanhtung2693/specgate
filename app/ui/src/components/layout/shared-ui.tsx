@@ -88,7 +88,7 @@ function MermaidDiagram({ code }: { code: string }) {
   }, [code, id, mode])
 
   return (
-    <section className="rounded-lg border bg-background/70">
+    <section className="sg-inset">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b p-3">
         <div>
           <h4 className="text-sm font-semibold">Mermaid diagram</h4>
@@ -221,7 +221,7 @@ export function GateEvidenceWhy({ evidence, executor }: { evidence?: string; exe
         Why
       </button>
       {open ? (
-        <div className="mt-2 grid gap-1.5 rounded-md border bg-card/50 p-2.5 text-xs">
+        <div className="mt-2 grid gap-1.5 sg-inset p-2.5 text-xs">
           {origin || confidence ? (
             <p className="text-muted-foreground">{[origin, confidence].filter(Boolean).join(" · ")}</p>
           ) : null}
@@ -263,7 +263,7 @@ export function PolicyExplanationSection({
 
   if (status === "loading") {
     return (
-      <section className="rounded-lg border bg-background/70 p-4">
+      <section className="sg-card p-4">
         <h3 className="text-sm font-semibold">{title}</h3>
         <p className="mt-2 text-sm text-muted-foreground">Loading policy explanation...</p>
       </section>
@@ -272,7 +272,7 @@ export function PolicyExplanationSection({
 
   if (status === "error") {
     return (
-      <section className="rounded-lg border bg-background/70 p-4">
+      <section className="sg-card p-4">
         <h3 className="text-sm font-semibold">{title}</h3>
         <p className="mt-2 text-sm text-muted-foreground">
           {context === "artifact"
@@ -286,7 +286,7 @@ export function PolicyExplanationSection({
   if (!policy) return null
 
   return (
-    <section className="rounded-lg border bg-background/70 p-4">
+    <section className="sg-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold">{title}</h3>
@@ -305,7 +305,7 @@ export function PolicyExplanationSection({
           </Badge>
         </div>
       </div>
-      <div className="mt-3 rounded-md border bg-card/70 p-3">
+      <div className="mt-3 sg-inset p-3">
         <p className="text-sm font-medium">{policy.title}</p>
         <p className="mt-1 text-sm leading-6 text-muted-foreground">{policy.summary}</p>
       </div>
@@ -326,7 +326,7 @@ export function PolicyExplanationSection({
           <h4 className="text-xs font-semibold text-muted-foreground">Obligations</h4>
           <div className="mt-2 grid gap-2">
             {policy.obligations.map((obligation) => (
-              <p key={obligation} className="rounded-md border bg-background/70 px-2 py-1.5 text-xs leading-5 text-muted-foreground">
+              <p key={obligation} className="sg-inset px-2 py-1.5 text-xs leading-5 text-muted-foreground">
                 {obligation}
               </p>
             ))}

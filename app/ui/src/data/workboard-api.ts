@@ -56,8 +56,8 @@ function buildSignals(items: WorkItem[]): Signal[] {
 
   return [
     { label: "Ready for pickup", value: String(ready), detail: "approved source available", tone: ready > 0 ? "success" : "neutral" },
-    { label: "Open gate failures", value: String(gateDebt), detail: "needs attention", tone: gateDebt > 0 ? "warning" : "success" },
-    { label: "Blocked by ambiguity", value: String(blocked), detail: "open blockers", tone: blocked > 0 ? "danger" : "success" },
+    { label: "Checks not passing", value: String(gateDebt), detail: "needs attention", tone: gateDebt > 0 ? "warning" : "success" },
+    { label: "Waiting on you", value: String(blocked), detail: "not approved yet", tone: blocked > 0 ? "danger" : "success" },
   ]
 }
 

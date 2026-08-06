@@ -16,7 +16,7 @@ import { MarkdownText } from "../shared-ui"
 export function RepositoryObservationSummary({ detail }: { detail: WorkItemDetailData }) {
   if (detail.readback.deliveryLinks === "error") {
     return (
-      <section className="rounded-lg border bg-background/70 p-4">
+      <section className="sg-card p-4">
         <h3 className="text-sm font-semibold">Repository observation</h3>
         <p className="mt-2 text-sm text-muted-foreground">Repository links unavailable. Check Doc Registry connectivity.</p>
       </section>
@@ -26,7 +26,7 @@ export function RepositoryObservationSummary({ detail }: { detail: WorkItemDetai
 
   const latestCompletionHead = detail.deliveryStatus?.gitReceipt?.headRevision
   return (
-    <section className="rounded-lg border bg-background/70 p-4">
+    <section className="sg-card p-4">
       <h3 className="text-sm font-semibold">Repository observation</h3>
       <div className="mt-3 grid gap-2">
         {detail.deliveryLinks.map((link) => (
@@ -51,7 +51,7 @@ function RepositoryObservationLink({ link, latestCompletionHead }: { link: Deliv
   const tone: Tone = observation === "exact" ? "success" : observation === "open" || observation === "missing-receipt" ? "warning" : "danger"
 
   return (
-    <div className="rounded-md border bg-card/70 p-3">
+    <div className="sg-card p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <a href={link.url} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-2 text-sm font-medium hover:underline">
           <ExternalLinkIcon className="size-4 shrink-0" />
@@ -142,7 +142,7 @@ export function DeliverySummary({
   }
 
   return (
-    <section className="rounded-lg border bg-background/70 p-4">
+    <section className="sg-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           {accepted ? (
@@ -170,7 +170,7 @@ export function DeliverySummary({
         )}
       </div>
       {detail.readback.delivery === "error" ? (
-        <p className="mt-3 rounded-md border bg-card/70 p-3 text-sm leading-6 text-muted-foreground">
+        <p className="mt-3 sg-inset p-3 text-sm leading-6 text-muted-foreground">
           Delivery review readback unavailable. Check Doc Registry connectivity; no fallback delivery review detail is shown in live mode.
         </p>
       ) : (
@@ -212,7 +212,7 @@ export function DeliverySummary({
               {pendingDecision === "reject" ? "Required changes" : "Note (optional)"}
             </span>
             <textarea
-              className="min-h-24 rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              className="min-h-24 sg-inset px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
               value={decisionNote}
               onChange={(event) => setDecisionNote(event.target.value)}
               placeholder={pendingDecision === "reject" ? "Describe specific evidence or behavior that must change" : "Why this delivery is acceptable"}
@@ -250,7 +250,7 @@ export function DeliverySummary({
 function DeliveryStatusDetails({ status }: { status: DeliveryStatusSummary }) {
   if (!status.found) {
     return (
-      <p className="mt-3 rounded-md border bg-card/70 p-3 text-sm leading-6 text-muted-foreground">
+      <p className="mt-3 sg-inset p-3 text-sm leading-6 text-muted-foreground">
         No persisted delivery review result is available yet. Triggering review remains a CLI or agents-service workflow.
       </p>
     )
@@ -281,12 +281,12 @@ function DeliveryStatusDetails({ status }: { status: DeliveryStatusSummary }) {
         </p>
       ) : null}
       {trust.modelReviewed ? (
-        <p className="rounded-md border bg-card/70 p-3 text-xs leading-5 text-muted-foreground">
+        <p className="sg-inset p-3 text-xs leading-5 text-muted-foreground">
           A model review evaluates submitted evidence; it does not verify the code, replace CI, or make the human acceptance decision.
         </p>
       ) : null}
       {status.outstandingMd ? (
-        <div className="max-h-64 overflow-y-auto rounded-md border bg-card/70 p-3">
+        <div className="max-h-64 overflow-y-auto sg-inset p-3">
           <h4 className="mb-2 text-xs font-semibold text-muted-foreground">Outstanding review feedback</h4>
           <MarkdownText content={status.outstandingMd} />
         </div>
@@ -296,7 +296,7 @@ function DeliveryStatusDetails({ status }: { status: DeliveryStatusSummary }) {
           <h4 className="text-xs font-semibold text-muted-foreground">Criteria verdicts</h4>
           <div className="mt-2 grid gap-2">
             {status.criteria.map((criterion) => (
-              <div key={criterion.id} className="rounded-md border bg-card/70 p-3">
+              <div key={criterion.id} className="sg-card p-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-mono text-[11px] text-muted-foreground">{criterion.id}</p>
@@ -323,7 +323,7 @@ function DeliveryStatusDetails({ status }: { status: DeliveryStatusSummary }) {
           <h4 className="text-xs font-semibold text-muted-foreground">Automated checks</h4>
           <div className="mt-2 grid gap-2">
             {status.checks.map((check) => (
-              <div key={`${check.name}-${check.status}-${check.detail ?? ""}`} className="grid gap-2 rounded-md border bg-card/70 p-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto]">
+              <div key={`${check.name}-${check.status}-${check.detail ?? ""}`} className="grid gap-2 sg-inset p-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto]">
                 <div className="min-w-0">
                   <p className="truncate font-medium">{check.name}</p>
                   {check.detail ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{check.detail}</p> : null}
@@ -342,7 +342,7 @@ function DeliveryStatusDetails({ status }: { status: DeliveryStatusSummary }) {
 
 function DeliveryTrustFact({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border bg-card/70 p-3">
+    <div className="sg-card p-3">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="mt-1 text-sm font-medium leading-5">{value}</p>
     </div>

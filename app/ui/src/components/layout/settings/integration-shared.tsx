@@ -56,7 +56,7 @@ export function IntegrationResourcesSummary({ className, state }: { className?: 
         {state.items.map((resource) => {
           const webhook = integrationResourceWebhook(resource)
           return (
-            <div key={resource.id} className="grid gap-2 rounded-md border bg-card/50 p-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <div key={resource.id} className="grid gap-2 sg-inset p-2 sm:grid-cols-[minmax(0,1fr)_auto]">
               <div className="min-w-0">
                 <div className="truncate text-xs font-medium">{integrationResourceName(resource)}</div>
                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -95,7 +95,7 @@ export function IntegrationWebhookEventsSummary({ state }: { state?: Integration
       <div className="text-xs font-medium text-muted-foreground">Recent webhooks</div>
       <div className="grid gap-2">
         {state.items.map((event) => (
-          <div key={event.id} className="grid gap-2 rounded-md border bg-card/50 p-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <div key={event.id} className="grid gap-2 sg-inset p-2 sm:grid-cols-[minmax(0,1fr)_auto]">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-medium">{webhookEventLabel(event.event_type || "webhook")}</span>

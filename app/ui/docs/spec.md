@@ -56,7 +56,9 @@ refresh.
 implementation nor a review queue state. Delivered items appear separately from
 attention work.
 
-Work detail has Overview, Handoff, Verification, and Activity tabs. It presents
+Work detail has Overview, Handoff, and Verification tabs. There is no activity
+tab: the UI has no read path to `workboard_lifecycle_events`, and the surface
+must not narrate history it cannot read. It presents
 delivery trust before gate detail, acceptance criteria, gate evidence, policy,
 stale warnings, tracker links, and Context Pack state. Delivery trust keeps four
 facts separate: the evidence assessment, its assurance source, the human

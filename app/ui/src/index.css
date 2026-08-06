@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "@fontsource-variable/geist";
+@import "@fontsource/young-serif";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -69,8 +70,16 @@
 }
 
 @theme inline {
-    --font-heading: var(--font-sans);
+    /* Three voices: a serif for the document title, a grotesque for the
+       interface, mono for machine-written records. */
+    --font-heading: 'Young Serif', Georgia, serif;
     --font-sans: 'Geist Variable', sans-serif;
+    --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', monospace;
+
+    /* Depth is two ultra-low-opacity layers, never one hard shadow. */
+    --shadow-card: 0 1px 2px rgb(23 20 18 / 0.04), 0 6px 16px -8px rgb(23 20 18 / 0.06);
+    --shadow-lift: 0 2px 4px rgb(23 20 18 / 0.05), 0 14px 32px -12px rgb(23 20 18 / 0.11);
+    --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -114,76 +123,91 @@
 }
 
 :root {
-    --background: #fbfbfa;
-    --foreground: #111216;
+    --background: #ffffff;
+    --foreground: #1a1714;
     --card: #ffffff;
-    --card-foreground: #111216;
+    --card-foreground: #1a1714;
     --popover: #ffffff;
-    --popover-foreground: #111216;
-    --primary: #5e6ad2;
+    --popover-foreground: #1a1714;
+    /* The logo indigo at ink depth. White on it measures 8.31:1; the pale
+       original measured 4.99:1 and read as default-blurple. */
+    --primary: #3840b0;
     --primary-foreground: #ffffff;
-    --secondary: #f4f3ef;
-    --secondary-foreground: #111216;
-    --muted: #f4f3ef;
-    --muted-foreground: #787774;
-    --accent: #efeee9;
-    --accent-foreground: #111216;
+    --secondary: #f6f5f1;
+    --secondary-foreground: #1a1714;
+    --muted: #f6f5f1;
+    /* #787774 measured 3.74:1 on white and carries real text. 5.18:1 now. */
+    --muted-foreground: #736c63;
+    --accent: #f1efe9;
+    --accent-foreground: #1a1714;
     --destructive: #d24233;
     --success: #1f9d3f;
     --warning: #c98a1e;
-    --border: #e6e2da;
-    --input: #d8d3c8;
-    --ring: #5e6ad2;
+    --border: #e9e6e1;
+    --input: #dcd7cd;
+    --ring: #5a63d8;
     --chart-1: #5e6ad2;
     --chart-2: #27a644;
     --chart-3: #e2a748;
     --chart-4: #db5c57;
     --chart-5: #8e94a0;
-    --radius: 0.5rem;
-    --sidebar: #ffffff;
-    --sidebar-foreground: #111216;
-    --sidebar-primary: #5e6ad2;
+    --radius: 0.7rem;
+    /* Chrome stays paper so the white worksheet comes forward. */
+    --sidebar: #f6f5f1;
+    --sidebar-foreground: #1a1714;
+    --sidebar-primary: #3840b0;
     --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #f4f3ef;
-    --sidebar-accent-foreground: #111216;
-    --sidebar-border: #e6e2da;
-    --sidebar-ring: #5e6ad2;
+    --sidebar-accent: #eceae4;
+    --sidebar-accent-foreground: #1a1714;
+    --sidebar-border: #e5e1da;
+    --sidebar-ring: #5a63d8;
 }
 
 .dark {
-    --background: #010102;
-    --foreground: #f7f8f8;
-    --card: #0f1011;
-    --card-foreground: #f7f8f8;
-    --popover: #141516;
-    --popover-foreground: #f7f8f8;
-    --primary: #828fff;
-    --primary-foreground: #010102;
-    --secondary: #141516;
-    --secondary-foreground: #f7f8f8;
-    --muted: #141516;
-    --muted-foreground: #8a8f98;
-    --accent: #18191a;
-    --accent-foreground: #f7f8f8;
+    --background: #131211;
+    --foreground: #f4f1ec;
+    --card: #1b1a18;
+    --card-foreground: #f4f1ec;
+    --popover: #1f1e1c;
+    --popover-foreground: #f4f1ec;
+    /* White on this measures 4.99:1 on any canvas, so the button keeps the
+       brand while accent text lifts to the lighter step. */
+    --primary: #5a63d8;
+    --primary-foreground: #ffffff;
+    --secondary: #1f1e1c;
+    --secondary-foreground: #f4f1ec;
+    --muted: #1f1e1c;
+    --muted-foreground: #948c82;
+    --accent: #242220;
+    --accent-foreground: #f4f1ec;
     --destructive: #db5c57;
     --success: #27a644;
     --warning: #e2a748;
-    --border: #23252a;
-    --input: #34343a;
-    --ring: #5e6ad2;
+    --border: #2a2724;
+    --input: #383430;
+    --ring: #9da3ee;
     --chart-1: #5e6ad2;
     --chart-2: #27a644;
     --chart-3: #e2a748;
     --chart-4: #db5c57;
     --chart-5: #62666d;
-    --sidebar: #0f1011;
-    --sidebar-foreground: #f7f8f8;
-    --sidebar-primary: #828fff;
-    --sidebar-primary-foreground: #010102;
-    --sidebar-accent: #18191a;
-    --sidebar-accent-foreground: #f7f8f8;
-    --sidebar-border: #23252a;
-    --sidebar-ring: #5e6ad2;
+    --sidebar: #161514;
+    --sidebar-foreground: #f4f1ec;
+    --sidebar-primary: #5a63d8;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #211f1d;
+    --sidebar-accent-foreground: #f4f1ec;
+    --sidebar-border: #262320;
+    --sidebar-ring: #9da3ee;
+}
+
+/* Shadows disappear on a dark canvas, so depth there comes from a hairline
+   highlight the way a real surface catches light. */
+.dark {
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 16px -8px rgb(0 0 0 / 0.5),
+        inset 0 1px 0 rgb(255 252 247 / 0.05);
+    --shadow-lift: 0 2px 6px rgb(0 0 0 / 0.45), 0 16px 34px -12px rgb(0 0 0 / 0.6),
+        inset 0 1px 0 rgb(255 252 247 / 0.08);
 }
 
 @layer base {
@@ -206,6 +230,50 @@
     }
 }
 
+@keyframes sg-rise {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+/* Cards enter in a cascade rather than all at once. */
+.sg-rise {
+    animation: sg-rise 520ms var(--ease-out-soft) both;
+    animation-delay: calc(var(--sg-i, 0) * 55ms);
+}
+
+/* Two surfaces, and only two. `sg-card` is an elevated section that sits on the
+   page; `sg-inset` is a recessed panel nested inside one. Twenty ad-hoc
+   rounded/border/bg combinations used to express these two ideas, which is why
+   radius and tint drifted per screen. Padding stays in the markup — it is the
+   one thing that legitimately varies. */
+@utility sg-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    background-color: var(--card);
+    box-shadow: var(--shadow-card);
+    transition:
+        box-shadow 260ms var(--ease-out-soft),
+        transform 260ms var(--ease-out-soft),
+        border-color 260ms var(--ease-out-soft);
+
+    &:hover {
+        box-shadow: var(--shadow-lift);
+        transform: translateY(-1px);
+    }
+}
+
+@utility sg-inset {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background-color: color-mix(in srgb, var(--muted) 55%, transparent);
+}
+
 @keyframes sg-thinking-shimmer {
     0% {
         background-position: 220% 0;
@@ -220,7 +288,16 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .sg-thinking-shimmer {
+    .sg-thinking-shimmer,
+    .sg-rise {
         animation: none;
+    }
+
+    .sg-card {
+        transition: none;
+    }
+
+    .sg-card:hover {
+        transform: none;
     }
 }

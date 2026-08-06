@@ -19,7 +19,7 @@ describe("SpecGate UI shell: navigation and agent", () => {
     expect(screen.getByText("VITE_DOC_REGISTRY_URL")).toBeInTheDocument()
     expect(screen.getByText(/Rebuild the Full appliance/)).toBeInTheDocument()
     expect(screen.queryByText("specgate init --mode full")).not.toBeInTheDocument()
-    expect(screen.queryByRole("heading", { name: "Set up attribution" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("heading", { name: "Who is approving?" })).not.toBeInTheDocument()
     expect(localStorage.getItem(sessionStorageKey)).toBeNull()
   })
 
@@ -27,7 +27,7 @@ describe("SpecGate UI shell: navigation and agent", () => {
     renderApp()
 
     expect(screen.getByRole("heading", { name: "Work" })).toBeInTheDocument()
-    expect(screen.getByText("Governance Board")).toBeInTheDocument()
+    expect(screen.getByText("What needs your decision, what is being built, and what is waiting.")).toBeInTheDocument()
     expect(screen.getByText("Work queue")).toBeInTheDocument()
     expect(screen.getByRole("table", { name: "Work queue" })).toBeInTheDocument()
     expect(screen.getByLabelText("Search work")).toBeInTheDocument()
@@ -120,7 +120,7 @@ describe("SpecGate UI shell: navigation and agent", () => {
     renderApp("/work")
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole("button", { name: "Governance stats · last 30 days" }))
+    await user.click(await screen.findByRole("button", { name: "Last 30 days" }))
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
@@ -128,7 +128,7 @@ describe("SpecGate UI shell: navigation and agent", () => {
         expect.any(Object),
       ),
     )
-    const statsRegion = screen.getByRole("region", { name: "Governance stats" })
+    const statsRegion = screen.getByRole("region", { name: "Last 30 days" })
     expect(await within(statsRegion).findByText("80%")).toBeInTheDocument()
     expect(within(statsRegion).getByText("First-pass yield")).toBeInTheDocument()
     const ledgerLink = within(statsRegion).getByRole("link", { name: "SG-142" })
@@ -159,10 +159,10 @@ describe("SpecGate UI shell: navigation and agent", () => {
     renderApp("/work")
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole("button", { name: "Governance stats · last 30 days" }))
+    await user.click(await screen.findByRole("button", { name: "Last 30 days" }))
 
     expect(await screen.findByText("Not enough data yet — run a few governed work items first.")).toBeInTheDocument()
-    const statsRegion = screen.getByRole("region", { name: "Governance stats" })
+    const statsRegion = screen.getByRole("region", { name: "Last 30 days" })
     expect(within(statsRegion).queryByText(/%/)).not.toBeInTheDocument()
     expect(within(statsRegion).queryByText("First-pass yield")).not.toBeInTheDocument()
   })
@@ -173,7 +173,7 @@ describe("SpecGate UI shell: navigation and agent", () => {
 
     renderApp("/work")
 
-    expect(await screen.findByRole("button", { name: "Governance stats · last 30 days" })).toBeInTheDocument()
+    expect(await screen.findByRole("button", { name: "Last 30 days" })).toBeInTheDocument()
     expect(await screen.findByText("Work queue")).toBeInTheDocument()
     expect(fetchMock.mock.calls.filter(([input]) => String(input).includes("/api/v1/stats"))).toHaveLength(0)
   })
@@ -193,7 +193,7 @@ describe("SpecGate UI shell: navigation and agent", () => {
     expect(screen.getByRole("link", { name: /^Artifacts$/ })).toHaveAttribute("href", "/artifacts")
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument()
     expect(await screen.findByText(/items need review/)).toBeInTheDocument()
-    expect(screen.getByText("Delivery evidence")).toBeInTheDocument()
+    expect(screen.getByText("Finished work")).toBeInTheDocument()
     expect(screen.getByLabelText("Search reviews")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /Needs changes/ })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /Gate failed/ })).toBeInTheDocument()
@@ -237,7 +237,7 @@ describe("SpecGate UI shell: navigation and agent", () => {
     renderApp("/reviews?artifact=artifact-draft-review")
 
     const headings = (await screen.findAllByRole("heading", { level: 2 })).map((heading) => heading.textContent)
-    const ordered = ["Artifact decisions", "Delivery evidence"]
+    const ordered = ["Specs waiting for approval", "Finished work"]
     expect(ordered.map((label) => headings.indexOf(label))).toEqual([expect.any(Number), expect.any(Number)])
     expect(headings.indexOf(ordered[0])).toBeLessThan(headings.indexOf(ordered[1]))
     expect(await screen.findByRole("dialog", { name: "Draft review" })).toBeInTheDocument()
@@ -334,7 +334,7 @@ describe("SpecGate UI shell: navigation and agent", () => {
 
     renderApp("/reviews")
 
-    expect(await screen.findByText("No delivery evidence needs review.")).toBeInTheDocument()
+    expect(await screen.findByText("Nothing waiting for you.")).toBeInTheDocument()
     expect(screen.queryByLabelText("Search reviews")).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "All" })).not.toBeInTheDocument()
   })
@@ -351,9 +351,9 @@ describe("SpecGate UI shell: navigation and agent", () => {
 
     renderApp("/reviews")
 
-    expect(await screen.findByText("Delivery evidence unavailable")).toBeInTheDocument()
+    expect(await screen.findByText("Finished work unavailable")).toBeInTheDocument()
     expect(screen.getByText(/Live review data is unavailable/)).toBeInTheDocument()
-    expect(screen.queryByText("No delivery evidence needs review.")).not.toBeInTheDocument()
+    expect(screen.queryByText("Nothing waiting for you.")).not.toBeInTheDocument()
     expect(screen.queryByLabelText("Search reviews")).not.toBeInTheDocument()
   })
 
@@ -363,8 +363,8 @@ describe("SpecGate UI shell: navigation and agent", () => {
 
     await user.click(screen.getByRole("button", { name: /Needs changes/ }))
 
-    expect(screen.getByLabelText("2 visible items")).toBeInTheDocument()
-    expect(screen.getByText("visible items")).toBeInTheDocument()
+    expect(screen.getByLabelText("2 items shown")).toBeInTheDocument()
+    expect(screen.getByText("shown")).toBeInTheDocument()
     expect(screen.getByText("Pre-release verification sweep")).toBeInTheDocument()
     expect(screen.getByText("Doc Registry migration cleanup")).toBeInTheDocument()
 
@@ -450,8 +450,8 @@ describe("SpecGate UI shell: navigation and agent", () => {
 
     renderApp("/knowledge")
 
-    expect(await screen.findByRole("heading", { name: "Set up attribution" })).toBeInTheDocument()
-    expect(screen.getByRole("alert")).toHaveTextContent("Saved workspace is no longer available")
+    expect(await screen.findByRole("heading", { name: "Who is approving?" })).toBeInTheDocument()
+    expect(screen.getByRole("alert")).toHaveTextContent("That workspace is no longer available")
     expect(fetchMock).not.toHaveBeenCalledWith(
       "http://registry.test/api/v1/identity/bootstrap",
       expect.any(Object),
@@ -474,13 +474,13 @@ describe("SpecGate UI shell: navigation and agent", () => {
     renderApp("/work")
     const user = userEvent.setup()
 
-    expect(await screen.findByRole("heading", { name: "Set up attribution" })).toBeInTheDocument()
+    expect(await screen.findByRole("heading", { name: "Who is approving?" })).toBeInTheDocument()
     await user.type(screen.getByLabelText("Display name"), "Offline Dev")
     await user.type(screen.getByLabelText("Username"), "offline")
     await user.click(screen.getByRole("button", { name: "Continue" }))
     expect(await screen.findByRole("alert")).toHaveTextContent("Doc Registry is unavailable")
     expect(screen.getByRole("alert")).toHaveTextContent("specgate doctor")
-    expect(screen.getByRole("heading", { name: "Set up attribution" })).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: "Who is approving?" })).toBeInTheDocument()
     expect(screen.queryByRole("heading", { name: "Work" })).not.toBeInTheDocument()
     expect(localStorage.getItem(sessionStorageKey)).toBeNull()
   })
@@ -528,7 +528,7 @@ describe("SpecGate UI shell: navigation and agent", () => {
     renderApp("/work")
 
     const user = userEvent.setup()
-    expect(await screen.findByRole("heading", { name: "Set up attribution" })).toBeInTheDocument()
+    expect(await screen.findByRole("heading", { name: "Who is approving?" })).toBeInTheDocument()
     await user.type(screen.getByLabelText("Display name"), "Dev")
     await user.type(screen.getByLabelText("Username"), "dev")
     await waitFor(() => expect(screen.getByLabelText("Workspace name")).toHaveValue("SpecGate Core"))

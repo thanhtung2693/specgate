@@ -135,7 +135,7 @@ export function GeneralSettingsPanel({
       ) : null}
 
       <div className="grid gap-3">
-        <div className="rounded-lg border bg-background/70 p-4">
+        <div className="sg-card p-4">
           <div className="flex items-start justify-between gap-4">
             <div>
               <label htmlFor="auto-archive-delivery-pass" className="text-sm font-semibold">
@@ -160,7 +160,7 @@ export function GeneralSettingsPanel({
           </div>
         </div>
 
-        <div className="rounded-lg border bg-background/70 p-4">
+        <div className="sg-card p-4">
           <div className="flex items-start justify-between gap-4">
             <div>
               <label htmlFor="artifact-retention-sweeper" className="text-sm font-semibold">

@@ -99,7 +99,7 @@ export function ArtifactsPage({ reviewer, workspaceId, workItems = [], routeArti
               <Badge variant="outline" className="font-mono">
                 {filteredArtifacts.length}
               </Badge>
-              <p className="text-xs text-muted-foreground">versioned bundles</p>
+              <p className="text-xs text-muted-foreground">approved versions</p>
             </div>
           </div>
           {artifacts.status === "loading" || artifacts.items.length > 0 ? (
@@ -176,7 +176,7 @@ export function ArtifactsPage({ reviewer, workspaceId, workItems = [], routeArti
                         Clear filters
                       </Button>
                     ) : liveArtifactEmpty ? (
-                      <div className="mt-3 inline-flex rounded-md border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
+                      <div className="mt-3 inline-flex sg-inset px-3 py-2 font-mono text-xs text-muted-foreground">
                         specgate artifact publish --help
                       </div>
                     ) : null}

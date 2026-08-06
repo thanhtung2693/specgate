@@ -121,26 +121,26 @@ export function TeamSkillsPanel({ workspaceId }: { workspaceId?: string }) {
           ) : null}
         </div>
         {!registryBase ? (
-          <p className="rounded-md border bg-background/70 p-3 text-sm text-muted-foreground">
+          <p className="sg-inset p-3 text-sm text-muted-foreground">
             Configure VITE_DOC_REGISTRY_URL to view team rubric Skills from Doc Registry.
           </p>
         ) : !workspaceId?.trim() ? (
-          <p className="rounded-md border bg-background/70 p-3 text-sm text-muted-foreground">Select a workspace to view team rubric Skills.</p>
+          <p className="sg-inset p-3 text-sm text-muted-foreground">Select a workspace to view team rubric Skills.</p>
         ) : registrySkillsStatus === "loading" ? (
-          <p className="rounded-md border bg-background/70 p-3 text-sm text-muted-foreground">Loading team rubric Skills...</p>
+          <p className="sg-inset p-3 text-sm text-muted-foreground">Loading team rubric Skills...</p>
         ) : registrySkillsStatus === "error" ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-background/70 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 sg-inset p-3">
             <p className="text-sm text-muted-foreground">Team rubric Skills unavailable.</p>
             <Button type="button" variant="outline" size="sm" className="rounded-md" onClick={() => loadSkills()}>
               Retry Skills
             </Button>
           </div>
         ) : registrySkills.length === 0 ? (
-          <p className="rounded-md border bg-background/70 p-3 text-sm text-muted-foreground">No team rubric Skills found.</p>
+          <p className="sg-inset p-3 text-sm text-muted-foreground">No team rubric Skills found.</p>
         ) : (
           <div className="grid min-w-0 gap-2">
             {registrySkills.map((skill) => (
-              <div key={skill.id} className="min-w-0 overflow-hidden rounded-md border bg-background/70 p-3">
+              <div key={skill.id} className="min-w-0 overflow-hidden sg-inset p-3">
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="min-w-0 truncate font-mono text-xs font-medium text-foreground">{skill.name}</span>
@@ -321,12 +321,12 @@ function RegistrySkillDetailDialog({
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="grid gap-4 p-5">
             {status === "loading" ? (
-              <p className="rounded-md border bg-background/70 p-3 text-sm text-muted-foreground">Loading Skill prompt...</p>
+              <p className="sg-inset p-3 text-sm text-muted-foreground">Loading Skill prompt...</p>
             ) : status === "error" ? (
-              <p className="rounded-md border bg-background/70 p-3 text-sm text-muted-foreground">Skill detail unavailable.</p>
+              <p className="sg-inset p-3 text-sm text-muted-foreground">Skill detail unavailable.</p>
             ) : detail ? (
               <>
-                <div className="rounded-md border bg-background/70 p-3">
+                <div className="sg-inset p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="font-mono text-xs font-medium text-foreground">{detail.id}</span>
                     {detail.updatedAt ? (
@@ -359,7 +359,7 @@ function RegistrySkillDetailDialog({
                       aria-label="Prompt"
                     />
                   ) : (
-                    <div className="max-h-[420px] overflow-auto rounded-md border bg-card/55 p-3 text-sm leading-6">
+                    <div className="max-h-[420px] overflow-auto sg-inset p-3 text-sm leading-6">
                       <MarkdownText content={detail.prompt} compact />
                     </div>
                   )}

@@ -33,5 +33,4 @@ export type WorkItem = {
   skills: string[]
   summary: string
   acceptance: string[]
-  activity: string[]
 }

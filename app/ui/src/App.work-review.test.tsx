@@ -32,7 +32,7 @@ describe("SpecGate UI shell: work review", () => {
       title: "Acceptance-ready delivery",
       delivery_review: {
         verdict: "pass",
-        hint: "Delivery evidence is ready for human review.",
+        hint: "Waiting for you to accept it.",
         reviewed_at: "2026-07-19T12:00:00Z",
       },
     }
@@ -63,7 +63,7 @@ describe("SpecGate UI shell: work review", () => {
       phase: "Review",
       delivery_review: {
         verdict: "pass",
-        hint: "Delivery evidence is ready for human review.",
+        hint: "Waiting for you to accept it.",
         reviewed_at: "2026-07-19T12:00:00Z",
       },
     }
@@ -327,7 +327,7 @@ describe("SpecGate UI shell: work review", () => {
                 phase: "Review",
                 delivery_review: {
                   verdict: "pass",
-                  hint: "Delivery evidence is ready for human review.",
+                  hint: "Waiting for you to accept it.",
                   reviewed_at: "2026-07-19T12:00:00Z",
                 },
               }],
@@ -343,7 +343,7 @@ describe("SpecGate UI shell: work review", () => {
 
     const row = await screen.findByRole("row", { name: /CR-READY-REVIEW/ })
     expect(within(row).getByText("Ready for human review")).toBeInTheDocument()
-    expect(within(row).getByText("Delivery evidence is ready for human review.")).toBeInTheDocument()
+    expect(within(row).getByText("Waiting for you to accept it.")).toBeInTheDocument()
     expect(within(row).getByRole("link", { name: "Inspect review outcome" })).toBeInTheDocument()
     expect(within(row).queryByText("A required gate failed.")).not.toBeInTheDocument()
   })
@@ -352,7 +352,7 @@ describe("SpecGate UI shell: work review", () => {
     renderApp("/work")
 
     expect(await screen.findByText("Work queue")).toBeInTheDocument()
-    expect(await screen.findByRole("columnheader", { name: "Blocker" })).toBeInTheDocument()
+    expect(await screen.findByRole("columnheader", { name: "Waiting on" })).toBeInTheDocument()
     expect(screen.queryByText("Owner")).not.toBeInTheDocument()
   })
 
@@ -361,9 +361,13 @@ describe("SpecGate UI shell: work review", () => {
 
     const row = await screen.findByRole("row", { name: /SG-151/ })
 
+    // The badge is the row's only state label now, so it has to carry pickup
+    // readiness without borrowing the vocabulary of an accepted delivery.
     expect(within(row).getByText("Ready for pickup")).toBeInTheDocument()
-    expect(within(row).getByText("Ready")).toBeInTheDocument()
     expect(within(row).queryByText("Passed")).not.toBeInTheDocument()
+    const blockerCell = row.querySelector("[data-slot='work-blocker']") as HTMLElement
+    expect(blockerCell).not.toBeNull()
+    expect(blockerCell.textContent).not.toContain("none")
   })
 
   it("labels pickup-ready work detail without implying delivery passed", async () => {
@@ -377,7 +381,7 @@ describe("SpecGate UI shell: work review", () => {
   it("drops the Owner column from the review queue table", async () => {
     renderApp("/reviews")
 
-    expect(await screen.findByText("Delivery evidence")).toBeInTheDocument()
+    expect(await screen.findByText("Finished work")).toBeInTheDocument()
     expect(await screen.findByText("Pre-release verification sweep")).toBeInTheDocument()
     expect(screen.queryByText("Owner")).not.toBeInTheDocument()
   })
@@ -386,7 +390,7 @@ describe("SpecGate UI shell: work review", () => {
     renderApp("/work/SG-142")
 
     expect(await screen.findByText("Work context")).toBeInTheDocument()
-    expect(screen.getByText("Blocker")).toBeInTheDocument()
+    expect(screen.getByText("Waiting on")).toBeInTheDocument()
     expect(screen.queryByText("Owner")).not.toBeInTheDocument()
     expect(screen.queryByText("Detail source")).not.toBeInTheDocument()
   })

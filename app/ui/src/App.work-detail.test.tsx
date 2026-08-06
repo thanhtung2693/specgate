@@ -100,7 +100,7 @@ describe("SpecGate UI shell: work detail", () => {
         expect.any(Object),
       ),
     )
-    expect(screen.getByText("No persisted gate runs yet.")).toBeInTheDocument()
+    expect(screen.getByText("Nothing checked yet.")).toBeInTheDocument()
     expect(screen.queryByText("Missing delivery evidence")).not.toBeInTheDocument()
 
     vi.unstubAllGlobals()
@@ -173,7 +173,7 @@ describe("SpecGate UI shell: work detail", () => {
     expect(screen.getByText(/Delivery review readback unavailable/)).toBeInTheDocument()
     expect(screen.getByText(/no fallback delivery review detail is shown/)).toBeInTheDocument()
     expect(screen.queryByText("No next actions recorded.")).not.toBeInTheDocument()
-    expect(screen.queryByText("No persisted gate runs yet.")).not.toBeInTheDocument()
+    expect(screen.queryByText("Nothing checked yet.")).not.toBeInTheDocument()
     expect(screen.queryByText(/Current verdict is/)).not.toBeInTheDocument()
 
     vi.unstubAllGlobals()
@@ -417,13 +417,15 @@ describe("SpecGate UI shell: work detail", () => {
     expect(screen.getByText("app/ui/src/components/layout/work/item-detail.tsx:723")).toBeInTheDocument()
     expect(screen.getByText(/A model review evaluates submitted evidence/)).toBeInTheDocument()
     expect(screen.queryByText(/Current verdict is/)).not.toBeInTheDocument()
-    const gateHeading = screen.getByText("Gate state")
-    const gateStateCard = gateHeading.closest(".rounded-lg")
+    const gateHeading = screen.getByText("Readiness checks")
+    // Select on a stable hook, not on a styling class: a border-radius change
+    // used to walk this query up to an ancestor holding two "Passed" badges.
+    const gateStateCard = gateHeading.closest("[data-slot='gate-state-card']")
     expect(gateStateCard).not.toBeNull()
     expect(within(gateStateCard as HTMLElement).getByText("Passed")).toBeInTheDocument()
     expect(within(gateStateCard as HTMLElement).queryByText("Failed")).not.toBeInTheDocument()
     expect(deliveryHeading.compareDocumentPosition(gateHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(screen.getByText("What each gate checked and why, per run.")).toBeInTheDocument()
+    expect(screen.getByText("What was checked before this work was approved, and why.")).toBeInTheDocument()
     expect(screen.queryByText("Readiness and quality outcomes stay in item context.")).not.toBeInTheDocument()
 
     const gateSummaryToggle = screen.getByRole("button", { name: "5 gates · 1 passed · 4 not applicable" })
