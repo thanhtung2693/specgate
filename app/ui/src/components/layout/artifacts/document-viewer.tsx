@@ -72,7 +72,7 @@ export function ArtifactDocumentList({
                 type="button"
                 key={`${document.role}-${document.path}`}
                 className={cn(
-                  "grid min-h-20 content-between gap-2 rounded-md border bg-card/70 p-2.5 text-left transition-colors hover:bg-accent focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                  "grid min-h-20 content-between gap-2 sg-inset p-2.5 text-left transition-colors hover:bg-accent focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
                   selectedPath === document.path && "border-ring bg-accent",
                 )}
                 onClick={() => onPreview(document)}
@@ -160,7 +160,7 @@ function DocumentDiffView({ before, after }: { before: string; after: string }) 
   const diff = useMemo(() => buildLineDiff(before, after), [before, after])
 
   return (
-    <div className="overflow-hidden rounded-lg border bg-background/70">
+    <div className="overflow-hidden sg-inset">
       <div className="border-b px-3 py-2 text-xs text-muted-foreground">
         Line diff
       </div>
@@ -188,7 +188,7 @@ function DocumentDiffView({ before, after }: { before: string; after: string }) 
 
 function DocumentCodeView({ content }: { content: string }) {
   return (
-    <pre className="max-h-[min(58vh,560px)] overflow-auto rounded-lg border bg-background/70 p-4 font-mono text-xs leading-5 text-muted-foreground">
+    <pre className="max-h-[min(58vh,560px)] overflow-auto sg-inset p-4 font-mono text-xs leading-5 text-muted-foreground">
       {content || " "}
     </pre>
   )
@@ -247,7 +247,7 @@ export function ArtifactDocumentPreview({
               <DialogDescription className="truncate font-mono text-xs">{document.path}</DialogDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2 self-start">
-              <div className="flex h-9 rounded-md border bg-background p-0.5">
+              <div className="flex h-9 sg-inset p-0.5">
                 <Button
                   type="button"
                   variant={mode === "view" ? "secondary" : "ghost"}
@@ -272,7 +272,7 @@ export function ArtifactDocumentPreview({
                   </span>
                 </ActionTooltip>
               </div>
-              <label className="flex h-9 items-center gap-2 rounded-md border bg-background px-2 text-xs text-muted-foreground">
+              <label className="flex h-9 items-center gap-2 sg-inset px-2 text-xs text-muted-foreground">
                 <span>Version</span>
                 <select
                   className="h-7 rounded-sm border-0 bg-transparent px-1 text-sm text-foreground outline-none focus-visible:ring-0"
@@ -309,7 +309,7 @@ export function ArtifactDocumentPreview({
             ) : null}
             {mode === "view" ? (
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex h-8 rounded-md border bg-background p-0.5">
+                <div className="flex h-8 sg-inset p-0.5">
                   <Button
                     type="button"
                     variant={viewMode === "markdown" ? "secondary" : "ghost"}
@@ -354,7 +354,7 @@ export function ArtifactDocumentPreview({
               </div>
             ) : null}
             {mode === "view" && previewContent.trim().length === 0 && content.status !== "loading" ? (
-              <div className="rounded-lg border bg-background/70 p-4">
+              <div className="sg-card p-4">
                 <h4 className="text-sm font-semibold">Preview unavailable</h4>
                 <p className="mt-2 text-sm text-muted-foreground">
                   {content.unavailableReason ?? "This document has no Markdown body available yet."}

@@ -373,8 +373,8 @@ export const emptyRegistryView: WorkboardView = {
   lanes: [],
   signals: [
     { label: "Ready for pickup", value: "0", detail: "approved source available", tone: "neutral" },
-    { label: "Open gate failures", value: "0", detail: "needs attention", tone: "success" },
-    { label: "Blocked by ambiguity", value: "0", detail: "open blockers", tone: "success" },
+    { label: "Checks not passing", value: "0", detail: "needs attention", tone: "success" },
+    { label: "Waiting on you", value: "0", detail: "not approved yet", tone: "success" },
   ],
   source: "registry",
   status: "ready",

@@ -235,7 +235,7 @@ export function ModelSettingsPanel({ onSaveStatusChange }: { onSaveStatusChange:
       ) : null}
 
       <div className="grid gap-5">
-        <div className="rounded-lg border bg-background/70 p-4">
+        <div className="sg-card p-4">
           <div className="flex items-center gap-2">
             <KeyRoundIcon className="size-4 text-muted-foreground" />
             <h3 className="text-sm font-semibold">Server-side model</h3>
@@ -361,7 +361,7 @@ export function ModelSettingsPanel({ onSaveStatusChange }: { onSaveStatusChange:
           </div>
         </div>
 
-        <div className="rounded-lg border bg-background/70 p-4">
+        <div className="sg-card p-4">
           <div className="flex items-center gap-2">
             <DatabaseIcon className="size-4 text-muted-foreground" />
             <h3 className="text-sm font-semibold">Embedding model</h3>
@@ -392,7 +392,7 @@ export function ModelSettingsPanel({ onSaveStatusChange }: { onSaveStatusChange:
             {embeddingProvider && embeddingApiKeyName ? (
               <>
                 {embeddingProvider === modelProvider ? (
-                  <p className="rounded-md border bg-card/70 px-3 py-2 text-xs text-muted-foreground">
+                  <p className="sg-inset px-3 py-2 text-xs text-muted-foreground">
                     Uses the {embeddingProviderLabel(embeddingProvider)} API key from the server-side model section.
                   </p>
                 ) : (

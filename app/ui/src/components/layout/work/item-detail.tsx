@@ -1,5 +1,5 @@
 // Work-item detail view extracted from app-shell.tsx: overview, handoff,
-// verification, and activity tabs for a selected work item.
+// and verification tabs for a selected work item.
 
 import { CopyIcon, ShieldCheckIcon } from "lucide-react"
 import { useState } from "react"
@@ -10,13 +10,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useWorkItemDetail } from "@/data/workboard"
 import type { WorkItem } from "@/data/workspace"
 import { cn } from "@/lib/utils"
-import { isDeliveredWorkItem, stateText, statusTone, toneClass } from "../shared"
+import {
+  routeText, isDeliveredWorkItem, stateText, statusTone, toneClass } from "../shared"
 import { copyText, PolicyExplanationSection } from "../shared-ui"
 import { workItemStatusBadge } from "../work-page"
 
 import {
   AcceptanceCriteriaSummary,
-  ActivityList,
   ContextSummary,
   FeatureOverview,
   FreshnessSignalsSummary,
@@ -45,7 +45,7 @@ export function WorkItemDetail({
   const [searchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState(() => {
     const requested = searchParams.get("tab")
-    return requested && ["overview", "handoff", "verification", "activity"].includes(requested) ? requested : "overview"
+    return requested && ["overview", "handoff", "verification"].includes(requested) ? requested : "overview"
   })
   const [resumeCopied, setResumeCopied] = useState(false)
   const deliveryVerdict = detail.deliveryStatus?.found === false ? undefined : detail.deliveryStatus?.verdict?.trim()
@@ -78,20 +78,20 @@ export function WorkItemDetail({
           : "Prepare handoff"
   return (
     <div className="grid min-w-0 gap-5 2xl:grid-cols-[minmax(0,1fr)_minmax(0,320px)]">
-      <div className="min-w-0 rounded-lg border bg-card p-5">
+      <div className="min-w-0 sg-card p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex flex-wrap gap-2">
               <Badge variant="secondary" className="font-mono">{item.key}</Badge>
-              <Badge variant="outline">{item.route}</Badge>
+              <Badge variant="outline">{routeText(item.route)}</Badge>
               <Badge variant="outline" className={cn("border", toneClass(headerBadge.tone))}>
                 {headerBadge.label}
               </Badge>
             </div>
-            <h2 className="mt-3 text-2xl font-semibold tracking-tight">{item.title}</h2>
+            <h2 className="mt-3 font-heading text-[28px] font-normal leading-tight tracking-[-0.008em] text-balance">{item.title}</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{item.summary}</p>
           </div>
-          <Button className="rounded-md bg-foreground text-background hover:bg-foreground/85" onClick={() => setActiveTab(nextActionTab)}>
+          <Button className="rounded-md" onClick={() => setActiveTab(nextActionTab)}>
             <ShieldCheckIcon data-icon="inline-start" />
             {nextActionLabel}
           </Button>
@@ -101,7 +101,6 @@ export function WorkItemDetail({
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="handoff">Handoff</TabsTrigger>
             <TabsTrigger value="verification">Verification</TabsTrigger>
-            <TabsTrigger value="activity">Activity</TabsTrigger>
           </TabsList>
           <TabsContent value="overview" className="mt-4">
             <div className="grid gap-3">
@@ -123,13 +122,10 @@ export function WorkItemDetail({
               <PolicyExplanationSection policy={detail.policy} status={detail.readback.policy} context="work" />
             </div>
           </TabsContent>
-          <TabsContent value="activity" className="mt-4">
-            <ActivityList item={item} />
-          </TabsContent>
         </Tabs>
       </div>
       <aside className="grid min-w-0 content-start gap-4">
-        <section className="min-w-0 overflow-hidden rounded-lg border bg-card/85 p-4">
+        <section className="min-w-0 overflow-hidden sg-inset p-4">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold">Resume in CLI</h3>
             <Button
@@ -145,7 +141,7 @@ export function WorkItemDetail({
               {resumeCopied ? "Copied" : "Copy"}
             </Button>
           </div>
-          <p className="mt-2 max-w-full overflow-x-auto whitespace-nowrap rounded-md border bg-background/70 px-2 py-1.5 font-mono text-xs text-muted-foreground">
+          <p className="mt-2 max-w-full overflow-x-auto whitespace-nowrap sg-inset px-2 py-1.5 font-mono text-xs text-muted-foreground">
             specgate work context {item.key}
           </p>
         </section>

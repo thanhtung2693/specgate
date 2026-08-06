@@ -142,11 +142,11 @@ across those systems.
 
 ## Web UI
 
-Most implementation work stays in your IDE. Open the web UI when you need to
-inspect the governed handoff: artifact context, gates, Context Packs, delivery
-reviews, governance conversations, or workspace settings.
+Most implementation work stays in your IDE. Open the web UI when you need to see
+what is waiting on you: work whose scope you have not approved, finished work
+waiting for you to accept it, what the agent was given, and what was checked.
 
-![SpecGate Governance Board showing lifecycle lanes, readiness, review states, and blockers](./docs/assets/readme/specgate-ui-governance-board.jpg)
+![The SpecGate work queue: each row shows a work item, whether it is backed by an approved spec or a quick contract, its current state, who it is waiting on, and when it last changed](./docs/assets/readme/specgate-ui-work.png)
 
 ## Repository layout
 

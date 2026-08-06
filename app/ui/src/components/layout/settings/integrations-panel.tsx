@@ -167,7 +167,7 @@ export function IntegrationsSettingsPanel({ workspaceId }: { workspaceId?: strin
         </div>
       ) : null}
       <div className="grid gap-5">
-        {loading ? <div className="rounded-lg border bg-background/70 p-3 text-sm text-muted-foreground">Loading integrations...</div> : null}
+        {loading ? <div className="sg-inset p-3 text-sm text-muted-foreground">Loading integrations...</div> : null}
         {!loading && displayedItems.length === 0 ? (
           <div className="rounded-lg border border-dashed bg-card/60 p-3 text-sm text-muted-foreground">
             No integrations connected yet. Add GitHub, GitLab, or Linear when you need provider signals.
@@ -185,7 +185,7 @@ export function IntegrationsSettingsPanel({ workspaceId }: { workspaceId?: strin
               {categoryItems.map((integration) => (
                 <div
                   key={integration.id}
-                  className="grid gap-3 rounded-lg border bg-background/70 p-3 md:grid-cols-[minmax(0,1fr)_auto]"
+                  className="grid gap-3 sg-inset p-3 md:grid-cols-[minmax(0,1fr)_auto]"
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="flex size-9 items-center justify-center rounded-md border bg-card">

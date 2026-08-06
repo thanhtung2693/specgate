@@ -439,7 +439,7 @@ export function AppShell() {
         setSetupUsername(profile.user.username)
         setSetupEmail(profile.user.email)
         setSetupWorkspaceName(profile.name)
-        setSetupError("Saved workspace is no longer available. Set up attribution for this appliance.")
+        setSetupError("That workspace is no longer available. Enter your name again for this server.")
         writeLocalSession(null)
         setProfile(null)
       })
@@ -499,7 +499,7 @@ export function AppShell() {
   if (!registryBase) {
     return (
       <main className="grid min-h-svh place-items-center bg-background p-4">
-        <section className="grid w-full max-w-md gap-4 rounded-xl border bg-card p-5">
+        <section className="grid w-full max-w-md gap-4 sg-card p-5">
           <div>
             <h1 className="text-xl font-semibold">UI is not configured</h1>
             <p className="mt-2 text-sm text-muted-foreground">
@@ -518,15 +518,15 @@ export function AppShell() {
     return (
       <main className="grid min-h-svh place-items-center bg-background p-4">
         <form
-          className="grid w-full max-w-md gap-4 rounded-xl border bg-card p-5"
+          className="grid w-full max-w-md gap-4 sg-card p-5"
           onSubmit={(event) => {
             event.preventDefault()
             void completeSetup()
           }}
         >
           <div>
-            <h1 className="text-xl font-semibold">Set up attribution</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Used for attribution and audit history. This does not control access.</p>
+            <h1 className="text-xl font-semibold">Who is approving?</h1>
+            <p className="mt-2 text-sm text-muted-foreground">Your name is recorded on everything you approve and accept. It does not control who can sign in.</p>
           </div>
           <label className="grid gap-1.5 text-sm">Display name<Input required value={setupDisplayName} onChange={(event) => setSetupDisplayName(event.target.value)} /></label>
           <label className="grid gap-1.5 text-sm">Username<Input required value={setupUsername} onChange={(event) => setSetupUsername(event.target.value)} /></label>

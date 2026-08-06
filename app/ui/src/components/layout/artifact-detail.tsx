@@ -260,7 +260,7 @@ function ArtifactFeatureContext({
 }) {
   if (status === "loading") {
     return (
-      <section className="rounded-lg border bg-background/70 p-4">
+      <section className="sg-card p-4">
         <h3 className="text-sm font-semibold">Feature context</h3>
         <p className="mt-2 text-sm text-muted-foreground">Loading linked feature...</p>
       </section>
@@ -269,7 +269,7 @@ function ArtifactFeatureContext({
 
   if (status === "error") {
     return (
-      <section className="rounded-lg border bg-background/70 p-4">
+      <section className="sg-card p-4">
         <h3 className="text-sm font-semibold">Feature context</h3>
         <p className="mt-2 text-sm text-muted-foreground">Feature context unavailable. Check Doc Registry connectivity; no fallback feature summary is shown in live mode.</p>
       </section>
@@ -279,7 +279,7 @@ function ArtifactFeatureContext({
   if (!feature) return null
 
   return (
-    <section className="rounded-lg border bg-background/70 p-4">
+    <section className="sg-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -354,7 +354,7 @@ function ArtifactGatePreviewSection({
         const latestRun = latestRunByGate.get(gate.gateKey)
         const note = latestRun && gate.note === gatePreviewNotRunNote ? "Latest persisted readiness run." : gate.note
         return (
-          <div key={`${gate.gateKey}:${gate.gateVersion ?? ""}:${gate.executor ?? ""}`} className="rounded-md border bg-background/70 p-3">
+          <div key={`${gate.gateKey}:${gate.gateVersion ?? ""}:${gate.executor ?? ""}`} className="sg-inset p-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="font-medium">{gateText(gate.gateKey)}</p>

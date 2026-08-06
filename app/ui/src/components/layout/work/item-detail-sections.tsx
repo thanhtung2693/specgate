@@ -1,4 +1,4 @@
-// Work-item overview, gate, and activity sections.
+// Work-item overview, context, and gate sections.
 
 import { CheckCircle2Icon, ChevronRightIcon, CircleDotIcon, ClockIcon, ExternalLinkIcon } from "lucide-react"
 import { useState } from "react"
@@ -8,14 +8,15 @@ import { type AcceptanceCriterionSummary, type DeliveryStatusSummary, type GateR
 import { type WorkItem } from "@/data/workspace"
 import { formatDateTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { gateChecks, gateText, readableKey, stateText, statusTone, toneClass, type Tone } from "../shared"
+import {
+  routeText, gateChecks, gateText, readableKey, stateText, statusTone, toneClass, type Tone } from "../shared"
 import { GateEvidenceWhy } from "../shared-ui"
 
 export function FreshnessSignalsSummary({ warnings }: { warnings: StaleWarningSummary[] }) {
   if (warnings.length === 0) return null
 
   return (
-    <section className="rounded-lg border bg-background/70 p-4">
+    <section className="sg-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold">Freshness signals</h3>
@@ -29,7 +30,7 @@ export function FreshnessSignalsSummary({ warnings }: { warnings: StaleWarningSu
       </div>
       <div className="mt-3 grid gap-2">
         {warnings.map((warning) => (
-          <div key={warning.id} className="rounded-md border bg-card/70 p-3">
+          <div key={warning.id} className="sg-card p-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-sm font-medium">{readableKey(warning.code)}</p>
@@ -60,7 +61,7 @@ export function FeatureOverview({ detail }: { detail: WorkItemDetailData }) {
 
   if (detail.readback.feature === "error") {
     return (
-      <section className="rounded-lg border bg-background/70 p-4">
+      <section className="sg-card p-4">
         <h3 className="text-sm font-semibold">Feature context</h3>
         <p className="mt-2 text-sm text-muted-foreground">Feature context unavailable. Check Doc Registry connectivity; no fallback feature summary is shown in live mode.</p>
       </section>
@@ -70,7 +71,7 @@ export function FeatureOverview({ detail }: { detail: WorkItemDetailData }) {
   if (!feature) return null
 
   return (
-    <section className="rounded-lg border bg-background/70 p-4">
+    <section className="sg-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -132,7 +133,7 @@ function criteriaEnforcementText(criteria: AcceptanceCriterionSummary[]) {
 export function AcceptanceCriteriaSummary({ detail }: { detail: WorkItemDetailData }) {
   const enforcement = criteriaEnforcementText(detail.acceptanceCriteria)
   return (
-    <section className="rounded-lg border bg-background/70 p-4">
+    <section className="sg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-sm font-semibold">Acceptance criteria</h3>
         <Badge variant="outline" className="font-mono">
@@ -141,11 +142,11 @@ export function AcceptanceCriteriaSummary({ detail }: { detail: WorkItemDetailDa
       </div>
       <div className="mt-3 grid gap-2">
         {detail.readback.acceptance === "error" ? (
-          <p className="rounded-md border bg-card/55 p-3 text-sm leading-5 text-muted-foreground">
+          <p className="sg-inset p-3 text-sm leading-5 text-muted-foreground">
             Acceptance criteria unavailable. Check Doc Registry connectivity; no fallback acceptance criteria are shown in live mode.
           </p>
         ) : detail.acceptanceCriteria.length === 0 ? (
-          <p className="rounded-md border bg-card/55 p-3 text-sm leading-5 text-muted-foreground">
+          <p className="sg-inset p-3 text-sm leading-5 text-muted-foreground">
             No acceptance criteria are recorded for this work item yet. Shape or update the governed artifact from the CLI or IDE workflow, then refresh the registry view.
           </p>
         ) : (
@@ -158,7 +159,7 @@ export function AcceptanceCriteriaSummary({ detail }: { detail: WorkItemDetailDa
                 // Wraps rather than squeezing: with a verdict, a check name, and a
                 // source badge, a non-wrapping row leaves the criterion text a few
                 // characters wide on a phone.
-                className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2 rounded-md border bg-card/70 p-3"
+                className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2 sg-inset p-3"
               >
                 <div className="flex min-w-[12rem] flex-1 items-start gap-2 text-sm">
                   {done ? (
@@ -179,9 +180,14 @@ export function AcceptanceCriteriaSummary({ detail }: { detail: WorkItemDetailDa
                       check: {criterion.verificationBinding}
                     </Badge>
                   ) : null}
-                  <Badge variant="outline" className="text-[11px]">
-                    {criterion.source}
-                  </Badge>
+                  {/* A human-approved criterion is the expected case and needs no
+                      badge. The one worth surfacing is a criterion no human is
+                      recorded as having written. */}
+                  {criterion.source === "human" ? null : (
+                    <Badge variant="outline" className="text-[11px]">
+                      agent-drafted
+                    </Badge>
+                  )}
                 </div>
               </div>
             )
@@ -204,15 +210,15 @@ export function ContextSummary({
 }) {
   return (
     <section className="grid gap-3">
-      <div className="rounded-lg border bg-background/70 p-4">
+      <div className="sg-card p-4">
         <h3 className="text-sm font-semibold">Work context</h3>
         <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
           <div>
-            <span className="text-xs text-muted-foreground">Route</span>
-            <p className="mt-1">{item.route}</p>
+            <span className="text-xs text-muted-foreground">Built from</span>
+            <p className="mt-1">{routeText(item.route)}</p>
           </div>
           <div>
-            <span className="text-xs text-muted-foreground">Blocker</span>
+            <span className="text-xs text-muted-foreground">Waiting on</span>
             <p className="mt-1">{item.blocker}</p>
           </div>
         </div>
@@ -230,7 +236,7 @@ function TrackerLinks({
   status: "ready" | "loading" | "error"
 }) {
   return (
-    <section className="rounded-lg border bg-background/70 p-4">
+    <section className="sg-card p-4">
       <h3 className="text-sm font-semibold">Linked issues</h3>
       <div className="mt-3 grid gap-2">
         {status === "error" ? (
@@ -242,7 +248,7 @@ function TrackerLinks({
             <a
               key={`${link.identifier}-${link.url}`}
               href={link.url}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-card/70 p-3 text-sm transition-colors hover:bg-accent"
+              className="flex flex-wrap items-center justify-between gap-3 sg-inset p-3 text-sm transition-colors hover:bg-accent"
               target="_blank"
               rel="noreferrer"
             >
@@ -322,7 +328,7 @@ function GateActionRows({
             ? nextActions.map((action) => (
                 <div
                   key={`${action.gate}-${action.state}`}
-                  className={cn("rounded-md border bg-card/70 p-3", action.state === "not_applicable" && "opacity-60")}
+                  className={cn("sg-inset p-3", action.state === "not_applicable" && "opacity-60")}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <span className="text-xs font-medium">{gateText(action.gate)}</span>
@@ -376,11 +382,11 @@ function GateRunRows({
       {status === "error" ? (
         <p className="text-sm text-muted-foreground">Gate run history unavailable. Check Doc Registry connectivity; no fallback gate runs are shown in live mode.</p>
       ) : gateRuns.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No persisted gate runs yet.</p>
+        <p className="text-sm text-muted-foreground">Nothing checked yet.</p>
       ) : (
         <>
           {visibleRuns.map((run) => (
-            <div key={run.id} className="rounded-md border bg-card/70 p-3">
+            <div key={run.id} className="sg-card p-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-2">
                   <ClockIcon className="size-4 text-muted-foreground" />
@@ -426,11 +432,11 @@ export function GateSummary({ item, detail }: { item: WorkItem; detail: WorkItem
         : "pass"
   return (
     <section className="grid gap-3">
-      <div className="rounded-lg border bg-background/70 p-4">
+      <div data-slot="gate-state-card" className="sg-card p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold">Gate state</h3>
-            <p className="mt-1 text-xs text-muted-foreground">What each gate checked and why, per run.</p>
+            <h3 className="text-sm font-semibold">Readiness checks</h3>
+            <p className="mt-1 text-xs text-muted-foreground">What was checked before this work was approved, and why.</p>
           </div>
           <Badge variant="outline" className={cn("border", toneClass(statusTone("gate", gateState)))}>
             {gateText(gateState)}
@@ -438,26 +444,9 @@ export function GateSummary({ item, detail }: { item: WorkItem; detail: WorkItem
         </div>
         <GateActionRows nextActions={detail.nextActions} status={detail.readback.nextActions} />
       </div>
-      <div className="rounded-lg border bg-background/70 p-4">
+      <div className="sg-card p-4">
         <h3 className="text-sm font-semibold">Gate run history</h3>
         <GateRunRows gateRuns={detail.gateRuns} status={detail.readback.gateRuns} />
-      </div>
-    </section>
-  )
-}
-
-
-export function ActivityList({ item }: { item: WorkItem }) {
-  return (
-    <section className="rounded-lg border bg-background/70 p-4">
-      <h3 className="text-sm font-semibold">Activity</h3>
-      <div className="mt-3 grid gap-2">
-        {item.activity.map((activity) => (
-          <div key={activity} className="flex items-center gap-2 text-sm text-muted-foreground">
-            <ClockIcon className="size-4" />
-            {activity}
-          </div>
-        ))}
       </div>
     </section>
   )

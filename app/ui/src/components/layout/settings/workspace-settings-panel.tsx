@@ -121,21 +121,21 @@ export function WorkspaceSettingsPanel({
           ) : null}
         </div>
         {!base ? (
-          <p className="rounded-md border bg-background/70 p-3 text-sm text-muted-foreground">
+          <p className="sg-inset p-3 text-sm text-muted-foreground">
             Configure VITE_DOC_REGISTRY_URL to view workspace members.
           </p>
         ) : !workspace ? (
-          <p className="rounded-md border bg-background/70 p-3 text-sm text-muted-foreground">
+          <p className="sg-inset p-3 text-sm text-muted-foreground">
             Select a registry workspace to view members.
           </p>
         ) : status === "loading" ? (
-          <p className="rounded-md border bg-background/70 p-3 text-sm text-muted-foreground">Loading workspace members...</p>
+          <p className="sg-inset p-3 text-sm text-muted-foreground">Loading workspace members...</p>
         ) : status === "error" ? (
-          <p className="rounded-md border bg-background/70 p-3 text-sm text-muted-foreground">Workspace members unavailable.</p>
+          <p className="sg-inset p-3 text-sm text-muted-foreground">Workspace members unavailable.</p>
         ) : members.length === 0 ? (
-          <p className="rounded-md border bg-background/70 p-3 text-sm text-muted-foreground">No team members found.</p>
+          <p className="sg-inset p-3 text-sm text-muted-foreground">No team members found.</p>
         ) : (
-          <ul className="divide-y rounded-lg border bg-background/70">
+          <ul className="divide-y sg-inset">
             {members.map((member) => (
               <MemberRow key={member.userId} member={member} />
             ))}

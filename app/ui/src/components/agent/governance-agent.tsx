@@ -127,7 +127,7 @@ function Composer() {
 
   return (
     <ComposerPrimitive.Unstable_TriggerPopoverRoot>
-      <ComposerPrimitive.Root className="relative rounded-lg border bg-background p-2 shadow-xs">
+      <ComposerPrimitive.Root className="relative sg-inset p-2 shadow-xs">
         <ComposerTriggerPopover char="/" {...commands} />
         <div className="flex items-end gap-2">
           <ComposerPrimitive.Input

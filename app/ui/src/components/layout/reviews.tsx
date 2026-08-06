@@ -14,7 +14,8 @@ import { type WorkboardView } from "@/data/workboard"
 import { type WorkItem } from "@/data/workspace"
 import { formatDateTime, formatRelativeTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { isDeliveredWorkItem, readableKey, reviewTone, toneClass } from "./shared"
+import {
+  routeText, isDeliveredWorkItem, readableKey, reviewTone, toneClass } from "./shared"
 import { ArtifactDetailDialog } from "./artifact-detail"
 
 type ReviewFilter = "all" | "ready" | "needs_changes" | "gate_failed"
@@ -47,7 +48,7 @@ function reviewReason(item: WorkItem) {
     return item.blocker !== "none" ? item.blocker : "Delivery review needs changes."
   }
   if (item.gate === "fail") return "A required gate failed."
-  if (item.delivery === "passed") return "Delivery evidence is ready for human review."
+  if (item.delivery === "passed") return "Waiting for you to accept it."
   return item.blocker !== "none" ? item.blocker : "Needs human review."
 }
 
@@ -93,12 +94,12 @@ function ArtifactDecisionQueueSection({
   return (
     <section className="overflow-hidden rounded-lg border bg-card">
       <div className="flex items-center gap-2 border-b px-3 py-2.5">
-        <h2 className="text-sm font-semibold">Artifact decisions</h2>
+        <h2 className="text-sm font-semibold">Specs waiting for approval</h2>
         <Badge variant="outline" className="font-mono">{artifacts.length}</Badge>
       </div>
       {status === "loading" ? <p className="p-4 text-sm text-muted-foreground">Loading artifact decisions…</p> : null}
-      {status === "error" ? <p className="p-4 text-sm text-muted-foreground">Artifact decisions unavailable. Check Doc Registry connectivity, then retry.</p> : null}
-      {status === "ready" && artifacts.length === 0 ? <p className="p-4 text-sm text-muted-foreground">No artifacts need a decision.</p> : null}
+      {status === "error" ? <p className="p-4 text-sm text-muted-foreground">Cannot reach the server. Check the connection, then retry.</p> : null}
+      {status === "ready" && artifacts.length === 0 ? <p className="p-4 text-sm text-muted-foreground">Nothing waiting for approval.</p> : null}
       {artifacts.length > 0 ? (
         <div className="grid divide-y">
           {artifacts.map((artifact) => (
@@ -158,7 +159,7 @@ export function ReviewsPage({ workboard, reviewer, workspaceId }: { workboard: W
             <h2 className="text-sm font-semibold">
               {reviewCount === 1 ? "1 item needs review" : `${reviewCount} items need review`}
             </h2>
-            <p className="mt-1 text-xs text-muted-foreground">Inspect delivery evidence ready for a human decision, failed gates, and evidence gaps.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Specs waiting for your approval, and finished work waiting for you to accept it.</p>
           </div>
         </div>
         {workboard.status === "error" ? (
@@ -219,11 +220,11 @@ export function ReviewsPage({ workboard, reviewer, workspaceId }: { workboard: W
       <section className="overflow-hidden rounded-lg border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-3 py-2.5">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-sm font-semibold">Delivery evidence</h2>
-            <Badge variant="outline" className="font-mono" aria-label={`${visibleItems.length} visible items`}>
+            <h2 className="text-sm font-semibold">Finished work</h2>
+            <Badge variant="outline" className="font-mono" aria-label={`${visibleItems.length} items shown`}>
               {visibleItems.length}
             </Badge>
-            <p className="text-xs text-muted-foreground">visible items</p>
+            <p className="text-xs text-muted-foreground">shown</p>
           </div>
           {activeFilter !== "all" || reviewSearch ? (
             <Button
@@ -243,9 +244,9 @@ export function ReviewsPage({ workboard, reviewer, workspaceId }: { workboard: W
           <div className="p-6 text-center">
             <h3 className="text-sm font-semibold">
               {workboard.status === "error"
-                ? "Delivery evidence unavailable"
+                ? "Finished work unavailable"
                 : reviewCount === 0
-                  ? "No delivery evidence needs review."
+                  ? "Nothing waiting for you."
                   : "No reviews in this view"}
             </h3>
             <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
@@ -295,7 +296,7 @@ export function ReviewsPage({ workboard, reviewer, workspaceId }: { workboard: W
                         <Badge variant="outline" className={cn("shrink-0 border text-[0.68rem]", toneClass(reviewTone(item)))}>
                           {reviewLabel(item)}
                         </Badge>
-                        <Badge variant="secondary" className="shrink-0 text-[0.68rem]">{item.route}</Badge>
+                        <Badge variant="secondary" className="shrink-0 text-[0.68rem]">{routeText(item.route)}</Badge>
                       </div>
                       <div className="mt-1 flex min-w-0 items-center gap-2">
                         <span className="block min-w-0 max-w-[460px] truncate text-left text-muted-foreground">
@@ -315,7 +316,7 @@ export function ReviewsPage({ workboard, reviewer, workspaceId }: { workboard: W
                       <div className="flex justify-start gap-2 sm:justify-end">
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Button size="icon-sm" className="rounded-md bg-foreground text-background hover:bg-foreground/85" asChild>
+                            <Button size="icon-sm" className="rounded-md" asChild>
                               <Link
                                 to={reviewTargetPath(item)}
                                 aria-label={reviewActionLabel(item)}

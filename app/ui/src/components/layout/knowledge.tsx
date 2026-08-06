@@ -227,7 +227,7 @@ export function KnowledgePage({ workspaceId, uploader }: { workspaceId?: string;
     <section className="grid gap-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-semibold">Knowledge library</h2>
+          <h2 className="font-heading text-[26px] font-normal tracking-[-0.008em]">Knowledge library</h2>
           <p className="text-sm text-muted-foreground">Versioned source material for governance context. Source frameworks remain the authors.</p>
         </div>
         <Button aria-label="Upload document" disabled={loadState !== "ready" || !embeddingsEnabled || !workspaceId} onClick={() => setUploadTarget(null)}>Upload document</Button>
@@ -237,8 +237,8 @@ export function KnowledgePage({ workspaceId, uploader }: { workspaceId?: string;
 
       <div className="grid gap-2 sm:grid-cols-3">
         <Input aria-label="Search knowledge" placeholder="Search title or ID" value={query} onChange={(event) => setQuery(event.target.value)} />
-        <select aria-label="Document type" className="rounded-md border bg-background px-3" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="">All types</option>{documentTypes.map((value) => <option key={value} value={value}>{knowledgeLabel(value)}</option>)}</select>
-        <select aria-label="Ingestion status" className="rounded-md border bg-background px-3" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All statuses</option>{statuses.map((value) => <option key={value} value={value}>{knowledgeLabel(value)}</option>)}</select>
+        <select aria-label="Document type" className="sg-inset px-3" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="">All types</option>{documentTypes.map((value) => <option key={value} value={value}>{knowledgeLabel(value)}</option>)}</select>
+        <select aria-label="Ingestion status" className="sg-inset px-3" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All statuses</option>{statuses.map((value) => <option key={value} value={value}>{knowledgeLabel(value)}</option>)}</select>
       </div>
 
       {loadState === "loading" ? <p>Loading Knowledge…</p> : null}
@@ -276,11 +276,11 @@ export function KnowledgePage({ workspaceId, uploader }: { workspaceId?: string;
             {uploadTarget ? <label className="grid gap-1.5 text-xs font-medium"><span>New version</span><Input name="new_version" aria-label="New version" placeholder="v2" required /></label> : null}
             <label className="grid gap-1.5 text-xs font-medium"><span>Document file</span><Input name="file" aria-label="Document file" type="file" required /></label>
             <label className="grid gap-1.5 text-xs font-medium"><span>Title</span><Input name="title" aria-label="Document title" placeholder="Title" defaultValue={uploadTarget?.title} required /></label>
-            <label className="grid gap-1.5 text-xs font-medium"><span>Document type</span><select name="document_type" aria-label="Upload document type" required defaultValue={uploadTarget?.documentType ?? ""} className="rounded-md border bg-background p-2 font-normal">
+            <label className="grid gap-1.5 text-xs font-medium"><span>Document type</span><select name="document_type" aria-label="Upload document type" required defaultValue={uploadTarget?.documentType ?? ""} className="sg-inset p-2 font-normal">
               <option value="">Choose a type</option>
               {documentTypes.map((value) => <option key={value} value={value}>{knowledgeLabel(value)}</option>)}
             </select></label>
-            <label className="grid gap-1.5 text-xs font-medium"><span>Authority</span><select name="authority_level" aria-label="Authority" required defaultValue={uploadTarget?.authorityLevel ?? ""} className="rounded-md border bg-background p-2 font-normal">
+            <label className="grid gap-1.5 text-xs font-medium"><span>Authority</span><select name="authority_level" aria-label="Authority" required defaultValue={uploadTarget?.authorityLevel ?? ""} className="sg-inset p-2 font-normal">
               <option value="">Choose an authority level</option>
               {["source_of_truth", "high", "reference", "low"].map((value) => <option key={value} value={value}>{knowledgeLabel(value)}</option>)}
             </select></label>

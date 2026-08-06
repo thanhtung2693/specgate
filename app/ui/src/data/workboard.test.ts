@@ -67,10 +67,23 @@ describe("workboard data adapter", () => {
       updated: expect.stringContaining("2026"),
       registryId: "cr-155",
       acceptance: ["Doc registry CI passes", "Expected misses are quiet"],
-      activity: expect.arrayContaining(["Quick-route Context Pack derives on demand from persisted work"]),
     })
-    expect(item.activity).toContain("Quick route uses persisted work as the handoff source")
-    expect(item.activity).not.toContain("Waiting for lead artifact")
+  })
+
+  // A Ready-phase item carrying a passing review used to render "Ready for human
+  // review" beside a Waiting-on of "none": the badge read the verdict, the
+  // blocker read the phase.
+  it("names the human when a ready-phase item already passed review", () => {
+    const item = mapChangeRequestToWorkItem({
+      id: "cr-160",
+      key: "SG-160",
+      title: "Reviewed while still ready",
+      phase: "Ready",
+      delivery_review: { verdict: "pass" },
+      updated_at: "2026-08-05T09:00:00Z",
+    })
+
+    expect(item.blocker).toBe("You — accept the delivery")
   })
 
   it("retains the exact lead artifact association", () => {
@@ -127,7 +140,7 @@ describe("workboard data adapter", () => {
       phase: "Review",
       delivery_review: {
         verdict: "pass",
-        hint: "Delivery evidence is ready for human review.",
+        hint: "Waiting for you to accept it.",
         reviewed_at: "2026-07-19T12:00:00Z",
       },
     })
@@ -144,7 +157,7 @@ describe("workboard data adapter", () => {
     expect(item.lifecycle).toBe("Intake")
     expect(item.gate).toBe("pending")
     expect(item.delivery).toBe("not_started")
-    expect(item.blocker).toBe("needs governance progress")
+    expect(item.blocker).toBe("You — approve it for handoff")
     expect(item.acceptance).toEqual([])
   })
 
@@ -361,13 +374,12 @@ describe("workboard data adapter", () => {
         status: "route suggested",
         gate: "pending",
         delivery: "not_started",
-        blocker: "needs governance progress",
+        blocker: "You — approve it for handoff",
         age: "1m",
         updated: "just now",
         skills: [],
         summary: "Registry detail should stay empty when registry rows are empty.",
         acceptance: ["sample criteria must not leak"],
-        activity: [],
       } satisfies WorkItem,
       "ws-live",
       new AbortController().signal,

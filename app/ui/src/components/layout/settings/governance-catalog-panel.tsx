@@ -110,7 +110,7 @@ function CatalogGroup({ title, empty, rows }: { title: string; empty: string; ro
 function CatalogDetails({ row }: { row: CatalogRow }) {
   const counts = [countLabel(row.gates.length, "gate"), countLabel(row.evidence.length, "evidence"), countLabel(row.roles.length, "role"), countLabel(row.topics.length, "topic")].join(" · ")
   return (
-    <details className="rounded-md border bg-background/70 p-3">
+    <details className="sg-inset p-3">
       <summary className="cursor-pointer list-none">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="font-medium">{row.title}</span>

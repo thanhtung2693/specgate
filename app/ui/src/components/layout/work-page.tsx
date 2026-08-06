@@ -26,6 +26,7 @@ import { useGovernanceStats } from "@/data/stats"
 import { formatDateTime, formatRelativeTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import {
+  routeText,
   deliveryText,
   gateText,
   isDeliveredWorkItem,
@@ -52,13 +53,13 @@ function GovernanceStatsContent({ workspaceId }: { workspaceId?: string }) {
   const stats = useGovernanceStats(workspaceId)
 
   if (stats.status === "loading") {
-    return <p className="text-xs text-muted-foreground">Loading governance stats…</p>
+    return <p className="text-xs text-muted-foreground">Loading…</p>
   }
   if (stats.status === "unconfigured") {
     return <p className="text-xs text-muted-foreground">Stats need a configured Doc Registry (VITE_DOC_REGISTRY_URL).</p>
   }
   if (stats.status === "workspace_required") {
-    return <p className="text-xs text-muted-foreground">Select a workspace to view governance stats.</p>
+    return <p className="text-xs text-muted-foreground">Select a workspace to see this.</p>
   }
   if (stats.status === "error") {
     return <p className="text-xs text-muted-foreground">Stats unavailable. Check Doc Registry connectivity.</p>
@@ -140,7 +141,7 @@ function GovernanceStatsContent({ workspaceId }: { workspaceId?: string }) {
           </ul>
         </div>
       ) : (
-        <p className="text-xs text-muted-foreground">No governance signals recorded in this window.</p>
+        <p className="text-xs text-muted-foreground">Nothing recorded in this window.</p>
       )}
     </div>
   )
@@ -153,7 +154,7 @@ function GovernanceStatsSection({ workspaceId }: { workspaceId?: string }) {
   const [expanded, setExpanded] = useState(false)
 
   return (
-    <section aria-label="Governance stats" className="grid gap-3">
+    <section aria-label="Last 30 days" className="grid gap-3">
       <button
         type="button"
         aria-expanded={expanded}
@@ -161,7 +162,7 @@ function GovernanceStatsSection({ workspaceId }: { workspaceId?: string }) {
         onClick={() => setExpanded((current) => !current)}
       >
         <ChevronRightIcon className={cn("size-3.5 transition-transform", expanded && "rotate-90")} />
-        Governance stats · last 30 days
+        Last 30 days
       </button>
       {expanded ? <GovernanceStatsContent workspaceId={workspaceId} /> : null}
     </section>
@@ -238,6 +239,12 @@ export function workItemStatusBadge(item: WorkItem): { label: string; tone: Tone
     return { label: "Ready for human review", tone: "success" }
   }
   if (item.delivery === "needs_changes") {
+    // Without a verdict, "needs changes" came from the Review-phase proxy, not
+    // from a review anyone ran. Say what is actually true: the spec is drafted
+    // and nobody has approved it yet.
+    if (!item.deliveryVerdict && item.lifecycle.trim().toLowerCase() === "review") {
+      return { label: "Waiting for approval", tone: "warning" }
+    }
     return { label: deliveryText(item.delivery), tone: "warning" }
   }
   if (item.delivery === "ready") {
@@ -286,7 +293,7 @@ function QueueViewControls({
           placeholder="Search work"
           aria-label="Search work"
         />
-        <div className="flex h-10 justify-self-start rounded-lg border bg-background/60 p-1 sm:justify-self-end">
+        <div className="flex h-10 justify-self-start sg-inset p-1 sm:justify-self-end">
           <Button
             type="button"
             variant={displayMode === "board" ? "secondary" : "ghost"}
@@ -401,32 +408,31 @@ function WorkQueueTable({
           <Badge variant="outline" className="font-mono">
             {workItems.length}
           </Badge>
-          <p className="text-xs text-muted-foreground">visible for review and CLI handoff</p>
+          <p className="text-xs text-muted-foreground">shown</p>
         </div>
       </div>
       <div>
         <table className="w-full table-fixed text-left text-xs" aria-label="Work queue">
           <caption className="sr-only">Work items visible in the current queue</caption>
+          {/* The status badge on each row already carries the state that the
+              separate Status and Review columns repeated a second and third
+              time, so the row keeps only what the badge cannot say. */}
           <colgroup className="hidden sm:table-column-group">
-            <col className="w-[33%]" />
-            <col className="w-[15%]" />
-            <col className="w-[13%]" />
-            <col className="w-[27%]" />
-            <col className="w-[12%]" />
+            <col className="w-[50%]" />
+            <col className="w-[32%]" />
+            <col className="w-[18%]" />
           </colgroup>
           <thead className="hidden border-b bg-muted/40 text-xs text-muted-foreground sm:table-header-group">
             <tr>
               <th scope="col" className="px-3 py-2 font-medium">Item</th>
-              <th scope="col" className="px-3 py-2 font-medium">Status</th>
-              <th scope="col" className="px-3 py-2 font-medium">Review</th>
-              <th scope="col" className="px-3 py-2 font-medium">Blocker</th>
+              <th scope="col" className="px-3 py-2 font-medium">Waiting on</th>
               <th scope="col" className="px-3 py-2 font-medium">Updated</th>
             </tr>
           </thead>
           <tbody className="grid sm:table-row-group">
             {workItems.length === 0 ? (
               <tr className="block w-full sm:table-row">
-                <td colSpan={5} className="block w-full px-4 py-8 text-center sm:table-cell">
+                <td colSpan={3} className="block w-full px-4 py-8 text-center sm:table-cell">
                   <h3 className="text-sm font-semibold">{emptyTitle}</h3>
                   <p className="mt-1 text-sm text-muted-foreground">{emptyDescription}</p>
                   {filtersActive ? (
@@ -458,7 +464,7 @@ function WorkQueueTable({
                         <Link to={`/work/${item.key}`} className="whitespace-nowrap font-mono font-semibold text-foreground hover:underline">
                           {item.key}
                         </Link>
-                        <Badge variant="secondary" className="shrink-0 text-[0.68rem]">{item.route}</Badge>
+                        <Badge variant="secondary" className="shrink-0 text-[0.68rem]">{routeText(item.route)}</Badge>
                         <Badge variant="outline" className={cn("shrink-0 border text-[0.68rem]", toneClass(statusBadge.tone))}>
                           {statusBadge.label}
                         </Badge>
@@ -469,10 +475,8 @@ function WorkQueueTable({
                         </Link>
                       </div>
                     </td>
-                    <td className="flex justify-between gap-3 truncate sm:table-cell sm:px-3 sm:py-2"><span className="font-medium sm:hidden">Status</span>{item.status}</td>
-                    <td className="flex justify-between gap-3 truncate sm:table-cell sm:px-3 sm:py-2"><span className="font-medium sm:hidden">Review</span>{deliveryText(item.delivery)}</td>
-                    <td className="grid gap-1 leading-5 sm:table-cell sm:px-3 sm:py-2" title={item.blocker}><span className="font-medium sm:hidden">Blocker</span>{item.blocker}</td>
-                    <td className="flex justify-between gap-3 truncate text-muted-foreground sm:table-cell sm:px-3 sm:py-2"><span className="font-medium text-foreground sm:hidden">Updated</span>{formatDateTime(item.updated)}</td>
+                    <td data-slot="work-blocker" className="flex justify-between gap-3 leading-5 sm:table-cell sm:px-3 sm:py-2"><span className="font-medium sm:hidden">Waiting on</span>{item.blocker === "none" ? <span className="text-muted-foreground">—</span> : item.blocker}</td>
+                    <td className="flex justify-between gap-3 truncate text-muted-foreground sm:table-cell sm:px-3 sm:py-2" title={formatDateTime(item.updated)}><span className="font-medium text-foreground sm:hidden">Updated</span>{formatRelativeTime(item.updated)}</td>
                   </tr>
                 )
               })
@@ -488,9 +492,9 @@ export function WorkItemNotFound({ itemKey, source }: { itemKey: string; source:
   const sourceLabel = source === "registry" ? "current workspace" : "local workspace"
 
   return (
-    <section className="rounded-lg border bg-card p-5">
+    <section className="sg-card p-5">
       <div className="flex max-w-2xl items-start gap-3">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground">
+        <span className="flex size-9 shrink-0 items-center justify-center sg-inset text-muted-foreground">
           <SearchIcon className="size-4" />
         </span>
         <div className="min-w-0">
@@ -513,9 +517,9 @@ export function WorkItemNotFound({ itemKey, source }: { itemKey: string; source:
 
 export function WorkItemRouteLoading({ itemKey }: { itemKey: string }) {
   return (
-    <section className="rounded-lg border bg-card p-5">
+    <section className="sg-card p-5">
       <div className="flex max-w-2xl items-start gap-3">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground">
+        <span className="flex size-9 shrink-0 items-center justify-center sg-inset text-muted-foreground">
           <RotateCwIcon className="size-4 animate-spin" />
         </span>
         <div className="min-w-0">
@@ -540,7 +544,7 @@ function ActiveLanes({ lanes }: { lanes: Lane[] }) {
       </div>
       <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
         {lanes.map((lane) => (
-          <div key={lane.title} className="rounded-lg border bg-background/70">
+          <div key={lane.title} className="sg-inset">
             <div className="flex items-center justify-between border-b px-3 py-2.5">
               <h3 className="text-sm font-medium">{lane.title}</h3>
               <Badge variant="outline" className={cn("border", toneClass(lane.tone))}>
@@ -555,7 +559,7 @@ function ActiveLanes({ lanes }: { lanes: Lane[] }) {
                     <Link
                       key={item.key}
                       to={`/work/${item.key}`}
-                      className="block rounded-md border bg-card p-3 transition-colors hover:bg-muted/35"
+                      className="block sg-card p-3 transition-colors hover:bg-muted/35"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-mono text-xs font-semibold text-foreground">{item.key}</span>
@@ -572,7 +576,7 @@ function ActiveLanes({ lanes }: { lanes: Lane[] }) {
                       </div>
                       <div className="mt-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
                         <span>{item.createdBy}</span>
-                        <span className="truncate">{item.status}</span>
+                        <span className="truncate">{readableKey(item.status)}</span>
                       </div>
                       {item.blocker !== "none" ? (
                         <div className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">{item.blocker}</div>
@@ -632,21 +636,17 @@ export function WorkPage({ workboard, workspaceId }: { workboard: WorkboardData;
   return (
     <div className="grid gap-4">
       <section className="grid gap-3.5">
-        <div>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold">Governance Board</h2>
-              <p className="text-xs text-muted-foreground">Review handoffs, evidence, verification failures, and blocked governance work.</p>
-            </div>
-            <Button variant="outline" size="sm" className="rounded-md" aria-label="Refresh work" disabled={workboard.refreshing} onClick={workboard.refresh}>
-              <RotateCwIcon data-icon="inline-start" className={cn(workboard.refreshing && "animate-spin")} />
-              {workboard.refreshing ? "Refreshing…" : "Refresh"}
-            </Button>
-          </div>
-          <div aria-live="polite" className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        {/* One row: the page title lives in the top bar, so a second heading here
+            only bought an empty band above the queue. */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div aria-live="polite" className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             {workboard.lastRefreshedAt ? <span>Last refreshed {formatDateTime(workboard.lastRefreshedAt)}</span> : null}
             {workboard.refreshError ? <><span>{workboard.refreshError}</span><Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={workboard.refresh}>Retry</Button></> : null}
           </div>
+          <Button variant="outline" size="sm" className="rounded-md" aria-label="Refresh work" disabled={workboard.refreshing} onClick={workboard.refresh}>
+            <RotateCwIcon data-icon="inline-start" className={cn(workboard.refreshing && "animate-spin")} />
+            {workboard.refreshing ? "Refreshing…" : "Refresh"}
+          </Button>
         </div>
         <GovernanceStatsSection workspaceId={workspaceId} />
         {workboard.status === "loading" || workboard.workItems.length > 0 ? (
