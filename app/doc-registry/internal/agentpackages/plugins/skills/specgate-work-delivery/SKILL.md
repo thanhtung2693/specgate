@@ -12,7 +12,6 @@ artifact or make a human delivery decision.
 ## 1. Load the exact contract
 
 ```bash
-specgate work show "$WORK_REF" --json
 specgate work context "$WORK_REF" --json
 specgate change status "$WORK_REF" --json
 ```
@@ -87,8 +86,8 @@ specgate delivery report "$WORK_REF" --init --json
 
 Keep returned `data.path` verbatim as `$COMPLETION_PATH`. Reuse an existing
 regular scaffold's exact `error.details.path` only when its `change_request_id`
-matches `work show` and any `context_digest` matches the Context Pack. Never
-overwrite automatically; stop when attribution is unsafe.
+matches the Context Pack or status work ID and any `context_digest` matches the
+Context Pack. Never overwrite automatically; stop when attribution is unsafe.
 
 Fill `agent.name`, `summary`, `affected_files`, `checks[]`, and exactly one
 `criteria[]` entry per canonical criterion. Each claim must be independently
@@ -122,8 +121,9 @@ command does not complete work.
 Hand off `next_command` verbatim.
 
 For `human_reviewer`, `maintainer`, or `none`, stop. `awaiting_review` belongs to
-the human reviewer. Run peer review only when the human explicitly requests it;
-use a different review-only agent:
+the human reviewer. SpecGate requires no subagent solely for this lifecycle.
+Run peer review only when the human explicitly requests it; use a
+different review-only agent:
 
 ```bash
 specgate delivery peer-review "$WORK_REF" --init --json
@@ -150,7 +150,8 @@ action, or one exact blocker is reported.
 
 ## 7. Show the delivery handoff
 
-Read `specgate change status "$WORK_REF" --json` immediately before responding.
+Use the latest status payload. If an action returns none, run
+`specgate change status "$WORK_REF" --json`.
 For `awaiting_acceptance`, render:
 
 ```text
@@ -166,7 +167,7 @@ Acceptance criteria: <total> total · <met> met · <unmet> unmet · <unclear> un
 Next (<next_actor>): <next_command>
 ```
 
-Count `data.criteria` verdicts only. If empty, list canonical `work show`
+Count `data.criteria` verdicts only. If empty, list canonical Context Pack
 criteria under `Acceptance criteria: <total> total · <total> not reviewed` as
 `[not reviewed] <criterion text>`. `unclear` and unreviewed are never `unmet`.
 
