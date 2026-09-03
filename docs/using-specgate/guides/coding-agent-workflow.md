@@ -60,7 +60,6 @@ row exists, or several need a human priority choice, the agent stops and asks.
 The agent starts from the Context Pack:
 
 ```bash
-specgate work show <work-ref> --json
 specgate work context <work-ref> --json
 specgate change status <work-ref> --json
 ```
@@ -90,7 +89,6 @@ COMPLETION_PATH="<exact data.path from the preceding response>"
 specgate change submit <work-ref> \
   --file "$COMPLETION_PATH" \
   --run-checks --yes --json
-specgate change status <work-ref> --json
 ```
 
 The agent uses the scaffold command's returned `data.path`; it does not build a
@@ -103,6 +101,8 @@ Pack.
 agent reviews that file before authorizing execution. Each claim points to
 reviewable evidence such as a test assertion, source line, API response, or UI
 observation. A skipped or failed check cannot support a satisfied claim.
+The submit response already includes the latest Change status, so the agent
+does not fetch it again.
 
 ### 4. Add an independent review only when you request one
 
@@ -124,8 +124,9 @@ as `next_actor`, the implementing agent stops for that human.
 
 ### 5. Return the delivery handoff
 
-Immediately before its final response, the agent reads a fresh
-`specgate change status <work-ref> --json`. When the state is exactly
+The agent uses the latest status returned by its preceding action. It reads
+`specgate change status <work-ref> --json` only when a later action did not
+return status. When the state is exactly
 `awaiting_acceptance`, it returns a compact per-work governance handoff:
 
 ```text
