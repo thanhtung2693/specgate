@@ -70,6 +70,7 @@ export function WorkspaceSettingsPanel({
 
   useEffect(() => {
     if (!base || !workspace) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Reset stale request state before loading data for the newly selected endpoint or workspace.
       setMembers([])
       setStatus("idle")
       return

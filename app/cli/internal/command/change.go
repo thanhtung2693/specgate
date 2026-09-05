@@ -17,21 +17,23 @@ import (
 )
 
 type changeStatusResult struct {
-	Mode        config.Mode `json:"mode"`
-	Ref         string      `json:"ref"`
-	Title       string      `json:"title"`
-	State       string      `json:"state"`
-	Evidence    string      `json:"evidence"`
-	Assurance   string      `json:"assurance"`
-	Decision    string      `json:"decision"`
-	Receipt     string      `json:"receipt"`
-	Freshness   string      `json:"freshness"`
-	NextActor   string      `json:"next_actor"`
-	Missing     []string    `json:"missing"`
-	Guidance    string      `json:"guidance,omitempty"`
-	Stale       bool        `json:"stale"`
-	StaleReason string      `json:"stale_reason,omitempty"`
-	NextCommand string      `json:"next_command"`
+	VerificationContract string      `json:"verification_contract,omitempty"`
+	Mode                 config.Mode `json:"mode"`
+	Ref                  string      `json:"ref"`
+	Title                string      `json:"title"`
+	State                string      `json:"state"`
+	Evidence             string      `json:"evidence"`
+	Assurance            string      `json:"assurance"`
+	Decision             string      `json:"decision"`
+	Receipt              string      `json:"receipt"`
+	Freshness            string      `json:"freshness"`
+	NextActor            string      `json:"next_actor"`
+	Missing              []string    `json:"missing"`
+	Guidance             string      `json:"guidance,omitempty"`
+	Stale                bool        `json:"stale"`
+	StaleReason          string      `json:"stale_reason,omitempty"`
+	NextCommand          string      `json:"next_command"`
+	ReviewID             string      `json:"review_id,omitempty"`
 	// Criteria carries each acceptance criterion's verdict and the reason for it,
 	// including the check that decided a bound criterion. A human accepting or
 	// rejecting delivery decides from this payload and must not need the
@@ -52,8 +54,8 @@ func newChangeCmd(deps *Deps) *cobra.Command {
 		Example: "  specgate change status CR-123\n" +
 			"  specgate change submit CR-123\n" +
 			"  specgate change submit CR-123 --file .specgate/completion-CR-123.json\n" +
-			"  specgate --yes change accept CR-123 --note \"Approved after review\"\n" +
-			"  specgate --yes change request-changes CR-123 --note \"Please address the failing check\"",
+			"  specgate --yes change accept LOCAL-123 --review-id <review-id> --note \"Approved after review\"\n" +
+			"  specgate --yes change request-changes LOCAL-123 --review-id <review-id> --note \"Please address the failing check\"",
 	}
 	cmd.AddCommand(newDeliverySubmitCommand(deps, deliverySubmitCommandSpec{
 		Use:   "submit <ref>",
@@ -450,6 +452,7 @@ func newChangeDecisionCmd(deps *Deps, use, short, operation, decision, prompt st
 		},
 	}
 	cmd.Flags().StringVar(&note, "note", "", "Optional reviewer note recorded with the decision")
+	cmd.Flags().String("review-id", "", "Exact reviewed delivery ID from status (required in Local mode)")
 	return cmd
 }
 
@@ -502,7 +505,16 @@ func changeStatusLocal(cmd *cobra.Command, deps *Deps, ref string) (changeStatus
 	return applyCheckoutFreshness(cmd.Context(), deps, result, mapGitReceipt(report.Body)), nil
 }
 
-func deriveLocalChangeStatusFromStore(ctx context.Context, store *local.Store, workspaceID string, work local.WorkItem) (changeStatusResult, *local.DeliveryReport, error) {
+func deriveLocalChangeStatusFromStore(ctx context.Context, store *local.Store, workspaceID string, work local.WorkItem) (result changeStatusResult, reportOut *local.DeliveryReport, resultErr error) {
+	contract, err := store.GetVerificationContract(ctx, workspaceID, work.Key)
+	if err != nil {
+		return changeStatusResult{}, nil, err
+	}
+	defer func() {
+		if resultErr == nil {
+			result.VerificationContract = contract.Status
+		}
+	}()
 	review, err := store.DeliveryStatus(ctx, workspaceID, work.Key)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return changeStatusResult{}, nil, err
@@ -577,6 +589,7 @@ func deriveLocalChangeStatus(work local.WorkItem, review *local.DeliveryReview, 
 		return implementationChangeStatus(result)
 	}
 	result.Evidence = deliveryEvidenceLabel(review.Verdict, "")
+	result.ReviewID = review.ID
 	result.Assurance = localDeliveryAssuranceLabel(report.Body, peer)
 	result.Decision = localDeliveryDecisionLabel(review.HumanDecision)
 	result.Receipt = localDeliveryReceiptLabel(report.Body)
@@ -616,7 +629,7 @@ func awaitingAcceptanceChangeStatus(result changeStatusResult) changeStatusResul
 	result.NextActor = "human_reviewer"
 	result.Missing = []string{"Human acceptance"}
 	if result.Mode == config.ModeLocal {
-		result.NextCommand = "specgate --yes change accept " + result.Ref
+		result.NextCommand = "specgate --yes change accept " + result.Ref + " --review-id " + result.ReviewID
 	} else {
 		result.NextCommand = "specgate change accept " + result.Ref
 	}
@@ -698,6 +711,9 @@ func changeFreshness(hasReceipt bool, peerState string) (string, bool, string) {
 }
 
 func printChangeStatus(deps *Deps, result changeStatusResult) {
+	if result.VerificationContract != "" {
+		fmt.Fprintf(deps.Stdout, "Verification contract: %s\n", result.VerificationContract)
+	}
 	fmt.Fprintf(deps.Stdout, "Change: %s — %s\n", result.Ref, result.Title)
 	fmt.Fprintf(deps.Stdout, "State: %s\n", result.State)
 	fmt.Fprintf(deps.Stdout, "Evidence: %s\n", result.Evidence)

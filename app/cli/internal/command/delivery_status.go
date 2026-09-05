@@ -31,14 +31,18 @@ func printLocalDeliveryStatus(cmd *cobra.Command, deps *Deps, ref, commandName s
 	if err != nil {
 		return localExitError(deps, commandName, err)
 	}
+	contract, err := store.GetVerificationContract(cmd.Context(), selection.Workspace.ID, ref)
+	if err != nil {
+		return localExitError(deps, commandName, err)
+	}
 	review, err := store.DeliveryStatus(cmd.Context(), selection.Workspace.ID, ref)
 	if errors.Is(err, sql.ErrNoRows) {
 		next := "specgate delivery report " + work.Key + " --init"
 		if deps.Printer.Mode() == output.ModeJSON {
-			deps.Printer.Success(commandName, map[string]any{"found": false, "work_id": work.ID, "work_key": work.Key, "next": next})
+			deps.Printer.Success(commandName, map[string]any{"found": false, "work_id": work.ID, "work_key": work.Key, "next": next, "verification_contract": contract.Status})
 			return nil
 		}
-		fmt.Fprintf(deps.Stdout, "No delivery review found for %s.\nNext: %s\n", work.Key, next)
+		fmt.Fprintf(deps.Stdout, "Verification contract: %s\nNo delivery review found for %s.\nNext: %s\n", contract.Status, work.Key, next)
 		return nil
 	}
 	if err != nil {
@@ -55,6 +59,7 @@ func printLocalDeliveryStatus(cmd *cobra.Command, deps *Deps, ref, commandName s
 	receiptLabel := localDeliveryReceiptLabel(report.Body)
 	if deps.Printer.Mode() == output.ModeJSON {
 		data := localDeliveryReviewView(review)
+		data["verification_contract"] = contract.Status
 		data["peer_review"] = peer
 		data["evidence_assessment"] = deliveryEvidenceLabel(review.Verdict, "")
 		data["assurance_source"] = localDeliveryAssuranceLabel(report.Body, peer)
@@ -63,6 +68,7 @@ func printLocalDeliveryStatus(cmd *cobra.Command, deps *Deps, ref, commandName s
 		deps.Printer.Success(commandName, data)
 		return nil
 	}
+	fmt.Fprintf(deps.Stdout, "Verification contract: %s\n", contract.Status)
 	fmt.Fprintf(deps.Stdout, "Evidence: %s\n", deliveryEvidenceLabel(review.Verdict, ""))
 	fmt.Fprintf(deps.Stdout, "Assurance: %s\n", localDeliveryAssuranceLabel(report.Body, peer))
 	fmt.Fprintf(deps.Stdout, "Decision: %s\n", localDeliveryDecisionLabel(review.HumanDecision))
@@ -72,7 +78,7 @@ func printLocalDeliveryStatus(cmd *cobra.Command, deps *Deps, ref, commandName s
 	fmt.Fprintln(deps.Stdout, review.Summary)
 	if review.HumanDecision == "" {
 		printDeliveryDecisionCommands(deps, work.Key, &client.DeliveryStatusResult{
-			Found: true, Verdict: review.Verdict, Executor: "platform",
+			Found: true, Verdict: review.Verdict, Executor: "platform", GateRunID: review.ID,
 		}, true)
 	}
 	return nil
@@ -85,12 +91,14 @@ func printDeliveryDecisionCommands(deps *Deps, ref string, ds *client.DeliverySt
 		return
 	}
 	prefix := "specgate "
+	binding := ""
 	if localMode {
 		prefix = "specgate --yes "
+		binding = " --review-id " + ds.GateRunID
 	}
 	fmt.Fprintln(deps.Stdout, "\nDecision commands:")
-	fmt.Fprintf(deps.Stdout, "  %schange accept %s\n", prefix, ref)
-	fmt.Fprintf(deps.Stdout, "  %schange request-changes %s --note \"<reason>\"\n", prefix, ref)
+	fmt.Fprintf(deps.Stdout, "  %schange accept %s%s\n", prefix, ref, binding)
+	fmt.Fprintf(deps.Stdout, "  %schange request-changes %s%s --note \"<reason>\"\n", prefix, ref, binding)
 }
 
 func localDeliveryDecisionLabel(decision string) string {

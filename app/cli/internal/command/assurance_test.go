@@ -304,7 +304,7 @@ func TestVerifyLocalRequiresAndReportsHumanApprovedDelivery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.DecideDelivery(context.Background(), selection.Workspace.ID, work.Key, "approve", "human", "verified"); err != nil {
+	if err := store.DecideDelivery(context.Background(), selection.Workspace.ID, work.Key, "approve", "human", "verified", localReviewID(t, store, selection.Workspace.ID, work.Key)); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Close(); err != nil {
@@ -375,7 +375,7 @@ func TestVerifyLocalSupportsAcceptedQuickWorkWithoutArtifact(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.DecideDelivery(t.Context(), selection.Workspace.ID, work.Key, "approve", "human", "verified"); err != nil {
+	if err := store.DecideDelivery(t.Context(), selection.Workspace.ID, work.Key, "approve", "human", "verified", localReviewID(t, store, selection.Workspace.ID, work.Key)); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Close(); err != nil {
@@ -497,14 +497,7 @@ func TestVerifyLocalHumanOverrideIsCleanupEligibleWithoutHidingEvidenceGap(t *te
 	if review.Verdict != "failed" {
 		t.Fatalf("review = %#v, want failed evidence", review)
 	}
-	if err := store.DecideDelivery(
-		t.Context(),
-		selection.Workspace.ID,
-		work.Key,
-		"approve",
-		"human",
-		"reviewed false negative",
-	); err != nil {
+	if err := store.DecideDelivery(t.Context(), selection.Workspace.ID, work.Key, "approve", "human", "reviewed false negative", localReviewID(t, store, selection.Workspace.ID, work.Key)); err != nil {
 		t.Fatal(err)
 	}
 	closeLocalChangeStore(t, deps, stateDir, store)
@@ -586,6 +579,7 @@ func TestSelfApprovalRefusalExitsGovernanceFailedNotUnavailable(t *testing.T) {
 	if _, err := store.SubmitDelivery(t.Context(), selection.Workspace.ID, work.Key, completion); err != nil {
 		t.Fatal(err)
 	}
+	reviewID := localReviewID(t, store, selection.Workspace.ID, work.Key)
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -593,7 +587,7 @@ func TestSelfApprovalRefusalExitsGovernanceFailedNotUnavailable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "change", "accept", work.Key)
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "change", "accept", work.Key, "--review-id", reviewID)
 	if code != output.ExitGovernanceFailed {
 		t.Fatalf("exit = %d, want ExitGovernanceFailed (%d); output = %s", code, output.ExitGovernanceFailed, out.String())
 	}
@@ -635,7 +629,7 @@ func TestLocalGovernanceRefusalsUseGovernanceExitCodes(t *testing.T) {
 
 	// Deciding before any completion exists is a precondition failure, not an
 	// outage: nothing about retrying the same call can satisfy it.
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "change", "accept", work.Key)
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "change", "accept", work.Key, "--review-id", "no-review")
 	if code != output.ExitGovernanceFailed {
 		t.Fatalf("accept before submit exited %d, want ExitGovernanceFailed; output = %s", code, out.String())
 	}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/config"
+	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
@@ -73,6 +74,7 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 			if strings.TrimSpace(eventType) != "coding_agent.completed" {
 				return completionValidationError(deps, spec.Operation, "event_type must be coding_agent.completed")
 			}
+			clearCheckObservations(body)
 			if err := validateCompletionReport(deps, spec.Operation, body, runChecks); err != nil {
 				return err
 			}
@@ -88,16 +90,6 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 				if len(args) == 0 {
 					return localExitError(deps, spec.Operation, ErrWorkRefRequired)
 				}
-				if runChecks {
-					proceed, err := confirmCompletionChecks(deps, spec.Operation, body)
-					if err != nil || !proceed {
-						return err
-					}
-					executeCompletionChecks(cmd.Context(), deps, body)
-					if err := validateCompletionReport(deps, spec.Operation, body, false); err != nil {
-						return err
-					}
-				}
 				store, err := openLocalStore(deps)
 				if err != nil {
 					return localExitError(deps, spec.Operation, err)
@@ -107,7 +99,42 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 				if err != nil {
 					return localExitError(deps, spec.Operation, err)
 				}
-				review, err := store.SubmitDelivery(cmd.Context(), selection.Workspace.ID, args[0], body)
+				work, err := store.GetWork(cmd.Context(), selection.Workspace.ID, args[0])
+				if err != nil {
+					return localExitError(deps, spec.Operation, err)
+				}
+				if work.Phase == "delivered" {
+					return localExitError(deps, spec.Operation, local.ErrDeliveryApproved)
+				}
+				if digest, _ := body["context_digest"].(string); digest != work.ContextDigest {
+					return completionValidationError(deps, spec.Operation, "completion context_digest does not match work")
+				}
+				if _, err := store.ContextPack(cmd.Context(), selection.Workspace.ID, args[0]); err != nil {
+					return localExitError(deps, spec.Operation, err)
+				}
+				root, _ := config.FindProjectRoot(deps.WorkingDir)
+				if err := store.ValidateVerificationReport(cmd.Context(), selection.Workspace.ID, args[0], root, body); err != nil {
+					return localExitError(deps, spec.Operation, err)
+				}
+				contract, err := store.GetVerificationContract(cmd.Context(), selection.Workspace.ID, args[0])
+				if err != nil {
+					return localExitError(deps, spec.Operation, err)
+				}
+				if runChecks {
+					proceed, err := confirmCompletionChecks(deps, spec.Operation, body)
+					if err != nil || !proceed {
+						return err
+					}
+					if contract.Status == "pinned" {
+						executeCompletionChecks(cmd.Context(), deps, body, root)
+					} else {
+						executeCompletionChecks(cmd.Context(), deps, body)
+					}
+					if err := validateCompletionReport(deps, spec.Operation, body, false); err != nil {
+						return err
+					}
+				}
+				review, err := store.SubmitDelivery(cmd.Context(), selection.Workspace.ID, args[0], body, root)
 				if err != nil {
 					return localExitError(deps, spec.Operation, err)
 				}
@@ -126,6 +153,7 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 						return localExitError(deps, spec.Operation, peerErr)
 					}
 					status := deriveLocalChangeStatus(work, &review, &report, peer)
+					status.VerificationContract = contract.Status
 					result = applyCheckoutFreshness(cmd.Context(), deps, status, mapGitReceipt(report.Body))
 				}
 				if deps.Printer.Mode() == output.ModeJSON {
@@ -314,6 +342,7 @@ func newDeliveryApproveCmd(deps *Deps) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&note, "note", "", "Optional reviewer note recorded with the decision")
+	cmd.Flags().String("review-id", "", "Exact reviewed delivery ID from status (required in Local mode)")
 	return cmd
 }
 
@@ -328,10 +357,12 @@ func newDeliveryRejectCmd(deps *Deps) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&note, "note", "", "Optional reviewer note recorded with the decision")
+	cmd.Flags().String("review-id", "", "Exact reviewed delivery ID from status (required in Local mode)")
 	return cmd
 }
 
 func runDeliveryDecision(cmd *cobra.Command, deps *Deps, args []string, op string, decision string, note string, prompt string) error {
+	reviewID, _ := cmd.Flags().GetString("review-id")
 	if deps.Topology == config.ModeLocal {
 		if len(args) == 0 {
 			return localExitError(deps, op, ErrWorkRefRequired)
@@ -340,6 +371,9 @@ func runDeliveryDecision(cmd *cobra.Command, deps *Deps, args []string, op strin
 			payload := output.ErrorPayload{Code: "confirmation_required", Message: fmt.Sprintf(prompt+" Re-run with --yes to record this human decision.", args[0])}
 			code := deps.Printer.Error(op, payload)
 			return &output.ExitError{Code: code}
+		}
+		if strings.TrimSpace(reviewID) == "" {
+			return completionValidationError(deps, op, "--review-id is required in Local mode; read `specgate change status "+args[0]+" --json` and review its evidence before deciding")
 		}
 		store, err := openLocalStore(deps)
 		if err != nil {
@@ -350,10 +384,13 @@ func runDeliveryDecision(cmd *cobra.Command, deps *Deps, args []string, op strin
 		if err != nil {
 			return localExitError(deps, op, err)
 		}
-		if err := store.DecideDelivery(cmd.Context(), selection.Workspace.ID, args[0], decision, selection.User.Username, note); err != nil {
+		if err := store.DecideDelivery(cmd.Context(), selection.Workspace.ID, args[0], decision, selection.User.Username, note, reviewID); err != nil {
 			return localExitError(deps, op, err)
 		}
 		return printLocalDeliveryStatus(cmd, deps, args[0], op)
+	}
+	if cmd.Flags().Changed("review-id") {
+		return completionValidationError(deps, op, "--review-id applies only to Local mode")
 	}
 	ref, err := resolveRef(cmd, args, deps)
 	if err != nil {

@@ -152,6 +152,48 @@ func TestLocalReadinessBlocksApprovalUntilSemanticResultsExist(t *testing.T) {
 	if drift.GateKey != "spec_repo_drift" {
 		t.Fatalf("pickup gate = %#v", drift)
 	}
+
+	input := validLocalGateResult(drift)
+	input.Evidence.ExaminedDocs = []string{"spec.md", "plan.md"}
+	input.Evidence.RepoCommit = "checkout-before-new-work"
+	if _, err := store.SubmitGateResult(ctx, selection.Workspace.ID, drift.TaskID, input); err != nil {
+		t.Fatal(err)
+	}
+	// Dispatch has no checkout input. A completed drift verdict therefore cannot
+	// establish that the current checkout (including uncommitted work) is clean.
+	refreshed, err := store.DispatchGateTasks(ctx, selection.Workspace.ID, artifact.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(refreshed.CreatedTaskIDs) != 1 || len(refreshed.PendingTaskIDs) != 1 || len(refreshed.SkippedGateKeys) != 3 {
+		t.Fatalf("dispatch after completed drift = %#v, want fresh drift and reused document gates", refreshed)
+	}
+	freshID := refreshed.CreatedTaskIDs[0]
+	if freshID == drift.TaskID {
+		t.Fatal("completed drift task was reused")
+	}
+	pending, err := store.ListGateTasks(ctx, selection.Workspace.ID, artifact.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 || pending[0].TaskID != freshID || pending[0].GateKey != "spec_repo_drift" {
+		t.Fatalf("pending tasks = %#v, want only fresh drift task", pending)
+	}
+	repeated, err := store.DispatchGateTasks(ctx, selection.Workspace.ID, artifact.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(repeated.CreatedTaskIDs) != 0 || len(repeated.PendingTaskIDs) != 1 || repeated.PendingTaskIDs[0] != freshID {
+		t.Fatalf("pending drift redispatch = %#v, want same pending task", repeated)
+	}
+	run, err = store.RunReadiness(ctx, selection.Workspace.ID, artifact.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := run.Checks["spec_repo_drift"].(map[string]any)
+	if check["state"] != "not_run" || check["task_id"] != freshID {
+		t.Fatalf("drift check = %#v, want fresh pending task instead of old pass", check)
+	}
 }
 
 func localGateFixture(t *testing.T) (*local.Store, local.Selection, local.Artifact) {

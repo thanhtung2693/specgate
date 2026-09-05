@@ -11,8 +11,6 @@ artifact or make a human delivery decision.
 
 ## 1. Load the exact contract
 
-Start with the work item:
-
 ```bash
 specgate work show "$WORK_REF" --json
 specgate work context "$WORK_REF" --json
@@ -41,16 +39,12 @@ repository-doc update.
 
 ## 2. Resume safely
 
-When resuming, check the persisted receipt:
+For `next_actor=implementing_agent` in `implementation` or `rework_requested`,
+resume approved scope despite missing receipts or stale evidence. Inspect
+existing edits; rerun checks and submit fresh evidence. Otherwise require
+matching `freshness`; stop on stale or unavailable comparison.
 
-```bash
-specgate change status "$WORK_REF" --json
-```
-
-Continue only when `freshness` confirms a match. Stop on `stale: true` or an
-unavailable comparison. Receipt metadata is not proof.
-
-Completion criterion: match, or human-owned blocker.
+Completion criterion: scoped resume or human-owned blocker.
 
 ## 3. Check artifact drift
 

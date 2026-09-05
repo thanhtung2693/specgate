@@ -173,9 +173,10 @@ func TestChangeAcceptLocalWithYesStoresDecisionWithoutHTTP(t *testing.T) {
 	deps, fc, _, out := newFakeDeps(t)
 	stateDir, store, selection, work := newLocalChangeWork(t, deps)
 	submitLocalChangeDelivery(t, store, selection.Workspace.ID, work, "builder", "receipt-1")
+	reviewID := localReviewID(t, store, selection.Workspace.ID, work.Key)
 	closeLocalChangeStore(t, deps, stateDir, store)
 
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "change", "accept", work.Key, "--note", "accepted locally")
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "change", "accept", work.Key, "--review-id", reviewID, "--note", "accepted locally")
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
 	}
@@ -211,6 +212,7 @@ func TestChangeAcceptLocalRejectsCompletionReporterWithoutHTTP(t *testing.T) {
 	deps, fc, _, out := newFakeDeps(t)
 	stateDir, store, selection, work := newLocalChangeWork(t, deps)
 	submitLocalChangeDelivery(t, store, selection.Workspace.ID, work, "local", "receipt-1")
+	reviewID := localReviewID(t, store, selection.Workspace.ID, work.Key)
 	closeLocalChangeStore(t, deps, stateDir, store)
 
 	code := command.ExecuteForCode(
@@ -220,6 +222,7 @@ func TestChangeAcceptLocalRejectsCompletionReporterWithoutHTTP(t *testing.T) {
 		"change",
 		"accept",
 		work.Key,
+		"--review-id", reviewID,
 	)
 	if code == output.ExitOK ||
 		!strings.Contains(out.String(), "cannot approve its own delivery") {

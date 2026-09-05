@@ -91,6 +91,7 @@ export function useArtifactFiles(artifactId: string | undefined, workspaceId: st
 
   useEffect(() => {
     if (!artifactId) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Reset stale request state before loading data for the newly selected endpoint or workspace.
       setView(emptyRegistryItems<ArtifactDocumentSummary>("ready"))
       return
     }
@@ -133,6 +134,7 @@ export function useArtifactVersions(
 
   useEffect(() => {
     if (!featureId || !current) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Reset stale request state before loading data for the newly selected endpoint or workspace.
       setView(emptyRegistryItems<ArtifactSummary>("ready"))
       return
     }
@@ -181,6 +183,7 @@ export function useArtifactDocumentContent(
 
   useEffect(() => {
     if (!artifactId || !path) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Reset stale request state before loading data for the newly selected endpoint or workspace.
       setView(emptyRegistryContent("ready"))
       return
     }
@@ -223,6 +226,7 @@ export function useArtifactAttachments(
 
   useEffect(() => {
     if (!featureId || !artifactId) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Reset stale request state before loading data for the newly selected endpoint or workspace.
       setView(emptyRegistryItems<ArtifactAttachmentSummary>("ready"))
       return
     }
@@ -260,6 +264,7 @@ export function useArtifactFeedback(artifactId: string | undefined, workspaceId:
 
   useEffect(() => {
     if (!artifactId) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Reset stale request state before loading data for the newly selected endpoint or workspace.
       setView(emptyRegistryItems<ArtifactFeedbackSummary>("ready"))
       return
     }
@@ -301,6 +306,7 @@ export function useArtifactReadinessRuns(
 
   useEffect(() => {
     if (!artifactId) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Reset stale request state before loading data for the newly selected endpoint or workspace.
       setView(emptyRegistryItems<ArtifactReadinessRunSummary>("ready"))
       return
     }
@@ -342,6 +348,7 @@ export function useArtifactEvents(
 
   useEffect(() => {
     if (!artifactId) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Reset stale request state before loading data for the newly selected endpoint or workspace.
       setView(emptyRegistryItems<ArtifactEventSummary>("ready"))
       return
     }
@@ -381,6 +388,7 @@ export function useArtifactFeature(
 
   useEffect(() => {
     if (!artifact) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Reset stale request state before loading data for the newly selected endpoint or workspace.
       setView(emptyRegistryStatus("ready"))
       return
     }
@@ -420,6 +428,7 @@ export function useArtifactPolicy(
 
   useEffect(() => {
     if (!artifactId) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Reset stale request state before loading data for the newly selected endpoint or workspace.
       setView(emptyRegistryStatus("ready"))
       return
     }
@@ -461,6 +470,7 @@ export function useArtifactGatePreview(
 
   useEffect(() => {
     if (!artifactId) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Reset stale request state before loading data for the newly selected endpoint or workspace.
       setView(emptyRegistryItems<ArtifactGatePreviewSummary>("ready"))
       return
     }

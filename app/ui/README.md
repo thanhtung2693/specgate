@@ -55,6 +55,13 @@ URL.
 
 ## Scripts
 
+React compiler diagnostics remain enabled. Existing effects that synchronize
+request, route, or dialog state have line-scoped `set-state-in-effect`
+exceptions with reasons; do not disable these rules globally during dependency
+updates. Validate exceptions with
+`npx oxlint --report-unused-disable-directives-severity error` and retain the
+behavioral tests covering those transitions.
+
 | Command | Purpose |
 | --- | --- |
 | `npm run dev` | Start the Vite dev server |

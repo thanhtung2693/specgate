@@ -1,6 +1,7 @@
 package command
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/deploy"
+	"github.com/specgate/specgate/app/cli/internal/interactive"
 	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
@@ -27,6 +29,7 @@ func newInitCmd(deps *Deps) *cobra.Command {
 		bundleVersion   string
 		installPlugins  bool
 		pluginAgentList string
+		pluginScope     string
 		workspaceName   string
 		displayName     string
 		username        string
@@ -64,16 +67,46 @@ func newInitCmd(deps *Deps) *cobra.Command {
 				code := deps.Printer.Error("init", output.ErrorPayload{Code: "validation_failed", Message: err.Error()})
 				return &output.ExitError{Code: code, Err: err}
 			}
+			if err := validateInitPluginScope(pluginScope); err != nil {
+				code := deps.Printer.Error("init", output.ErrorPayload{Code: "usage", Message: err.Error()})
+				return &output.ExitError{Code: code, Err: err}
+			}
 			cfg, err := config.LoadFrom(deps.ConfigPath)
 			if err != nil {
 				code := deps.Printer.Error("init", output.ErrorPayload{Code: "unavailable", Message: err.Error()})
 				return &output.ExitError{Code: code, Err: err}
 			}
 			if mode == "local" || mode == "" {
-				if installPlugins && strings.TrimSpace(pluginAgentList) == "" {
-					pluginAgentList = "codex"
+				if canPrompt(deps) && !installPlugins {
+					confirmed, err := deps.Prompter.Confirm("Install IDE plugins now?", false)
+					if err != nil {
+						return err
+					}
+					installPlugins = confirmed
 				}
-				return runLocalInit(cmd, deps, cfg, localDir, workspaceName, displayName, username, email, installPlugins, pluginAgentList)
+				if installPlugins && strings.TrimSpace(pluginAgentList) == "" {
+					if canPrompt(deps) {
+						if err := resolvePluginAgentPrompt(cmd, deps, &pluginAgentList, "Select IDE plugins", "plugin-agent"); err != nil {
+							return err
+						}
+					} else {
+						pluginAgentList = "codex"
+					}
+				}
+				if installPlugins && canPrompt(deps) && !cmd.Flags().Changed("plugin-scope") {
+					selected, err := deps.Prompter.Select("Install scope", []interactive.Option{
+						{Label: "Global — available in every project; does not modify this repository", Value: "global"},
+						{Label: "This project — writes IDE files into this repository", Value: "project"},
+					})
+					if err != nil {
+						return err
+					}
+					pluginScope = selected
+					if err := validateInitPluginScope(pluginScope); err != nil {
+						return initUsageError(deps, err.Error())
+					}
+				}
+				return runLocalInit(cmd, deps, cfg, localDir, workspaceName, displayName, username, email, installPlugins, pluginAgentList, pluginScope)
 			}
 			dir := deployDir
 			if dir == "" {
@@ -223,7 +256,8 @@ func newInitCmd(deps *Deps) *cobra.Command {
 					fmt.Fprintln(deps.Stderr, "Installing IDE plugins...")
 				}
 				result, err := runPluginInstall(ctx, deps, pluginInstallOptions{
-					Agent: pluginAgentList,
+					Agent:        pluginAgentList,
+					ProjectLocal: pluginScope == "project",
 				})
 				if err != nil {
 					payload := pluginInstallErrorPayload(err)
@@ -285,6 +319,7 @@ func newInitCmd(deps *Deps) *cobra.Command {
 	f.StringVar(&bundleVersion, "bundle-version", "", "Compose bundle release to download (Full mode only; default: this CLI's version)")
 	f.BoolVar(&installPlugins, "install-plugins", false, "Install matching IDE plugin files after setup")
 	f.StringVar(&pluginAgentList, "plugin-agent", "", "IDE plugin target for --install-plugins: "+supportedPluginAgentList())
+	f.StringVar(&pluginScope, "plugin-scope", "global", "IDE plugin install scope: global or project")
 	f.StringVar(&workspaceName, "workspace-name", "", "Workspace name to create or reuse during local identity setup")
 	f.StringVar(&displayName, "display-name", "", "Display name for the local user")
 	f.StringVar(&username, "username", "", "Username for attribution")
@@ -322,8 +357,31 @@ func validateInitModeFlags(cmd *cobra.Command, mode string) error {
 	return nil
 }
 
-func runLocalInit(cmd *cobra.Command, deps *Deps, cfg config.Config, stateDir, workspaceName, displayName, username, email string, installPlugins bool, pluginAgentList string) error {
+func runLocalInit(cmd *cobra.Command, deps *Deps, cfg config.Config, stateDir, workspaceName, displayName, username, email string, installPlugins bool, pluginAgentList, pluginScope string) error {
 	var err error
+	projectLocal := pluginScope == "project"
+	if installPlugins {
+		if projectLocal {
+			root, ok := config.FindProjectRoot(deps.WorkingDir)
+			if !ok {
+				return initUsageError(deps, "project plugin scope requires a Git repository; cd to its root and retry")
+			}
+			working, _ := filepath.Abs(deps.WorkingDir)
+			if real, evalErr := filepath.EvalSymlinks(working); evalErr == nil {
+				working = real
+			}
+			if filepath.Clean(working) != filepath.Clean(root) {
+				return initUsageError(deps, fmt.Sprintf("project plugin scope must run from the repository root; run `cd %s` and retry; no Local state or plugin files were changed", root))
+			}
+		}
+		// The installer dry run performs the same package, ownership, and native
+		// manager checks as installation without writing plugin or Local state.
+		if _, err := runPluginInstall(cmd.Context(), deps, pluginInstallOptions{Agent: pluginAgentList, ProjectLocal: projectLocal, DryRun: true}); err != nil {
+			payload := pluginInstallErrorPayload(err)
+			code := deps.Printer.Error("init", payload)
+			return &output.ExitError{Code: code, Err: err}
+		}
+	}
 	if strings.TrimSpace(workspaceName) == "" || strings.TrimSpace(displayName) == "" || strings.TrimSpace(username) == "" {
 		if canPrompt(deps) {
 			input, promptErr := promptIdentityBootstrap(deps)
@@ -403,9 +461,14 @@ func runLocalInit(cmd *cobra.Command, deps *Deps, cfg config.Config, stateDir, w
 	}
 	var pluginResult *pluginInstallResult
 	if installPlugins {
-		installed, err := runPluginInstall(cmd.Context(), deps, pluginInstallOptions{Agent: pluginAgentList})
+		installed, err := runPluginInstall(cmd.Context(), deps, pluginInstallOptions{Agent: pluginAgentList, ProjectLocal: projectLocal})
 		if err != nil {
 			payload := pluginInstallErrorPayload(err)
+			if payload.Details == nil {
+				payload.Details = map[string]any{}
+			}
+			payload.Details["local_setup"] = "complete"
+			payload.Details["next"] = "specgate plugins install --agent " + pluginAgentList
 			code := deps.Printer.Error("init", payload)
 			return &output.ExitError{Code: code, Err: err}
 		}
@@ -439,6 +502,19 @@ func runLocalInit(cmd *cobra.Command, deps *Deps, cfg config.Config, stateDir, w
 		fmt.Fprintln(deps.Stdout, nextStep(deps, "Install IDE integration files with", "specgate plugins install"))
 	}
 	return nil
+}
+
+func validateInitPluginScope(scope string) error {
+	if scope != "global" && scope != "project" {
+		return fmt.Errorf("--plugin-scope must be global or project")
+	}
+	return nil
+}
+
+func initUsageError(deps *Deps, message string) error {
+	err := errors.New(message)
+	code := deps.Printer.Error("init", output.ErrorPayload{Code: "usage", Message: message})
+	return &output.ExitError{Code: code, Err: err}
 }
 
 func bindInitializedProject(deps *Deps, workspace config.CurrentWorkspace) (string, error) {

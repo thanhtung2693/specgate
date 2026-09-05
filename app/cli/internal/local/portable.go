@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 )
 
 type PortableWorkspace struct {
@@ -75,6 +76,13 @@ type PortableDeliveryEvidence struct {
 }
 
 func (s *Store) ExportWorkspace(ctx context.Context, workspaceID string) (PortableWorkspace, error) {
+	var pinned int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM verification_contracts WHERE workspace_id = ?`, workspaceID).Scan(&pinned); err != nil {
+		return PortableWorkspace{}, err
+	}
+	if pinned > 0 {
+		return PortableWorkspace{}, fmt.Errorf("%w: portable/v1 Full-mode import cannot preserve Local verification contracts; use a Local database backup instead", ErrVerificationInvalid)
+	}
 	workspace, err := s.Workspace(ctx, workspaceID)
 	if err != nil {
 		return PortableWorkspace{}, err

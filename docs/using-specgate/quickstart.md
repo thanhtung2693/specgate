@@ -38,8 +38,8 @@ specgate init
 ```
 
 Choose **Local CLI**, the default. The prompts create a local user and workspace
-and bind the current repository to that workspace. They also print the
-plugin-install command.
+and bind the current repository to that workspace. You can optionally select
+IDE plugins and choose a global or project install during the same setup.
 
 Local state uses SQLite on your machine; no Docker container, browser, or TCP
 service starts.
@@ -63,6 +63,19 @@ specgate init --mode local --no-input \
 
 Email is optional: add `--email jane@example.com` when needed.
 
+To include an IDE plugin in the same automated setup, name both the target and
+scope. Global remains the default for compatibility:
+
+```bash
+specgate init --mode local --no-input \
+  --workspace-name "My workspace" --display-name "Jane Doe" --username jane \
+  --install-plugins --plugin-agent codex --plugin-scope global
+```
+
+The initializer previews and validates plugin ownership before creating Local
+state. Project scope must be invoked at the Git repository root; from a nested
+directory, follow the exact `cd` command printed by the CLI and retry.
+
 When you start using SpecGate in another repository, bind that checkout before
 running its workflow:
 
@@ -83,6 +96,10 @@ Restart the IDE agent so it loads the installed skills and rules. Claude Code
 and Cursor use the same commands with `--agent claude` or `--agent cursor`.
 Codex and Claude Code also support native installation; see
 [Install IDE plugins](guides/install-ide-plugins.md). Use one method per IDE.
+
+`specgate doctor` reports repository binding, the required `sh` executable,
+and optional plugin files separately. Finding files does not prove that the
+current IDE session loaded them; restart the IDE and verify in a new session.
 
 Check the Local setup:
 
@@ -187,10 +204,10 @@ specgate verify <work-ref>
 You make the final delivery decision:
 
 ```bash
-specgate --yes change accept <work-ref>
+specgate --yes change accept <work-ref> --review-id <review-id>
 ```
 
-Use `specgate --yes change request-changes <work-ref>` instead if the evidence
+Use `specgate --yes change request-changes <work-ref> --review-id <review-id>` instead if the evidence
 or result is not acceptable. Then inspect the durable trail:
 
 ```bash

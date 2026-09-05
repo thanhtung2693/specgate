@@ -264,8 +264,8 @@ func printDeliveryHandoff(
 			bundle.Review.Verdict, verdict)
 	}
 	fmt.Fprintf(deps.Stdout, "\nThis view is read-only. The author records the decision with:\n")
-	fmt.Fprintf(deps.Stdout, "  specgate --yes change accept %s\n", bundle.Work.Key)
-	fmt.Fprintf(deps.Stdout, "  specgate --yes change request-changes %s --note \"<reason>\"\n", bundle.Work.Key)
+	fmt.Fprintf(deps.Stdout, "  specgate --yes change accept %s --review-id %s\n", bundle.Work.Key, bundle.Review.ID)
+	fmt.Fprintf(deps.Stdout, "  specgate --yes change request-changes %s --review-id %s --note \"<reason>\"\n", bundle.Work.Key, bundle.Review.ID)
 }
 
 func deliveryHandoffAgent(bundle deliveryHandoffBundle) string {

@@ -31,6 +31,8 @@ func registerWorkCommands(root *cobra.Command, deps *Deps) {
 	work.AddCommand(newWorkListCmd(deps))
 	work.AddCommand(newWorkShowCmd(deps))
 	work.AddCommand(newWorkContextCmd(deps))
+	work.AddCommand(newWorkVerificationCmd(deps))
+	work.AddCommand(newWorkResumeCmd(deps))
 	work.AddCommand(newWorkArchiveCmd(deps))
 	work.AddCommand(newWorkCreateQuickCmd(deps))
 	work.AddCommand(newWorkCreateCmd(deps))
@@ -49,6 +51,9 @@ func newWorkListCmd(deps *Deps) *cobra.Command {
 		Short: "List work items needing attention, or enumerate a phase with --phase",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if deps.Topology == config.ModeLocal {
+				if allWorkspaces {
+					return incompatibleCommand(deps, "work.list", "--all-workspaces is a Full-mode aggregate; in Local mode select a workspace with `specgate workspace select <workspace>` and run `specgate work list`")
+				}
 				store, err := openLocalStore(deps)
 				if err != nil {
 					return localExitError(deps, "work.list", err)
@@ -63,9 +68,10 @@ func newWorkListCmd(deps *Deps) *cobra.Command {
 					return localExitError(deps, "work.list", err)
 				}
 				if strings.TrimSpace(phase) != "" {
+					wanted := workListPhases(phase)
 					filtered := items[:0]
 					for _, item := range items {
-						if strings.EqualFold(item.Phase, strings.TrimSpace(phase)) {
+						if wanted[strings.ToLower(strings.TrimSpace(item.Phase))] {
 							filtered = append(filtered, item)
 						}
 					}
@@ -144,15 +150,20 @@ func newWorkListCmd(deps *Deps) *cobra.Command {
 	return cmd
 }
 
-// runWorkListByPhase enumerates work items whose lifecycle phase matches any of
-// the comma-separated phases, printing ref + phase + title for pickup.
-func runWorkListByPhase(cmd *cobra.Command, deps *Deps, workspaceID, phaseCSV string) error {
+func workListPhases(phaseCSV string) map[string]bool {
 	wanted := map[string]bool{}
 	for _, p := range strings.Split(phaseCSV, ",") {
 		if p = strings.ToLower(strings.TrimSpace(p)); p != "" {
 			wanted[p] = true
 		}
 	}
+	return wanted
+}
+
+// runWorkListByPhase enumerates work items whose lifecycle phase matches any of
+// the comma-separated phases, printing ref + phase + title for pickup.
+func runWorkListByPhase(cmd *cobra.Command, deps *Deps, workspaceID, phaseCSV string) error {
+	wanted := workListPhases(phaseCSV)
 	items, err := deps.Client.ListWorkItems(cmd.Context(), workspaceID)
 	if err != nil {
 		return apiExitError(deps, "work.list", err)
@@ -338,6 +349,9 @@ func overlayAcceptanceCriteriaDone(criteria []client.AcceptanceCriterion, review
 
 // specgate work context [ref]
 func newWorkContextCmd(deps *Deps) *cobra.Command {
+	var summary bool
+	var document string
+	var role string
 	cmd := &cobra.Command{
 		Use:   "context [ref]",
 		Short: "Fetch the context pack for a work item",
@@ -350,6 +364,21 @@ IDE agents should read it before editing implementation files.`,
 		Example: `  specgate work context CR-123 --json`,
 		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if summary || cmd.Flags().Changed("document") || cmd.Flags().Changed("role") {
+				if deps.Topology != config.ModeLocal {
+					return incompatibleCommand(deps, "work.context", "--summary and --document are Local-only")
+				}
+				if len(args) == 0 {
+					return localExitError(deps, "work.context", ErrWorkRefRequired)
+				}
+				if cmd.Flags().Changed("document") && document == "" {
+					return completionValidationError(deps, "work.context", "--document requires an exact indexed path")
+				}
+				if cmd.Flags().Changed("role") && !cmd.Flags().Changed("document") {
+					return completionValidationError(deps, "work.context", "--role requires --document")
+				}
+				return runLocalContextProjection(cmd, deps, args[0], document, role)
+			}
 			if deps.Topology == config.ModeLocal {
 				if len(args) == 0 {
 					return localExitError(deps, "work.context", ErrWorkRefRequired)
@@ -404,6 +433,10 @@ IDE agents should read it before editing implementation files.`,
 		},
 	}
 
+	cmd.Flags().BoolVar(&summary, "summary", false, "Return scope, criteria and pinned document index without document bodies (Local)")
+	cmd.Flags().StringVar(&document, "document", "", "Read one exact path from the pinned document index (Local)")
+	cmd.Flags().StringVar(&role, "role", "", "Select the artifact role when --document path occurs in multiple roles (Local)")
+	cmd.MarkFlagsMutuallyExclusive("summary", "document")
 	return cmd
 }
 

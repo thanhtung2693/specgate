@@ -81,6 +81,7 @@ export function ArtifactsPage({ reviewer, workspaceId, workItems = [], routeArti
   }
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- Follow browser navigation, including back/forward changes to the artifact query.
     setSelectedId(routeSelectedArtifactId)
   }, [routeSelectedArtifactId])
 

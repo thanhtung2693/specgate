@@ -80,6 +80,8 @@ var localCommandCapabilities = map[string]string{
 	"gates tasks submit-result": "ide_agent_gates",
 	"gates tasks dispatch":      "ide_agent_gates",
 	"work context":              "core",
+	"work verification":         "core",
+	"work resume":               "core",
 	"work create":               "core",
 	"work create-quick":         "core",
 	"work list":                 "core",

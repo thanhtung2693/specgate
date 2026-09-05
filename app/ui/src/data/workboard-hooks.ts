@@ -51,6 +51,7 @@ export function useWorkItemDetail(item: WorkItem, workspaceId: string, enabled: 
 
   useEffect(() => {
     if (!baseUrl) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Reset stale request state before loading data for the newly selected endpoint or workspace.
       setDetail(emptyRegistryDetail("ready"))
       return
     }
