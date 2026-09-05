@@ -532,8 +532,16 @@ func TestLocalReadinessThenHumanApprovalNeedNoHTTP(t *testing.T) {
 	if !strings.Contains(out.String(), `"peer_review":{"state":"passed"`) {
 		t.Fatalf("delivery status missing peer review state: %s", out.String())
 	}
+	var reviewed struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &reviewed); err != nil {
+		t.Fatal(err)
+	}
 	out.Reset()
-	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "delivery", "approve", work.Data.Key); code != output.ExitOK {
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "delivery", "approve", work.Data.Key, "--review-id", reviewed.Data.ID); code != output.ExitOK {
 		t.Fatalf("delivery approve exit = %d; output=%s", code, out.String())
 	}
 	if !strings.Contains(out.String(), `"human_decision":"approve"`) {

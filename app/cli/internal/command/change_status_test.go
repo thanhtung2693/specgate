@@ -578,13 +578,14 @@ func TestChangeStatusLocalPassingEvidenceAwaitsAcceptance(t *testing.T) {
 	deps, _, _, out := newFakeDeps(t)
 	stateDir, store, selection, work := newLocalChangeWork(t, deps)
 	submitLocalChangeDelivery(t, store, selection.Workspace.ID, work, "builder", "receipt-1")
+	reviewID := localReviewID(t, store, selection.Workspace.ID, work.Key)
 	closeLocalChangeStore(t, deps, stateDir, store)
 
 	got := runChangeStatusJSON(t, deps, out, work.Key)
 	if got.State != "awaiting_acceptance" || got.NextActor != "human_reviewer" || got.Decision != "Awaiting human acceptance" {
 		t.Fatalf("status = %#v", got)
 	}
-	if want := "specgate --yes change accept " + work.Key; got.NextCommand != want {
+	if want := "specgate --yes change accept " + work.Key + " --review-id " + reviewID; got.NextCommand != want {
 		t.Fatalf("next command = %q, want %q", got.NextCommand, want)
 	}
 }
@@ -611,7 +612,7 @@ func TestChangeStatusLocalApprovedDeliveryIsAccepted(t *testing.T) {
 	deps, _, _, out := newFakeDeps(t)
 	stateDir, store, selection, work := newLocalChangeWork(t, deps)
 	submitLocalChangeDelivery(t, store, selection.Workspace.ID, work, "builder", "receipt-1")
-	if err := store.DecideDelivery(t.Context(), selection.Workspace.ID, work.Key, "approve", "human", "accepted"); err != nil {
+	if err := store.DecideDelivery(t.Context(), selection.Workspace.ID, work.Key, "approve", "human", "accepted", localReviewID(t, store, selection.Workspace.ID, work.Key)); err != nil {
 		t.Fatal(err)
 	}
 	closeLocalChangeStore(t, deps, stateDir, store)
@@ -639,14 +640,7 @@ func TestChangeStatusLocalHumanCanAcceptEvidenceGapWithoutHidingIt(t *testing.T)
 	if review.Verdict != "failed" {
 		t.Fatalf("review = %#v, want failed evidence", review)
 	}
-	if err := store.DecideDelivery(
-		t.Context(),
-		selection.Workspace.ID,
-		work.Key,
-		"approve",
-		"human",
-		"reviewed the false negative",
-	); err != nil {
+	if err := store.DecideDelivery(t.Context(), selection.Workspace.ID, work.Key, "approve", "human", "reviewed the false negative", localReviewID(t, store, selection.Workspace.ID, work.Key)); err != nil {
 		t.Fatal(err)
 	}
 	closeLocalChangeStore(t, deps, stateDir, store)
@@ -693,7 +687,7 @@ func TestChangeStatusLocalHumanRejectionRequestsRework(t *testing.T) {
 	deps, _, _, out := newFakeDeps(t)
 	stateDir, store, selection, work := newLocalChangeWork(t, deps)
 	submitLocalChangeDelivery(t, store, selection.Workspace.ID, work, "builder", "receipt-1")
-	if err := store.DecideDelivery(t.Context(), selection.Workspace.ID, work.Key, "reject", "human", "rework"); err != nil {
+	if err := store.DecideDelivery(t.Context(), selection.Workspace.ID, work.Key, "reject", "human", "rework", localReviewID(t, store, selection.Workspace.ID, work.Key)); err != nil {
 		t.Fatal(err)
 	}
 	closeLocalChangeStore(t, deps, stateDir, store)

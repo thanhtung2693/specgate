@@ -86,6 +86,7 @@ export function ModelSettingsPanel({ onSaveStatusChange }: { onSaveStatusChange:
 
   useEffect(() => {
     if (!base) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Reset stale request state before loading data for the newly selected endpoint or workspace.
       setLoading(false)
       return
     }
@@ -116,6 +117,7 @@ export function ModelSettingsPanel({ onSaveStatusChange }: { onSaveStatusChange:
     if (!usesOpenRouter || openRouterModels.length > 0) return
 
     const controller = new AbortController()
+    // oxlint-disable-next-line react/set-state-in-effect -- Reset stale request state before loading data for the newly selected endpoint or workspace.
     setCatalogLoading(true)
     setCatalogError(null)
     fetchOpenRouterModels(controller.signal)
@@ -136,6 +138,7 @@ export function ModelSettingsPanel({ onSaveStatusChange }: { onSaveStatusChange:
     if (!embeddingUsesOpenRouter || openRouterEmbeddingModels.length > 0) return
 
     const controller = new AbortController()
+    // oxlint-disable-next-line react/set-state-in-effect -- Reset stale request state before loading data for the newly selected endpoint or workspace.
     setEmbeddingCatalogLoading(true)
     setEmbeddingCatalogError(null)
     fetchOpenRouterEmbeddingModels(controller.signal)

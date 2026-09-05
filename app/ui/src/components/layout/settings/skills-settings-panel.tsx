@@ -42,6 +42,7 @@ export function TeamSkillsPanel({ workspaceId }: { workspaceId?: string }) {
 
   useEffect(() => {
     if (!registryBase) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Reset fetched skill state or the editor draft when its external selection changes.
       setRegistrySkills([])
       setRegistrySkillsStatus("idle")
       return
@@ -244,6 +245,7 @@ function RegistrySkillDetailDialog({
 
   useEffect(() => {
     if (!open || !skill || !baseUrl) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Reset fetched skill state or the editor draft when its external selection changes.
       setDetail(null)
       setStatus("idle")
       setEditing(false)
@@ -283,6 +285,7 @@ function RegistrySkillDetailDialog({
 
   useEffect(() => {
     if (!detail) return
+    // oxlint-disable-next-line react/set-state-in-effect -- Reset fetched skill state or the editor draft when its external selection changes.
     setDescription(detail.description)
     setPrompt(detail.prompt)
     setSaveStatus("idle")
@@ -422,6 +425,7 @@ function RegistrySkillFormDialog({
 
   useEffect(() => {
     if (!state) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Reset fetched skill state or the editor draft when its external selection changes.
       setName("")
       setDescription("")
       setPrompt("")

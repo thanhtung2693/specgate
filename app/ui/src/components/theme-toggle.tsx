@@ -14,6 +14,7 @@ export function ThemeToggle() {
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- Keep the initial theme stable until the client theme provider has mounted.
     setMounted(true)
   }, [])
 

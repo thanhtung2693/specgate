@@ -118,6 +118,7 @@ export function useGovernanceStats(workspaceId?: string): GovernanceStatsView {
 
   useEffect(() => {
     if (!baseUrl) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Reset stale request state before loading data for the newly selected endpoint or workspace.
       setView({ status: "unconfigured", source: "registry" })
       return
     }

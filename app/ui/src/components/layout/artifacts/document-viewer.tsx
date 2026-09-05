@@ -219,6 +219,7 @@ export function ArtifactDocumentPreview({
   const canDiff = versions.status === "ready" && versions.items.length > 1 && hasPreviewContent
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- Reset document-specific preview state when the selected document or available content changes.
     setViewArtifactId(artifact.id)
     setMode("view")
     setViewMode("markdown")
@@ -226,10 +227,12 @@ export function ArtifactDocumentPreview({
   }, [artifact.id, document?.path])
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- Reset document-specific preview state when the selected document or available content changes.
     setCopiedDocument(false)
   }, [previewContent, viewMode])
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- Reset document-specific preview state when the selected document or available content changes.
     if (mode === "diff" && !canDiff) setMode("view")
   }, [canDiff, mode])
 

@@ -36,6 +36,7 @@ function GovernancePolicyReference() {
   useEffect(() => {
     levelsController.current?.abort()
     started.current = false
+    // oxlint-disable-next-line react/set-state-in-effect -- Invalidate fetched policy levels when the registry endpoint changes.
     setLevels({ status: "idle", items: [] })
     if (referenceOpenRef.current) {
       queueMicrotask(() => loadReferenceRef.current())
@@ -61,7 +62,9 @@ function GovernancePolicyReference() {
     loadLevels()
   }
 
-  loadReferenceRef.current = loadReference
+  useEffect(() => {
+    loadReferenceRef.current = loadReference
+  })
 
   const settled = levels.status === "ready" || levels.status === "error"
   const summary = settled

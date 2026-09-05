@@ -176,7 +176,7 @@ implementation:
 
 ```bash
 # Local
-specgate --yes change accept <work-ref> --note "Approved after review"
+specgate --yes change accept <work-ref> --review-id <review-id> --note "Approved after review"
 
 # Full
 specgate change accept <work-ref> --note "Approved after review"
@@ -186,7 +186,7 @@ If status is not ready for acceptance, request another implementation cycle:
 
 ```bash
 # Local
-specgate --yes change request-changes <work-ref> \
+specgate --yes change request-changes <work-ref> --review-id <review-id> \
   --note "Please address the failing check"
 
 # Full
@@ -194,7 +194,8 @@ specgate change request-changes <work-ref> \
   --note "Please address the failing check"
 ```
 
-Local mode requires `--yes` for either decision. Full mode confirms
+Local mode requires `--yes` and the reviewed status's `review_id` for either
+decision; status returns the complete command. Full mode confirms
 interactively when possible. Do not issue both decisions for the same
 completion.
 

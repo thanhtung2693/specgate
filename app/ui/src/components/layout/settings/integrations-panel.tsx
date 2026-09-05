@@ -61,6 +61,7 @@ export function IntegrationsSettingsPanel({ workspaceId }: { workspaceId?: strin
   }, [base, selectedWorkspace])
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- Reset stale request state before loading data for the newly selected endpoint or workspace.
     reloadIntegrations()
   }, [reloadIntegrations])
 

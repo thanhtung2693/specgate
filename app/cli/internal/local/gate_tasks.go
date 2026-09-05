@@ -124,6 +124,11 @@ func (s *Store) dispatchGateTasks(ctx context.Context, workspaceID, artifactID s
 			if err != nil {
 				return result, err
 			}
+			// Completed drift describes an earlier checkout. Explicit dispatch
+			// refreshes it; only outstanding drift tasks remain idempotent.
+			if row.ResultID.Valid && definition.Key == "spec_repo_drift" {
+				continue
+			}
 			if row.ResultID.Valid || expiresAt.After(now) {
 				current = true
 				break

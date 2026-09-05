@@ -445,11 +445,13 @@ export function ArtifactDetailDialog({
 
   useEffect(() => {
     if (previewDocument && !files.items.some((document) => document.path === previewDocument.path)) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Close a preview when its document disappears or its parent dialog closes.
       setPreviewDocument(undefined)
     }
   }, [files.items, previewDocument])
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- Close a preview when its document disappears or its parent dialog closes.
     if (!open) setPreviewDocument(undefined)
   }, [open])
 

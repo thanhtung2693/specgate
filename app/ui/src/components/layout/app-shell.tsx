@@ -279,6 +279,7 @@ function AccountActionDialog({
 
   useEffect(() => {
     if (action === "workspace") {
+      // oxlint-disable-next-line react/set-state-in-effect -- Synchronize workspace/dialog state with profile, registry, or route changes.
       setDraftWorkspaceId(profile.id ?? profile.name)
     }
   }, [action, profile.id, profile.name])
@@ -408,6 +409,7 @@ export function AppShell() {
     if (!validSectionIds.has(activeId)) return
     const requestedSection = settingsSectionFromParam(searchParams.get("settings"))
     if (!requestedSection) return
+    // oxlint-disable-next-line react/set-state-in-effect -- Synchronize workspace/dialog state with profile, registry, or route changes.
     setActiveSettingsSection(requestedSection)
     setSettingsOpen(true)
     const next = new URLSearchParams(searchParams)
@@ -417,6 +419,7 @@ export function AppShell() {
 
   useEffect(() => {
     if (!registryBase) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Synchronize workspace/dialog state with profile, registry, or route changes.
       setWorkspaceOptions([])
       setValidatedKnowledgeWorkspaceId(undefined)
       return
@@ -460,6 +463,7 @@ export function AppShell() {
 
   useEffect(() => {
     if (!profile && workspaceOptions.length > 0 && setupWorkspaceName === "My workspace") {
+      // oxlint-disable-next-line react/set-state-in-effect -- Synchronize workspace/dialog state with profile, registry, or route changes.
       setSetupWorkspaceName(workspaceOptions[0].name)
     }
   }, [profile, setupWorkspaceName, workspaceOptions])

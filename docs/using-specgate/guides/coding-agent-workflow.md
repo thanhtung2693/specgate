@@ -12,6 +12,34 @@ and generated work receipts, not a replacement home for framework documents.
 During preparation, the agent maps the files you selected with `repo_file` and
 shows their exact governance policy before asking to publish.
 
+## Resume Local work without losing scope
+
+Give the next agent the explicit work reference and ask it to start with:
+
+```bash
+specgate work resume LOCAL-123 --json
+```
+
+The packet keeps the work description, every acceptance criterion, the pinned
+document index, verification setup and next action together. For artifact-backed
+work, read the relevant indexed documents before editing:
+
+```bash
+specgate work context LOCAL-123 --document "specs/design.md" --json
+```
+
+Use the exact path returned by the index. This retrieves the approved snapshot,
+even when the file in Git has changed. The full `work context` remains available.
+Do not select a work item from its branch name or assume completing one work
+completes other work using the same spec.
+
+Before implementation, the human may pin the commands for `@check` criteria via
+`work verification <ref> --file checks.json --dry-run`, then confirm the same
+file with `--yes`. A pinned completion scaffold already contains those commands;
+do not replace a failing command with an easier one. Without a pin the workflow
+still works, but status explicitly says `unconfigured`. See the
+[contract input and limitations](../reference/cli.md#local-resume-and-verification-contracts).
+
 ## Before you start
 
 Install the CLI and IDE plugin at the scope that fits your project, then verify
@@ -60,6 +88,7 @@ row exists, or several need a human priority choice, the agent stops and asks.
 The agent starts from the Context Pack:
 
 ```bash
+specgate work show <work-ref> --json
 specgate work context <work-ref> --json
 specgate change status <work-ref> --json
 ```
@@ -69,6 +98,13 @@ risks, and artifact references. It outranks chat history and stale tracker or
 repository notes. The agent stops when approval is absent, the pack is stale,
 or the contract is ambiguous. It also stops without editing when Change status
 names a human reviewer, maintainer, or no next actor.
+
+Read the work description too: artifact-backed Local Context Packs do not
+include it, and multiple work items may slice the same approved artifact.
+On resume, `implementation` or `rework_requested` owned by the implementing
+agent may have no receipt yet or stale evidence from before the edits. Continue
+within approved scope, inspect existing edits, and rerun checks before submitting
+fresh evidence. Do not treat stale results as proof of the new implementation.
 
 ### 2. Implement and verify
 
@@ -139,7 +175,7 @@ Freshness: Stored receipt matches the current checkout.
 Acceptance criteria: 2 total · 2 met · 0 unmet · 0 unclear
 [met] Health endpoint returns 200 — integration test passed
 [met] Unhealthy dependency returns 503 — failure-path test passed
-Next (human_reviewer): specgate --yes change accept CR-123
+Next (human_reviewer): specgate --yes change accept CR-123 --review-id <review-id>
 ```
 
 The receipt means the work is awaiting your acceptance, not accepted or
@@ -156,9 +192,13 @@ language.
 
 Review the implementation and receipt, then run exactly one human decision:
 
+For Local mode, copy `review_id` from the status you reviewed (the handoff's
+`next_command` already includes it). Full mode uses the same verbs without
+`--review-id`.
+
 ```bash
-specgate --yes change accept <work-ref>
-specgate --yes change request-changes <work-ref> --note "<focused feedback>"
+specgate --yes change accept <work-ref> --review-id <review-id>
+specgate --yes change request-changes <work-ref> --review-id <review-id> --note "<focused feedback>"
 ```
 
 In Local mode, the handoff uses the work title, stable ID, and exact CLI
