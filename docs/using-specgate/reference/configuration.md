@@ -30,7 +30,8 @@ ownership and package safety are previewed before Local state changes.
 Project-scoped setup must run from the Git repository root so relative IDE
 paths cannot land in a nested directory. If plugin writing later fails, Local
 identity, workspace, store, and repository setup remain complete and the error
-provides the plugin install command to retry.
+provides the plugin install command to retry. Both retry and successful
+verification commands preserve `--project-local` when project scope was selected.
 
 ### Gateway credentials (Full mode)
 

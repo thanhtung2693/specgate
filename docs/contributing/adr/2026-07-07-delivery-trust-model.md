@@ -26,7 +26,7 @@ An implementation agent can claim that every acceptance criterion is complete,
 but a claim alone does not prove the implementation. Model judges help interpret
 subjective criteria, yet their verdicts vary with model quality, thinking level,
 and report wording. Objective criteria should use objective checks where
-possible, while humans retain explicit override authority during alpha.
+possible, while humans retain explicit override authority.
 
 SpecGate must make the provenance of each verdict visible without pretending
 that every signal has equal strength.

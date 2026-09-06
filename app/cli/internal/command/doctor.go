@@ -84,7 +84,8 @@ specgate model test`),
 					"workspace": map[string]any{"status": "ok", "slug": selection.Workspace.Slug},
 					"network":   map[string]any{"status": "not_required", "message": "Local mode uses no server or TCP service"},
 				}
-				for key, value := range buildLocalDoctorDiagnostics(cmd.Context(), deps, cfg, selectionErr) {
+				diagnostics := buildLocalDoctorDiagnostics(cmd.Context(), deps, cfg, selectionErr, selection.Workspace.Slug)
+				for key, value := range diagnostics {
 					result[key] = value
 				}
 				if deps.Printer.Mode() == output.ModeJSON {
@@ -97,7 +98,6 @@ specgate model test`),
 				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "User:"), selection.User.Username)
 				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Workspace:"), selection.Workspace.Slug)
 				fmt.Fprintf(deps.Stdout, "%s not required\n", label(deps, "Network:"))
-				diagnostics := buildLocalDoctorDiagnostics(cmd.Context(), deps, cfg, selectionErr)
 				for _, key := range []string{"repository", "shell", "plugins"} {
 					check := diagnostics[key].(doctorCheck)
 					checkLabel := map[string]string{"repository": "Repository:", "shell": "Shell:", "plugins": "Plugins:"}[key]

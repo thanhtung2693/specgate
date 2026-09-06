@@ -510,6 +510,11 @@ func deriveLocalChangeStatusFromStore(ctx context.Context, store *local.Store, w
 	if err != nil {
 		return changeStatusResult{}, nil, err
 	}
+	return deriveLocalChangeStatusWithContract(ctx, store, workspaceID, work, contract)
+}
+
+// Resume already loaded the contract for its packet; reuse that same snapshot.
+func deriveLocalChangeStatusWithContract(ctx context.Context, store *local.Store, workspaceID string, work local.WorkItem, contract local.VerificationContract) (result changeStatusResult, reportOut *local.DeliveryReport, resultErr error) {
 	defer func() {
 		if resultErr == nil {
 			result.VerificationContract = contract.Status

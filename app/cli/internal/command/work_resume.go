@@ -88,7 +88,7 @@ func newWorkResumeCmd(deps *Deps) *cobra.Command {
 		if err != nil {
 			return localExitError(deps, op, err)
 		}
-		status, report, err := deriveLocalChangeStatusFromStore(cmd.Context(), store, sel.Workspace.ID, view.Work)
+		status, report, err := deriveLocalChangeStatusWithContract(cmd.Context(), store, sel.Workspace.ID, view.Work, contract)
 		if err != nil {
 			return localExitError(deps, op, err)
 		}

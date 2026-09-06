@@ -77,6 +77,14 @@ Contracts are Local-only. Portable/v1 export refuses a workspace containing
 pinned contracts because Full import cannot preserve their enforcement. Use a
 Local database backup instead; existing unpinned portable exports are unchanged.
 
+## Local setup diagnostics
+
+Local `doctor` checks both global plugins and the current repository's root
+plugin files, even from a subdirectory. Diagnostics name each detected scope
+and return matching verification commands; they do not prove IDE session
+loading. A stale repository binding returns an explicit `workspace bind <slug>`
+for the durable Local selection, so recovery does not reuse the broken binding.
+
 ## Full-mode server selection
 
 Local CLI mode does not create an HTTP client or use a server. The precedence

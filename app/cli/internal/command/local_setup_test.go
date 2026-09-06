@@ -131,6 +131,8 @@ func TestLocalDoctorMarksMismatchedProjectBindingStale(t *testing.T) {
 	deps.WorkingDir = repo
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	stateDir := filepath.Join(t.TempDir(), "state")
+	home := t.TempDir()
+	deps.UserHomeDir = func() (string, error) { return home, nil }
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "init", "--mode", "local", "--local-dir", stateDir,
 		"--workspace-name", "Alpha", "--display-name", "Human", "--username", "human"); code != output.ExitOK {
 		t.Fatalf("init exit=%d output=%s", code, out.String())
@@ -155,5 +157,140 @@ func TestLocalDoctorMarksMismatchedProjectBindingStale(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), `"repository":{"status":"stale"`) || !strings.Contains(out.String(), "workspace bind") {
 		t.Fatalf("mismatched binding was not actionable: %s", out.String())
+	}
+	var diagnostic struct {
+		Data struct{ Repository struct{ Command string } }
+	}
+	if err := json.Unmarshal(out.Bytes(), &diagnostic); err != nil {
+		t.Fatal(err)
+	}
+	args := strings.Fields(diagnostic.Data.Repository.Command)
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), append([]string{"--json"}, args[1:]...)...); code != 0 {
+		t.Fatalf("doctor recovery failed: exit=%d %s", code, out.String())
+	}
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "doctor"); code != 0 || !strings.Contains(out.String(), `"repository":{"status":"ok"`) {
+		t.Fatalf("binding not repaired: %s", out.String())
+	}
+}
+
+func TestLocalInitPluginNextAndDoctorPreserveScope(t *testing.T) {
+	for _, agent := range []string{"cursor", "claude", "codex"} {
+		for _, scope := range []string{"global", "project"} {
+			t.Run(agent+"/"+scope, func(t *testing.T) {
+				repo, home := t.TempDir(), t.TempDir()
+				t.Chdir(repo)
+				if err := os.Mkdir(".git", 0755); err != nil {
+					t.Fatal(err)
+				}
+				deps, out := newTestDeps(t, "")
+				deps.WorkingDir = repo
+				deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
+				deps.UserHomeDir = func() (string, error) { return home, nil }
+				if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "init", "--mode", "local", "--local-dir", filepath.Join(t.TempDir(), "state"), "--workspace-name", "Alpha", "--display-name", "Human", "--username", "human", "--install-plugins", "--plugin-agent", agent, "--plugin-scope", scope); code != 0 {
+					t.Fatalf("init: %d %s", code, out.String())
+				}
+				var result struct{ Data struct{ Next string } }
+				if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+					t.Fatal(err)
+				}
+				args := strings.Fields(result.Data.Next)
+				out.Reset()
+				if code := command.ExecuteForCode(command.NewRootCommand(deps), append([]string{"--json"}, args[1:]...)...); code != 0 {
+					t.Errorf("init next failed: %d %s", code, out.String())
+				}
+				// Doctor must find the project install even from a child directory.
+				if err := os.Mkdir("child", 0755); err != nil {
+					t.Fatal(err)
+				}
+				deps.WorkingDir = filepath.Join(repo, "child")
+				t.Chdir(deps.WorkingDir)
+				out.Reset()
+				if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "doctor"); code != 0 {
+					t.Fatal(out.String())
+				}
+				var diagnostic struct {
+					Data struct {
+						Plugins struct{ Status, Message, Command string }
+					}
+				}
+				if err := json.Unmarshal(out.Bytes(), &diagnostic); err != nil {
+					t.Fatal(err)
+				}
+				if diagnostic.Data.Plugins.Status != "ok" || !strings.Contains(diagnostic.Data.Plugins.Message, agent) {
+					t.Errorf("installed plugin not detected: %s", out.String())
+				}
+				next := diagnostic.Data.Plugins.Command
+				if scope == "project" {
+					root, _ := config.FindProjectRoot(repo)
+					prefix := "cd '" + root + "' && "
+					if !strings.HasPrefix(next, prefix) {
+						t.Fatalf("nested recovery has no repository root: %s", next)
+					}
+					next = strings.TrimPrefix(next, prefix)
+					t.Chdir(repo)
+					deps.WorkingDir = repo
+				}
+				args = strings.Fields(next)
+				out.Reset()
+				if code := command.ExecuteForCode(command.NewRootCommand(deps), append([]string{"--json"}, args[1:]...)...); code != 0 {
+					t.Fatalf("doctor next failed: %d %s", code, out.String())
+				}
+			})
+		}
+	}
+}
+
+func TestLocalInitPluginFailureKeepsRepairScope(t *testing.T) {
+	for _, scope := range []string{"global", "project"} {
+		t.Run(scope, func(t *testing.T) {
+			repo, home := t.TempDir(), t.TempDir()
+			t.Chdir(repo)
+			if err := os.Mkdir(".git", 0755); err != nil {
+				t.Fatal(err)
+			}
+			deps, out := newTestDeps(t, "")
+			deps.WorkingDir = repo
+			deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
+			calls := 0
+			deps.UserHomeDir = func() (string, error) {
+				calls++
+				if calls == 2 {
+					root := home
+					if scope == "project" {
+						root = repo
+					}
+					// Simulate an unrelated file appearing after the successful preview.
+					path := filepath.Join(root, ".cursor", "rules", "using-specgate.mdc")
+					if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(path, []byte("user-owned rule"), 0600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				return home, nil
+			}
+			code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "init", "--mode", "local", "--local-dir", filepath.Join(t.TempDir(), "state"), "--workspace-name", "Alpha", "--display-name", "Human", "--username", "human", "--install-plugins", "--plugin-agent", "cursor", "--plugin-scope", scope)
+			var result struct {
+				Error struct {
+					Details struct {
+						Next       string
+						LocalSetup string `json:"local_setup"`
+					}
+				}
+			}
+			if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+				t.Fatal(err)
+			}
+			want := "specgate plugins install --agent cursor"
+			if scope == "project" {
+				want += " --project-local"
+			}
+			if code == 0 || result.Error.Details.LocalSetup != "complete" || result.Error.Details.Next != want {
+				t.Fatalf("retry scope lost: %d %s", code, out.String())
+			}
+		})
 	}
 }

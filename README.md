@@ -41,8 +41,8 @@ and review history together.
 > before exposing it beyond that boundary — see
 > [Trust and security](docs/using-specgate/concepts/trust-and-security.md).
 > Start with the CLI. Use the web UI to inspect artifacts, review work, manage
-> settings, or use governance chat. SpecGate is pre-1.0: APIs and interfaces can
-> change between minor versions.
+> settings, or use governance chat. Review release notes before updating between
+> minor versions because APIs and interfaces can evolve.
 
 ## Why SpecGate?
 
@@ -173,6 +173,7 @@ surface or web UI directly to the public internet.
   [contracts](docs/contributing/contracts.md).
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
+- [Changelog](CHANGELOG.md)
 
 ## Roadmap
 
