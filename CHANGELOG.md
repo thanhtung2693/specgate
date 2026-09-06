@@ -3,9 +3,9 @@
 All notable user-facing changes are recorded here. SpecGate follows semantic
 versioning.
 
-## [0.1.5] - 2026-09-06
+## [0.1.6] - 2026-09-06
 
-`v0.1.5` is the supported stable successor to `v0.1.4`.
+`v0.1.6` is the supported stable successor to `v0.1.4`.
 
 ### Added
 
@@ -37,7 +37,7 @@ versioning.
 
 ### Upgrade from 0.1.4
 
-- Run `specgate update`, or rerun the public installer. `v0.1.5` sorts after
+- Run `specgate update`, or rerun the public installer. `v0.1.6` sorts after
   `v0.1.4`, so the CLI update check and installer select it normally.
 - Existing Local SQLite stores open in place; the new verification-contract
   table is additive. Existing work remains `unconfigured` until a human pins a
@@ -46,4 +46,4 @@ versioning.
   new IDE session. Update native Codex or Claude plugins through their native
   plugin manager.
 
-[0.1.5]: https://github.com/thanhtung2693/specgate/compare/v0.1.4...v0.1.5
+[0.1.6]: https://github.com/thanhtung2693/specgate/compare/v0.1.4...v0.1.6
