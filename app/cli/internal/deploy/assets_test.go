@@ -54,7 +54,7 @@ func TestLocalApplianceContainsFullRuntime(t *testing.T) {
 	dockerfile := readRepoFile(t, "../../../../docker/Dockerfile.local")
 	for _, want := range []string{
 		"pgvector/pgvector:0.8.5-pg18-trixie",
-		"golang:1.26.5-bookworm",
+		"golang:1.26.6-bookworm",
 		"python:3.13-slim-trixie",
 		"ghcr.io/astral-sh/uv:0.11.15",
 		"github.com/tianon/gosu@1.19",

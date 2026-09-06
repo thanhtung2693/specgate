@@ -3,9 +3,9 @@
 All notable user-facing changes are recorded here. SpecGate follows semantic
 versioning.
 
-## [0.1.6] - 2026-09-06
+## [0.1.7] - 2026-09-06
 
-`v0.1.6` is the supported stable successor to `v0.1.4`.
+`v0.1.7` is the supported stable successor to `v0.1.4`.
 
 ### Added
 
@@ -35,9 +35,15 @@ versioning.
   to use documented skills directories.
 - UI, CLI, agent, and Doc Registry dependencies were refreshed.
 
+### Security
+
+- The Local appliance now builds Doc Registry with Go `1.26.6`, removing the
+  fixed High Go standard-library vulnerabilities that blocked release image
+  scanning.
+
 ### Upgrade from 0.1.4
 
-- Run `specgate update`, or rerun the public installer. `v0.1.6` sorts after
+- Run `specgate update`, or rerun the public installer. `v0.1.7` sorts after
   `v0.1.4`, so the CLI update check and installer select it normally.
 - Existing Local SQLite stores open in place; the new verification-contract
   table is additive. Existing work remains `unconfigured` until a human pins a
@@ -46,4 +52,4 @@ versioning.
   new IDE session. Update native Codex or Claude plugins through their native
   plugin manager.
 
-[0.1.6]: https://github.com/thanhtung2693/specgate/compare/v0.1.4...v0.1.6
+[0.1.7]: https://github.com/thanhtung2693/specgate/compare/v0.1.4...v0.1.7
