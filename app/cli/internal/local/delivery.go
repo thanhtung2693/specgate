@@ -31,6 +31,8 @@ var ErrPreconditionNotMet = errors.New("governance precondition not met")
 // paths used to report it as an unavailable service instead.
 var ErrDecisionRecorded = errors.New("decision already recorded")
 
+var ErrReviewChanged = errors.New("delivery review changed")
+
 type DeliveryReview struct {
 	ID            string `json:"id"`
 	WorkID        string `json:"work_id"`
@@ -62,7 +64,7 @@ type DeliveryReport struct {
 	Body map[string]any `json:"body"`
 }
 
-func (s *Store) SubmitDelivery(ctx context.Context, workspaceID, ref string, body map[string]any) (DeliveryReview, error) {
+func (s *Store) SubmitDelivery(ctx context.Context, workspaceID, ref string, body map[string]any, repoRoots ...string) (DeliveryReview, error) {
 	work, err := s.GetWork(ctx, workspaceID, ref)
 	if err != nil {
 		return DeliveryReview{}, err
@@ -118,6 +120,17 @@ func (s *Store) SubmitDelivery(ctx context.Context, workspaceID, ref string, bod
 	if currentDigest != work.ContextDigest {
 		return DeliveryReview{}, fmt.Errorf("work context changed; rerun `specgate work context %s --json`", work.Key)
 	}
+	contract, err := getVerificationContract(ctx, tx, work)
+	if err != nil {
+		return DeliveryReview{}, err
+	}
+	root := ""
+	if len(repoRoots) > 0 {
+		root = repoRoots[0]
+	}
+	if err := validateVerificationReport(contract, root, body); err != nil {
+		return DeliveryReview{}, err
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO delivery_reports(id, workspace_id, work_id, context_digest, body, created_at) VALUES (?, ?, ?, ?, ?, ?)`, reportID, workspaceID, work.ID, work.ContextDigest, encoded, now); err != nil {
 		return DeliveryReview{}, err
 	}
@@ -133,7 +146,7 @@ func (s *Store) SubmitDelivery(ctx context.Context, workspaceID, ref string, bod
 	return review, nil
 }
 
-func (s *Store) DecideDelivery(ctx context.Context, workspaceID, ref, decision, actor, note string) error {
+func (s *Store) DecideDelivery(ctx context.Context, workspaceID, ref, decision, actor, note, reviewID string) error {
 	if decision != "approve" && decision != "reject" {
 		return fmt.Errorf("delivery decision must be approve or reject")
 	}
@@ -156,6 +169,9 @@ func (s *Store) DecideDelivery(ctx context.Context, workspaceID, ref, decision, 
 	}
 	if review.HumanDecision != "" {
 		return fmt.Errorf("%w: delivery decision is already recorded for %s; submit corrected evidence before another human decision", ErrDecisionRecorded, work.Key)
+	}
+	if strings.TrimSpace(reviewID) == "" || reviewID != review.ID {
+		return fmt.Errorf("%w: read `specgate change status %s --json` and decide that review with --review-id", ErrReviewChanged, work.Key)
 	}
 	actor = strings.TrimSpace(actor)
 	if actor == "" {
@@ -429,14 +445,19 @@ func validateLocalPeerCriteria(body, completion map[string]any, requiredCriteria
 // handoff bundle can be re-derived away from the store that produced it.
 func DeliveryVerdict(body map[string]any, requiredCriteria []string) (string, string) {
 	satisfied := make(map[string]bool, len(requiredCriteria))
+	seen := make(map[string]bool, len(requiredCriteria))
 	criteria, _ := body["criteria"].([]any)
 	for _, raw := range criteria {
 		criterion, _ := raw.(map[string]any)
+		id := strings.TrimSpace(fmt.Sprint(criterion["criterion_id"]))
+		if !isLocalCriterionID(id, len(requiredCriteria)) || seen[id] {
+			return "failed", "completion needs one evidence-backed satisfied claim for each acceptance criterion"
+		}
+		seen[id] = true
 		if strings.TrimSpace(fmt.Sprint(criterion["claim"])) != "satisfied" {
 			continue
 		}
-		id := strings.TrimSpace(fmt.Sprint(criterion["criterion_id"]))
-		if !isLocalCriterionID(id, len(requiredCriteria)) || satisfied[id] || !hasDeliveryEvidence(criterion) {
+		if !hasDeliveryEvidence(criterion) {
 			return "failed", "completion needs one evidence-backed satisfied claim for each acceptance criterion"
 		}
 		satisfied[id] = true

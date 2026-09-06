@@ -199,7 +199,7 @@ test("SEO metadata is canonical, crawlable, and structured", () => {
   assert.match(html, /<main id="top" aria-labelledby="page-title" tabindex="-1">/);
   assert.match(html, /<h1 id="page-title"/);
   assert.match(css, /\.skip-link:focus/);
-  assert.match(sitemap, /<lastmod>2026-07-23<\/lastmod>/);
+  assert.match(sitemap, /<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/);
 
   const jsonLd = html.match(/<script type="application\/ld\+json">\s*(?<json>[\s\S]*?)\s*<\/script>/)?.groups?.json;
   assert.ok(jsonLd);
@@ -310,10 +310,12 @@ test("terminal presents the current four-part value path", () => {
   assert.match(js, /specgate work list --phase ready/);
   assert.match(js, /specgate work context <work-ref>/);
   assert.match(js, /specgate delivery report <work-ref> --init/);
-  assert.match(js, /specgate delivery submit <work-ref> --file \.specgate\/completion-<ref>\.json --run-checks/);
+  assert.match(js, /specgate delivery submit <work-ref> --file <completion-path> --run-checks --yes/);
+  assert.match(js, /returned data\.path/);
+  assert.match(js, /specgate work resume <work-ref> --json/);
   assert.match(js, /specgate delivery peer-review <work-ref> --init/);
   assert.match(js, /specgate delivery status <work-ref> --detail/);
-  assert.match(js, /specgate --yes delivery approve <work-ref>/);
+  assert.match(js, /specgate --yes change accept <work-ref> --review-id <review-id>/);
   assert.match(js, /Human approval remains required/);
   assert.doesNotMatch(js, /Delivery verdict: PASS/);
   assert.match(js, /specgate stats --days 30/);

@@ -117,6 +117,7 @@ export function SettingsModal({
   useEffect(() => {
     if (!open) {
       initialMobileSection.current = null
+      // oxlint-disable-next-line react/set-state-in-effect -- Reset the mobile pane when the externally controlled settings dialog closes or opens.
       setMobileSectionOpen(false)
       return
     }

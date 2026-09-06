@@ -14,7 +14,7 @@ authority.
 ## Context
 
 SpecGate has connection, resource-selection, webhook, tracker-adapter, and
-delivery-link plumbing for GitHub, GitLab, and Linear. The pre-alpha behavior
+delivery-link plumbing for GitHub, GitLab, and Linear. The earlier behavior
 groups those capabilities together and exposes broader claims than the normal
 setup path can satisfy. A managed webhook receives only selected-resource PR/MR
 or Linear events; it does not ingest provider CI state or create CI assurance.
@@ -162,4 +162,4 @@ not enough for a release that changes the team-integration contract.
 - Enhanced evidence can use an exact-completion merged-PR or merged-MR
   observation without misrepresenting CI.
 - Existing generic tracker and dormant CI code outside this boundary should be
-  removed rather than advertised as experimental first-release behavior.
+  removed rather than advertised as a first-release capability.

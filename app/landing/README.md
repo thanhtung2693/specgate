@@ -38,10 +38,12 @@ Use the manual workflow trigger to redeploy unchanged landing-page files.
 - `fonts/` - self-hosted Host Grotesk and Commit Mono assets plus their OFL licenses
 
 The terminal carousel demonstrates four current CLI value paths: publish an
-artifact after an explicit preview, load an approved Context Pack, submit
+artifact after an explicit preview, resume Local work and read pinned documents, submit
 delivery evidence with locally re-run checks and independent peer review before
 the human delivery decision, and inspect observed governance signals. Keep
-command shapes aligned with `specgate --help` and the user documentation. The
+command shapes aligned with `specgate --help` and the user documentation. Use
+returned scaffold paths and the exact review ID for Local acceptance. Demo
+outputs are abbreviated illustrations, not captured CLI transcripts. The
 initial Publish frame is present in HTML for no-JavaScript use; `script.js`
 enhances it with accessible tabs and plain-text playback.
 

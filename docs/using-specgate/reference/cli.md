@@ -10,6 +10,81 @@ For exact flags in your installed version:
 specgate <command> --help
 ```
 
+## Local resume and verification contracts
+
+`work resume <ref> --json` is a read-only Local pickup packet: complete work
+description and acceptance criteria, the approved document index and digests,
+verification contract, and current change status (including the next actor,
+missing evidence and next command). A reference is mandatory; no branch-name or
+most-recent-work inference occurs. Different work items on one spec remain
+separate. Receipt freshness is checked when a receipt exists.
+
+`work context <ref> --summary --json` returns scope and the pinned document
+index without document bodies. Read a specific indexed snapshot with
+`work context <ref> --document "specs/design.md" --json`. If one path has
+multiple indexed roles, it refuses the ambiguous read; pass `--role <role>`
+from the index. These Local-only flags
+are mutually exclusive. The summary is an index, not permission to skip
+non-goals or other constraints in the indexed documents. Existing unflagged
+Context Packs and their digests are unchanged. Document reads use stored
+approved content, not the current checkout or a newer artifact version.
+
+For automated criteria, optionally pin reviewed check commands before the
+first completion report:
+
+```bash
+specgate work verification LOCAL-123 --json
+specgate work verification LOCAL-123 --file checks.json --dry-run --json
+specgate --yes work verification LOCAL-123 --file checks.json --json
+```
+
+The input is:
+
+```json
+{
+  "context_digest": "<digest from work context>",
+  "shell": "sh",
+  "checks": [{"name": "unit", "command": "go test ./...", "cwd": "."}]
+}
+```
+
+Each name must match an existing `@check:<name>` acceptance-criterion binding;
+every bound name must occur exactly once. Commands must be nonempty. `cwd`
+defaults to `.`, is relative to the Git checkout root, and must be an existing
+directory inside it (symlink escapes are rejected). Pin from the target
+repository. Only `sh` is supported; commands are not sandboxed.
+
+The contract is immutable per work and bound to its Context Pack digest.
+Repinning, pinning after a report, or pinning delivered work is a conflict. To
+change the contract, create replacement work. Dry-run validates without
+pinning; a real pin requires confirmation (`--yes` in automation).
+
+`delivery report <ref> --init` copies pinned commands/cwd and
+`verification_contract_digest`. Submit rejects changed, duplicate, extra, or
+missing checks before execution and checks the contract again when persisting.
+`--run-checks` executes pinned commands relative to the checkout root even from
+a subdirectory. Without a pin, legacy command execution is unchanged.
+
+Status, resume and acceptance output distinguish `pinned` from `unconfigured`.
+Pinning is not a test pass: reported checks remain agent-reported unless
+SpecGate reruns them. Failed/skipped checks remain visible; a human decision
+does not erase those gaps. This prevents accidental command substitution
+through the CLI, not weak test design or tampering by someone who controls the
+Local database. Local user names are cooperative attribution, not proof that a
+human operated the CLI.
+
+Contracts are Local-only. Portable/v1 export refuses a workspace containing
+pinned contracts because Full import cannot preserve their enforcement. Use a
+Local database backup instead; existing unpinned portable exports are unchanged.
+
+## Local setup diagnostics
+
+Local `doctor` checks both global plugins and the current repository's root
+plugin files, even from a subdirectory. Diagnostics name each detected scope
+and return matching verification commands; they do not prove IDE session
+loading. A stale repository binding returns an explicit `workspace bind <slug>`
+for the durable Local selection, so recovery does not reuse the broken binding.
+
 ## Full-mode server selection
 
 Local CLI mode does not create an HTTP client or use a server. The precedence
@@ -164,13 +239,23 @@ specgate --yes change approve <artifact-id> --title <title> --ac <criterion> [--
 specgate change submit <ref> [--file <completion.json>] [--run-checks] [--skip-evidence-check]
 
 # Local: explicit human assertion is required.
-specgate --yes change accept <ref> [--note <note>]
-specgate --yes change request-changes <ref> [--note <note>]
+specgate --yes change accept <ref> --review-id <review-id> [--note <note>]
+specgate --yes change request-changes <ref> --review-id <review-id> [--note <note>]
 
 # Full: interactive terminals confirm; non-interactive callers may run these directly.
 specgate change accept <ref> [--note <note>]
 specgate change request-changes <ref> [--note <note>]
 ```
+
+Local decisions require `--review-id` from the status you reviewed, including
+the expert `delivery approve|reject` commands. Status prints a complete command.
+If a newer report arrived, the decision exits `4` (conflict); inspect the new
+evidence before deciding again. Full mode does not accept this Local-only flag.
+
+`work list --phase` accepts comma-separated phases in both modes, ignoring case
+and surrounding whitespace. `work list --all-workspaces` is a Full-only
+aggregate; Local refuses it instead of silently listing only the selected
+workspace. Select each Local workspace explicitly when inspecting its work.
 
 For `change submit`, a file-safe `<ref>` defaults to
 `.specgate/completion-<safe-ref>.json`. A file-safe ref contains only letters, digits, `-`, and `_`. An unsafe ref must pass `--file` with a completion file path.
@@ -224,12 +309,14 @@ object in `data`.
 | `decision` | Recorded human delivery decision, if any. |
 | `receipt` | Recorded Git receipt summary, if any. |
 | `freshness` | Whether the stored evidence was checked against the current checkout. |
+| `verification_contract` | Local verification setup: `pinned` means the exact criterion-bound commands and directories were fixed before reporting; `unconfigured` means checks remain self-selected. Omitted in Full mode. A pin does not itself prove a check passed. |
 | `next_actor` | Actor expected to take the next action: `implementing_agent`, `human_reviewer`, `maintainer`, or `none`. |
 | `missing` | Always an array of named requirements still missing; empty after acceptance. |
 | `guidance` | Optional human rework note, preserved for the implementing agent after `request-changes`. |
 | `stale` | Whether peer-review evidence is stale or the current checkout differs from the stored Git receipt. |
 | `stale_reason` | Optional; omitted unless `stale` is true. |
 | `next_command` | Exact next CLI command for the returned state and mode. |
+| `review_id` | Local delivery review shown by this payload; pass it as `--review-id` when accepting or requesting changes. Omitted before a report exists. |
 
 `evidence`, `assurance`, `decision`, and `receipt` are separate summary labels:
 evidence says what was reported or reviewed, assurance says how it was assessed,
@@ -248,7 +335,7 @@ SpecGate-produced assurance.
 | `implementation` | An implementing agent must add or repair delivery evidence. With no report, `next_command` creates the scaffold; after a failed review, it resubmits the existing completion with locally reproduced checks. |
 | `awaiting_review` | Evidence needs human interpretation; `next_actor` is the human reviewer and `next_command` opens the detailed criterion review, which ends with the exact accept and request-changes commands. |
 | `review_pending` | A newer completion has not received its own delivery review; the implementing agent runs the returned review command before any human decision. |
-| `awaiting_acceptance` | Evidence passed but a human must decide. Local emits `specgate --yes change accept <ref>`; Full emits `specgate change accept <ref>`. |
+| `awaiting_acceptance` | Evidence passed but a human must decide. Local emits `specgate --yes change accept <ref> --review-id <review-id>`; Full emits `specgate change accept <ref>`. |
 | `accepted` | A human accepted the current reviewed completion. The evidence label still discloses an advisory or false-negative assessment; no actor is pending and the next command is the audit trail. |
 | `rework_requested` | A human requested rework. Follow `guidance`, revise the existing completion, then run `next_command` to submit it for a new review cycle. |
 | `blocked` | A maintainer must restore delivery policy; the next command opens detailed delivery status. |
@@ -409,6 +496,13 @@ semantic result is submitted. That is a pending readiness state, never a pass.
 receipt in both modes; `created_task_ids` only records what that invocation
 created and may be empty on an idempotent repeat.
 
+In Local mode, explicit `gates tasks dispatch` refreshes a completed
+`spec_repo_drift` check even for an unchanged artifact: the repository may have
+changed since its earlier result. It reuses an unexpired pending drift task and
+completed document-only checks. Readiness reads use the newest drift task, not
+an older passing result. Dispatch does not snapshot the checkout; the IDE agent
+must examine the current repository when completing the task.
+
 `work create-quick <title>` uses the title as the description when
 `--description` is omitted, so the shortest quickstart form still satisfies the
 server contract. Repeat `--ac` on `work create-quick` or feature-backed
@@ -492,6 +586,9 @@ the text says otherwise.
 | `delivery handoff show --file <path>` | Render a committed review request read-only, without a workspace or server |
 
 Noninteractive callers must add `--yes` to the commands that record a decision.
+Local `delivery approve` and `delivery reject` also require `--review-id` from
+the status being reviewed; Full mode does not accept that flag. Use the exact
+next command printed by status.
 
 ### Completion scaffold
 
@@ -871,7 +968,11 @@ or summaries:
 
 `specgate doctor` checks the active topology. In Local mode it verifies the
 embedded store, selected user, and workspace without a server or TCP
-connection. In Full mode it checks server and capability compatibility, then
+connection, then reports repository binding, `sh`, and optional IDE-plugin
+files separately. A stale repository binding is actionable; absent optional
+plugin files do not make CLI-only Local mode unhealthy. Plugin files do not
+prove a running IDE loaded them—restart it and verify from a new session. In
+Full mode it checks server and capability compatibility, then
 prints setup state for identity, workspace source, model settings, Knowledge
 embeddings, workspace membership, and IDE plugin follow-up.
 

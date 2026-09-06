@@ -10,13 +10,14 @@ a few days and will coordinate a fix and disclosure timeline with you.
 
 ## Supported versions
 
-SpecGate is pre-1.0. Security fixes land on the latest `main`; there are no maintained
+Security fixes land on the latest `main`; there are no maintained
 release branches yet.
 
 ## Scope
 
-SpecGate's Doc Registry is designed as an **internal/network-trusted** service (no HTTP
-auth by design). Reports about the absence of HTTP authentication on Doc Registry are
+SpecGate's Doc Registry is designed as an **internal/network-trusted** service.
+The Full appliance supports optional gateway credentials, but direct service
+access still requires a trusted boundary. Reports about the absence of HTTP authentication on Doc Registry are
 out of scope; reports about unintended exposure, credential leakage, injection, or
 privilege issues are in scope.
 

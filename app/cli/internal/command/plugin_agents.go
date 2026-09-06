@@ -21,7 +21,7 @@ type pluginAgentAdapter struct {
 	install       func(*pluginInstaller) error
 	inspectNative func(string) nativePluginInspection
 	nativeRemoval func(string) string
-	health        func(string, bool, *client.PluginPackage) pluginAgentHealth
+	health        func(string, bool, *client.PluginPackage, ...string) pluginAgentHealth
 	installed     func(string) bool
 	remove        func(*pluginRemover) error
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/deploy"
 	"github.com/specgate/specgate/app/cli/internal/fsutil"
+	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
@@ -446,7 +447,18 @@ func anchored(excerpt string) (string, string) {
 // untouched. The corrected body is submitted either way — an observed failure
 // is honest data for the delivery review, which already fails the verdict on any
 // failed check.
-func executeCompletionChecks(ctx context.Context, deps *Deps, body map[string]any) {
+// Observation metadata belongs to this execution, never to the input file.
+// Clear it once at ingress, not during validation after --run-checks.
+func clearCheckObservations(body map[string]any) {
+	checks, _ := body["checks"].([]any)
+	for _, raw := range checks {
+		entry, _ := raw.(map[string]any)
+		delete(entry, "source")
+		delete(entry, "claimed_status")
+	}
+}
+
+func executeCompletionChecks(ctx context.Context, deps *Deps, body map[string]any, repoRoots ...string) {
 	runner := deps.RunCheckCommand
 	if runner == nil {
 		runner = defaultRunCheckCommand
@@ -463,7 +475,18 @@ func executeCompletionChecks(ctx context.Context, deps *Deps, body map[string]an
 		if command == "" || claimed == "skipped" {
 			continue
 		}
-		exitCode, combined := runner(ctx, command)
+		executable := command
+		if len(repoRoots) > 0 {
+			cwd, _ := entry["cwd"].(string)
+			_, dir, err := local.ResolveVerificationCwd(repoRoots[0], cwd)
+			if err != nil {
+				entry["status"] = "fail"
+				entry["detail"] = err.Error()
+				continue
+			}
+			executable = "cd " + shellQuote(dir) + " && " + command
+		}
+		exitCode, combined := runner(ctx, executable)
 		observed := "pass"
 		if exitCode != 0 {
 			observed = "fail"

@@ -23,6 +23,16 @@ specgate init --mode local --no-input \
 specgate init --mode full --no-input
 ```
 
+Local initialization can optionally install IDE integration files in the same
+command. Use `--install-plugins --plugin-agent <agent>` and choose
+`--plugin-scope global|project`; `global` is the existing default. Plugin
+ownership and package safety are previewed before Local state changes.
+Project-scoped setup must run from the Git repository root so relative IDE
+paths cannot land in a nested directory. If plugin writing later fails, Local
+identity, workspace, store, and repository setup remain complete and the error
+provides the plugin install command to retry. Both retry and successful
+verification commands preserve `--project-local` when project scope was selected.
+
 ### Gateway credentials (Full mode)
 
 An appliance shared by several developers issues each of them a credential. The
@@ -43,7 +53,10 @@ credentials needs none, which is the default.
 Switching topology clears the other mode's server/deployment or Local-only
 identity and project bindings. Create or select an identity after setup in the
 new mode. It does not delete Local SQLite state; use a portable export before
-moving Local history into Full mode.
+moving Local history into Full mode. Portable export refuses a workspace with
+pinned verification contracts because Full mode cannot preserve their
+enforcement. Back up that Local store instead; switching modes does not migrate
+its history or remove the contracts.
 
 Local state defaults to the OS SpecGate config location. Use `--local-dir` at
 initialization to select another store, or `SPECGATE_LOCAL_DIR` for a
@@ -66,7 +79,8 @@ specgate --yes change approve <artifact-id> --title "Implement it" \
 specgate work context <work-ref> --json
 # IDE agent implements only the Context Pack, then submits evidence:
 specgate change submit <work-ref> --file completion.json
-specgate --yes change accept <work-ref>
+# Use review_id from the returned status (or change status --json).
+specgate --yes change accept <work-ref> --review-id <review-id>
 specgate audit <work-ref> --json
 specgate stats --json
 ```
@@ -89,7 +103,11 @@ Codex, Claude Code, and Cursor plugin package; for example,
 `specgate plugins install --agent codex --project-local` does not contact a
 plugin registry. Project-local installation writes only the selected IDE's
 managed plugin files; it never changes repository instructions such as
-`AGENTS.md`.
+`AGENTS.md`. `specgate doctor` treats those plugins as optional: a missing
+plugin does not make CLI-only Local mode unhealthy. It reports repository
+binding, `sh` availability, and plugin-file health as distinct diagnostics.
+Plugin files on disk do not prove an already-running IDE session loaded them;
+restart the IDE and verify from a new session.
 Before `specgate init` selects a topology, plugin install and doctor also use
 that embedded package. This lets an IDE bootstrap finish on a clean machine
 without a running appliance. An explicit `--registry`, `--server`, or

@@ -58,6 +58,7 @@ func newDeliveryReportCmd(deps *Deps) *cobra.Command {
 				if err != nil {
 					return err
 				}
+				clearCheckObservations(body)
 				if err := validateCompletionReport(deps, "delivery.report", body, false); err != nil {
 					return err
 				}
@@ -406,15 +407,16 @@ func latestCompletionFeedback(events []client.GovernanceFeedbackEvent) (client.G
 // `delivery report --init`. JSON has no comments, so example entries carry
 // empty-string values that show the expected shape.
 type completionTemplate struct {
-	EventType       string                        `json:"event_type"`
-	ChangeRequestID string                        `json:"change_request_id"`
-	Summary         string                        `json:"summary"`
-	Agent           map[string]string             `json:"agent"`
-	ContextDigest   string                        `json:"context_digest,omitempty"`
-	AffectedFiles   []string                      `json:"affected_files"`
-	GitReceipt      gitReceipt                    `json:"git_receipt"`
-	Checks          []completionCheckTemplate     `json:"checks"`
-	Criteria        []completionCriterionTemplate `json:"criteria"`
+	VerificationContractDigest string                        `json:"verification_contract_digest,omitempty"`
+	EventType                  string                        `json:"event_type"`
+	ChangeRequestID            string                        `json:"change_request_id"`
+	Summary                    string                        `json:"summary"`
+	Agent                      map[string]string             `json:"agent"`
+	ContextDigest              string                        `json:"context_digest,omitempty"`
+	AffectedFiles              []string                      `json:"affected_files"`
+	GitReceipt                 gitReceipt                    `json:"git_receipt"`
+	Checks                     []completionCheckTemplate     `json:"checks"`
+	Criteria                   []completionCriterionTemplate `json:"criteria"`
 }
 
 func runLocalDeliveryReportInit(cmd *cobra.Command, args []string, deps *Deps, path string, force bool) error {
@@ -466,6 +468,17 @@ func runLocalDeliveryReportInit(cmd *cobra.Command, args []string, deps *Deps, p
 		})
 	}
 	tpl.Checks = completionTemplateChecks(bindings)
+	contract, err := store.GetVerificationContract(cmd.Context(), selection.Workspace.ID, work.Key)
+	if err != nil {
+		return localExitError(deps, "delivery.report", err)
+	}
+	if contract.Status == "pinned" {
+		tpl.VerificationContractDigest = contract.Digest
+		tpl.Checks = nil
+		for _, check := range contract.Checks {
+			tpl.Checks = append(tpl.Checks, completionCheckTemplate{Name: check.Name, Command: check.Command, Cwd: check.Cwd, Status: "pending"})
+		}
+	}
 	data, err := json.MarshalIndent(tpl, "", "  ")
 	if err != nil {
 		return localExitError(deps, "delivery.report", err)
@@ -482,6 +495,7 @@ func runLocalDeliveryReportInit(cmd *cobra.Command, args []string, deps *Deps, p
 }
 
 type completionCheckTemplate struct {
+	Cwd     string `json:"cwd,omitempty"`
 	Name    string `json:"name"`
 	Command string `json:"command"`
 	Status  string `json:"status"`

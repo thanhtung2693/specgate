@@ -523,7 +523,7 @@ func TestDeliveryDecisionWithoutReportRoutesToChangeSubmit(t *testing.T) {
 	}
 	work := readyLocalWork(t, store, selection)
 
-	err = store.DecideDelivery(context.Background(), selection.Workspace.ID, work.Key, "approve", "human", "looks good")
+	err = store.DecideDelivery(context.Background(), selection.Workspace.ID, work.Key, "approve", "human", "looks good", localReviewID(t, store, selection.Workspace.ID, work.Key))
 	if err == nil || !strings.Contains(err.Error(), "specgate change submit "+work.Key) {
 		t.Fatalf("decision error = %v, want change submit recovery", err)
 	}
@@ -552,7 +552,7 @@ func TestDeliveryEvidenceBindsContextAndNeedsHumanApproval(t *testing.T) {
 	if review.Verdict != "passed" {
 		t.Fatalf("review = %#v", review)
 	}
-	if err := store.DecideDelivery(context.Background(), selection.Workspace.ID, work.Key, "approve", "human", "looks good"); err != nil {
+	if err := store.DecideDelivery(context.Background(), selection.Workspace.ID, work.Key, "approve", "human", "looks good", localReviewID(t, store, selection.Workspace.ID, work.Key)); err != nil {
 		t.Fatal(err)
 	}
 	updated, err := store.GetWork(context.Background(), selection.Workspace.ID, work.Key)
@@ -705,7 +705,7 @@ func TestApprovedDeliveryRejectsLaterAgentSubmission(t *testing.T) {
 	if _, err := store.SubmitDelivery(context.Background(), selection.Workspace.ID, work.Key, body); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.DecideDelivery(context.Background(), selection.Workspace.ID, work.Key, "approve", "human", "looks good"); err != nil {
+	if err := store.DecideDelivery(context.Background(), selection.Workspace.ID, work.Key, "approve", "human", "looks good", localReviewID(t, store, selection.Workspace.ID, work.Key)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SubmitDelivery(context.Background(), selection.Workspace.ID, work.Key, body); err == nil || !strings.Contains(err.Error(), "already approved") {
@@ -718,7 +718,7 @@ func TestApprovedDeliveryRejectsLaterAgentSubmission(t *testing.T) {
 	if status.HumanDecision != "approve" {
 		t.Fatalf("human decision = %q, want approve", status.HumanDecision)
 	}
-	if err := store.DecideDelivery(context.Background(), selection.Workspace.ID, work.Key, "reject", "human", "changed my mind"); err == nil || !strings.Contains(err.Error(), "already recorded") {
+	if err := store.DecideDelivery(context.Background(), selection.Workspace.ID, work.Key, "reject", "human", "changed my mind", localReviewID(t, store, selection.Workspace.ID, work.Key)); err == nil || !strings.Contains(err.Error(), "already recorded") {
 		t.Fatalf("second decision error = %v", err)
 	}
 }

@@ -57,6 +57,7 @@ export function LinkIntegrationResourceDialog({
 
   useEffect(() => {
     if (!open) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Reset the externally controlled dialog draft; never retain credentials across reopen.
       setQuery("")
       setCandidates([])
       setSelectedKey("")
@@ -206,6 +207,7 @@ export function AddIntegrationDialog({
   useEffect(() => {
     if (!open) return
     const next = providerDefinition(provider)
+    // oxlint-disable-next-line react/set-state-in-effect -- Reset the externally controlled dialog draft; never retain credentials across reopen.
     setName(next.defaultName)
     setBaseUrl(next.defaultBaseUrl ?? "")
     setAuthMethod("oauth")

@@ -356,7 +356,9 @@ func localExitError(deps *Deps, command string, err error) error {
 		// A policy refusal, not an outage: exit 1 tells a caller the governance
 		// answer was no, where exit 5 would invite a retry that can never pass.
 		payload = output.ErrorPayload{Code: "governance_failed", Message: err.Error()}
-	} else if errors.Is(err, local.ErrDeliveryApproved) || errors.Is(err, local.ErrDecisionRecorded) {
+	} else if errors.Is(err, local.ErrVerificationInvalid) {
+		payload = output.ErrorPayload{Code: "validation", Message: err.Error()}
+	} else if errors.Is(err, local.ErrVerificationConflict) || errors.Is(err, local.ErrDeliveryApproved) || errors.Is(err, local.ErrDecisionRecorded) || errors.Is(err, local.ErrReviewChanged) {
 		payload = output.ErrorPayload{Code: "conflict", Message: err.Error()}
 	} else if errors.Is(err, local.ErrPreconditionNotMet) {
 		// "Not yet" is a governance answer. Exit 5 would tell an automated caller

@@ -86,6 +86,7 @@ export function KnowledgePage({ workspaceId, uploader }: { workspaceId?: string;
   }, [registry, workspaceId])
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- Reset stale request state before loading data for the newly selected endpoint or workspace.
     void load()
     return () => {
       listGenerationRef.current += 1

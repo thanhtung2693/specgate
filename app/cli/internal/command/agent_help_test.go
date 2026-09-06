@@ -63,8 +63,8 @@ func TestChangeHelpShowsTheCompleteRunnableFacade(t *testing.T) {
 		"specgate change status CR-123",
 		"\n  specgate change submit CR-123\n",
 		"specgate change submit CR-123 --file .specgate/completion-CR-123.json",
-		"specgate --yes change accept CR-123",
-		"specgate --yes change request-changes CR-123",
+		"specgate --yes change accept LOCAL-123 --review-id <review-id>",
+		"specgate --yes change request-changes LOCAL-123 --review-id <review-id>",
 	} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("change help missing runnable facade entry %q:\n%s", want, out.String())

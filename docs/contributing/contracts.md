@@ -10,6 +10,29 @@ and the [CLI reference](../using-specgate/reference/cli.md). For the Doc Registr
 route catalog, see
 [app/doc-registry/docs/spec.md](../../app/doc-registry/docs/spec.md).
 
+## Local verification pin and pickup projections
+
+Local may store one optional immutable verification contract per work. The
+contract digest binds workspace/work identity, the existing Context Pack digest,
+fixed `sh` shell, normalized repository-relative check directories, exact check
+commands/names and bindings derived from stored acceptance criteria. Actor and
+timestamp are recorded separately from digest identity. Pinning is permitted
+only before the first report and is rechecked transactionally; contracts cannot
+be amended. Existing work remains `unconfigured` unless explicitly pinned.
+
+Local submission resolves workspace/work and validates the Context Pack before
+executing commands. Pinned reports carry `verification_contract_digest` and the
+exact configured checks; mismatches are rejected before execution and again
+inside the report transaction. Pin status is separate from check outcome and
+human acceptance. Local same-user storage is not an authentication or hostile
+agent security boundary. Portable/v1 cannot transfer these Local-only pins and
+must refuse export rather than silently weaken them in Full mode.
+
+Local `work resume` and context summary/document views are additive read-only
+projections. They never select work from branches, revise approved content,
+change Context Pack digests, or summarize away acceptance criteria. A document
+index is not a substitute for reading the indexed scope and non-goals.
+
 ## Module Boundaries
 
 | Module | Owns | Does not own |
@@ -107,7 +130,8 @@ canonical; the server verifies the artifact's feature, workspace, and status.
 Full mode may return a server-advertised URL through `specgate open --print`.
 Local CLI mode has no browser UI or server: a handoff names the human-readable
 work/artifact title and stable ID, then gives the exact CLI action such as
-`specgate delivery approve <work-ref>`. Agents must never invent a localhost
+`specgate --yes change accept <work-ref> --review-id <review-id>`, using the
+review ID from the evidence the human reviewed. Agents must never invent a localhost
 URL for either mode.
 
 The product hierarchy is:
@@ -356,6 +380,16 @@ product scope or bypass approval.
 
 ## Delivery Evidence
 
+Local delivery decisions require the exact `review_id` displayed to the human.
+`change accept|request-changes` and `delivery approve|reject` require
+`--review-id` and `--yes`. The store compares that ID to the latest review in
+the decision transaction; a replacement report returns conflict without making
+a decision. Existing reports need no migration: read status to obtain their ID.
+
+Local completion verdicts reject duplicate or unknown criterion IDs regardless
+of claim. Every canonical criterion must have one evidence-backed satisfied
+claim for a passing review; contradictory entries never cancel each other out.
+
 Delivery reports are append-only evidence. A completion report may include:
 
 - summary;
@@ -374,7 +408,9 @@ shell `command` is retained in the append-only receipt so an independent
 reviewer can reproduce it. In Local mode, `delivery submit --run-checks`
 overwrites each executed row with the observed status and
 `source: "specgate_cli"`; status reports `locally reproduced` only when that
-marker is present. Full mode continues to strip caller-authored source fields at
+marker is present. CLI submission discards input `checks[].source` and
+`claimed_status` before execution, including skipped checks; only this invocation
+can stamp observation metadata. Full mode continues to strip caller-authored source fields at
 its trust boundary and derives assurance from server-side review.
 
 The `deterministic` trust tier means a bound check decided the criterion, not

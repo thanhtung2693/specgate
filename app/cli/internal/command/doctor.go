@@ -65,9 +65,16 @@ specgate model test`),
 					return localExitError(deps, "doctor", err)
 				}
 				defer store.Close()
-				selection, err := localSelection(cmd.Context(), deps, store)
+				selection, err := store.Current(cmd.Context())
 				if err != nil {
 					return localExitError(deps, "doctor", err)
+				}
+				// A stale project binding must not make doctor itself unavailable.
+				// Keep the durable selection for its base health view and surface the
+				// failed override as an actionable repository diagnostic below.
+				resolvedSelection, selectionErr := localSelection(cmd.Context(), deps, store)
+				if selectionErr == nil {
+					selection = resolvedSelection
 				}
 				cfg, _ := config.LoadFrom(deps.ConfigPath)
 				result := map[string]any{
@@ -76,6 +83,10 @@ specgate model test`),
 					"identity":  map[string]any{"status": "ok", "username": selection.User.Username},
 					"workspace": map[string]any{"status": "ok", "slug": selection.Workspace.Slug},
 					"network":   map[string]any{"status": "not_required", "message": "Local mode uses no server or TCP service"},
+				}
+				diagnostics := buildLocalDoctorDiagnostics(cmd.Context(), deps, cfg, selectionErr, selection.Workspace.Slug)
+				for key, value := range diagnostics {
+					result[key] = value
 				}
 				if deps.Printer.Mode() == output.ModeJSON {
 					deps.Printer.Success("doctor", result)
@@ -87,6 +98,14 @@ specgate model test`),
 				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "User:"), selection.User.Username)
 				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Workspace:"), selection.Workspace.Slug)
 				fmt.Fprintf(deps.Stdout, "%s not required\n", label(deps, "Network:"))
+				for _, key := range []string{"repository", "shell", "plugins"} {
+					check := diagnostics[key].(doctorCheck)
+					checkLabel := map[string]string{"repository": "Repository:", "shell": "Shell:", "plugins": "Plugins:"}[key]
+					fmt.Fprintf(deps.Stdout, "%s %s — %s\n", label(deps, checkLabel), check.Status, check.Message)
+					if check.Command != "" {
+						fmt.Fprintf(deps.Stdout, "  %s %s\n", label(deps, "next:"), check.Command)
+					}
+				}
 				return nil
 			}
 			ctx := cmd.Context()

@@ -2,6 +2,33 @@
 
 Use this guide to start, stop, back up, upgrade, or remove SpecGate.
 
+## Operate Local CLI
+
+Local mode has no service to start or stop. From the bound repository, run
+`specgate doctor` to check the store, workspace binding, shell, and IDE files.
+Use `specgate work resume <work-ref> --json` to pick up a specific work item.
+
+To upgrade the CLI, run `specgate update` or rerun the installer. Users on
+`v0.1.4` can upgrade directly to `v0.1.7`; existing SQLite stores open in place
+with an additive verification-contract table. Existing work remains
+`unconfigured` until a human pins a contract. See the [changelog](../../../CHANGELOG.md).
+
+Refresh CLI-managed plugins using the same agent and global/project scope used
+at installation. Update native Codex or Claude Code plugins through their IDE
+plugin manager, then start a new IDE session.
+
+For a backup, stop all CLI and IDE-agent operations that write Local state,
+then copy the entire selected Local store directory and CLI configuration to a
+private backup location. Honor custom `--local-dir`, `SPECGATE_LOCAL_DIR`, and
+`SPECGATE_CONFIG_PATH` settings; do not assume the repository's `.specgate/`
+directory contains the store. Keep SQLite sidecar files with the database if
+present. See [Configuration](../reference/configuration.md#cli).
+
+Portable workspace export is a migration format, not a complete Local backup.
+It refuses workspaces with pinned verification contracts because Full mode
+cannot preserve those contracts. Switching to Full does not delete the Local
+store, but it does not move its history automatically either.
+
 ## Install the Full appliance
 
 Use the CLI:
@@ -10,7 +37,7 @@ Use the CLI:
 specgate init --mode full
 ```
 
-The complete product runs in one Docker container with one public port and one
+The Full appliance runs in one Docker container with one public port and one
 named volume. The CLI manages installation and lifecycle commands. For the
 no-Docker Local workflow, use the [quickstart](../quickstart.md).
 

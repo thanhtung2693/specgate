@@ -36,13 +36,14 @@ Markdown, or another tool. SpecGate does not take over authoring. It manages the
 handoff from approved intent to implementation and keeps the resulting evidence
 and review history together.
 
-> **Run it on a trusted machine or private network.** SpecGate ships no HTTP
-> authentication layer, so put an authentication proxy and TLS in front of it
-> before exposing it beyond that boundary — see
+> **Full mode: run it on a trusted machine or private network.** The appliance
+> trusts its network by default and supports optional gateway credentials.
+> Direct Doc Registry access has no HTTP authentication layer.
+> Protect shared access with authentication and TLS or a private overlay — see
 > [Trust and security](docs/using-specgate/concepts/trust-and-security.md).
 > Start with the CLI. Use the web UI to inspect artifacts, review work, manage
-> settings, or use governance chat. SpecGate is pre-1.0: APIs and interfaces can
-> change between minor versions.
+> settings, or use governance chat. Review release notes before updating between
+> minor versions because APIs and interfaces can evolve.
 
 ## Why SpecGate?
 
@@ -51,7 +52,7 @@ after: knowing which version was approved, whether an agent completed every
 acceptance criterion, and whether delivery evidence still matches the spec after
 changes.
 
-SpecGate keeps that handoff outside your code repository. It records the
+SpecGate keeps a durable record of that handoff. It records the
 approved artifact version, gives the coding agent a focused Context Pack, and
 makes delivery reviewable against the original acceptance criteria.
 [Who SpecGate is for](docs/using-specgate/concepts/who-specgate-is-for.md) maps
@@ -100,6 +101,11 @@ specgate status
 
 Restart selected IDEs after plugin install so new skills, hooks, and rules load.
 
+Already using SpecGate? Run `specgate update` or rerun the installer.
+Users on `v0.1.4` can upgrade to `v0.1.7` directly. Refresh CLI-managed IDE
+files with the same plugin install command and scope, or update native plugins
+through their IDE plugin manager. See the [changelog](CHANGELOG.md) for details.
+
 Continue with the [full quickstart](docs/using-specgate/quickstart.md).
 
 ## How a work item moves through SpecGate
@@ -127,11 +133,17 @@ draft acceptance criteria for quick work instead of writing them yourself.
 
 - Versioned artifact publishing and approval.
 - Context Packs for coding agents.
+- Local resume packets keep each work item's scope, approved document index,
+  evidence gaps, and next action together. Fetch only the pinned documents
+  needed for the current task with
+  `specgate work context <work-ref> --document <path> --role <role> --json`.
 - Local users, shared workspaces, and per-project workspace binding.
 - CLI-first workflow for humans and IDE agents.
 - IDE plugin files for Codex, Claude Code, and Cursor.
 - Automatic governance policy, readiness gates, delivery evidence, and delivery review.
 - Deterministic check bindings for acceptance criteria with `@check:<name>`.
+- Optional Local verification contracts pin reviewed check commands before
+  delivery reporting. Human acceptance references the exact reviewed delivery.
 - `specgate stats` for workflow signals — first-pass yield, rework depth, and
   cycle time — from recorded runs, in both Local and Full mode.
 - Full mode adds workspace-scoped Knowledge and Git/tracker integrations.
@@ -140,7 +152,7 @@ SpecGate does not replace your authoring tool, issue tracker, coding IDE, pull
 request review, or CI. It records the governed handoff and delivery review
 across those systems.
 
-## Web UI
+## Web UI (Full mode)
 
 Most implementation work stays in your IDE. Open the web UI when you need to see
 what is waiting on you: work whose scope you have not approved, finished work
@@ -173,14 +185,14 @@ surface or web UI directly to the public internet.
   [contracts](docs/contributing/contracts.md).
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
+- [Changelog](CHANGELOG.md)
 
 ## Roadmap
 
-- Stabilize the newer browser UI, governance chat, Knowledge, and model-backed
-  review surfaces around failure recovery, source attribution, and operator
-  diagnostics.
-- Improve team and repository-provider workflows without weakening the
-  local-first path or trusted-network boundary.
+- Strengthen per-criterion delivery verification and make evidence gaps easier
+  to act on.
+- Improve approved-snapshot handoffs and durable acceptance records, with Local
+  mode as the default path.
 
 Missing something? [Open an issue](https://github.com/thanhtung2693/specgate/issues).
 

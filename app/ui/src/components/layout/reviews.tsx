@@ -136,6 +136,7 @@ export function ReviewsPage({ workboard, reviewer, workspaceId }: { workboard: W
 
   useEffect(() => {
     const artifactId = searchParams.get("artifact")
+    // oxlint-disable-next-line react/set-state-in-effect -- Synchronize selection with a deep link after its registry data arrives.
     if (artifactId) setSelectedArtifact(artifactDecisions.items.find((artifact) => artifact.id === artifactId))
   }, [artifactDecisions.items, searchParams])
 

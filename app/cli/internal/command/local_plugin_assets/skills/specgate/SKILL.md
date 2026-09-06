@@ -67,9 +67,11 @@ None or several: ask the human.
 For other concept or troubleshooting questions, use the smallest relevant CLI
 read. Do not force a phase or mutate records.
 
-Before a mode-dependent write or handoff, run `specgate doctor --json`. Read
+Before the first mode-dependent operation, run `specgate doctor --json`. Read
 `data.mode`; never infer the mode from Docker, URLs, or browser availability.
 Report an unsuccessful doctor result instead of guessing.
+Reuse that mode in this session until configuration, workspace, or repository
+changes, or a command reports a mode/setup error.
 
 ## Operating contract
 
@@ -86,7 +88,8 @@ Report an unsuccessful doctor result instead of guessing.
 - An approved Context Pack outranks chat history, tracker prose, and stale
   repository documentation. Never silently expand its scope.
 - Follow exact IDs and versions; `artifact coverage <artifact-id>` is exact-version evidence.
-- Follow `change status.data.next_actor` and `next_command`. When the next actor
+- Follow `change status.data` (or Local `work resume.data.status`) fields
+  `next_actor` and `next_command`. When the next actor
   is human, stop and hand off that command verbatim.
 - Local mode has no UI URL and never calls `specgate open`. In Full mode, use
   only the URL returned by `specgate open ... --print --json`; never construct
