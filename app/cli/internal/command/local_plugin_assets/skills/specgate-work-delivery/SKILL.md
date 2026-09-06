@@ -25,7 +25,7 @@ specgate work context "$WORK_REF" --document "$DOCUMENT_PATH" --role "$ROLE" --j
 ```
 
 Copy path/role from `data.documents`. Reuse only matching-digest content; the
-index cannot replace it. Quick work uses persisted scope and criteria.
+index cannot replace it. Quick work uses persisted scope/criteria.
 
 Full mode: read these; status is `change status.data`:
 
@@ -40,7 +40,7 @@ criteria are missing/placeholders. Hand artifact-backed work missing its
 approved version to the human or
 `specgate-work-preparation`.
 
-Reuse results until state changes; avoid duplicate Local reads. Follow status:
+Reuse results until state changes; avoid duplicate reads. Follow status:
 
 - If `data.next_actor` is not `implementing_agent`, hand off without editing.
 - For `review_pending`, accept only one `specgate` `next_command` without shell
@@ -60,8 +60,8 @@ required check, or its explicit skip reason.
 ## 2. Resume safely
 
 For `next_actor=implementing_agent` in `implementation` or `rework_requested`,
-inspect current edits, rerun checks, and submit fresh evidence. Otherwise
-require matching `freshness`; stop if unavailable.
+inspect edits, rerun checks, submit fresh evidence. Otherwise require
+`freshness`; stop if unavailable.
 
 ## 3. Check artifact drift
 
@@ -103,8 +103,8 @@ matches the Context Pack or status work ID and any `context_digest` matches the
 Context Pack. Never overwrite automatically; stop when attribution is unsafe.
 
 Fill `agent.name`, `summary`, `affected_files`, `checks[]`, and exactly one
-`criteria[]` entry per canonical criterion. Anchor evidence with `line` or a
-verbatim `heading`; a path is
+`criteria[]` entry per canonical criterion. Each claim must be independently
+reviewable. Anchor evidence with `line` or a verbatim `heading`; a path is
 `unanchored`, and a missing heading is `heading_not_found`. Neither has an
 excerpt. A command name alone is not evidence. Set every check to `pass`,
 `fail`, or `skipped`, or leave it `pending` with a runnable command and use
