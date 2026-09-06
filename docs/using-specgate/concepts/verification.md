@@ -41,6 +41,11 @@ code, replace CI, or make the human acceptance decision.
 
 ## What a readiness gate sees
 
+The model-based descriptions below apply to Full mode with a configured
+platform model. Local mode and model-less Full mode instead dispatch frozen
+IDE gate tasks; their results are `agent_attested`, not independent platform
+model judgments. Both paths keep readiness separate from human approval.
+
 When gates run, the platform fetches the artifact's documents and groups them
 by role: spec, design, plan, verification, reference. Each gate receives only
 the sections relevant to its question. The scope gate reads the spec; the
@@ -133,6 +138,18 @@ cycle; rerunning a review for the same completion cannot silently undo an
 existing human decision.
 
 ## Per-criterion trust
+
+Local mode can additionally pin a verification contract before the first
+completion report. It fixes the reviewed commands and repository-relative
+working directories for each `@check` binding. A later submission cannot swap
+those commands; `--run-checks` reruns them. This does not prove that the tests
+cover the requirement, and the commands run without a sandbox. Without a pin,
+status explicitly reports `unconfigured`.
+
+Local acceptance and rejection require the exact `--review-id` displayed by
+the status the human reviewed. A new review requires a new decision against
+that ID. See [Local verification contracts](../reference/cli.md#local-resume-and-verification-contracts)
+for input, timing, and migration limits.
 
 Each delivery-review criterion can expose a `trust_tier` so humans can see why
 SpecGate trusted that row:

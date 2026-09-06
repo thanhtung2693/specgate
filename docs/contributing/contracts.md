@@ -130,7 +130,8 @@ canonical; the server verifies the artifact's feature, workspace, and status.
 Full mode may return a server-advertised URL through `specgate open --print`.
 Local CLI mode has no browser UI or server: a handoff names the human-readable
 work/artifact title and stable ID, then gives the exact CLI action such as
-`specgate delivery approve <work-ref>`. Agents must never invent a localhost
+`specgate --yes change accept <work-ref> --review-id <review-id>`, using the
+review ID from the evidence the human reviewed. Agents must never invent a localhost
 URL for either mode.
 
 The product hierarchy is:

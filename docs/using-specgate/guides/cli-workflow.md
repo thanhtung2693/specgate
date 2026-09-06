@@ -83,7 +83,12 @@ or supported issue URL.
 
 ### 2. Read the governing context
 
-Before implementation, read the policy, gate state, and Context Pack:
+In Local mode, start with `specgate work resume <work-ref> --json`, then read
+the required pinned documents using the path and role from its index. The
+packet includes current status and the next action. See
+[Local resume](coding-agent-workflow.md#resume-local-work-without-losing-scope).
+
+In Full mode, read the policy, gate state, and Context Pack:
 
 ```bash
 specgate work policy <work-ref>

@@ -305,12 +305,12 @@
             <div>
               <span class="loop-verb">Hand off</span>
               <h3>Approve one Context Pack</h3>
-              <p>The coding agent gets the approved version, acceptance criteria, non-goals, risks, tasks, and applicable Skills through the CLI.</p>
+              <p>Switch between specs and plans without losing the approved scope. In Local mode, a resume packet gives the agent each work item's criteria, pinned document index, and next action.</p>
             </div>
             <div class="loop-artifact" aria-hidden="true">
               <span class="la-head"><span>context-pack.md</span><span class="la-acc">approved</span></span>
-              <span>$ specgate work context WI-101</span><br />
-              <span class="la-dim">contract, criteria, risks, tasks</span><br />
+              <span>$ specgate work resume WI-101 --json</span><br />
+              <span class="la-dim">scope, pinned docs, next action</span><br />
               <span class="la-dim">for Cursor / Claude Code / Codex</span>
             </div>
           </li>
@@ -318,7 +318,7 @@
             <div>
               <span class="loop-verb">Review</span>
               <h3>Review delivery evidence</h3>
-              <p>SpecGate compares completion claims, tests, docs, and changed files against every acceptance criterion before you close the work.</p>
+              <p>Compare evidence against every acceptance criterion. Local mode can pin reviewed check commands before reporting, then bind your acceptance to the exact delivery review.</p>
             </div>
             <div class="loop-artifact" aria-hidden="true">
               <span class="la-head"><span>delivery review</span><span class="la-ok">pass</span></span>
@@ -375,7 +375,8 @@
           <h2>See it run, command by command.</h2>
           <p class="band-sub">
             The CLI drives every SpecGate workflow. Cursor, Claude Code, and Codex
-            use the same Context Pack and report evidence the same way.
+            use the same Context Pack and report evidence the same way. The examples
+            below illustrate a Local workflow; outputs are abbreviated.
           </p>
         </div>
         <div class="cast-carousel reveal-up" data-carousel aria-label="SpecGate workflow demos">
@@ -397,6 +398,8 @@
 $ specgate artifact publish --file artifact.json
   Published 8a42…
 $ specgate gates check &lt;artifact-id&gt;
+  If IDE readiness tasks are pending, complete them before approval.
+$ specgate gates results &lt;artifact-id&gt;
   Spec quality: pass
 $ specgate --yes artifact approve &lt;artifact-id&gt;
   Approved 8a42… (v1)</pre>

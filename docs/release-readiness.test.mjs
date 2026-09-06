@@ -402,7 +402,7 @@ const retired = [
   },
   { pattern: /hooks-cursor\.json/, why: "the Cursor bootstrap hook was removed" },
   { pattern: /agent-handoff\.md/, why: "the handoff doc was retired" },
-  { pattern: /ADMIN_SECRET/, why: "no admin secret ever shipped; the appliance has no HTTP auth layer" },
+  { pattern: /ADMIN_SECRET/, why: "no admin secret ever shipped; shared appliances use member gateway credentials" },
   { pattern: /docker-compose\.dev\.yml/, why: "the release is a single local appliance" },
   { pattern: /multi-service Compose/i, why: "the release is a single local appliance" },
   {
@@ -651,6 +651,7 @@ test("public docs lead with the deployment boundary, not with hedging", () => {
   const readme = read("README.md");
   assert.match(readme, /trusted machine or private network/i);
   assert.match(readme, /no HTTP[\s>]+authentication layer/i);
+  assert.match(readme, /optional gateway credentials/i);
   assert.match(readme, /release notes before updating/i);
   assert.match(readme, /CHANGELOG\.md/);
 

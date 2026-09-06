@@ -49,7 +49,8 @@ service starts.
 | Best for | One person using a terminal and IDE agent | Teams and browser-based workflows |
 | Runtime | CLI only; no Docker, server, browser, or TCP service | One local Docker appliance container |
 | Durable state | SQLite on this machine | Appliance-managed durable data; Governance-chat threads reset when the appliance restarts |
-| Core workflow | Immutable artifacts, readiness tasks, Context Packs, delivery evidence, and human decisions | Everything in Local, backed by shared services and a browser UI |
+| Core workflow | Immutable artifacts, readiness tasks, Context Packs, delivery evidence, and human decisions | The same core delivery loop, backed by shared services and a browser UI |
+| Local-specific tools | Resume packets, indexed snapshot reads, and optional pinned verification contracts | These Local-specific contracts and commands are not available |
 | Additional capabilities | Local users, workspaces, and Codex, Claude Code, or Cursor plugins | Governance chat, Knowledge, integrations, model-backed checks, and shared workspaces |
 
 For automated Local setup:
@@ -163,11 +164,21 @@ confirms its Context Pack is assembled. Tell the agent to continue by reading
 that exact handoff:
 
 ```bash
-specgate work context <work-ref> --json
+specgate work resume <work-ref> --json
 ```
 
-The Context Pack identifies the approved artifact version. The agent should
-stop if it cannot retrieve that context.
+The resume packet includes the work scope, criteria, approved document index,
+and next action. The agent reads the relevant approved documents using the
+exact path and role from that index:
+
+```bash
+specgate work context <work-ref> --document <path> --role <role> --json
+```
+
+Read scope and non-goals before editing. The agent should stop if it cannot
+retrieve that approved context. Before the first completion report, you may
+optionally [pin the check commands](reference/cli.md#local-resume-and-verification-contracts)
+for `@check` criteria. Without a pin, verification setup remains `unconfigured`.
 
 ## 6. Let the agent implement and submit evidence
 
