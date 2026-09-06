@@ -414,12 +414,11 @@ const retired = [
   { pattern: /Offline Local CLI/, why: "Local mode is not positioned as an offline product" },
   { pattern: /<returned-data\.path>/, why: "examples capture the returned path in a shell variable" },
   {
-    // Provisional self-description stopped people trying the product. The
-    // deployment boundary in SECURITY.md and trust-and-security.md is a
-    // different thing and stays.
+    // Product messaging states capabilities and boundaries directly. The
+    // deployment boundary in SECURITY.md and trust-and-security.md remains.
     pattern: /\b(?:experimental|early release|alpha release)\b/i,
     why: "SpecGate does not describe itself as provisional; state the capability and its boundary instead",
-    allow: ["docs/contributing/adr/", "CHANGELOG.md", "app/ui/src/App.integrations.test.tsx"],
+    allow: ["app/ui/src/App.integrations.test.tsx"],
   },
   {
     pattern: /\b(?:CI ingestion|tracker authority)\b/i,
@@ -647,14 +646,13 @@ test("only machine-to-machine gateway routes skip verification", () => {
 // ---------------------------------------------------------------------------
 
 test("public docs lead with the deployment boundary, not with hedging", () => {
-  // The boundary is a safety fact and has to stay stated. Provisional framing —
-  // "early release", "experimental", "alpha" — is separate: it deterred people
-  // from trying the product and is enforced absent by the retired-terminology
-  // scan below.
+  // The boundary is a safety fact and has to stay stated. Product messaging
+  // should state capabilities directly; retired wording is enforced below.
   const readme = read("README.md");
   assert.match(readme, /trusted machine or private network/i);
   assert.match(readme, /no HTTP[\s>]+authentication layer/i);
-  assert.match(readme, /pre-1\.0/);
+  assert.match(readme, /release notes before updating/i);
+  assert.match(readme, /CHANGELOG\.md/);
 
   const featureStatus = read("docs/using-specgate/reference/feature-status.md");
   assert.match(featureStatus, /## Established paths/);

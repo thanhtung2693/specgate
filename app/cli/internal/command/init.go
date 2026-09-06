@@ -468,7 +468,7 @@ func runLocalInit(cmd *cobra.Command, deps *Deps, cfg config.Config, stateDir, w
 				payload.Details = map[string]any{}
 			}
 			payload.Details["local_setup"] = "complete"
-			payload.Details["next"] = "specgate plugins install --agent " + pluginAgentList
+			payload.Details["next"] = pluginRepairCommand(pluginAgentList, projectLocal)
 			code := deps.Printer.Error("init", payload)
 			return &output.ExitError{Code: code, Err: err}
 		}
@@ -477,6 +477,9 @@ func runLocalInit(cmd *cobra.Command, deps *Deps, cfg config.Config, stateDir, w
 	next := "specgate plugins install"
 	if pluginResult != nil {
 		next = "specgate plugins doctor --agent " + strings.Join(pluginResult.Agents, ",")
+		if projectLocal {
+			next += " --project-local"
+		}
 	}
 	result := map[string]any{"mode": config.ModeLocal, "state_dir": stateDir, "user": cfg.CurrentUser, "workspace": cfg.Workspace, "next": next}
 	if projectRoot != "" {

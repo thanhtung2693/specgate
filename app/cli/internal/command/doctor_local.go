@@ -9,7 +9,7 @@ import (
 	"github.com/specgate/specgate/app/cli/internal/config"
 )
 
-func buildLocalDoctorDiagnostics(ctx context.Context, deps *Deps, cfg config.Config, selectionErr error) map[string]any {
+func buildLocalDoctorDiagnostics(ctx context.Context, deps *Deps, cfg config.Config, selectionErr error, workspaceSlug string) map[string]any {
 	result := map[string]any{}
 	root, found := config.FindProjectRoot(deps.WorkingDir)
 	if !found {
@@ -17,7 +17,7 @@ func buildLocalDoctorDiagnostics(ctx context.Context, deps *Deps, cfg config.Con
 	} else if _, bound := cfg.Projects[root]; !bound {
 		result["repository"] = doctorCheck{Status: "missing", Message: fmt.Sprintf("Repository %s has no workspace binding.", root), Command: "specgate workspace bind"}
 	} else if selectionErr != nil {
-		result["repository"] = doctorCheck{Status: "stale", Message: fmt.Sprintf("Repository workspace binding cannot be resolved: %v", selectionErr), Command: "specgate workspace bind"}
+		result["repository"] = doctorCheck{Status: "stale", Message: fmt.Sprintf("Repository workspace binding cannot be resolved: %v; rebind to the current Local workspace %s", selectionErr, workspaceSlug), Command: "specgate workspace bind " + workspaceSlug}
 	} else {
 		result["repository"] = doctorCheck{Status: "ok", Message: root}
 	}
@@ -37,18 +37,26 @@ func localPluginDiagnostic(ctx context.Context, deps *Deps) doctorCheck {
 	}
 	pkg, _ := (embeddedLocalPlugin{}).PluginPackage(ctx)
 	var installed []string
+	var commands []string
+	root, hasRoot := config.FindProjectRoot(deps.WorkingDir)
 	for _, agent := range pluginAgentNames() {
+		adapter, _ := pluginAgentAdapterFor(agent)
+		if hasRoot && adapter.health(home, true, pkg, root).OK {
+			installed = append(installed, agent+" (project)")
+			commands = append(commands, "cd "+shellQuote(root)+" && specgate plugins doctor --agent "+agent+" --project-local")
+		}
 		if health, native := nativePluginHealth(agent, home); native && health.OK {
 			installed = append(installed, agent+" (native)")
+			commands = append(commands, "specgate plugins doctor --agent "+agent)
 			continue
 		}
-		adapter, _ := pluginAgentAdapterFor(agent)
 		if adapter.health(home, false, pkg).OK {
-			installed = append(installed, agent)
+			installed = append(installed, agent+" (global)")
+			commands = append(commands, "specgate plugins doctor --agent "+agent)
 		}
 	}
 	if len(installed) == 0 {
-		return doctorCheck{Status: "optional", Message: "No global IDE plugin files were detected; CLI-only Local mode remains healthy.", Command: "specgate plugins install"}
+		return doctorCheck{Status: "optional", Message: "No complete global or project IDE plugin files were detected; CLI-only Local mode remains healthy.", Command: "specgate plugins install"}
 	}
-	return doctorCheck{Status: "ok", Message: "Plugin files detected for " + strings.Join(installed, ", ") + "; restart the IDE and verify in a new session.", Command: "specgate plugins doctor"}
+	return doctorCheck{Status: "ok", Message: "Plugin files detected for " + strings.Join(installed, ", ") + "; restart the IDE and verify in a new session.", Command: strings.Join(commands, " && ")}
 }

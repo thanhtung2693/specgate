@@ -7,6 +7,12 @@ The IDE integration gives coding agents focused SpecGate skills and, where the
 IDE supports them, hooks or rules. It uses the `specgate` CLI for all product
 operations.
 
+For Codex or Claude Code, prefer the native marketplace when you want the IDE
+to manage plugin updates and enablement. Use the SpecGate CLI installer for an
+offline package matched to the CLI, or for repository-owned integration files.
+For Cursor, the CLI's skills installation remains a supported option. Choose
+one owner per IDE; do not combine native and CLI-managed copies.
+
 ## Before you start
 
 Install the CLI first:
@@ -73,6 +79,11 @@ claude plugin install specgate@specgate
 claude plugin list
 ```
 
+Claude defaults to user scope. Use `--scope project` for a shared repository
+install, or `--scope local` for a personal install limited to that repository.
+Use the same scope for update/removal. These native scopes differ from
+SpecGate's `--project-local`, which writes integration files directly.
+
 Refresh or remove the Claude plugin through the same manager:
 
 ```bash
@@ -82,6 +93,19 @@ claude plugin uninstall specgate@specgate
 
 Use the same manager to update or remove the plugin. `specgate plugins install`
 detects native ownership and stops before writing duplicate IDE files.
+
+These paths follow the official [Codex marketplace documentation](https://developers.openai.com/plugins/build/plugins#add-a-marketplace-from-the-cli)
+and [Claude installation scopes](https://code.claude.com/docs/en/discover-plugins#install-plugins).
+Codex recommends marketplace commands rather than hand-editing its config.
+SpecGate's offline Codex installer still maintains its own personal marketplace
+entry; use the native route to let Codex own that configuration lifecycle.
+
+Cursor also supports marketplace plugins and local bundles under
+`~/.cursor/plugins/local/`. Local imports can be restricted by organization
+policy, so SpecGate does not automatically migrate existing skills installs
+there. Its current global and project skills directories are documented by
+[Cursor Skills](https://cursor.com/docs/skills). See
+[Cursor Plugins](https://cursor.com/docs/plugins) for native distribution.
 
 ## Start from skills.sh
 
@@ -191,6 +215,9 @@ Global Codex and Claude Code locations contain the native plugin package, hooks,
 and focused skills. Project-local Codex contains focused skills only.
 Project-local Claude Code also installs its SessionStart hook and merges the
 required permission and hook entries into the existing settings object.
+Claude documents a manifest-bearing folder under its skills directory as a
+plugin loaded with the `skills-dir` source; this is the layout used by the
+CLI-managed global Claude bundle. See [Claude skill locations](https://code.claude.com/docs/en/skills#where-skills-live).
 Malformed settings JSON stops installation before any plugin files are written;
 existing settings permissions are preserved. `plugins doctor --project-local
 --agent claude` verifies the hook files, their SpecGate ownership marker, the
@@ -258,6 +285,22 @@ cache intact. See the [CLI reference](../reference/cli.md) for exact scope and
 flags.
 
 ## Troubleshooting
+
+### Local setup and recovery commands
+
+`init --plugin-scope project --install-plugins` returns a verification command
+with `--project-local`; retry commands preserve that scope too. Run project
+installation from the repository root.
+
+Local `doctor` inspects global and repository-root plugin files, including when
+called from a subdirectory. Its plugin diagnostic names the detected scope and
+provides scoped verification commands. This proves file health, not that the
+running IDE loaded the plugin; verify in a new IDE session.
+
+For a stale workspace binding, `doctor` suggests an explicit
+`workspace bind <slug>` using the current Local store's workspace. Review that
+workspace before rebinding. To choose a different one, run `workspace list` and
+bind its exact slug.
 
 ### `plugins install` reports a native marketplace conflict
 

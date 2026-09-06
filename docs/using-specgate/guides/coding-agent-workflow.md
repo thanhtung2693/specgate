@@ -25,10 +25,14 @@ document index, verification setup and next action together. For artifact-backed
 work, read the relevant indexed documents before editing:
 
 ```bash
-specgate work context LOCAL-123 --document "specs/design.md" --json
+specgate work context LOCAL-123 --document "specs/design.md" --role spec --json
 ```
 
-Use the exact path returned by the index. This retrieves the approved snapshot,
+Use the exact path and role returned by the index. Read `data.status` from the
+resume packet instead of fetching `change status` again. Reuse pinned document
+content already read only while its digest matches the current index; read scope
+and non-goals before editing. Refresh status after a state-changing action unless
+that action already returns it. This retrieves the approved snapshot,
 even when the file in Git has changed. The full `work context` remains available.
 Do not select a work item from its branch name or assume completing one work
 completes other work using the same spec.

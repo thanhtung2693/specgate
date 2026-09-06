@@ -313,8 +313,11 @@ func (l *pluginAgentFileLayout) addSkills(dir string, skills []string) {
 	}
 }
 
-func pluginHealthRoot(home string, projectLocal bool) string {
+func pluginHealthRoot(home string, projectLocal bool, projectRoots ...string) string {
 	if projectLocal {
+		if len(projectRoots) > 0 && projectRoots[0] != "" {
+			return projectRoots[0]
+		}
 		return "."
 	}
 	return home
@@ -373,8 +376,8 @@ func finishPluginAgentHealth(health pluginAgentHealth, projectLocal bool) plugin
 	return health
 }
 
-func checkCursorPluginAgent(home string, projectLocal bool, pkg *client.PluginPackage) pluginAgentHealth {
-	root := pluginHealthRoot(home, projectLocal)
+func checkCursorPluginAgent(home string, projectLocal bool, pkg *client.PluginPackage, projectRoots ...string) pluginAgentHealth {
+	root := pluginHealthRoot(home, projectLocal, projectRoots...)
 	skills := pluginSkillsFromPackage(pkg)
 	pluginRoot := filepath.Join(root, ".cursor")
 	rule := filepath.Join(pluginRoot, "rules", "using-specgate.mdc")
@@ -386,8 +389,8 @@ func checkCursorPluginAgent(home string, projectLocal bool, pkg *client.PluginPa
 	return finishPluginAgentHealth(checkPluginAgentFiles("cursor", projectLocal, pkg, layout), projectLocal)
 }
 
-func checkCodexPluginAgent(home string, projectLocal bool, pkg *client.PluginPackage) pluginAgentHealth {
-	root := pluginHealthRoot(home, projectLocal)
+func checkCodexPluginAgent(home string, projectLocal bool, pkg *client.PluginPackage, projectRoots ...string) pluginAgentHealth {
+	root := pluginHealthRoot(home, projectLocal, projectRoots...)
 	skills := pluginSkillsFromPackage(pkg)
 	layout := pluginAgentFileLayout{}
 	if projectLocal {
@@ -438,8 +441,8 @@ func checkCodexPluginAgent(home string, projectLocal bool, pkg *client.PluginPac
 	return finishPluginAgentHealth(health, projectLocal)
 }
 
-func checkClaudePluginAgent(home string, projectLocal bool, pkg *client.PluginPackage) pluginAgentHealth {
-	root := pluginHealthRoot(home, projectLocal)
+func checkClaudePluginAgent(home string, projectLocal bool, pkg *client.PluginPackage, projectRoots ...string) pluginAgentHealth {
+	root := pluginHealthRoot(home, projectLocal, projectRoots...)
 	skills := pluginSkillsFromPackage(pkg)
 	layout := pluginAgentFileLayout{}
 	if projectLocal {
