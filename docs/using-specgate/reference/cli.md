@@ -586,6 +586,9 @@ the text says otherwise.
 | `delivery handoff show --file <path>` | Render a committed review request read-only, without a workspace or server |
 
 Noninteractive callers must add `--yes` to the commands that record a decision.
+Local `delivery approve` and `delivery reject` also require `--review-id` from
+the status being reviewed; Full mode does not accept that flag. Use the exact
+next command printed by status.
 
 ### Completion scaffold
 

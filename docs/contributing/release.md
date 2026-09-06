@@ -21,7 +21,8 @@ Check that:
 
 - root README leads with the trusted-machine/private-network boundary, is CLI-first, and links to the changelog and compatibility guidance;
 - [Quickstart](../using-specgate/quickstart.md) works without a source checkout;
-- IDE plugin docs point to CLI install first, then `specgate plugins install`;
+- IDE plugin docs install the CLI first, then explain native Codex/Claude
+  marketplaces or CLI-managed IDE files, with one installation owner per IDE;
 - model setup is optional for core operation;
 - uninstall docs explain preserved data and purge behavior;
 - current docs are linked from [docs home](../README.md);
@@ -110,6 +111,8 @@ Check:
 
 - tag points at the intended commit;
 - `release.yml` succeeds for the tag;
+- confirm the final `release-publish` job succeeded and the release is public
+  (`isDraft: false`); a draft page or uploaded assets alone do not prove release;
 - the GitHub Release remains a draft until image manifests, the local bundle,
   and the clean-install appliance smoke test all succeed;
 - GitHub Release contains CLI artifacts and the local appliance bundle;

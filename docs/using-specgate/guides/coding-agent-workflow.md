@@ -89,7 +89,9 @@ row exists, or several need a human priority choice, the agent stops and asks.
 
 ### 1. Read the approved contract
 
-The agent starts from the Context Pack:
+In Local mode, use the resume packet and indexed document reads described
+above. It already contains the work description and current status. In Full
+mode, the agent reads:
 
 ```bash
 specgate work context <work-ref> --json

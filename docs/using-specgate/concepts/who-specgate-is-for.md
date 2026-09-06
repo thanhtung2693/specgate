@@ -6,8 +6,9 @@ each criterion.*
 
 That's the whole product. Solo, it plays the reviewer you don't have. In a
 team, it ends the "wait, which version did we approve?" argument before it
-starts. And everything below runs in Local mode: one binary, no Docker, no
-server, no model API key, no small print.
+starts. The core delivery loop runs in Local mode: one binary, no Docker, no
+server, and no model API key. Shared gateway credentials and hash-linked event
+verification require Full mode.
 
 ## The problem: diffs don't show what's missing
 
@@ -52,6 +53,15 @@ the goalposts were confiscated at approval time.
 Nice side effect: the spec file in your repo can stay uncommitted, get
 mangled, or be deleted in a fit of tidiness — the approved snapshot survives.
 SpecGate never touches your files. Not even to help.
+
+## For solo developers: several specs, one explicit work reference
+
+For a solo developer juggling several specs or plans, hand the agent one work
+reference and start with `specgate work resume <ref> --json`. It returns the
+scope, criteria, pinned document index, and next action. The agent reads the
+relevant approved documents on demand; each work item remains separate even
+when several share a spec. This reduces repeated context loading without
+relying on the agent to remember a previous conversation.
 
 ## For teams: names on decisions
 

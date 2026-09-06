@@ -21,7 +21,7 @@ When a local package is selected, `path` is its normalized repository-relative
 POSIX path. SpecGate preserves nested paths; it does not flatten framework
 directories. Local and Full modes reject absolute, traversal, backslash, and
 NUL-containing paths with the same rules. Roles are lowercased; unknown roles
-become `unspecified`. The server snapshots bytes and computes per-file SHA-256
+become `unspecified`. The selected store snapshots bytes and computes per-file SHA-256
 plus a deterministic package manifest digest.
 
 The role matters more than the filename. A file named `notes.md` can still be
@@ -96,6 +96,13 @@ from memory or chat history.
 One source may satisfy several artifact roles. Its body appears only once in
 the Context Pack, so role coverage does not duplicate model input.
 
+In Local mode, `work resume <ref> --json` brings the work description, criteria,
+approved document index, verification setup, and next action into one response.
+The agent can retrieve selected documents with `work context --document` using
+the explicit work reference, path, and role. These reads return stored approved
+bytes even if the source file has changed. Separate work references keep slices
+of the same spec distinct; switching branches does not select the intended work.
+
 ## Quick and artifact-backed routes
 
 The quick route in either mode creates a lightweight work item from title, description, and
@@ -112,7 +119,12 @@ durable state and can be resumed safely.
 
 Both routes produce delivery evidence and review.
 
-## Local data
+## Stored data
+
+Local CLI keeps artifacts, work, decisions, and pinned verification contracts
+in its selected SQLite store. The repository's `.specgate/` receipts and report
+scaffolds are not a backup of that store. Stop writers before taking a complete
+store backup; see [Operate SpecGate](../guides/operate-specgate.md#operate-local-cli).
 
 The Full appliance keeps artifact metadata and immutable document contents in
 its managed `specgate-data` volume. Purging local data deletes both; back up
