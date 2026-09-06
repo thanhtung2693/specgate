@@ -16,7 +16,7 @@ ENV VITE_DOC_REGISTRY_URL=$VITE_DOC_REGISTRY_URL \
     VITE_LANGGRAPH_API_URL=$VITE_LANGGRAPH_API_URL
 RUN npm run build -- --mode "${BUILD_MODE}"
 
-FROM golang:1.26.5-bookworm AS registry-build
+FROM golang:1.26.6-bookworm AS registry-build
 WORKDIR /src
 COPY app/doc-registry/go.mod app/doc-registry/go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
