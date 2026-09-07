@@ -347,6 +347,14 @@ func TestPublishArtifactPinsSourceCriteria(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "source_path") {
 		t.Fatalf("unknown source path error = %v", err)
 	}
+	_, err = store.PublishArtifact(context.Background(), selection.Workspace.ID, local.ArtifactInput{
+		FeatureKey: "LOCAL-INVALID-SOURCE-ID", RequestType: "new_feature",
+		Documents:      []local.ArtifactDocumentInput{{Path: "spec.md", Role: "spec", Content: []byte("# Spec")}},
+		SourceCriteria: []local.SourceCriterion{{ID: "req 1", Text: "Cannot be referenced by an @source token", SourcePath: "spec.md"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "source criterion id") {
+		t.Fatalf("unsafe source criterion id error = %v", err)
+	}
 }
 
 func TestArtifactDocumentsMatchFullPathAndRoleRules(t *testing.T) {

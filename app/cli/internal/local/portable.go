@@ -101,6 +101,11 @@ func (s *Store) ExportWorkspace(ctx context.Context, workspaceID string) (Portab
 	if err != nil {
 		return out, err
 	}
+	for _, artifact := range artifacts {
+		if len(artifact.SourceCriteria) > 0 {
+			return PortableWorkspace{}, fmt.Errorf("%w: portable/v1 Full-mode import cannot preserve Local source criteria; use a Local database backup instead", ErrVerificationInvalid)
+		}
+	}
 	for index := len(artifacts) - 1; index >= 0; index-- {
 		artifact, err := s.GetArtifact(ctx, workspaceID, artifacts[index].ID)
 		if err != nil {

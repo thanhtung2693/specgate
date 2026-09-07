@@ -485,6 +485,52 @@ func TestArtifactPublishPreviewUsesEmbeddedLocalPolicyWithoutAPI(t *testing.T) {
 	}
 }
 
+func TestArtifactPublishPreviewLocalValidatesAndShowsSourceCriteria(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	if err := (config.Config{Mode: config.ModeLocal}).SaveTo(deps.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+	valid := writeTempJSON(t, map[string]any{
+		"feature_key":     "feat-local-source-criteria",
+		"documents":       []map[string]any{{"path": "spec.md", "role": "spec", "content": "# Spec"}},
+		"source_criteria": []map[string]any{{"id": "req-later", "text": "Export CSV", "source_path": "spec.md", "deferred_reason": "Out of scope"}},
+	})
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "publish", "--preview", "--file", valid); code != output.ExitOK {
+		t.Fatalf("valid local preview exit = %d; output = %s", code, out.String())
+	}
+	for _, want := range []string{`"source_criteria":[{`, `"id":"req-later"`, `"deferred_reason":"Out of scope"`} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("local preview missing %s: %s", want, out.String())
+		}
+	}
+	if fc.calls != 0 {
+		t.Fatalf("local preview made %d API calls", fc.calls)
+	}
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "artifact", "publish", "--preview", "--file", valid); code != output.ExitOK {
+		t.Fatalf("plain local preview exit = %d; output = %s", code, out.String())
+	}
+	for _, want := range []string{"Source criterion", "req-later", "Export CSV", "deferred: Out of scope"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("plain local preview missing %s: %s", want, out.String())
+		}
+	}
+
+	out.Reset()
+	invalid := writeTempJSON(t, map[string]any{
+		"feature_key":     "feat-local-source-criteria",
+		"documents":       []map[string]any{{"path": "spec.md", "role": "spec", "content": "# Spec"}},
+		"source_criteria": []map[string]any{{"id": "req 1", "text": "Unmappable", "source_path": "spec.md"}},
+	})
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "publish", "--preview", "--file", invalid); code != output.ExitUsage {
+		t.Fatalf("invalid local preview exit = %d; output = %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "source criterion id") || strings.Contains(out.String(), "human_confirmation_required") {
+		t.Fatalf("invalid local preview did not fail before output: %s", out.String())
+	}
+}
+
 func TestArtifactPublishPreviewReturnsNoPartialResultWhenPolicyResolutionFails(t *testing.T) {
 	t.Parallel()
 	deps, fc, _, out := newFakeDeps(t)
@@ -822,6 +868,27 @@ func TestArtifactPublishRejectsWorkTypeAlias(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "unknown artifact package field") ||
 		!strings.Contains(out.String(), "work_type") {
+		t.Fatalf("output = %s", out.String())
+	}
+}
+
+func TestArtifactPublishRejectsLocalSourceCriteriaInFullModeBeforeHTTP(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	f := writeTempJSON(t, map[string]any{
+		"feature_key":     "feat-x",
+		"documents":       []map[string]any{{"path": "spec.md", "role": "spec", "content": "# Spec"}},
+		"source_criteria": []map[string]any{{"id": "req-1", "text": "Local-only", "source_path": "spec.md"}},
+	})
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "publish", "--file", f)
+	if code != output.ExitIncompatible {
+		t.Fatalf("exit = %d, want incompatible; output = %s", code, out.String())
+	}
+	if fc.lastPublishBody != nil || fc.calls != 0 {
+		t.Fatalf("Full publish sent Local source criteria: body=%#v calls=%d", fc.lastPublishBody, fc.calls)
+	}
+	if !strings.Contains(out.String(), "source_criteria") || !strings.Contains(out.String(), "Local mode") {
 		t.Fatalf("output = %s", out.String())
 	}
 }

@@ -10,7 +10,7 @@ import (
 func TestValidateArtifactPublishFieldsAcceptsOnlySourceCriterionSchema(t *testing.T) {
 	body := map[string]any{
 		"feature_key": "source-coverage", "request_type": "new_feature",
-		"documents": []any{map[string]any{"path": "spec.md", "role": "spec", "content": "# Spec"}},
+		"documents":       []any{map[string]any{"path": "spec.md", "role": "spec", "content": "# Spec"}},
 		"source_criteria": []any{map[string]any{"id": "req-1", "text": "Result", "source_path": "spec.md"}},
 	}
 	if err := validateArtifactPublishFields(body); err != nil {
@@ -25,7 +25,7 @@ func TestValidateArtifactPublishFieldsAcceptsOnlySourceCriterionSchema(t *testin
 func TestLocalArtifactInputReadsDeferredSourceCriterion(t *testing.T) {
 	input, err := localArtifactInput(map[string]any{
 		"feature_key": "source-coverage", "request_type": "new_feature",
-		"documents": []any{map[string]any{"path": "spec.md", "role": "spec", "content": "# Spec"}},
+		"documents":       []any{map[string]any{"path": "spec.md", "role": "spec", "content": "# Spec"}},
 		"source_criteria": []any{map[string]any{"id": "req-1", "text": "Later", "source_path": "spec.md", "deferred_reason": "Out of scope"}},
 	})
 	if err != nil {
@@ -37,5 +37,24 @@ func TestLocalArtifactInputReadsDeferredSourceCriterion(t *testing.T) {
 	view := localArtifactView(local.Artifact{SourceCriteria: input.SourceCriteria})
 	if got := view["source_criteria"].([]local.SourceCriterion); len(got) != 1 || got[0].ID != "req-1" {
 		t.Fatalf("view source criteria = %#v", got)
+	}
+}
+
+func TestSourceCriterionFieldsRejectNonStrings(t *testing.T) {
+	for _, field := range []string{"id", "text", "source_path", "deferred_reason"} {
+		t.Run(field, func(t *testing.T) {
+			for _, value := range []any{123, true, nil, []any{"reason"}, map[string]any{"reason": "later"}} {
+				criterion := map[string]any{"id": "req-1", "text": "Result", "source_path": "spec.md", "deferred_reason": "Later"}
+				criterion[field] = value
+				body := map[string]any{
+					"feature_key": "source-coverage", "request_type": "new_feature",
+					"documents":       []any{map[string]any{"path": "spec.md", "role": "spec", "content": "# Spec"}},
+					"source_criteria": []any{criterion},
+				}
+				if err := validateArtifactPublishFields(body); err == nil || !strings.Contains(err.Error(), "source_criteria[0]."+field+" must be a string") {
+					t.Fatalf("value %#v: error = %v", value, err)
+				}
+			}
+		})
 	}
 }

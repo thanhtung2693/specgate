@@ -35,7 +35,8 @@ its interfaces are the more likely to change.
 - Local resume packets and indexed reads of approved document snapshots.
 - Optional Local verification contracts that pin reviewed `@check` commands
   before reporting; Local acceptance requires the exact `--review-id` from
-  reviewed status. Pinned contracts cannot be exported to Full mode.
+  reviewed status. Pinned contracts and source-criterion inventory cannot be
+  exported to Full mode.
 - `specgate stats` governance-value reporting from real gate and delivery
   history in both modes, including first-pass yield, pre/post-build governance
   signals, rework, and cycle time.

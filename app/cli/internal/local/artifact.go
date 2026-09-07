@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -23,6 +24,8 @@ var artifactRequestTypes = map[string]struct{}{
 	"bugfix":         {},
 	"unknown":        {},
 }
+
+var sourceCriterionIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 
 type ArtifactInput struct {
 	FeatureKey     string
@@ -69,21 +72,12 @@ type ArtifactDocument struct {
 }
 
 func (s *Store) PublishArtifact(ctx context.Context, workspaceID string, input ArtifactInput) (Artifact, error) {
-	input.FeatureKey = strings.TrimSpace(input.FeatureKey)
-	input.RequestType = strings.TrimSpace(input.RequestType)
-	if workspaceID == "" || input.FeatureKey == "" || input.RequestType == "" || len(input.Documents) == 0 {
+	input, documents, digest, criteria, err := normalizedArtifactInput(input)
+	if err != nil {
+		return Artifact{}, err
+	}
+	if workspaceID == "" {
 		return Artifact{}, fmt.Errorf("workspace, feature key, request type, and at least one document are required")
-	}
-	if _, ok := artifactRequestTypes[input.RequestType]; !ok {
-		return Artifact{}, fmt.Errorf("request type must be new_feature, change_request, bugfix, or unknown")
-	}
-	documents, digest, err := validateArtifactDocuments(input.Documents)
-	if err != nil {
-		return Artifact{}, err
-	}
-	criteria, err := validateSourceCriteria(input.SourceCriteria, documents)
-	if err != nil {
-		return Artifact{}, err
 	}
 	if len(criteria) > 0 {
 		hash := sha256.New()
@@ -153,6 +147,33 @@ func (s *Store) PublishArtifact(ctx context.Context, workspaceID string, input A
 	return artifact, nil
 }
 
+// ValidateArtifactInput applies the same immutable-package checks as PublishArtifact
+// without opening a transaction. It supports no-write CLI previews.
+func ValidateArtifactInput(input ArtifactInput) error {
+	_, _, _, _, err := normalizedArtifactInput(input)
+	return err
+}
+
+func normalizedArtifactInput(input ArtifactInput) (ArtifactInput, []ArtifactDocument, string, []SourceCriterion, error) {
+	input.FeatureKey = strings.TrimSpace(input.FeatureKey)
+	input.RequestType = strings.TrimSpace(input.RequestType)
+	if input.FeatureKey == "" || input.RequestType == "" || len(input.Documents) == 0 {
+		return input, nil, "", nil, fmt.Errorf("feature key, request type, and at least one document are required")
+	}
+	if _, ok := artifactRequestTypes[input.RequestType]; !ok {
+		return input, nil, "", nil, fmt.Errorf("request type must be new_feature, change_request, bugfix, or unknown")
+	}
+	documents, digest, err := validateArtifactDocuments(input.Documents)
+	if err != nil {
+		return input, nil, "", nil, err
+	}
+	criteria, err := validateSourceCriteria(input.SourceCriteria, documents)
+	if err != nil {
+		return input, nil, "", nil, err
+	}
+	return input, documents, digest, criteria, nil
+}
+
 func (s *Store) ListArtifacts(ctx context.Context, workspaceID string) ([]Artifact, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, workspace_id, feature_key, request_type, version, status, snapshot_digest, policy_digest, policy_snapshot_json, source_criteria_json, created_at FROM artifacts WHERE workspace_id = ? ORDER BY created_at DESC`, workspaceID)
 	if err != nil {
@@ -214,6 +235,9 @@ func validateSourceCriteria(input []SourceCriterion, documents []ArtifactDocumen
 		criterion.DeferredReason = strings.TrimSpace(criterion.DeferredReason)
 		if criterion.ID == "" || criterion.Text == "" || criterion.SourcePath == "" {
 			return nil, fmt.Errorf("each source criterion needs id, text, and source_path")
+		}
+		if !sourceCriterionIDPattern.MatchString(criterion.ID) {
+			return nil, fmt.Errorf("source criterion id %q must start with an ASCII letter or digit and contain only ASCII letters, digits, hyphens, or underscores", criterion.ID)
 		}
 		if _, found := documentPaths[criterion.SourcePath]; !found {
 			return nil, fmt.Errorf("source criterion %q source_path %q is not an artifact document", criterion.ID, criterion.SourcePath)

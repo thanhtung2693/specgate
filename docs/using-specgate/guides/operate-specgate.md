@@ -25,9 +25,10 @@ directory contains the store. Keep SQLite sidecar files with the database if
 present. See [Configuration](../reference/configuration.md#cli).
 
 Portable workspace export is a migration format, not a complete Local backup.
-It refuses workspaces with pinned verification contracts because Full mode
-cannot preserve those contracts. Switching to Full does not delete the Local
-store, but it does not move its history automatically either.
+It refuses workspaces with pinned verification contracts or source criteria
+because Full mode cannot preserve those Local proof records. Switching to Full
+does not delete the Local store, but it does not move its history automatically
+either.
 
 ## Install the Full appliance
 

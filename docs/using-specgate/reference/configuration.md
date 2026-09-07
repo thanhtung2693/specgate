@@ -54,9 +54,9 @@ Switching topology clears the other mode's server/deployment or Local-only
 identity and project bindings. Create or select an identity after setup in the
 new mode. It does not delete Local SQLite state; use a portable export before
 moving Local history into Full mode. Portable export refuses a workspace with
-pinned verification contracts because Full mode cannot preserve their
-enforcement. Back up that Local store instead; switching modes does not migrate
-its history or remove the contracts.
+pinned verification contracts or source criteria because Full mode cannot
+preserve their enforcement or proof. Back up that Local store instead;
+switching modes does not migrate its history or remove those Local records.
 
 Local state defaults to the OS SpecGate config location. Use `--local-dir` at
 initialization to select another store, or `SPECGATE_LOCAL_DIR` for a
