@@ -21,6 +21,9 @@ versioning.
   for a stale workspace binding.
 - Local initialization can install IDE files at global or project scope, and
   retains that scope in verification and recovery commands.
+- Local artifacts can pin source requirements to immutable document snapshots.
+  Work acceptance criteria map them with `@source:<id>`, and coverage reports
+  whether every requirement is assigned and delivered.
 
 ### Changed
 
@@ -33,6 +36,9 @@ versioning.
   Claude Code when the IDE should manage updates and enablement. The SpecGate
   CLI remains the offline and project-integration installer; Cursor continues
   to use documented skills directories.
+- Local artifact preview validates and displays source requirements. Portable
+  export refuses source-criterion inventories because portable/v1 cannot carry
+  that proof into Full mode.
 - UI, CLI, agent, and Doc Registry dependencies were refreshed.
 
 ### Security
