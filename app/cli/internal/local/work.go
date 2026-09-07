@@ -120,6 +120,9 @@ func (s *Store) CreateWork(ctx context.Context, workspaceID string, input WorkIn
 	if len(criteria) == 0 {
 		return WorkItem{}, fmt.Errorf("at least one acceptance criterion is required")
 	}
+	if err := validateSourceCriterionMappings(criteria, artifact.SourceCriteria); err != nil {
+		return WorkItem{}, err
+	}
 	id, err := newID()
 	if err != nil {
 		return WorkItem{}, err
@@ -136,6 +139,26 @@ func (s *Store) CreateWork(ctx context.Context, workspaceID string, input WorkIn
 		return WorkItem{}, err
 	}
 	return work, nil
+}
+
+func validateSourceCriterionMappings(criteria []string, source []SourceCriterion) error {
+	known := make(map[string]bool, len(source))
+	for _, criterion := range source {
+		known[criterion.ID] = true
+	}
+	for _, criterion := range criteria {
+		for _, token := range strings.Fields(criterion) {
+			token = strings.Trim(token, ".,;:!?)]}\"'")
+			if !strings.HasPrefix(token, "@source:") {
+				continue
+			}
+			id := strings.TrimPrefix(token, "@source:")
+			if id == "" || !known[id] {
+				return fmt.Errorf("unknown source criterion %q", id)
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Store) CreateQuickWork(ctx context.Context, workspaceID string, input QuickWorkInput) (WorkItem, error) {

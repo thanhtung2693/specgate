@@ -19,6 +19,21 @@ missing evidence and next command). A reference is mandatory; no branch-name or
 most-recent-work inference occurs. Different work items on one spec remain
 separate. Receipt freshness is checked when a receipt exists.
 
+Local artifact packages can add explicit source requirements:
+
+```json
+"source_criteria": [
+  {"id":"req-id","text":"Record has a stable ID","source_path":"spec.md"},
+  {"id":"req-later","text":"Export CSV","source_path":"spec.md","deferred_reason":"Out of scope"}
+]
+```
+
+Each `source_path` must name a document in that artifact package. Map a work
+acceptance criterion with `@source:req-id`. Unknown IDs are rejected when
+creating work. `coverage` and `artifact coverage` show `source_coverage`
+alongside the existing work-delivery `state`; their JSON output carries the same
+field without changing that state.
+
 `work context <ref> --summary --json` returns scope and the pinned document
 index without document bodies. Read a specific indexed snapshot with
 `work context <ref> --document "specs/design.md" --json`. If one path has

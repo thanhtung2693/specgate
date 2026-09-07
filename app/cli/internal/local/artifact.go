@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"path"
 	"sort"
@@ -24,10 +25,18 @@ var artifactRequestTypes = map[string]struct{}{
 }
 
 type ArtifactInput struct {
-	FeatureKey  string
-	RequestType string
-	BaseVersion string
-	Documents   []ArtifactDocumentInput
+	FeatureKey     string
+	RequestType    string
+	BaseVersion    string
+	Documents      []ArtifactDocumentInput
+	SourceCriteria []SourceCriterion
+}
+
+type SourceCriterion struct {
+	ID             string `json:"id"`
+	Text           string `json:"text"`
+	SourcePath     string `json:"source_path"`
+	DeferredReason string `json:"deferred_reason,omitempty"`
 }
 
 type ArtifactDocumentInput struct {
@@ -48,6 +57,7 @@ type Artifact struct {
 	PolicySnapshot string
 	CreatedAt      string
 	Documents      []ArtifactDocument
+	SourceCriteria []SourceCriterion
 }
 
 type ArtifactDocument struct {
@@ -68,6 +78,22 @@ func (s *Store) PublishArtifact(ctx context.Context, workspaceID string, input A
 		return Artifact{}, fmt.Errorf("request type must be new_feature, change_request, bugfix, or unknown")
 	}
 	documents, digest, err := validateArtifactDocuments(input.Documents)
+	if err != nil {
+		return Artifact{}, err
+	}
+	criteria, err := validateSourceCriteria(input.SourceCriteria, documents)
+	if err != nil {
+		return Artifact{}, err
+	}
+	if len(criteria) > 0 {
+		hash := sha256.New()
+		_, _ = hash.Write([]byte(digest + "\n"))
+		for _, criterion := range criteria {
+			_, _ = hash.Write([]byte(criterion.ID + "\x00" + criterion.Text + "\x00" + criterion.SourcePath + "\x00" + criterion.DeferredReason + "\n"))
+		}
+		digest = "sha256:" + hex.EncodeToString(hash.Sum(nil))
+	}
+	criteriaJSON, err := json.Marshal(criteria)
 	if err != nil {
 		return Artifact{}, err
 	}
@@ -112,7 +138,8 @@ func (s *Store) PublishArtifact(ctx context.Context, workspaceID string, input A
 		CreatedAt:      time.Now().UTC().Format(time.RFC3339Nano),
 		Documents:      documents,
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO artifacts(id, workspace_id, feature_key, request_type, version, status, snapshot_digest, policy_digest, policy_snapshot_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, artifact.ID, artifact.WorkspaceID, artifact.FeatureKey, artifact.RequestType, artifact.Version, artifact.Status, artifact.SnapshotDigest, artifact.PolicyDigest, artifact.PolicySnapshot, artifact.CreatedAt); err != nil {
+	artifact.SourceCriteria = criteria
+	if _, err := tx.ExecContext(ctx, `INSERT INTO artifacts(id, workspace_id, feature_key, request_type, version, status, snapshot_digest, policy_digest, policy_snapshot_json, source_criteria_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, artifact.ID, artifact.WorkspaceID, artifact.FeatureKey, artifact.RequestType, artifact.Version, artifact.Status, artifact.SnapshotDigest, artifact.PolicyDigest, artifact.PolicySnapshot, string(criteriaJSON), artifact.CreatedAt); err != nil {
 		return Artifact{}, err
 	}
 	for _, document := range artifact.Documents {
@@ -127,7 +154,7 @@ func (s *Store) PublishArtifact(ctx context.Context, workspaceID string, input A
 }
 
 func (s *Store) ListArtifacts(ctx context.Context, workspaceID string) ([]Artifact, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, workspace_id, feature_key, request_type, version, status, snapshot_digest, policy_digest, policy_snapshot_json, created_at FROM artifacts WHERE workspace_id = ? ORDER BY created_at DESC`, workspaceID)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, workspace_id, feature_key, request_type, version, status, snapshot_digest, policy_digest, policy_snapshot_json, source_criteria_json, created_at FROM artifacts WHERE workspace_id = ? ORDER BY created_at DESC`, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -135,8 +162,12 @@ func (s *Store) ListArtifacts(ctx context.Context, workspaceID string) ([]Artifa
 	var artifacts []Artifact
 	for rows.Next() {
 		var artifact Artifact
-		if err := rows.Scan(&artifact.ID, &artifact.WorkspaceID, &artifact.FeatureKey, &artifact.RequestType, &artifact.Version, &artifact.Status, &artifact.SnapshotDigest, &artifact.PolicyDigest, &artifact.PolicySnapshot, &artifact.CreatedAt); err != nil {
+		var criteria string
+		if err := rows.Scan(&artifact.ID, &artifact.WorkspaceID, &artifact.FeatureKey, &artifact.RequestType, &artifact.Version, &artifact.Status, &artifact.SnapshotDigest, &artifact.PolicyDigest, &artifact.PolicySnapshot, &criteria, &artifact.CreatedAt); err != nil {
 			return nil, err
+		}
+		if err := json.Unmarshal([]byte(criteria), &artifact.SourceCriteria); err != nil {
+			return nil, fmt.Errorf("decode source criteria for artifact %q: %w", artifact.ID, err)
 		}
 		artifacts = append(artifacts, artifact)
 	}
@@ -145,8 +176,12 @@ func (s *Store) ListArtifacts(ctx context.Context, workspaceID string) ([]Artifa
 
 func (s *Store) GetArtifact(ctx context.Context, workspaceID, id string) (Artifact, error) {
 	var artifact Artifact
-	err := s.db.QueryRowContext(ctx, `SELECT id, workspace_id, feature_key, request_type, version, status, snapshot_digest, policy_digest, policy_snapshot_json, created_at FROM artifacts WHERE workspace_id = ? AND id = ?`, workspaceID, id).Scan(&artifact.ID, &artifact.WorkspaceID, &artifact.FeatureKey, &artifact.RequestType, &artifact.Version, &artifact.Status, &artifact.SnapshotDigest, &artifact.PolicyDigest, &artifact.PolicySnapshot, &artifact.CreatedAt)
+	var criteria string
+	err := s.db.QueryRowContext(ctx, `SELECT id, workspace_id, feature_key, request_type, version, status, snapshot_digest, policy_digest, policy_snapshot_json, source_criteria_json, created_at FROM artifacts WHERE workspace_id = ? AND id = ?`, workspaceID, id).Scan(&artifact.ID, &artifact.WorkspaceID, &artifact.FeatureKey, &artifact.RequestType, &artifact.Version, &artifact.Status, &artifact.SnapshotDigest, &artifact.PolicyDigest, &artifact.PolicySnapshot, &criteria, &artifact.CreatedAt)
 	if err != nil {
+		return Artifact{}, err
+	}
+	if err := json.Unmarshal([]byte(criteria), &artifact.SourceCriteria); err != nil {
 		return Artifact{}, err
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT path, role, content, digest FROM artifact_documents WHERE artifact_id = ? ORDER BY path`, id)
@@ -163,6 +198,34 @@ func (s *Store) GetArtifact(ctx context.Context, workspaceID, id string) (Artifa
 		artifact.Documents = append(artifact.Documents, document)
 	}
 	return artifact, rows.Err()
+}
+
+func validateSourceCriteria(input []SourceCriterion, documents []ArtifactDocument) ([]SourceCriterion, error) {
+	documentPaths := make(map[string]struct{}, len(documents))
+	for _, document := range documents {
+		documentPaths[document.Path] = struct{}{}
+	}
+	seen := map[string]bool{}
+	out := make([]SourceCriterion, 0, len(input))
+	for _, criterion := range input {
+		criterion.ID = strings.TrimSpace(criterion.ID)
+		criterion.Text = strings.TrimSpace(criterion.Text)
+		criterion.SourcePath = strings.TrimSpace(criterion.SourcePath)
+		criterion.DeferredReason = strings.TrimSpace(criterion.DeferredReason)
+		if criterion.ID == "" || criterion.Text == "" || criterion.SourcePath == "" {
+			return nil, fmt.Errorf("each source criterion needs id, text, and source_path")
+		}
+		if _, found := documentPaths[criterion.SourcePath]; !found {
+			return nil, fmt.Errorf("source criterion %q source_path %q is not an artifact document", criterion.ID, criterion.SourcePath)
+		}
+		if seen[criterion.ID] {
+			return nil, fmt.Errorf("duplicate source criterion id %q", criterion.ID)
+		}
+		seen[criterion.ID] = true
+		out = append(out, criterion)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
 }
 
 func validateArtifactDocuments(input []ArtifactDocumentInput) ([]ArtifactDocument, string, error) {

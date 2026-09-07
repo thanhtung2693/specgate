@@ -139,6 +139,18 @@ existing human decision.
 
 ## Per-criterion trust
 
+### Source requirement coverage (Local)
+
+Artifact packages may include `source_criteria`: immutable entries with `id`,
+`text`, and `source_path`. Link a work acceptance criterion with exact
+`@source:<id>`. `coverage` keeps its existing delivery state and adds
+`source_coverage`: `unknown` for legacy artifacts, `unassigned` when a source
+entry has no link, `accounted_for` when linked work remains open, and
+`delivered` when every linked work item is delivered.
+
+A `deferred_reason` is reviewed as part of approving the immutable snapshot.
+It counts as `accounted_for`, never `delivered`.
+
 Local mode can additionally pin a verification contract before the first
 completion report. It fixes the reviewed commands and repository-relative
 working directories for each `@check` binding. A later submission cannot swap

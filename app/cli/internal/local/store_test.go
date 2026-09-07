@@ -303,6 +303,52 @@ func TestPublishArtifactRequiresExactLatestBaseVersion(t *testing.T) {
 	}
 }
 
+func TestPublishArtifactPinsSourceCriteria(t *testing.T) {
+	store, err := local.Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	selection, err := store.Initialize(context.Background(), local.InitInput{WorkspaceName: "Alpha", DisplayName: "Human", Username: "human"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifact, err := store.PublishArtifact(context.Background(), selection.Workspace.ID, local.ArtifactInput{
+		FeatureKey: "LOCAL-SOURCE-CRITERIA", RequestType: "new_feature",
+		Documents:      []local.ArtifactDocumentInput{{Path: "spec.md", Role: "spec", Content: []byte("# Spec")}},
+		SourceCriteria: []local.SourceCriterion{{ID: "req-1", Text: "First result", SourcePath: "spec.md"}, {ID: "req-2", Text: "Second result", SourcePath: "spec.md"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := artifact.SourceCriteria; len(got) != 2 || got[0].ID != "req-1" || got[1].ID != "req-2" {
+		t.Fatalf("source criteria = %#v", got)
+	}
+	stored, err := store.GetArtifact(context.Background(), selection.Workspace.ID, artifact.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stored.SourceCriteria) != 2 {
+		t.Fatalf("stored source criteria = %#v", stored.SourceCriteria)
+	}
+	_, err = store.PublishArtifact(context.Background(), selection.Workspace.ID, local.ArtifactInput{
+		FeatureKey: "LOCAL-DUPLICATE-SOURCE-CRITERIA", RequestType: "new_feature",
+		Documents:      []local.ArtifactDocumentInput{{Path: "spec.md", Role: "spec", Content: []byte("# Spec")}},
+		SourceCriteria: []local.SourceCriterion{{ID: "req-1", Text: "One", SourcePath: "spec.md"}, {ID: "req-1", Text: "Two", SourcePath: "spec.md"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "duplicate source criterion") {
+		t.Fatalf("duplicate criteria error = %v", err)
+	}
+	_, err = store.PublishArtifact(context.Background(), selection.Workspace.ID, local.ArtifactInput{
+		FeatureKey: "LOCAL-INVALID-SOURCE-PATH", RequestType: "new_feature",
+		Documents:      []local.ArtifactDocumentInput{{Path: "spec.md", Role: "spec", Content: []byte("# Spec")}},
+		SourceCriteria: []local.SourceCriterion{{ID: "req-1", Text: "Missing source", SourcePath: "missing.md"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "source_path") {
+		t.Fatalf("unknown source path error = %v", err)
+	}
+}
+
 func TestArtifactDocumentsMatchFullPathAndRoleRules(t *testing.T) {
 	t.Parallel()
 	store, err := local.Open(filepath.Join(t.TempDir(), "state.db"))

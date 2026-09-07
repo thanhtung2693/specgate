@@ -325,6 +325,19 @@ func localArtifactInput(body map[string]any) (local.ArtifactInput, error) {
 		content, _ := document["content"].(string)
 		input.Documents = append(input.Documents, local.ArtifactDocumentInput{Path: path, Role: role, Content: []byte(content)})
 	}
+	if rawCriteria, found := body["source_criteria"]; found {
+		items, ok := rawCriteria.([]any)
+		if !ok {
+			return input, fmt.Errorf("source_criteria must be an array")
+		}
+		for _, raw := range items {
+			item, ok := raw.(map[string]any)
+			if !ok {
+				return input, fmt.Errorf("source_criteria must contain objects")
+			}
+			input.SourceCriteria = append(input.SourceCriteria, local.SourceCriterion{ID: artifactString(item, "id"), Text: artifactString(item, "text"), SourcePath: artifactString(item, "source_path"), DeferredReason: artifactString(item, "deferred_reason")})
+		}
+	}
 	return input, nil
 }
 
@@ -351,7 +364,7 @@ func localArtifactComparisonBase(artifact local.Artifact) (*client.Artifact, []c
 }
 
 func localArtifactView(artifact local.Artifact) map[string]any {
-	return map[string]any{"id": artifact.ID, "workspace_id": artifact.WorkspaceID, "feature_key": artifact.FeatureKey, "request_type": artifact.RequestType, "version": artifact.Version, "status": artifact.Status, "snapshot_digest": artifact.SnapshotDigest, "created_at": artifact.CreatedAt}
+	return map[string]any{"id": artifact.ID, "workspace_id": artifact.WorkspaceID, "feature_key": artifact.FeatureKey, "request_type": artifact.RequestType, "version": artifact.Version, "status": artifact.Status, "snapshot_digest": artifact.SnapshotDigest, "source_criteria": artifact.SourceCriteria, "created_at": artifact.CreatedAt}
 }
 
 func artifactPublishPreview(body map[string]any, sources []string) map[string]any {
@@ -419,6 +432,7 @@ func validateArtifactPublishFields(body map[string]any) error {
 		"source_revision": true, "source_id": true, "created_by": true,
 		"impact_level": true, "request_type": true, "authority": true,
 		"requested_governance_level": true, "impact_declaration": true,
+		"source_criteria": true,
 	}
 	var unknown []string
 	for field := range body {
@@ -470,6 +484,29 @@ func validateArtifactPublishFields(body map[string]any) error {
 		}
 		if _, ok := document[sourceFields[0]].(string); !ok {
 			return fmt.Errorf("documents[%d].%s must be a string", index, sourceFields[0])
+		}
+	}
+	if rawCriteria, found := body["source_criteria"]; found {
+		criteria, ok := rawCriteria.([]any)
+		if !ok {
+			return fmt.Errorf("source_criteria must be an array")
+		}
+		allowedCriterion := map[string]bool{"id": true, "text": true, "source_path": true, "deferred_reason": true}
+		for index, raw := range criteria {
+			criterion, ok := raw.(map[string]any)
+			if !ok {
+				return fmt.Errorf("source_criteria[%d] must be an object", index)
+			}
+			unknown = unknown[:0]
+			for field := range criterion {
+				if !allowedCriterion[field] {
+					unknown = append(unknown, field)
+				}
+			}
+			slices.Sort(unknown)
+			if len(unknown) > 0 {
+				return fmt.Errorf("unknown artifact package field %q", fmt.Sprintf("source_criteria[%d].%s", index, unknown[0]))
+			}
 		}
 	}
 	return nil

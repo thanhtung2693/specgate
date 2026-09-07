@@ -86,6 +86,34 @@ func TestCoverageFullClassifiesCanonicalSpecificationDelivery(t *testing.T) {
 	}
 }
 
+func TestCoverageFullReportsUnknownSourceCoverageForLegacyArtifacts(t *testing.T) {
+	t.Parallel()
+	deps, fc, _, out := newFakeDeps(t)
+	setWorkListWorkspace(t, deps)
+	fc.featuresResult = []client.Feature{{ID: "feature-a", Key: "A", Name: "Legacy", CanonicalArtifactID: "artifact-a"}}
+	fc.artifactListResult = &client.ArtifactList{Items: []client.Artifact{{ID: "artifact-a", FeatureID: "feature-a", Version: "v1", Status: "approved"}}}
+	fc.workItems = []client.WorkItemSummary{{Key: "CR-A", Phase: "delivered", LeadArtifactID: "artifact-a"}}
+
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "coverage"); code != output.ExitOK {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	var env struct {
+		Data struct {
+			Specifications []struct {
+				FeatureKey     string `json:"feature_key"`
+				State          string `json:"state"`
+				SourceCoverage string `json:"source_coverage"`
+			} `json:"specifications"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+		t.Fatal(err)
+	}
+	if got := env.Data.Specifications[0]; got.FeatureKey != "A" || got.State != "delivered" || got.SourceCoverage != "unknown" {
+		t.Fatalf("coverage = %+v, want legacy delivered work with source_coverage=unknown", got)
+	}
+}
+
 func TestCoverageFullReadsEveryArtifactPage(t *testing.T) {
 	t.Parallel()
 	deps, fc, _, out := newFakeDeps(t)
