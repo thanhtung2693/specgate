@@ -66,7 +66,7 @@ func Open(path string) (*Store, error) {
 		`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, display_name TEXT NOT NULL, email TEXT NOT NULL DEFAULT '')`,
 		`CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, slug TEXT UNIQUE NOT NULL, name TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS selection (id INTEGER PRIMARY KEY CHECK (id = 1), user_id TEXT NOT NULL, workspace_id TEXT NOT NULL)`,
-		`CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), feature_key TEXT NOT NULL, request_type TEXT NOT NULL, version INTEGER NOT NULL, status TEXT NOT NULL, snapshot_digest TEXT NOT NULL, policy_digest TEXT NOT NULL DEFAULT '', policy_snapshot_json TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, UNIQUE(workspace_id, feature_key, version))`,
+		`CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), feature_key TEXT NOT NULL, request_type TEXT NOT NULL, version INTEGER NOT NULL, status TEXT NOT NULL, snapshot_digest TEXT NOT NULL, policy_digest TEXT NOT NULL DEFAULT '', policy_snapshot_json TEXT NOT NULL DEFAULT '', source_criteria_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL, UNIQUE(workspace_id, feature_key, version))`,
 		`CREATE TABLE IF NOT EXISTS artifact_documents (artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE, path TEXT NOT NULL, role TEXT NOT NULL, content BLOB NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(artifact_id, path, role))`,
 		`CREATE TABLE IF NOT EXISTS artifact_readiness_runs (id TEXT PRIMARY KEY, artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE, workspace_id TEXT NOT NULL REFERENCES workspaces(id), aggregate TEXT NOT NULL, evidence TEXT NOT NULL, created_at TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS local_gate_tasks (
@@ -116,7 +116,36 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := ensureArtifactSourceCriteriaSchema(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return &Store{db: db}, nil
+}
+
+func ensureArtifactSourceCriteriaSchema(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(artifacts)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull, pk int
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
+			return err
+		}
+		if name == "source_criteria_json" {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = db.Exec(`ALTER TABLE artifacts ADD COLUMN source_criteria_json TEXT NOT NULL DEFAULT '[]'`)
+	return err
 }
 
 // ensureArtifactDocumentRoleKey widens the artifact_documents key from

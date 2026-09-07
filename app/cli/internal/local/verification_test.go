@@ -5,6 +5,7 @@ import (
 	"github.com/specgate/specgate/app/cli/internal/local"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -72,6 +73,30 @@ func TestVerificationContractRoundTripImmutable(t *testing.T) {
 		t.Fatal("portable export discarded pin")
 	}
 }
+
+func TestExportWorkspaceRejectsSourceCriteria(t *testing.T) {
+	s, err := local.Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	selection, err := s.Initialize(t.Context(), local.InitInput{WorkspaceName: "Source criteria", Username: "human", DisplayName: "Human"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PublishArtifact(t.Context(), selection.Workspace.ID, local.ArtifactInput{
+		FeatureKey:     "SOURCE-CRITERIA-EXPORT",
+		RequestType:    "new_feature",
+		Documents:      []local.ArtifactDocumentInput{{Path: "spec.md", Role: "spec", Content: []byte("# Spec")}},
+		SourceCriteria: []local.SourceCriterion{{ID: "req-1", Text: "Persist source coverage", SourcePath: "spec.md"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ExportWorkspace(t.Context(), selection.Workspace.ID); err == nil || !strings.Contains(err.Error(), "source criteria") || !strings.Contains(err.Error(), "Local database backup") {
+		t.Fatalf("export with source criteria error = %v", err)
+	}
+}
+
 func TestVerificationContractInvalidPins(t *testing.T) {
 	for _, kind := range []string{"empty", "unknown", "missing", "duplicate", "shell", "absolute", "escape", "symlink", "context", "late"} {
 		t.Run(kind, func(t *testing.T) {

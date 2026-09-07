@@ -59,7 +59,7 @@ func newArtifactCoverageCmd(deps *Deps) *cobra.Command {
 				if err != nil {
 					return localExitError(deps, "artifact.coverage", err)
 				}
-				return printArtifactCoverage(deps, artifactCoverageView(id, artifact.Status, localWorkCoverage(items, id)))
+				return printArtifactCoverage(deps, localArtifactCoverageView(artifact, items))
 			}
 			workspaceID, err := currentWorkspaceID(cmd.Context(), deps)
 			if err != nil {
@@ -96,6 +96,19 @@ func fullWorkCoverage(items []client.WorkItemSummary, artifactID string) []map[s
 	}
 	return out
 }
+
+func localArtifactCoverageView(artifact local.Artifact, items []local.WorkItem) map[string]any {
+	data := artifactCoverageView(artifact.ID, artifact.Status, localWorkCoverage(items, artifact.ID))
+	work := make([]coverageWork, 0, len(items))
+	for _, item := range items {
+		if item.ArtifactID == artifact.ID {
+			work = append(work, coverageWork{Current: true, Phase: item.Phase, AcceptanceCriteria: item.AcceptanceCriteria})
+		}
+	}
+	data["source_coverage"] = sourceCoverage(sourceCriterionIDs(artifact.SourceCriteria), work)
+	return data
+}
+
 func artifactCoverageView(id, artifactStatus string, items []map[string]string) map[string]any {
 	state := "uncovered"
 	if len(items) > 0 {
@@ -109,7 +122,7 @@ func artifactCoverageView(id, artifactStatus string, items []map[string]string) 
 	} else if artifactStatus == "superseded" {
 		state = "superseded"
 	}
-	return map[string]any{"artifact_id": id, "state": state, "work_items": items}
+	return map[string]any{"artifact_id": id, "state": state, "source_coverage": "unknown", "work_items": items}
 }
 func printArtifactCoverage(deps *Deps, data map[string]any) error {
 	if deps.Printer.Mode() == output.ModeJSON {
@@ -117,6 +130,7 @@ func printArtifactCoverage(deps *Deps, data map[string]any) error {
 		return nil
 	}
 	fmt.Fprintf(deps.Stdout, "%s %s\n", styled(deps, output.StyleBold, fmt.Sprint(data["artifact_id"]))+":", styledStatus(deps, fmt.Sprint(data["state"])))
+	fmt.Fprintf(deps.Stdout, "  Source requirements: %s\n", styledStatus(deps, fmt.Sprint(data["source_coverage"])))
 	for _, item := range data["work_items"].([]map[string]string) {
 		fmt.Fprintf(deps.Stdout, "%s  [%s]  %s\n", styled(deps, output.StyleBold, item["key"]), styledStatus(deps, item["phase"]), item["title"])
 	}

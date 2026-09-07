@@ -57,12 +57,27 @@ to compare explicit paths, roles, and hashes against one stored artifact.`,
 				code := deps.Printer.Error("artifact.publish", payload)
 				return &output.ExitError{Code: code, Err: err}
 			}
+			if _, hasSourceCriteria := body["source_criteria"]; hasSourceCriteria && deps.Topology != config.ModeLocal {
+				return incompatibleCommand(deps, "artifact.publish", "source_criteria is available only in Local mode")
+			}
 			projectRoot, _ := config.FindProjectRoot(deps.WorkingDir)
 			documentSources, err := expandArtifactDocumentSources(body, filePath, projectRoot)
 			if err != nil {
 				payload := output.ErrorPayload{Code: "usage", Message: err.Error()}
 				code := deps.Printer.Error("artifact.publish", payload)
 				return &output.ExitError{Code: code, Err: err}
+			}
+			var localInput local.ArtifactInput
+			if deps.Topology == config.ModeLocal {
+				localInput, err = localArtifactInput(body)
+				if err == nil {
+					err = local.ValidateArtifactInput(localInput)
+				}
+				if err != nil {
+					payload := output.ErrorPayload{Code: "validation", Message: err.Error()}
+					code := deps.Printer.Error("artifact.publish", payload)
+					return &output.ExitError{Code: code, Err: err}
+				}
 			}
 			if previewOnly {
 				preview := artifactPublishPreview(body, documentSources)
@@ -135,6 +150,14 @@ to compare explicit paths, roles, and hashes against one stored artifact.`,
 				for _, doc := range preview["documents"].([]map[string]any) {
 					fmt.Fprintf(deps.Stdout, "%s\t%s\t%d bytes\n", styled(deps, output.StyleBold, fmt.Sprint(doc["path"])), doc["role"], doc["size_bytes"])
 				}
+				for _, criterion := range preview["source_criteria"].([]map[string]any) {
+					fmt.Fprintf(deps.Stdout, "Source criterion\t%s\t%s\t%s", criterion["id"], criterion["source_path"], criterion["text"])
+					deferred, _ := criterion["deferred_reason"].(string)
+					if deferred != "" {
+						fmt.Fprintf(deps.Stdout, " (deferred: %s)", deferred)
+					}
+					fmt.Fprintln(deps.Stdout)
+				}
 				fmt.Fprintf(deps.Stdout, "Policy\t%s (%s)\n", policy.GovernanceLevel, strings.Join(policy.ReasonCodes, ", "))
 				if missing := preview["missing_roles"].([]string); len(missing) > 0 {
 					fmt.Fprintf(deps.Stdout, "Missing roles\t%s\n", strings.Join(missing, ", "))
@@ -156,11 +179,7 @@ to compare explicit paths, roles, and hashes against one stored artifact.`,
 				if err != nil {
 					return localExitError(deps, "artifact.publish", err)
 				}
-				input, err := localArtifactInput(body)
-				if err != nil {
-					return localExitError(deps, "artifact.publish", err)
-				}
-				artifact, err := store.PublishArtifact(cmd.Context(), selection.Workspace.ID, input)
+				artifact, err := store.PublishArtifact(cmd.Context(), selection.Workspace.ID, localInput)
 				if err != nil {
 					return localExitError(deps, "artifact.publish", err)
 				}
@@ -325,6 +344,19 @@ func localArtifactInput(body map[string]any) (local.ArtifactInput, error) {
 		content, _ := document["content"].(string)
 		input.Documents = append(input.Documents, local.ArtifactDocumentInput{Path: path, Role: role, Content: []byte(content)})
 	}
+	if rawCriteria, found := body["source_criteria"]; found {
+		items, ok := rawCriteria.([]any)
+		if !ok {
+			return input, fmt.Errorf("source_criteria must be an array")
+		}
+		for _, raw := range items {
+			item, ok := raw.(map[string]any)
+			if !ok {
+				return input, fmt.Errorf("source_criteria must contain objects")
+			}
+			input.SourceCriteria = append(input.SourceCriteria, local.SourceCriterion{ID: artifactString(item, "id"), Text: artifactString(item, "text"), SourcePath: artifactString(item, "source_path"), DeferredReason: artifactString(item, "deferred_reason")})
+		}
+	}
 	return input, nil
 }
 
@@ -351,7 +383,7 @@ func localArtifactComparisonBase(artifact local.Artifact) (*client.Artifact, []c
 }
 
 func localArtifactView(artifact local.Artifact) map[string]any {
-	return map[string]any{"id": artifact.ID, "workspace_id": artifact.WorkspaceID, "feature_key": artifact.FeatureKey, "request_type": artifact.RequestType, "version": artifact.Version, "status": artifact.Status, "snapshot_digest": artifact.SnapshotDigest, "created_at": artifact.CreatedAt}
+	return map[string]any{"id": artifact.ID, "workspace_id": artifact.WorkspaceID, "feature_key": artifact.FeatureKey, "request_type": artifact.RequestType, "version": artifact.Version, "status": artifact.Status, "snapshot_digest": artifact.SnapshotDigest, "source_criteria": artifact.SourceCriteria, "created_at": artifact.CreatedAt}
 }
 
 func artifactPublishPreview(body map[string]any, sources []string) map[string]any {
@@ -384,7 +416,7 @@ func artifactPublishPreview(body map[string]any, sources []string) map[string]an
 	preview := map[string]any{
 		"source_kind": body["source_kind"], "source_id": body["source_id"], "source_revision": body["source_revision"],
 		"documents": documents, "target": target, "base_version": base, "new_artifact": base == "",
-		"omitted": omitted, "ambiguous": []string{}, "human_confirmation_required": true,
+		"source_criteria": previewSourceCriteria(body), "omitted": omitted, "ambiguous": []string{}, "human_confirmation_required": true,
 	}
 	if len(omitted) > 0 {
 		// Name the fields, not just the gap. An author cannot answer "supply an
@@ -397,6 +429,25 @@ func artifactPublishPreview(body map[string]any, sources []string) map[string]an
 			"Omitting it is allowed; unanswered questions resolve as unknown, which raises governance rather than lowering it."
 	}
 	return preview
+}
+
+func previewSourceCriteria(body map[string]any) []map[string]any {
+	raw, _ := body["source_criteria"].([]any)
+	criteria := make([]map[string]any, 0, len(raw))
+	for _, item := range raw {
+		criterion, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		row := map[string]any{
+			"id": criterion["id"], "text": criterion["text"], "source_path": criterion["source_path"],
+		}
+		if deferred, _ := criterion["deferred_reason"].(string); strings.TrimSpace(deferred) != "" {
+			row["deferred_reason"] = deferred
+		}
+		criteria = append(criteria, row)
+	}
+	return criteria
 }
 
 func normalizeArtifactPublishBody(body map[string]any) error {
@@ -419,6 +470,7 @@ func validateArtifactPublishFields(body map[string]any) error {
 		"source_revision": true, "source_id": true, "created_by": true,
 		"impact_level": true, "request_type": true, "authority": true,
 		"requested_governance_level": true, "impact_declaration": true,
+		"source_criteria": true,
 	}
 	var unknown []string
 	for field := range body {
@@ -470,6 +522,36 @@ func validateArtifactPublishFields(body map[string]any) error {
 		}
 		if _, ok := document[sourceFields[0]].(string); !ok {
 			return fmt.Errorf("documents[%d].%s must be a string", index, sourceFields[0])
+		}
+	}
+	if rawCriteria, found := body["source_criteria"]; found {
+		criteria, ok := rawCriteria.([]any)
+		if !ok {
+			return fmt.Errorf("source_criteria must be an array")
+		}
+		allowedCriterion := map[string]bool{"id": true, "text": true, "source_path": true, "deferred_reason": true}
+		for index, raw := range criteria {
+			criterion, ok := raw.(map[string]any)
+			if !ok {
+				return fmt.Errorf("source_criteria[%d] must be an object", index)
+			}
+			unknown = unknown[:0]
+			for field := range criterion {
+				if !allowedCriterion[field] {
+					unknown = append(unknown, field)
+				}
+			}
+			slices.Sort(unknown)
+			if len(unknown) > 0 {
+				return fmt.Errorf("unknown artifact package field %q", fmt.Sprintf("source_criteria[%d].%s", index, unknown[0]))
+			}
+			for _, field := range []string{"id", "text", "source_path", "deferred_reason"} {
+				if value, found := criterion[field]; found {
+					if _, ok := value.(string); !ok {
+						return fmt.Errorf("source_criteria[%d].%s must be a string", index, field)
+					}
+				}
+			}
 		}
 	}
 	return nil

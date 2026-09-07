@@ -11,6 +11,7 @@ import (
 
 	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/config"
+	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
@@ -22,28 +23,36 @@ type coverageFeature struct {
 }
 
 type coverageArtifact struct {
-	ID         string
-	FeatureID  string
-	FeatureKey string
-	Version    string
+	ID             string
+	FeatureID      string
+	FeatureKey     string
+	Version        string
+	SourceCriteria []sourceCriterion
+}
+
+type sourceCriterion struct {
+	ID             string
+	DeferredReason string
 }
 
 type coverageWork struct {
-	Key        string `json:"key"`
-	Title      string `json:"title"`
-	Phase      string `json:"phase"`
-	ArtifactID string `json:"artifact_id"`
-	Current    bool   `json:"current_spec"`
+	Key                string `json:"key"`
+	Title              string `json:"title"`
+	Phase              string `json:"phase"`
+	ArtifactID         string `json:"artifact_id"`
+	Current            bool   `json:"current_spec"`
+	AcceptanceCriteria []string
 }
 
 type specificationCoverage struct {
-	FeatureKey  string         `json:"feature_key"`
-	FeatureName string         `json:"feature_name,omitempty"`
-	ArtifactID  string         `json:"artifact_id"`
-	Version     string         `json:"version"`
-	State       string         `json:"state"`
-	WorkItems   []coverageWork `json:"work_items"`
-	NextAction  string         `json:"next_action,omitempty"`
+	FeatureKey     string         `json:"feature_key"`
+	FeatureName    string         `json:"feature_name,omitempty"`
+	ArtifactID     string         `json:"artifact_id"`
+	Version        string         `json:"version"`
+	State          string         `json:"state"`
+	SourceCoverage string         `json:"source_coverage"`
+	WorkItems      []coverageWork `json:"work_items"`
+	NextAction     string         `json:"next_action,omitempty"`
 }
 
 type workspaceCoverage struct {
@@ -115,12 +124,12 @@ func localWorkspaceCoverage(cmd *cobra.Command, deps *Deps) (workspaceCoverage, 
 	artifacts := make([]coverageArtifact, 0, len(localArtifacts))
 	for _, artifact := range localArtifacts {
 		artifacts = append(artifacts, coverageArtifact{
-			ID: artifact.ID, FeatureKey: artifact.FeatureKey, Version: "v" + strconv.Itoa(artifact.Version),
+			ID: artifact.ID, FeatureKey: artifact.FeatureKey, Version: "v" + strconv.Itoa(artifact.Version), SourceCriteria: sourceCriterionIDs(artifact.SourceCriteria),
 		})
 	}
 	work := make([]coverageWork, 0, len(localWork))
 	for _, item := range localWork {
-		work = append(work, coverageWork{Key: item.Key, Title: item.Title, Phase: item.Phase, ArtifactID: item.ArtifactID})
+		work = append(work, coverageWork{Key: item.Key, Title: item.Title, Phase: item.Phase, ArtifactID: item.ArtifactID, AcceptanceCriteria: item.AcceptanceCriteria})
 	}
 	return buildWorkspaceCoverage(config.ModeLocal, selection.Workspace.ID, selection.Workspace.Slug, features, artifacts, work), nil
 }
@@ -186,6 +195,7 @@ func listAllArtifacts(ctx context.Context, deps *Deps, filter client.ArtifactFil
 func buildWorkspaceCoverage(mode config.Mode, workspaceID, workspace string, features []coverageFeature, artifacts []coverageArtifact, work []coverageWork) workspaceCoverage {
 	artifactFeature := make(map[string]string, len(artifacts))
 	artifactVersion := make(map[string]string, len(artifacts))
+	artifactCriteria := make(map[string][]sourceCriterion, len(artifacts))
 	for _, artifact := range artifacts {
 		key := artifact.FeatureID
 		if key == "" {
@@ -193,6 +203,7 @@ func buildWorkspaceCoverage(mode config.Mode, workspaceID, workspace string, fea
 		}
 		artifactFeature[artifact.ID] = key
 		artifactVersion[artifact.ID] = artifact.Version
+		artifactCriteria[artifact.ID] = artifact.SourceCriteria
 	}
 	sort.Slice(features, func(i, j int) bool { return features[i].Key < features[j].Key })
 	result := workspaceCoverage{
@@ -202,7 +213,7 @@ func buildWorkspaceCoverage(mode config.Mode, workspaceID, workspace string, fea
 	}
 	for _, feature := range features {
 		row := specificationCoverage{
-			FeatureKey: feature.Key, FeatureName: feature.Name, ArtifactID: feature.CanonicalArtifactID, Version: artifactVersion[feature.CanonicalArtifactID], WorkItems: []coverageWork{},
+			FeatureKey: feature.Key, FeatureName: feature.Name, ArtifactID: feature.CanonicalArtifactID, Version: artifactVersion[feature.CanonicalArtifactID], SourceCoverage: "unknown", WorkItems: []coverageWork{},
 		}
 		currentDelivered := false
 		currentUnfinished := false
@@ -235,6 +246,7 @@ func buildWorkspaceCoverage(mode config.Mode, workspaceID, workspace string, fea
 			row.State = "uncovered"
 			row.NextAction = createCoverageWorkCommand(feature)
 		}
+		row.SourceCoverage = sourceCoverage(artifactCriteria[feature.CanonicalArtifactID], row.WorkItems)
 		result.Counts[row.State]++
 		result.Specifications = append(result.Specifications, row)
 	}
@@ -254,6 +266,62 @@ func isDeliveredPhase(phase string) bool {
 	return strings.EqualFold(strings.TrimSpace(phase), "delivered")
 }
 
+func sourceCriterionIDs(criteria []local.SourceCriterion) []sourceCriterion {
+	ids := make([]sourceCriterion, 0, len(criteria))
+	for _, criterion := range criteria {
+		ids = append(ids, sourceCriterion{ID: criterion.ID, DeferredReason: criterion.DeferredReason})
+	}
+	return ids
+}
+
+func sourceCoverage(criteria []sourceCriterion, work []coverageWork) string {
+	if len(criteria) == 0 {
+		return "unknown"
+	}
+	deferred := false
+	accountedFor := false
+	for _, criterion := range criteria {
+		if criterion.DeferredReason != "" {
+			deferred = true
+			continue
+		}
+		id := criterion.ID
+		mapped := false
+		delivered := true
+		for _, item := range work {
+			if !item.Current {
+				continue
+			}
+			for _, acceptance := range item.AcceptanceCriteria {
+				if hasSourceCriterion(acceptance, id) {
+					mapped = true
+					delivered = delivered && isDeliveredPhase(item.Phase)
+				}
+			}
+		}
+		if !mapped {
+			return "unassigned"
+		}
+		if !delivered {
+			accountedFor = true
+		}
+	}
+	if deferred || accountedFor {
+		return "accounted_for"
+	}
+	return "delivered"
+}
+
+func hasSourceCriterion(acceptance, id string) bool {
+	want := "@source:" + id
+	for _, token := range strings.Fields(acceptance) {
+		if strings.Trim(token, ".,;:!?)]}\"'") == want {
+			return true
+		}
+	}
+	return false
+}
+
 func createCoverageWorkCommand(feature coverageFeature) string {
 	return fmt.Sprintf("specgate artifact show %s --json", feature.CanonicalArtifactID)
 }
@@ -265,6 +333,7 @@ func printWorkspaceCoverage(deps *Deps, result workspaceCoverage) {
 		result.Counts["delivered"], result.Counts["unfinished"], result.Counts["stale"], result.Counts["uncovered"])
 	for _, spec := range result.Specifications {
 		fmt.Fprintf(deps.Stdout, "%s %s %s — %s\n", styled(deps, output.StyleBold, spec.FeatureKey), spec.Version, spec.ArtifactID, styledStatus(deps, spec.State))
+		fmt.Fprintf(deps.Stdout, "  Source requirements: %s\n", styledStatus(deps, spec.SourceCoverage))
 		for _, item := range spec.WorkItems {
 			fmt.Fprintf(deps.Stdout, "  %s [%s] %s\n", item.Key, item.Phase, item.ArtifactID)
 		}

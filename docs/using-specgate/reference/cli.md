@@ -19,6 +19,28 @@ missing evidence and next command). A reference is mandatory; no branch-name or
 most-recent-work inference occurs. Different work items on one spec remain
 separate. Receipt freshness is checked when a receipt exists.
 
+Local artifact packages can add explicit source requirements:
+
+```json
+"source_criteria": [
+  {"id":"req-id","text":"Record has a stable ID","source_path":"spec.md"},
+  {"id":"req-later","text":"Export CSV","source_path":"spec.md","deferred_reason":"Out of scope"}
+]
+```
+
+Each `source_path` must name a document in that artifact package. IDs must
+start with an ASCII letter or digit, then contain only ASCII letters, digits,
+hyphens, or underscores, so a work acceptance criterion can map them reliably
+with `@source:req-id`. Unknown IDs are rejected when creating work. `coverage`
+and `artifact coverage` show `source_coverage` alongside the existing
+work-delivery `state`; their JSON output carries the same field without
+changing that state.
+
+Source-criterion fields must be strings; omit `deferred_reason` when the
+requirement is not deferred. Local `artifact publish --preview` validates the
+inventory and shows each requirement's text, ID, source path, and any deferral
+reason in both JSON and plain output.
+
 `work context <ref> --summary --json` returns scope and the pinned document
 index without document bodies. Read a specific indexed snapshot with
 `work context <ref> --document "specs/design.md" --json`. If one path has
@@ -73,9 +95,10 @@ through the CLI, not weak test design or tampering by someone who controls the
 Local database. Local user names are cooperative attribution, not proof that a
 human operated the CLI.
 
-Contracts are Local-only. Portable/v1 export refuses a workspace containing
-pinned contracts because Full import cannot preserve their enforcement. Use a
-Local database backup instead; existing unpinned portable exports are unchanged.
+Contracts and source-criterion inventory are Local-only. Portable/v1 export
+refuses a workspace containing pinned contracts or source criteria because Full
+import cannot preserve their enforcement or proof. Use a Local database backup
+instead; existing unpinned, source-criterion-free portable exports are unchanged.
 
 ## Local setup diagnostics
 

@@ -45,6 +45,10 @@ func TestOpenMigratesExistingWorkItemsForQuickRouteWithoutLosingData(t *testing.
 	if existing.ArtifactID != "artifact-1" || existing.Title != "Existing work" {
 		t.Fatalf("existing work changed: %#v", existing)
 	}
+	artifact, err := store.GetArtifact(context.Background(), "ws-1", "artifact-1")
+	if err != nil || len(artifact.SourceCriteria) != 0 {
+		t.Fatalf("legacy artifact criteria = %#v, %v", artifact.SourceCriteria, err)
+	}
 	report, err := store.LatestDeliveryReport(context.Background(), "ws-1", "LOCAL-OLD")
 	if err != nil || report.ID != "report-1" {
 		t.Fatalf("existing delivery report changed: %#v, %v", report, err)
