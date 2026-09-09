@@ -53,10 +53,4 @@ escape_for_json() {
 }
 
 ESCAPED="$(escape_for_json "$CONTENT")"
-PLATFORM="${1:-codex}"
-
-if [ "$PLATFORM" = "claude" ]; then
-  printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$ESCAPED"
-else
-  printf '{"additionalContext":"%s"}\n' "$ESCAPED"
-fi
+printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$ESCAPED"

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -82,6 +83,50 @@ func TestAddSpecgateSessionHookRepairsOwnedCommand(t *testing.T) {
 	got := commands[0].(map[string]any)["command"]
 	if got != want {
 		t.Fatalf("owned hook command = %q, want %q", got, want)
+	}
+	if matcher, _ := entry["matcher"].(string); matcher != "" {
+		t.Fatalf("refreshed hook still filters SessionStart: %q", matcher)
+	}
+}
+
+func TestSessionHookRefreshPreservesOtherCommands(t *testing.T) {
+	other := map[string]any{"type": "command", "command": "echo unrelated"}
+	entry := map[string]any{"matcher": "startup", "hooks": []any{
+		other, map[string]any{"type": "command", "command": claudeProjectSessionHookCommand},
+	}}
+	settings := map[string]any{"hooks": map[string]any{"SessionStart": []any{entry}}}
+	if hasSpecgateSessionHook(settings) {
+		t.Fatal("doctor accepted a hook that misses resume")
+	}
+	addSpecgateSessionHook(settings)
+	addSpecgateSessionHook(settings)
+	events := settings["hooks"].(map[string]any)["SessionStart"].([]any)
+	if len(events) != 2 || entry["matcher"] != "startup" || len(entry["hooks"].([]any)) != 1 {
+		t.Fatalf("refresh changed unrelated hook or duplicated SpecGate: %#v", events)
+	}
+	if !hasSpecgateSessionHook(settings) {
+		t.Fatal("refreshed hook is unhealthy")
+	}
+}
+
+func TestPluginHookWrapperPreservesFailure(t *testing.T) {
+	dir := t.TempDir()
+	wrapper, err := os.ReadFile("local_plugin_assets/hooks/run-hook.cmd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "run-hook.cmd")
+	if err := os.WriteFile(path, wrapper, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeNativeTestFile(t, filepath.Join(dir, "failure"), "exit 7\n")
+	cmd := exec.Command("bash", path, "failure")
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("cmd", "/c", path, "failure")
+	}
+	output, err := cmd.CombinedOutput()
+	if exit, ok := err.(*exec.ExitError); !ok || exit.ExitCode() != 7 {
+		t.Fatalf("wrapper lost hook exit code: %v, output: %s", err, output)
 	}
 }
 

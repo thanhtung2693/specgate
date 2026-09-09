@@ -60,10 +60,28 @@ cp -R "$CANONICAL/skills/specgate" "$tmp/project/.claude/skills/"
 printf '%s\n' specgate-plugin-v1 > "$tmp/project/.claude/specgate-hooks/.specgate-owned"
 
 hook="$ROOT/$CANONICAL/hooks/session-start"
-native="$(cd "$tmp/home/work/plain"; HOME="$tmp/home" "$hook" codex | jq -r .additionalContext)"
-governed="$(cd "$tmp/home/work/governed"; HOME="$tmp/home" "$hook" codex | jq -r .additionalContext)"
-cli="$(cd "$tmp/home/work/plain"; HOME="$tmp/home" "$tmp/cli/hooks/session-start" codex | jq -r .additionalContext)"
-project="$(cd "$tmp/home/work/plain"; HOME="$tmp/home" "$tmp/project/.claude/specgate-hooks/session-start" claude | jq -r .hookSpecificOutput.additionalContext)"
+for config in hooks.json hooks-claude.json; do
+  jq -e '.hooks.SessionStart | all(.[]; (.matcher // "") == "")' "$CANONICAL/hooks/$config" >/dev/null ||
+    fail "$config filters out session lifecycle events"
+done
+"$hook" codex | jq -e '.hookSpecificOutput.hookEventName == "SessionStart" and (.hookSpecificOutput.additionalContext | type == "string") and (has("additionalContext") | not)' >/dev/null ||
+  fail "Codex hook output does not match SessionStart schema"
+native="$(cd "$tmp/home/work/plain"; "$hook" codex | jq -r .hookSpecificOutput.additionalContext)"
+governed="$(cd "$tmp/home/work/governed"; "$hook" codex | jq -r .hookSpecificOutput.additionalContext)"
+cli="$(cd "$tmp/home/work/plain"; "$tmp/cli/hooks/session-start" codex | jq -r .hookSpecificOutput.additionalContext)"
+project="$(cd "$tmp/home/work/plain"; "$tmp/project/.claude/specgate-hooks/session-start" claude | jq -r .hookSpecificOutput.additionalContext)"
+
+mkdir -p "$tmp/home/work/governed/subdir" "$tmp/home/work/governed/nested/.git"
+for platform in codex claude; do
+  wrapped="$(cd "$tmp/home/work/governed/subdir"; bash "$ROOT/$CANONICAL/hooks/run-hook.cmd" session-start "$platform")"
+  printf '%s' "$wrapped" | jq -e '.hookSpecificOutput.additionalContext | contains("governed by SpecGate")' >/dev/null ||
+    fail "$platform wrapper did not route from a repository subdirectory"
+  isolated="$(cd "$tmp/home/work/governed/nested"; "$hook" "$platform")"
+  printf '%s' "$isolated" | jq -e '.hookSpecificOutput.additionalContext | contains("governed by SpecGate") | not' >/dev/null ||
+    fail "$platform hook inherited governance across a repository boundary"
+done
+grep -Fxq 'alwaysApply: true' "$CANONICAL/rules/using-specgate.mdc" ||
+  fail "Cursor routing rule is not always applied"
 
 printf '%s' "$native" | grep -Fq 'load `specgate`' ||
   fail "hook did not route explicit SpecGate work"

@@ -223,6 +223,17 @@ existing settings permissions are preserved. `plugins doctor --project-local
 --agent claude` verifies the hook files, their SpecGate ownership marker, the
 CLI permission, and the SessionStart registration.
 
+Claude Code and native Codex plugins add a short reminder when a session starts
+or resumes. Cursor uses an always-applied rule. Project-local Codex installs
+contain skills only; use the native plugin for session reminders. Skills.sh
+alone does not install hooks. These reminders guide the agent; they do not
+guarantee it will invoke a skill on every prompt.
+
+If Claude keeps missing SpecGate, check `/hooks` for its SessionStart entry and
+refresh through the manager that installed it, then restart Claude. On Windows,
+the session hook needs Bash (included with Git for Windows); a missing Bash
+now reports an error instead of silently skipping the reminder.
+
 The focused skills are:
 
 - `specgate` — point the agent at the right lifecycle phase

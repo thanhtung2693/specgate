@@ -20,22 +20,22 @@ set "HOOK_DIR=%~dp0"
 REM Try Git for Windows bash in standard locations.
 if exist "C:\Program Files\Git\bin\bash.exe" (
     "C:\Program Files\Git\bin\bash.exe" "%HOOK_DIR%%~1" %2 %3 %4 %5 %6 %7 %8 %9
-    exit /b %ERRORLEVEL%
+    exit /b
 )
 if exist "C:\Program Files (x86)\Git\bin\bash.exe" (
     "C:\Program Files (x86)\Git\bin\bash.exe" "%HOOK_DIR%%~1" %2 %3 %4 %5 %6 %7 %8 %9
-    exit /b %ERRORLEVEL%
+    exit /b
 )
 
 REM Try bash on PATH (MSYS2, Cygwin, user-installed Git Bash).
 where bash >nul 2>nul
 if %ERRORLEVEL% equ 0 (
     bash "%HOOK_DIR%%~1" %2 %3 %4 %5 %6 %7 %8 %9
-    exit /b %ERRORLEVEL%
+    exit /b
 )
 
-REM No bash found — exit silently; plugin still works, just without hook context.
-exit /b 0
+echo SpecGate hook: Bash not found. Install Git for Windows or add bash.exe to PATH, then restart the IDE. >&2
+exit /b 1
 CMDBLOCK
 
 # Unix: run the named hook script directly via bash.

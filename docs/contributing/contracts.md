@@ -378,6 +378,13 @@ IDE plugins provide behavior: read the Context Pack, stay inside scope, report
 blockers, submit delivery evidence, and read delivery review. They do not add
 product scope or bypass approval.
 
+Claude Code and native Codex plugins register a synchronous `SessionStart`
+reminder without a source matcher, including resumed sessions. Both return
+`hookSpecificOutput` with `hookEventName: "SessionStart"` and
+`additionalContext`. Claude project-local refresh replaces only SpecGate's
+command registration and preserves other hooks and their matchers. Cursor uses
+an `alwaysApply` rule; project-local Codex installs contain skills only.
+
 ## Delivery Evidence
 
 Local delivery decisions require the exact `review_id` displayed to the human.
