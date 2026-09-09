@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -472,24 +473,27 @@ func addSpecgateSessionHook(settings map[string]any) {
 		hooks = map[string]any{}
 	}
 	events, _ := hooks["SessionStart"].([]any)
+	kept := make([]any, 0, len(events)+1)
 	for _, rawEntry := range events {
 		entry, _ := rawEntry.(map[string]any)
 		commands, _ := entry["hooks"].([]any)
+		remaining := make([]any, 0, len(commands))
 		for _, rawCommand := range commands {
 			command, _ := rawCommand.(map[string]any)
 			value, _ := command["command"].(string)
-			if value == claudeProjectSessionHookCommand {
-				return
-			}
 			if strings.Contains(value, "$CLAUDE_PROJECT_DIR/.claude/"+specgateHookDirName+"/run-hook.cmd") {
-				command["type"] = "command"
-				command["command"] = claudeProjectSessionHookCommand
-				return
+				continue
 			}
+			remaining = append(remaining, rawCommand)
+		}
+		if len(remaining) == len(commands) {
+			kept = append(kept, rawEntry)
+		} else if len(remaining) > 0 {
+			entry["hooks"] = remaining
+			kept = append(kept, entry)
 		}
 	}
-	hooks["SessionStart"] = append(events, map[string]any{
-		"matcher": "startup|clear|compact",
+	hooks["SessionStart"] = append(kept, map[string]any{
 		"hooks": []any{map[string]any{
 			"type":    "command",
 			"command": claudeProjectSessionHookCommand,
@@ -530,11 +534,19 @@ func hasSpecgateSessionHook(settings map[string]any) bool {
 	events, _ := hooks["SessionStart"].([]any)
 	for _, rawEntry := range events {
 		entry, _ := rawEntry.(map[string]any)
+		matcher, _ := entry["matcher"].(string)
+		if matcher != "" && matcher != "*" {
+			pattern, err := regexp.Compile(matcher)
+			if err != nil || !pattern.MatchString("startup") || !pattern.MatchString("resume") ||
+				!pattern.MatchString("clear") || !pattern.MatchString("compact") {
+				continue
+			}
+		}
 		commands, _ := entry["hooks"].([]any)
 		for _, rawCommand := range commands {
 			command, _ := rawCommand.(map[string]any)
 			value, _ := command["command"].(string)
-			if value == claudeProjectSessionHookCommand {
+			if value == claudeProjectSessionHookCommand && command["type"] == "command" && command["async"] != true {
 				return true
 			}
 		}
