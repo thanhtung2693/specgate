@@ -60,6 +60,20 @@ solo-developer and team pain points to the mechanism that answers each.
 
 ## Quickstart
 
+Prefer asking an AI? Copy either prompt into your assistant.
+
+**Install with your coding agent** (open your project first):
+
+```text
+Read https://github.com/thanhtung2693/specgate and its linked installation guide, then install and set up SpecGate in Local mode for this project and my coding IDE, reusing any existing installation, and run the setup diagnostics.
+```
+
+**Understand SpecGate** (use an AI with web access):
+
+```text
+Read https://github.com/thanhtung2693/specgate and its linked user docs, then explain in my language what SpecGate does, which solo-developer problems it helps solve, how it fits with my existing spec-driven tools, and its limits, using one concrete example from spec to reviewed delivery.
+```
+
 You do not need Docker, a source checkout, Go, Node.js, Python, or a model API
 key for the default Local CLI workflow.
 

@@ -100,6 +100,25 @@ The Context Pack is the implementation contract for the selected work. It
 keeps the approved artifact version, acceptance criteria, applicable skills,
 and current governance state together.
 
+### Optional Local verification agreement
+
+For Local work with confirmed `@check` criteria, keep the contract
+`unconfigured` unless a human wants specific reviewed commands to remain stable
+across agents or resumes. First show the current Context Pack digest, every
+binding and criterion, and each literal command with its checkout-relative
+directory. Choose an unused work-specific draft path, preserving existing files.
+Include the current `context_digest` and reviewed commands, then preview it:
+
+```bash
+specgate work verification <work-ref> --file <unused-work-checks.json> --dry-run --json
+```
+
+The preview validates the agreement but does not run commands or save a pin.
+After a separate human confirmation of that displayed agreement, rerun the same
+file with `--yes`. Pins are immutable for a work, do not establish a passing
+test or requirement coverage, and run later through an unsandboxed shell. See
+[Local verification contracts](../reference/cli.md#local-resume-and-verification-contracts).
+
 ### 3. Check the next action
 
 ```bash
@@ -246,6 +265,23 @@ For larger work, preview an explicitly mapped artifact package:
 }
 ```
 
+When one approved source will be delivered through several independently useful
+work items, you can add a reviewed Local source inventory to the package. Each
+entry is linked later by an exact `@source:<id>` token in a work acceptance
+criterion:
+
+```json
+"source_criteria": [
+  {"id":"req-health","text":"The health endpoint returns 200","source_path":"specs/health.md"},
+  {"id":"req-dashboard","text":"A dashboard shows health","source_path":"specs/health.md","deferred_reason":"Not in this release"}
+]
+```
+
+Use this only when you want to review the inventory and its slice mappings. It
+does not prove the list contains every requirement in the source. Source
+inventory is Local-only, and any stored inventory in the workspace currently
+prevents portable/v1 export to Full mode; use a Local database backup instead.
+
 ```bash
 specgate artifact publish --file artifact.json --preview --json
 ```
@@ -285,6 +321,19 @@ Find published specifications without corresponding delivered work:
 ```bash
 specgate coverage
 ```
+
+For a Local inventory, coverage lists unassigned requirements and intentional
+deferrals beside ordinary work delivery. Use the exact artifact command before
+proposing missing work or revisiting a deferral:
+
+```bash
+specgate artifact coverage <artifact-id>
+```
+
+An unassigned source requirement does not change the delivered state of a work
+item. It says an entry in the reviewed inventory has no current work mapping.
+Do not create new work automatically; agree the next slice, then prepare and
+approve it through the normal workflow.
 
 Review governance signals after several work items:
 

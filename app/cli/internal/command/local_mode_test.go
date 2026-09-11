@@ -185,7 +185,7 @@ func TestLocalProjectWorkspaceBindingOverridesGlobalSelection(t *testing.T) {
 	}
 }
 
-func TestLocalArtifactPublishListAndShowNeedNoHTTP(t *testing.T) {
+func TestLocalArtifactPublishListShowAndCoverageNeedNoHTTP(t *testing.T) {
 	deps, out := newTestDeps(t, "")
 	repo := t.TempDir()
 	for _, dir := range []string{".git", "docs/framework", ".specgate/work"} {
@@ -207,7 +207,7 @@ func TestLocalArtifactPublishListAndShowNeedNoHTTP(t *testing.T) {
 		t.Fatalf("init exit = %d; output=%s", code, out.String())
 	}
 	artifactPath := filepath.Join(repo, ".specgate/work/artifact.json")
-	if err := os.WriteFile(artifactPath, []byte(`{"feature_key":"LOCAL-ARTIFACTS","request_type":"new_feature","documents":[{"path":"docs/framework/spec.md","role":"spec","repo_file":"docs/framework/spec.md"},{"path":"docs/framework/plan.md","role":"plan","repo_file":"docs/framework/plan.md"}]}`), 0o600); err != nil {
+	if err := os.WriteFile(artifactPath, []byte(`{"feature_key":"LOCAL-ARTIFACTS","request_type":"new_feature","documents":[{"path":"docs/framework/spec.md","role":"spec","repo_file":"docs/framework/spec.md"},{"path":"docs/framework/plan.md","role":"plan","repo_file":"docs/framework/plan.md"}],"source_criteria":[{"id":"req-health","text":"Expose health","source_path":"docs/framework/spec.md"},{"id":"req-dashboard","text":"Add dashboard","source_path":"docs/framework/spec.md","deferred_reason":"Later"}]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	out.Reset()
@@ -232,6 +232,52 @@ func TestLocalArtifactPublishListAndShowNeedNoHTTP(t *testing.T) {
 	}
 	if published.Data.ArtifactID == "" || published.Data.Version != 1 {
 		t.Fatalf("published = %#v", published)
+	}
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "gates", "check", published.Data.ArtifactID); code != output.ExitOK {
+		t.Fatalf("readiness exit = %d; output=%s", code, out.String())
+	}
+	submitLocalGateResults(t, deps, out, published.Data.ArtifactID)
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "artifact", "approve", published.Data.ArtifactID); code != output.ExitOK {
+		t.Fatalf("approve exit = %d; output=%s", code, out.String())
+	}
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "artifact", "promote", published.Data.ArtifactID); code != output.ExitOK {
+		t.Fatalf("promote exit = %d; output=%s", code, out.String())
+	}
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "coverage"); code != output.ExitOK {
+		t.Fatalf("coverage exit = %d; output=%s", code, out.String())
+	}
+	var coverage struct {
+		Data struct {
+			Specifications []struct {
+				ArtifactID         string `json:"artifact_id"`
+				SourceCoverage     string `json:"source_coverage"`
+				SourceNextAction   string `json:"source_next_action"`
+				SourceRequirements []struct {
+					ID    string `json:"id"`
+					State string `json:"state"`
+				} `json:"source_requirements"`
+			} `json:"specifications"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &coverage); err != nil {
+		t.Fatal(err)
+	}
+	if got := coverage.Data.Specifications; len(got) != 1 || got[0].ArtifactID != published.Data.ArtifactID || got[0].SourceCoverage != "unassigned" || got[0].SourceNextAction != "specgate artifact show "+published.Data.ArtifactID+" --json" || len(got[0].SourceRequirements) != 2 || got[0].SourceRequirements[0] != (struct {
+		ID    string `json:"id"`
+		State string `json:"state"`
+	}{ID: "req-dashboard", State: "deferred"}) || got[0].SourceRequirements[1] != (struct {
+		ID    string `json:"id"`
+		State string `json:"state"`
+	}{ID: "req-health", State: "unassigned"}) {
+		t.Fatalf("local coverage = %#v", got)
+	}
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "coverage", published.Data.ArtifactID); code != output.ExitOK || !strings.Contains(out.String(), `"source_requirements":[{"id":"req-dashboard"`) || !strings.Contains(out.String(), `"source_next_action":"specgate artifact show `+published.Data.ArtifactID+` --json"`) {
+		t.Fatalf("artifact coverage exit=%d output=%s", code, out.String())
 	}
 	out.Reset()
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "show", published.Data.ArtifactID); code != output.ExitOK {

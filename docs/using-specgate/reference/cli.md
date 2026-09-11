@@ -33,8 +33,25 @@ start with an ASCII letter or digit, then contain only ASCII letters, digits,
 hyphens, or underscores, so a work acceptance criterion can map them reliably
 with `@source:req-id`. Unknown IDs are rejected when creating work. `coverage`
 and `artifact coverage` show `source_coverage` alongside the existing
-work-delivery `state`; their JSON output carries the same field without
-changing that state.
+work-delivery `state`; that state is unchanged by source coverage.
+
+In Local JSON, `coverage` returns `source_requirements` for every canonical
+artifact, including an empty array when that artifact has no inventory.
+`artifact coverage` returns the same rows for its exact artifact version. A row
+has its stored `id`, `text`, and `source_path`; a `state` of `unassigned`,
+`in_progress`, `delivered`, or `deferred`; optional `deferred_reason`; and the
+linked work items. `deferred` takes precedence even if work is linked. Linked
+work is matched only through exact `@source:<id>` tokens on that artifact
+version. `source_next_action`, when present, names the read-only artifact command
+to inspect before proposing missing work. Full-mode output does not add these
+Local-only rows.
+
+Plain `coverage` lists unassigned and deferred entries immediately. Plain
+`artifact coverage` lists every entry and its linked work. A delivered work
+state with unassigned source requirements means the created work was delivered;
+it does not mean the reviewed inventory is fully assigned. An inventory is only
+as complete as the human-reviewed list: SpecGate validates its stored IDs and
+links, not whether an agent extracted every requirement from the source.
 
 Source-criterion fields must be strings; omit `deferred_reason` when the
 requirement is not deferred. Local `artifact publish --preview` validates the
