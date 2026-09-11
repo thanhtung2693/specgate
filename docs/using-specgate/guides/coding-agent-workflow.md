@@ -37,12 +37,33 @@ even when the file in Git has changed. The full `work context` remains available
 Do not select a work item from its branch name or assume completing one work
 completes other work using the same spec.
 
-Before implementation, the human may pin the commands for `@check` criteria via
-`work verification <ref> --file checks.json --dry-run`, then confirm the same
-file with `--yes`. A pinned completion scaffold already contains those commands;
-do not replace a failing command with an easier one. Without a pin the workflow
-still works, but status explicitly says `unconfigured`. See the
-[contract input and limitations](../reference/cli.md#local-resume-and-verification-contracts).
+Before implementation, pin commands only when you want a reviewed agreement to
+survive across agents or resumes. Do not make it a routine quick-work question;
+an `unconfigured` contract remains a normal workflow. When you request one, the
+agent first shows the current work reference and Context Pack digest, every
+`@check` binding and criterion it covers, and every literal command with its
+checkout-relative working directory. Commands must come from reviewed project
+scripts or instructions, never be guessed.
+
+The agent chooses an unused work-specific file under `.specgate/work/`, preserving
+existing drafts, and includes the current `context_digest`. It previews the
+contract without saving a pin or executing checks, then waits for confirmation
+of those exact commands and consequences before pinning the same file:
+
+```bash
+specgate work verification LOCAL-123 --file .specgate/work/LOCAL-123-checks.json --dry-run --json
+specgate --yes work verification LOCAL-123 --file .specgate/work/LOCAL-123-checks.json --json
+```
+
+A pin fixes only command text and working directory; scripts and tests remain
+mutable. It is not a test run, a passing result, or proof that a test covers
+the criterion; the shell commands
+are unsandboxed. A pinned completion scaffold already contains those commands,
+and a failing pinned command cannot be replaced with an easier one. Revising a
+pin requires replacement work. A pin also blocks portable/v1 export to Full
+mode; Local database backup remains available. If preview reports a conflict,
+preserve history and resolve the reported error before requesting confirmation.
+See the [contract input and limitations](../reference/cli.md#local-resume-and-verification-contracts).
 
 ## Before you start
 

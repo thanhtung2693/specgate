@@ -32,7 +32,24 @@ type coverageArtifact struct {
 
 type sourceCriterion struct {
 	ID             string
+	Text           string
+	SourcePath     string
 	DeferredReason string
+}
+
+type sourceRequirementWork struct {
+	Key   string `json:"key"`
+	Title string `json:"title"`
+	Phase string `json:"phase"`
+}
+
+type sourceRequirementCoverage struct {
+	ID             string                  `json:"id"`
+	Text           string                  `json:"text"`
+	SourcePath     string                  `json:"source_path"`
+	State          string                  `json:"state"`
+	DeferredReason string                  `json:"deferred_reason,omitempty"`
+	WorkItems      []sourceRequirementWork `json:"work_items"`
 }
 
 type coverageWork struct {
@@ -45,14 +62,16 @@ type coverageWork struct {
 }
 
 type specificationCoverage struct {
-	FeatureKey     string         `json:"feature_key"`
-	FeatureName    string         `json:"feature_name,omitempty"`
-	ArtifactID     string         `json:"artifact_id"`
-	Version        string         `json:"version"`
-	State          string         `json:"state"`
-	SourceCoverage string         `json:"source_coverage"`
-	WorkItems      []coverageWork `json:"work_items"`
-	NextAction     string         `json:"next_action,omitempty"`
+	FeatureKey         string                       `json:"feature_key"`
+	FeatureName        string                       `json:"feature_name,omitempty"`
+	ArtifactID         string                       `json:"artifact_id"`
+	Version            string                       `json:"version"`
+	State              string                       `json:"state"`
+	SourceCoverage     string                       `json:"source_coverage"`
+	SourceRequirements *[]sourceRequirementCoverage `json:"source_requirements,omitempty"`
+	SourceNextAction   string                       `json:"source_next_action,omitempty"`
+	WorkItems          []coverageWork               `json:"work_items"`
+	NextAction         string                       `json:"next_action,omitempty"`
 }
 
 type workspaceCoverage struct {
@@ -246,7 +265,15 @@ func buildWorkspaceCoverage(mode config.Mode, workspaceID, workspace string, fea
 			row.State = "uncovered"
 			row.NextAction = createCoverageWorkCommand(feature)
 		}
-		row.SourceCoverage = sourceCoverage(artifactCriteria[feature.CanonicalArtifactID], row.WorkItems)
+		criteria := artifactCriteria[feature.CanonicalArtifactID]
+		row.SourceCoverage = sourceCoverage(criteria, row.WorkItems)
+		if mode == config.ModeLocal {
+			requirements := sourceRequirementRows(criteria, row.WorkItems)
+			row.SourceRequirements = &requirements
+			if hasUnassignedSourceRequirement(requirements) {
+				row.SourceNextAction = fmt.Sprintf("specgate artifact show %s --json", feature.CanonicalArtifactID)
+			}
+		}
 		result.Counts[row.State]++
 		result.Specifications = append(result.Specifications, row)
 	}
@@ -269,9 +296,51 @@ func isDeliveredPhase(phase string) bool {
 func sourceCriterionIDs(criteria []local.SourceCriterion) []sourceCriterion {
 	ids := make([]sourceCriterion, 0, len(criteria))
 	for _, criterion := range criteria {
-		ids = append(ids, sourceCriterion{ID: criterion.ID, DeferredReason: criterion.DeferredReason})
+		ids = append(ids, sourceCriterion{ID: criterion.ID, Text: criterion.Text, SourcePath: criterion.SourcePath, DeferredReason: criterion.DeferredReason})
 	}
 	return ids
+}
+
+func sourceRequirementRows(criteria []sourceCriterion, work []coverageWork) []sourceRequirementCoverage {
+	rows := make([]sourceRequirementCoverage, 0, len(criteria))
+	for _, criterion := range criteria {
+		row := sourceRequirementCoverage{
+			ID: criterion.ID, Text: criterion.Text, SourcePath: criterion.SourcePath,
+			DeferredReason: criterion.DeferredReason, WorkItems: []sourceRequirementWork{},
+		}
+		for _, item := range work {
+			if !item.Current || !workMapsSourceCriterion(item, criterion.ID) {
+				continue
+			}
+			row.WorkItems = append(row.WorkItems, sourceRequirementWork{Key: item.Key, Title: item.Title, Phase: item.Phase})
+		}
+		sort.Slice(row.WorkItems, func(i, j int) bool { return row.WorkItems[i].Key < row.WorkItems[j].Key })
+		switch {
+		case criterion.DeferredReason != "":
+			row.State = "deferred"
+		case len(row.WorkItems) == 0:
+			row.State = "unassigned"
+		default:
+			row.State = "delivered"
+			for _, item := range row.WorkItems {
+				if !isDeliveredPhase(item.Phase) {
+					row.State = "in_progress"
+					break
+				}
+			}
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+func hasUnassignedSourceRequirement(rows []sourceRequirementCoverage) bool {
+	for _, row := range rows {
+		if row.State == "unassigned" {
+			return true
+		}
+	}
+	return false
 }
 
 func sourceCoverage(criteria []sourceCriterion, work []coverageWork) string {
@@ -322,6 +391,15 @@ func hasSourceCriterion(acceptance, id string) bool {
 	return false
 }
 
+func workMapsSourceCriterion(item coverageWork, id string) bool {
+	for _, acceptance := range item.AcceptanceCriteria {
+		if hasSourceCriterion(acceptance, id) {
+			return true
+		}
+	}
+	return false
+}
+
 func createCoverageWorkCommand(feature coverageFeature) string {
 	return fmt.Sprintf("specgate artifact show %s --json", feature.CanonicalArtifactID)
 }
@@ -334,11 +412,26 @@ func printWorkspaceCoverage(deps *Deps, result workspaceCoverage) {
 	for _, spec := range result.Specifications {
 		fmt.Fprintf(deps.Stdout, "%s %s %s — %s\n", styled(deps, output.StyleBold, spec.FeatureKey), spec.Version, spec.ArtifactID, styledStatus(deps, spec.State))
 		fmt.Fprintf(deps.Stdout, "  Source requirements: %s\n", styledStatus(deps, spec.SourceCoverage))
+		if spec.SourceRequirements != nil {
+			for _, requirement := range *spec.SourceRequirements {
+				if requirement.State != "unassigned" && requirement.State != "deferred" {
+					continue
+				}
+				fmt.Fprintf(deps.Stdout, "  [%s] %s — %s (%s)", terminalText(requirement.State), terminalText(requirement.ID), terminalText(requirement.Text), terminalText(requirement.SourcePath))
+				if requirement.DeferredReason != "" {
+					fmt.Fprintf(deps.Stdout, " — %s", terminalText(requirement.DeferredReason))
+				}
+				fmt.Fprintln(deps.Stdout)
+			}
+		}
 		for _, item := range spec.WorkItems {
 			fmt.Fprintf(deps.Stdout, "  %s [%s] %s\n", item.Key, item.Phase, item.ArtifactID)
 		}
 		if spec.NextAction != "" {
 			fmt.Fprintf(deps.Stdout, "  Next: %s\n", spec.NextAction)
+		}
+		if spec.SourceNextAction != "" {
+			fmt.Fprintf(deps.Stdout, "  Source next: %s\n", spec.SourceNextAction)
 		}
 	}
 }

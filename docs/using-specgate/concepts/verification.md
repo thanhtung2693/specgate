@@ -151,12 +151,28 @@ entry has no link, `accounted_for` when linked work remains open, and
 A `deferred_reason` is reviewed as part of approving the immutable snapshot.
 It counts as `accounted_for`, never `delivered`.
 
+Local coverage also projects every reviewed source entry: its text and source
+path, exact linked work items, and `unassigned`, `in_progress`, `delivered`, or
+`deferred` state. Work delivery and source coverage answer different questions.
+A delivered work item can coexist with an unassigned source entry because no
+work was created for that entry. The projection verifies stored IDs and exact
+links; it does not prove the inventory is a complete reading of the source or
+that a linked criterion implements the source requirement.
+
 Local mode can additionally pin a verification contract before the first
 completion report. It fixes the reviewed commands and repository-relative
 working directories for each `@check` binding. A later submission cannot swap
 those commands; `--run-checks` reruns them. This does not prove that the tests
 cover the requirement, and the commands run without a sandbox. Without a pin,
 status explicitly reports `unconfigured`.
+
+Pin only when a human wants that reviewed command agreement to remain stable
+across agents or resumes, not as a default quick-work step. Before confirming,
+the human reviews the work's current Context Pack digest, each binding and
+criterion, and each literal command and checkout-relative directory. A dry-run
+checks eligibility but neither writes a pin nor runs its commands. The agreement
+is immutable for the work: changing it requires replacement work, and a pin
+also prevents portable/v1 export to Full mode; a Local database backup remains.
 
 Local acceptance and rejection require the exact `--review-id` displayed by
 the status the human reviewed. A new review requires a new decision against

@@ -11,11 +11,14 @@ product code.
 
 ## 1. Define the contract and route
 
-Read the request, governing repository instructions, and author-selected source
-documents. Show the human the exact title, description, observable acceptance
-criteria, and non-goals. Split work that can be accepted independently. Use an
-`@check:<name>` binding only when the human confirms that exact check, and name
-in the preview which criteria a check enforces and which rest on your claim.
+Read the request, repository instructions, and human-selected sources. Show the
+title, description, observable criteria, and non-goals; split independently
+accepted work. Bind `@check:<name>` only after the human confirms that check and
+show which criteria it enforces and which remain reviewed claims.
+
+In Local mode, offer pinning only when the human wants reviewed commands stable
+across agents or resumes; never make it a default quick-work step. Carry each
+candidate binding and command/cwd proof to delivery.
 
 Choose one route with the human:
 
@@ -29,8 +32,8 @@ Completion criterion: the human-approved preview names every slice's contract an
 
 ## 2A. Create quick work
 
-Quick work is available in Local and Full mode. Persist the approved contract
-with explicit criteria, then read it back:
+Quick work is available in Local and Full mode. Create it with explicit criteria,
+then read the approved contract back:
 
 ```bash
 specgate work create-quick "$TITLE" --description "$DESCRIPTION" \
@@ -39,9 +42,8 @@ specgate work show "$WORK_REF" --json
 specgate work context "$WORK_REF" --json
 ```
 
-Never derive criteria from filenames, headings, numbering, or keywords. If the
-persisted title, description, or ordered criteria differ from the preview, stop
-instead of implementing.
+Never derive criteria from source structure. Stop if the stored contract differs
+from the preview.
 
 Completion criterion: the returned Context Pack reproduces the approved quick
 contract exactly. Quick work ends here; switch to `specgate-work-delivery`.
@@ -49,24 +51,27 @@ contract exactly. Quick work ends here; switch to `specgate-work-delivery`.
 ## 2B. Preview and publish an artifact
 
 The originating framework owns source paths, names, lifecycle, and Git policy.
-Never relocate, copy, rename, delete, commit, or change their ignore rules. Edit
-source content only when the request authorizes it.
+Never relocate, copy, rename, delete, commit, or change ignore rules; edit only
+with authorization.
 
-Roles are routing labels, not one-file-per-concern requirements. Map each
-human-selected source explicitly; never detect a framework or manufacture
-documents. When policy requires a role one source already covers,
-map that same `path` again under the second `role` — one spec is often both spec
-and plan.
+Roles are routing labels. Map each human-selected source explicitly; never
+detect a framework or manufacture documents. Reuse a path under a second role
+when policy requires it.
 
-Keep the transient manifest at `.specgate/work/artifact.json`. For each mapped
-document:
+Keep the transient manifest at `.specgate/work/artifact.json`: unchanged
+repository-relative `path`, explicit `role`, and exactly one source. Use
+`content`, `repo_file` in the repository, `source_file` beneath the manifest,
+or absolute `file_url` outside it.
 
-- set `path` to its unchanged repository-relative POSIX path;
-- set its explicit governance `role`;
-- use `repo_file` for a repository source;
-- use `source_file` only inside the manifest directory, and an absolute
-  `file_url` outside it;
-- set exactly one of `content`, `repo_file`, `source_file`, or `file_url`.
+### Local source inventory
+
+For Local artifact-backed work, propose inventory only for several independent
+slices, explicit deferrals, or a human request for source coverage; never for
+quick work or by inferring entries from source structure. In the existing
+preview, show each proposed ID, text, unchanged path, slice mapping, and
+deferral. The human reviews completeness and confirms `source_criteria` entries
+safe for exact `@source:<id>` mappings. State that inventory is Local-only and
+any historical inventory blocks portable/v1 export to Full mode; Local backup remains.
 
 Use the human-selected `feature_key`; `request_type` is `new_feature`,
 `change_request`, `bugfix`, or `unknown`:
@@ -97,11 +102,9 @@ specgate artifact publish --file .specgate/work/artifact.json \
   --preview --compare "$BASE_ARTIFACT_ID" --json
 ```
 
-Show the source mapping and exact policy projection together, reporting added,
-removed, changed, and unchanged paths. If preview lists an omitted impact
-declaration, ask for its exact `yes`, `no`, or `unknown` answers; never infer
-`no`. Resolve feature identity from an explicitly named work item or human selection,
-never from similarity.
+Show source mapping and exact policy projection, including added, removed, changed,
+and unchanged paths. Ask for each omitted impact's exact `yes`, `no`, or
+`unknown`; resolve feature identity from human selection or a named work item.
 
 Completion criterion: every selected source appears once under its unchanged
 path and role; source files and Git policy remain unchanged except for
@@ -122,9 +125,8 @@ version are recorded. On failure, stop before readiness.
 specgate gates check "$ARTIFACT_ID" --json --summary
 ```
 
-When `dispatched_to_ide_agent.pending_task_ids` is non-empty, complete every
-frozen task. List tasks, read each task's `skill_content`, judge only against
-that rubric, and write `.specgate/work/gate-<task-id>.json`:
+When pending task IDs exist, complete every frozen task: list them, judge only
+their `skill_content`, and write `.specgate/work/gate-<task-id>.json`:
 
 ```json
 {
@@ -143,23 +145,18 @@ specgate gates tasks submit-result <task-id> \
   --file .specgate/work/gate-<task-id>.json --json
 ```
 
-`tasks list` already returns each task's `skill_content`, `gate_digest`, and
-`artifact_digest`; do not call `tasks show` for a task it listed. Copy both
-digests exactly — a mismatched digest leaves the gate `not_run`.
-
-`aggregate=not_run` means work remains; it is never a pass. Stale digests need a
-fresh task. Readiness errors preserve the artifact and become explicit
-blockers.
+`tasks list` includes task content and both digests; do not refetch. Copy
+digests exactly. `aggregate=not_run` is unfinished; stale digests need a fresh
+task, while readiness errors preserve explicit blockers.
 
 Completion criterion: every pending task has a submitted result for its exact
 digests, and the final aggregate plus every remaining gap is recorded.
 
 ## 4. Repair without taking ownership
 
-For an authorized content correction, publish a new version using the same
-path-preserving manifest, exact `base_version`, comparison, human-confirmed
-preview, and readiness loop. Ask the human about ambiguous product intent.
-Report out-of-scope gaps without editing their source.
+For authorized corrections, publish a new version with the same paths, exact
+`base_version`, comparison, confirmed preview, and readiness. Ask about product
+ambiguity; report out-of-scope gaps without editing their source.
 
 Completion criterion: readiness is acceptable under the stored policy, or each
 remaining gap has an explicit human owner and no unauthorized source edit.
@@ -172,8 +169,7 @@ Show the exact immutable snapshot and readiness evidence:
 specgate artifact show "$ARTIFACT_ID" --json
 ```
 
-Reuse the readiness rows already read in section 3; do not refetch them. Render
-every gate before asking, preserving each state and hint verbatim:
+Reuse readiness rows from section 3; render every state and hint verbatim:
 
 ```text
 SpecGate readiness — <artifact-id> <version> (<aggregate>)
@@ -181,8 +177,8 @@ SpecGate readiness — <artifact-id> <version> (<aggregate>)
 Not yet judged: <count>
 ```
 
-Never summarize a `fail`, `warn`, `needs_human_review`, or `not_run` gate as
-acceptable, and never present an aggregate without its per-gate lines.
+Never call a `fail`, `warn`, `needs_human_review`, or `not_run` gate acceptable,
+or hide its row behind the aggregate.
 
 Stop for the human decision. After the human explicitly approves and authorizes
 that exact snapshot, run the normal handoff with every confirmed criterion:
@@ -198,6 +194,10 @@ specgate work context "$WORK_REF" --json
 Require the returned work item's `lead_artifact_id` to equal the approved
 artifact and its Context Pack to reference the governed sources. A conflicting
 existing work contract is a blocker, never a silent relink.
+
+For each authorized slice, include its exact `@source:<id>` token. Run
+`specgate artifact coverage "$ARTIFACT_ID" --json`; report unassigned entries
+and deferrals without creating work or deciding delivery.
 
 Completion criterion: either the human is reviewing the named immutable
 artifact, or the approved work reference and matching Context Pack are recorded;

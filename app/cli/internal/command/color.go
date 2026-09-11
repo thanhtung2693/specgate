@@ -4,9 +4,20 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"unicode"
 
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
+
+// terminalText keeps manifest-provided text on one harmless terminal line.
+func terminalText(text string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, text)
+}
 
 func styled(deps *Deps, style output.Style, text string) string {
 	if deps == nil || deps.Printer == nil {

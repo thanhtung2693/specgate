@@ -102,10 +102,15 @@ func localArtifactCoverageView(artifact local.Artifact, items []local.WorkItem) 
 	work := make([]coverageWork, 0, len(items))
 	for _, item := range items {
 		if item.ArtifactID == artifact.ID {
-			work = append(work, coverageWork{Current: true, Phase: item.Phase, AcceptanceCriteria: item.AcceptanceCriteria})
+			work = append(work, coverageWork{Key: item.Key, Title: item.Title, Current: true, Phase: item.Phase, AcceptanceCriteria: item.AcceptanceCriteria})
 		}
 	}
-	data["source_coverage"] = sourceCoverage(sourceCriterionIDs(artifact.SourceCriteria), work)
+	criteria := sourceCriterionIDs(artifact.SourceCriteria)
+	data["source_coverage"] = sourceCoverage(criteria, work)
+	data["source_requirements"] = sourceRequirementRows(criteria, work)
+	if hasUnassignedSourceRequirement(data["source_requirements"].([]sourceRequirementCoverage)) {
+		data["source_next_action"] = fmt.Sprintf("specgate artifact show %s --json", artifact.ID)
+	}
 	return data
 }
 
@@ -133,6 +138,21 @@ func printArtifactCoverage(deps *Deps, data map[string]any) error {
 	fmt.Fprintf(deps.Stdout, "  Source requirements: %s\n", styledStatus(deps, fmt.Sprint(data["source_coverage"])))
 	for _, item := range data["work_items"].([]map[string]string) {
 		fmt.Fprintf(deps.Stdout, "%s  [%s]  %s\n", styled(deps, output.StyleBold, item["key"]), styledStatus(deps, item["phase"]), item["title"])
+	}
+	if requirements, ok := data["source_requirements"].([]sourceRequirementCoverage); ok {
+		for _, requirement := range requirements {
+			fmt.Fprintf(deps.Stdout, "  [%s] %s — %s (%s)", terminalText(requirement.State), terminalText(requirement.ID), terminalText(requirement.Text), terminalText(requirement.SourcePath))
+			if requirement.DeferredReason != "" {
+				fmt.Fprintf(deps.Stdout, " — %s", terminalText(requirement.DeferredReason))
+			}
+			fmt.Fprintln(deps.Stdout)
+			for _, item := range requirement.WorkItems {
+				fmt.Fprintf(deps.Stdout, "    %s [%s] %s\n", terminalText(item.Key), terminalText(item.Phase), terminalText(item.Title))
+			}
+		}
+	}
+	if sourceNextAction, ok := data["source_next_action"].(string); ok && sourceNextAction != "" {
+		fmt.Fprintf(deps.Stdout, "  Source next: %s\n", sourceNextAction)
 	}
 	return nil
 }

@@ -6,25 +6,41 @@ description: Use when implementing, resuming, verifying, or reworking an approve
 # Delivering Work
 
 Apply the [SpecGate operating contract](../specgate/SKILL.md#operating-contract).
-Implement the approved contract, stop at the next actor, and never approve an
-artifact or make a human delivery decision.
+Implement approved scope; stop at next actor; never decide for humans.
 
 ## 1. Load the exact contract
 
-Use the mode from `doctor`. Local: read scope, criteria, verification contract,
-document index, and status together:
+Local: read scope/criteria, verification, document index, status:
 
 ```bash
 specgate work resume "$WORK_REF" --json
 ```
 
-Use `data.status`. Read pinned documents, including scope and non-goals:
+Reuse pins; declining leaves unconfigured work usable. For a requested
+Local pin, read the proposed scripts; show work, digest, every binding/criterion,
+literal command and checkout-relative cwd. Explain: immutable command/cwd,
+replacement work to change; scripts remain mutable; no test-pass/coverage proof;
+unsandboxed shell; portable/v1 export blocked, Local backup available.
+
+Preserve drafts. Choose an unused work-specific `$CHECKS_PATH` under
+`.specgate/work` with `context_digest`, `shell: "sh"`, and
+`checks: [{name, command, cwd}]`; every bound name once. Run:
+
+```bash
+specgate work verification "$WORK_REF" --file "$CHECKS_PATH" --dry-run --json
+```
+
+Dry-run neither pins nor executes. After successful preview and explicit human
+confirmation of commands/consequences, rerun that file without `--dry-run`, with
+`--yes`. Reuse response. On conflict, preserve history and report the error.
+
+Use `data.status`; read pinned scope and non-goals:
 
 ```bash
 specgate work context "$WORK_REF" --document "$DOCUMENT_PATH" --role "$ROLE" --json
 ```
 
-Copy path/role from `data.documents`. Reuse only matching-digest content; the
+Copy path/role from `data.documents`. Reuse matching-digest content; the
 index cannot replace it. Quick work uses persisted scope/criteria.
 
 Full mode: read these; status is `change status.data`:
@@ -34,10 +50,8 @@ specgate work context "$WORK_REF" --json
 specgate change status "$WORK_REF" --json
 ```
 
-Stop before editing when approval is absent, the Context Pack is stale, or
-criteria are missing/placeholders. Hand artifact-backed work missing its
-approved version to the human or
-`specgate-work-preparation`.
+Stop for missing approval/criteria, placeholder criteria, or stale context.
+Missing approved artifact: hand to human or `specgate-work-preparation`.
 
 Reuse results until state changes; avoid duplicate reads. Follow status:
 
@@ -51,10 +65,7 @@ Reuse results until state changes; avoid duplicate reads. Follow status:
 - Otherwise record `missing` and `guidance`, then follow `next_command`'s named
   section or stop if none matches.
 
-Every change/check must map to a criterion or required repository-doc update.
-
-Completion criterion: submitted evidence contains an observed result for every
-required check, or its explicit skip reason.
+Map every change/check to a criterion or required repository-doc update.
 
 ## 2. Resume safely
 
@@ -80,9 +91,8 @@ keep `findings` top-level. Report out-of-scope drift without editing it.
 
 ## 4. Implement and verify
 
-Implement approved scope and preserve non-goals. Record required tests, lint,
-type checks, builds, and every skip reason. Never mutate an approved snapshot;
-a new artifact version belongs to `specgate-work-preparation`.
+Preserve scope/non-goals. Record required tests, lint, types, builds, and skip
+reasons. Snapshot changes belong to `specgate-work-preparation`.
 
 For a pull or merge request, include
 `<!-- specgate-work-ref: $WORK_REF -->` in its description. Never infer work
@@ -124,16 +134,11 @@ specgate change submit "$WORK_REF" \
 
 ## 6. Follow the authoritative actor
 
-Use the latest authoritative status. For `implementing_agent`, complete `missing`, run
-the supplied `next_command` at its named step, then reread status. A scaffold
-command does not complete work.
+For `implementing_agent`, complete `missing`, follow `next_command`, then refresh
+status. Scaffolding is not completion. Hand off `next_command` verbatim.
 
-Hand off `next_command` verbatim.
-
-For `human_reviewer`, `maintainer`, or `none`, stop. `awaiting_review` belongs to
-the human reviewer. SpecGate requires no subagent solely for this lifecycle.
-Run peer review only when the human explicitly requests it; use a
-different review-only agent:
+For `human_reviewer`, `maintainer`, or `none`, stop; `awaiting_review` belongs to
+humans. Only when the human explicitly requests it, use a different review-only agent:
 
 ```bash
 specgate delivery peer-review "$WORK_REF" --init --json
@@ -143,10 +148,9 @@ specgate delivery peer-review "$WORK_REF" \
 
 Keep `data.path` as `$PEER_REVIEW_PATH`; same existing-file rule.
 
-A pass means ready for human review, not accepted. The implementing agent never
-runs a human-decision command.
+Completion criterion: evidence awaits human review; never run human-decision commands.
 
-Export a teammate-readable review request only when the human requests one:
+Export review requests only on human request:
 
 ```bash
 specgate delivery handoff export "$WORK_REF" --json
