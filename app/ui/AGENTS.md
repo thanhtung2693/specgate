@@ -5,7 +5,7 @@ changes under `app/ui/`.
 
 ## Stack and structure
 
-- Vite 8, React 19, TypeScript, Tailwind CSS 4, shadcn/Radix, React Router 7,
+- Vite 8, React 19, TypeScript, Tailwind CSS 4, shadcn/Radix, React Router 8,
   assistant-ui, and Node.js 26+.
 - Layout and navigation live in `src/components/layout/`.
 - Governance-chat surfaces live in `src/components/agent/`.

@@ -9,7 +9,7 @@ import (
 )
 
 func TestVersionJSONUsesSuccessEnvelope(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "version"); code != output.ExitOK {
 		t.Fatalf("exit = %d output = %s", code, out.String())
 	}

@@ -18,6 +18,10 @@ func localDeliveryReviewView(review local.DeliveryReview) map[string]any {
 }
 
 func printLocalDeliveryStatus(cmd *cobra.Command, deps *Deps, ref, commandName string) error {
+	return printLocalDeliveryStatusWithUpgrade(cmd, deps, ref, commandName, nil)
+}
+
+func printLocalDeliveryStatusWithUpgrade(cmd *cobra.Command, deps *Deps, ref, commandName string, upgrade *local.StoreUpgrade) error {
 	store, err := openLocalStore(deps)
 	if err != nil {
 		return localExitError(deps, commandName, err)
@@ -56,6 +60,16 @@ func printLocalDeliveryStatus(cmd *cobra.Command, deps *Deps, ref, commandName s
 	if err != nil {
 		return localExitError(deps, commandName, err)
 	}
+	status := deriveLocalChangeStatus(work, &review, &report, peer)
+	status.VerificationContract = contract.Status
+	status.CriterionEvidence, _ = local.ProjectAcceptanceEvidence(work.AcceptanceCriteria, report.Body, contract)
+	status, err = augmentAcceptanceStatus(cmd, deps, store, selection.Workspace.ID, ref, status)
+	if err != nil {
+		return localExitError(deps, commandName, err)
+	}
+	if view := status.Inspection; view != nil {
+		work, review, report, peer, contract = view.Work, view.Review, view.Report, view.Peer, view.Contract
+	}
 	receiptLabel := localDeliveryReceiptLabel(report.Body)
 	if deps.Printer.Mode() == output.ModeJSON {
 		data := localDeliveryReviewView(review)
@@ -65,6 +79,19 @@ func printLocalDeliveryStatus(cmd *cobra.Command, deps *Deps, ref, commandName s
 		data["assurance_source"] = localDeliveryAssuranceLabel(report.Body, peer)
 		data["decision_state"] = localDeliveryDecisionLabel(review.HumanDecision)
 		data["receipt"] = receiptLabel
+		if status.BasisDigest != "" {
+			data["basis_digest"] = status.BasisDigest
+		}
+		if status.AcceptanceBasis != nil {
+			data["acceptance_basis"] = status.AcceptanceBasis
+		}
+		if status.RecordedBasis != nil {
+			data["recorded_acceptance_basis"] = status.RecordedBasis
+		}
+		data["next_command"] = status.NextCommand
+		if upgrade != nil {
+			data["store_upgrade"] = upgrade
+		}
 		deps.Printer.Success(commandName, data)
 		return nil
 	}
@@ -76,12 +103,28 @@ func printLocalDeliveryStatus(cmd *cobra.Command, deps *Deps, ref, commandName s
 	fmt.Fprintf(deps.Stdout, "Stored verdict: %s\n", review.Verdict)
 	fmt.Fprintf(deps.Stdout, "Peer review: %s\n", peer.State)
 	fmt.Fprintln(deps.Stdout, review.Summary)
-	if review.HumanDecision == "" {
-		printDeliveryDecisionCommands(deps, work.Key, &client.DeliveryStatusResult{
-			Found: true, Verdict: review.Verdict, Executor: "platform", GateRunID: review.ID,
-		}, true)
+	if review.HumanDecision == "" && status.BasisDigest != "" {
+		printLocalBasisDecisionCommands(deps, work.Key, review.ID, status.AcceptanceBasis)
+	} else if review.HumanDecision == "" {
+		printDeliveryDecisionCommands(deps, work.Key, &client.DeliveryStatusResult{Found: true, Verdict: review.Verdict, Executor: "platform", GateRunID: review.ID}, true)
 	}
 	return nil
+}
+
+func printLocalBasisDecisionCommands(deps *Deps, ref, reviewID string, basis *local.AcceptanceBasis) {
+	if basis == nil {
+		return
+	}
+	flags := " --review-id " + shellQuote(reviewID) + " --basis-digest " + shellQuote(basis.Digest)
+	if basis.Selections.CheckpointID != "" {
+		flags += " --checkpoint " + shellQuote(basis.Selections.CheckpointID)
+	}
+	if basis.Selections.ImpactBase != "" {
+		flags += " --impact-base " + shellQuote(basis.Selections.ImpactBase) + " --impact-target " + shellQuote(basis.Selections.ImpactTarget)
+	}
+	fmt.Fprintln(deps.Stdout, "\nDecision commands:")
+	fmt.Fprintf(deps.Stdout, "  specgate --yes change accept %s%s\n", ref, flags)
+	fmt.Fprintf(deps.Stdout, "  specgate --yes change request-changes %s%s --note \"<reason>\"\n", ref, flags)
 }
 
 func printDeliveryDecisionCommands(deps *Deps, ref string, ds *client.DeliveryStatusResult, localMode bool) {

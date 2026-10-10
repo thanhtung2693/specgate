@@ -52,14 +52,17 @@ jobs:
       - name: Verify Doc Registry
         working-directory: app/doc-registry
         run: |
-          go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...
+          go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
           go test -race -count=1 -p=1 ./...
 
       - name: Verify CLI
         working-directory: app/cli
         run: |
-          go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...
+          go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
           make test
+
+      - name: Verify legacy Local compatibility and recovery
+        run: bash .github/scripts/check-legacy-cli.sh
 
       - name: Verify governance operations
         working-directory: app/agents
@@ -80,7 +83,7 @@ jobs:
           npm run test -- --run
 
       - name: Verify release-facing contracts
-        run: node --test docs/release-readiness.test.mjs
+        run: node --test docs/release-readiness.test.mjs .github/scripts/release-notes.test.mjs
 
   verify-windows-cli:
     runs-on: windows-latest
@@ -93,9 +96,9 @@ jobs:
           go-version-file: app/cli/go.mod
           cache-dependency-path: app/cli/go.sum
 
-      - name: Test native Windows updater
+      - name: Test native Windows CLI boundaries
         working-directory: app/cli
-        run: go test ./internal/command -run 'TestUpdateWindows|TestSelfUpdateWindowsCLI' -count=1
+        run: go test ./internal/command -run 'TestUpdateWindows|TestSelfUpdateWindowsCLI|TestWindowsBrowser|TestOpen' -count=1
 
       - name: Build native Windows CLI
         working-directory: app/cli
@@ -119,7 +122,7 @@ jobs:
 
       - name: Install GoReleaser
         run: |
-          GO_RELEASER_VERSION=v2.17.0
+          GO_RELEASER_VERSION=v2.18.2
           archive="goreleaser_Linux_x86_64.tar.gz"
           base="https://github.com/goreleaser/goreleaser/releases/download/${GO_RELEASER_VERSION}"
           cd "$RUNNER_TEMP"
@@ -130,9 +133,12 @@ jobs:
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
       - name: Run GoReleaser
-        run: goreleaser release --clean
+        run: |
+          node .github/scripts/release-notes.mjs "$VERSION" > "$RUNNER_TEMP/release-notes.md"
+          goreleaser release --clean --release-notes "$RUNNER_TEMP/release-notes.md"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.ref_name }}
 
   release-images:
     name: release-images (${{ matrix.arch }})
@@ -201,6 +207,11 @@ jobs:
           fail-build: true
           severity-cutoff: high
           only-fixed: true
+
+      - name: Verify supervisor security and lifecycle
+        env:
+          SPECGATE_TEST_APPLIANCE_IMAGE: ${{ steps.image.outputs.ref }}
+        run: node --test docker/local/supervisor.test.mjs
 
       - name: Upload image digest
         uses: actions/upload-artifact@v7

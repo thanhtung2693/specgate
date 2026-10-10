@@ -17,7 +17,7 @@ import (
 )
 
 func TestLocalInitSuggestsAgentNeutralPluginInstall(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	stateDir := filepath.Join(t.TempDir(), "local")
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
 		"--plain", "--no-input", "init", "--mode", "local", "--local-dir", stateDir,
@@ -35,7 +35,7 @@ func TestLocalInitSuggestsAgentNeutralPluginInstall(t *testing.T) {
 }
 
 func TestLocalInitJSONSuggestsAgentNeutralPluginInstall(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	stateDir := filepath.Join(t.TempDir(), "local")
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
 		"--json", "--no-input", "init", "--mode", "local", "--local-dir", stateDir,
@@ -58,7 +58,7 @@ func TestLocalInitJSONSuggestsAgentNeutralPluginInstall(t *testing.T) {
 }
 
 func TestInteractiveInitPromptsForSetupMode(t *testing.T) {
-	deps, _ := newTestDeps(t, "")
+	deps, _ := newTestDeps(t)
 	t.Setenv("CI", "")
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("TERM", "xterm-256color")
@@ -91,7 +91,7 @@ func TestInteractiveInitPromptsForSetupMode(t *testing.T) {
 }
 
 func TestLocalInitIgnoresRepositoryContainedStateBeforeCreatingIt(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	repo := t.TempDir()
 	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
 		t.Fatal(err)
@@ -124,7 +124,7 @@ func TestInitCmdJSON(t *testing.T) {
 	setupTestBundle(t, dir)
 
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 	deps.DeployRunner = &fakeDeployRunner{}
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "init", "--mode", "full", "--dir", dir)
@@ -164,7 +164,7 @@ func TestInitRejectsMalformedConfigBeforeMutation(t *testing.T) {
 			deployDir := t.TempDir()
 			setupTestBundle(t, deployDir)
 			runner := &fakeDeployRunner{}
-			deps, out := newTestDeps(t, "")
+			deps, out := newTestDeps(t)
 			deps.ConfigPath = cfgPath
 			deps.DeployRunner = runner
 			args := []string{"--json", "--no-input", "init", "--mode", testCase.mode}
@@ -211,7 +211,7 @@ func TestFullInitReportsConfigSaveFailure(t *testing.T) {
 			t.Fatal(err)
 		}
 	}}
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 	deps.DeployRunner = runner
 
@@ -231,7 +231,7 @@ func TestInitRejectsFlagsFromTheOtherModeBeforeMutation(t *testing.T) {
 	for _, extra := range localCases {
 		t.Run("local_"+strings.TrimPrefix(extra[0], "--"), func(t *testing.T) {
 			stateDir := filepath.Join(t.TempDir(), "local")
-			deps, out := newTestDeps(t, "")
+			deps, out := newTestDeps(t)
 			runner := &fakeDeployRunner{}
 			deps.DeployRunner = runner
 			args := []string{
@@ -258,7 +258,7 @@ func TestInitRejectsFlagsFromTheOtherModeBeforeMutation(t *testing.T) {
 	t.Run("full_local-dir", func(t *testing.T) {
 		deployDir := t.TempDir()
 		setupTestBundle(t, deployDir)
-		deps, out := newTestDeps(t, "")
+		deps, out := newTestDeps(t)
 		runner := &fakeDeployRunner{}
 		deps.DeployRunner = runner
 		code := command.ExecuteForCode(
@@ -279,7 +279,7 @@ func TestInitRejectsFlagsFromTheOtherModeBeforeMutation(t *testing.T) {
 func TestFullInitReplacesExistingLocalTopology(t *testing.T) {
 	dir := t.TempDir()
 	setupTestBundle(t, dir)
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	deps.DeployRunner = &fakeDeployRunner{}
 	if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: filepath.Join(t.TempDir(), "local")}}).SaveTo(deps.ConfigPath); err != nil {
@@ -298,7 +298,7 @@ func TestFullInitReplacesExistingLocalTopology(t *testing.T) {
 }
 
 func TestLocalInitReplacesExistingFullTopology(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	if err := (config.Config{
 		Mode:          config.ModeFull,
@@ -326,7 +326,7 @@ func TestLocalInitReplacesExistingFullTopology(t *testing.T) {
 func TestInitLocalCreatesStateWithoutDocker(t *testing.T) {
 	t.Parallel()
 	stateDir := t.TempDir()
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	runner := &fakeDeployRunner{}
 	deps.DeployRunner = runner
@@ -354,7 +354,7 @@ func TestInitLocalCreatesStateWithoutDocker(t *testing.T) {
 }
 
 func TestInitLocalCanInstallEmbeddedCodexPlugin(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	homeDir := t.TempDir()
 	deps.UserHomeDir = func() (string, error) { return homeDir, nil }
 	stateDir := filepath.Join(t.TempDir(), "local")
@@ -392,7 +392,7 @@ func TestInitLocalCanInstallEmbeddedCodexPlugin(t *testing.T) {
 }
 
 func TestInitLocalNamesSelectedPluginInNextStep(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	homeDir := t.TempDir()
 	deps.UserHomeDir = func() (string, error) { return homeDir, nil }
 
@@ -419,7 +419,7 @@ func TestInitPersistsServerFromDeploymentPort(t *testing.T) {
 	}
 
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 	deps.DeployRunner = &fakeDeployRunner{}
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "init", "--mode", "full", "--dir", dir)
@@ -446,7 +446,7 @@ func TestUpRefreshesPersistedServerFromDeploymentPort(t *testing.T) {
 	if err := (config.Config{Mode: config.ModeFull, Server: config.DefaultServerURL}).SaveTo(cfgPath); err != nil {
 		t.Fatal(err)
 	}
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 	deps.DeployRunner = &fakeDeployRunner{}
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "up", "--dir", dir)
@@ -469,7 +469,7 @@ func TestInitPlainShowsLocalWebURL(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.DeployRunner = &fakeDeployRunner{}
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--no-input", "init", "--mode", "full", "--dir", dir)
 	if code != output.ExitOK {
@@ -489,7 +489,7 @@ func TestInitPrefersEnvironmentPortOverDeploymentPort(t *testing.T) {
 	t.Setenv("SPECGATE_PORT", "13001")
 
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 	deps.DeployRunner = &fakeDeployRunner{}
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "init", "--mode", "full", "--dir", dir)
@@ -514,7 +514,7 @@ func TestInitRefreshesPersistedDefaultServerForCustomPort(t *testing.T) {
 	if err := (config.Config{Server: config.DefaultServerURL}).SaveTo(cfgPath); err != nil {
 		t.Fatal(err)
 	}
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 	deps.DeployRunner = &fakeDeployRunner{}
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "init", "--mode", "full", "--dir", dir)
@@ -539,7 +539,7 @@ func TestInitKeepsExplicitServer(t *testing.T) {
 	}
 
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 	deps.DeployRunner = &fakeDeployRunner{}
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--server", "https://specgate.example", "--no-input", "init", "--mode", "full", "--dir", dir)
@@ -563,7 +563,7 @@ func TestInitCanInstallSelectedPlugins(t *testing.T) {
 	homeDir := t.TempDir()
 
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 	deps.UserHomeDir = func() (string, error) { return homeDir, nil }
 	deps.DeployRunner = &fakeDeployRunner{}
@@ -633,7 +633,7 @@ func TestInitInstallsPluginsFromInferredLocalServer(t *testing.T) {
 	}
 
 	homeDir := t.TempDir()
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.DeployRunner = &fakeDeployRunner{}
 	deps.UserHomeDir = func() (string, error) { return homeDir, nil }
 
@@ -660,7 +660,7 @@ func TestInitCmdNoSeedByDefault(t *testing.T) {
 	setupTestBundle(t, dir)
 
 	fr := &fakeDeployRunner{}
-	deps, _ := newTestDeps(t, "")
+	deps, _ := newTestDeps(t)
 	deps.DeployRunner = fr
 	command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "init", "--mode", "full", "--dir", dir)
 	for _, cmd := range fr.Commands {
@@ -677,7 +677,7 @@ func TestUpCmdJSON(t *testing.T) {
 	setupTestBundle(t, dir)
 
 	runner := &fakeDeployRunner{}
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.DeployRunner = runner
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "up", "--dir", dir)
 	if code != output.ExitOK {
@@ -691,7 +691,7 @@ func TestDownCmdJSON(t *testing.T) {
 	dir := t.TempDir()
 	setupTestBundle(t, dir)
 
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.DeployRunner = &fakeDeployRunner{}
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "down", "--dir", dir)
 	if code != output.ExitOK {

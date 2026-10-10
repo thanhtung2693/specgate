@@ -70,6 +70,9 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 			if err != nil {
 				return err
 			}
+			if err := rejectFullCheckExtensions(deps, spec.Operation, body); err != nil {
+				return err
+			}
 			eventType, _ := body["event_type"].(string)
 			if strings.TrimSpace(eventType) != "coding_agent.completed" {
 				return completionValidationError(deps, spec.Operation, "event_type must be coding_agent.completed")
@@ -120,15 +123,18 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 				if err != nil {
 					return localExitError(deps, spec.Operation, err)
 				}
+				if verificationNeedsObservedJUnit(contract) && !runChecks {
+					return completionValidationError(deps, spec.Operation, "report-enabled verification requires --run-checks so SpecGate can observe the selected JUnit cases")
+				}
 				if runChecks {
 					proceed, err := confirmCompletionChecks(deps, spec.Operation, body)
 					if err != nil || !proceed {
 						return err
 					}
 					if contract.Status == "pinned" {
-						executeCompletionChecks(cmd.Context(), deps, body, root)
+						executeCompletionChecks(cmd.Context(), deps, body, &contract, root)
 					} else {
-						executeCompletionChecks(cmd.Context(), deps, body)
+						executeCompletionChecks(cmd.Context(), deps, body, nil)
 					}
 					if err := validateCompletionReport(deps, spec.Operation, body, false); err != nil {
 						return err
@@ -154,7 +160,19 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 					}
 					status := deriveLocalChangeStatus(work, &review, &report, peer)
 					status.VerificationContract = contract.Status
-					result = applyCheckoutFreshness(cmd.Context(), deps, status, mapGitReceipt(report.Body))
+					status.VerificationVersion = contract.Version
+					status.VerificationDigest = contract.Digest
+					status.CriterionEvidence, _ = local.ProjectAcceptanceEvidence(work.AcceptanceCriteria, report.Body, contract)
+					status, err = enrichLocalStatusScope(cmd.Context(), store, selection.Workspace.ID, work, status)
+					if err != nil {
+						return localExitError(deps, spec.Operation, err)
+					}
+					status, err = augmentAcceptanceStatus(cmd, deps, store, selection.Workspace.ID, work.Key, status)
+					if err != nil {
+						return localExitError(deps, spec.Operation, err)
+					}
+					status.Risks = acceptanceRisks(status)
+					result = status
 				}
 				if deps.Printer.Mode() == output.ModeJSON {
 					deps.Printer.Success(spec.Operation, result)
@@ -183,7 +201,7 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 				if err != nil || !proceed {
 					return err
 				}
-				executeCompletionChecks(cmd.Context(), deps, body)
+				executeCompletionChecks(cmd.Context(), deps, body, nil)
 				if err := validateCompletionReport(deps, spec.Operation, body, false); err != nil {
 					return err
 				}
@@ -265,6 +283,15 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 	return cmd
 }
 
+func verificationNeedsObservedJUnit(contract local.VerificationContract) bool {
+	for _, check := range contract.Checks {
+		if check.TestReport != nil {
+			return true
+		}
+	}
+	return false
+}
+
 func safeCompletionRef(ref string) bool {
 	if ref == "" {
 		return false
@@ -343,6 +370,8 @@ func newDeliveryApproveCmd(deps *Deps) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&note, "note", "", "Optional reviewer note recorded with the decision")
 	cmd.Flags().String("review-id", "", "Exact reviewed delivery ID from status (required in Local mode)")
+	cmd.Flags().String("basis-digest", "", "Exact enhanced Local acceptance basis")
+	acceptanceSelectionFlags(cmd)
 	return cmd
 }
 
@@ -358,11 +387,17 @@ func newDeliveryRejectCmd(deps *Deps) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&note, "note", "", "Optional reviewer note recorded with the decision")
 	cmd.Flags().String("review-id", "", "Exact reviewed delivery ID from status (required in Local mode)")
+	cmd.Flags().String("basis-digest", "", "Exact enhanced Local acceptance basis")
+	acceptanceSelectionFlags(cmd)
 	return cmd
 }
 
 func runDeliveryDecision(cmd *cobra.Command, deps *Deps, args []string, op string, decision string, note string, prompt string) error {
+	if err := rejectFullAcceptanceSelections(cmd, deps, op); err != nil {
+		return err
+	}
 	reviewID, _ := cmd.Flags().GetString("review-id")
+	basisDigest, _ := cmd.Flags().GetString("basis-digest")
 	if deps.Topology == config.ModeLocal {
 		if len(args) == 0 {
 			return localExitError(deps, op, ErrWorkRefRequired)
@@ -384,13 +419,32 @@ func runDeliveryDecision(cmd *cobra.Command, deps *Deps, args []string, op strin
 		if err != nil {
 			return localExitError(deps, op, err)
 		}
-		if err := store.DecideDelivery(cmd.Context(), selection.Workspace.ID, args[0], decision, selection.User.Username, note, reviewID); err != nil {
+		selected := strings.TrimSpace(basisDigest) != "" || cmd.Flags().Changed("checkpoint") || cmd.Flags().Changed("impact-base") || cmd.Flags().Changed("impact-target")
+		var upgrade *local.StoreUpgrade
+		if selected {
+			upgrade, err = store.PendingStoreUpgrade(cmd.Context())
+			if err != nil {
+				return localExitError(deps, op, err)
+			}
+		}
+		proceed, err := confirmStoreWrite(deps, op, fmt.Sprintf(prompt, args[0]), upgrade)
+		if err != nil || !proceed {
+			return err
+		}
+		basisOptions, _, err := acceptanceOptions(cmd, deps, store, selection.Workspace.ID, args[0])
+		if err != nil {
 			return localExitError(deps, op, err)
 		}
-		return printLocalDeliveryStatus(cmd, deps, args[0], op)
+		if err := store.DecideDeliveryWithBasis(cmd.Context(), selection.Workspace.ID, args[0], decision, selection.User.Username, note, reviewID, basisDigest, basisOptions); err != nil {
+			return localExitError(deps, op, err)
+		}
+		return printLocalDeliveryStatusWithUpgrade(cmd, deps, args[0], op, upgrade)
 	}
 	if cmd.Flags().Changed("review-id") {
 		return completionValidationError(deps, op, "--review-id applies only to Local mode")
+	}
+	if cmd.Flags().Changed("basis-digest") {
+		return completionValidationError(deps, op, "--basis-digest applies only to Local mode")
 	}
 	ref, err := resolveRef(cmd, args, deps)
 	if err != nil {
@@ -441,6 +495,9 @@ func newDeliveryStatusCmd(deps *Deps) *cobra.Command {
 		Short: "Show the authoritative delivery review verdict for a work item",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := rejectFullAcceptanceSelections(cmd, deps, "delivery.status"); err != nil {
+				return err
+			}
 			if deps.Topology == config.ModeLocal {
 				if len(args) == 0 {
 					return localExitError(deps, "delivery.status", ErrWorkRefRequired)
@@ -476,6 +533,7 @@ func newDeliveryStatusCmd(deps *Deps) *cobra.Command {
 		},
 	}
 
+	acceptanceSelectionFlags(cmd)
 	cmd.Flags().BoolVar(&detail, "detail", false, "Include per-criterion breakdown")
 	return cmd
 }

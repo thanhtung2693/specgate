@@ -27,6 +27,19 @@ func verificationFixture(t *testing.T) (*local.Store, local.WorkItem, string) {
 	}
 	return s, w, root
 }
+
+func TestWatchedPathRejectsSymlinkedParent(t *testing.T) {
+	root, outside := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "private.txt"), []byte("outside"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "linked")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := local.ResolveVerificationFile(root, "linked/private.txt"); err == nil {
+		t.Fatal("accepted file outside repository")
+	}
+}
 func verificationInput(w local.WorkItem) local.VerificationContractInput {
 	return local.VerificationContractInput{ContextDigest: w.ContextDigest, Shell: "sh", Checks: []local.VerificationCheck{{Name: "unit", Command: "go test ./...", Cwd: "."}}}
 }
@@ -171,5 +184,73 @@ func TestVerificationReportRejectsMismatchAtPersistence(t *testing.T) {
 				t.Fatal("persistence accepted mismatch")
 			}
 		})
+	}
+}
+
+func TestReportEnabledPinRequiresExactSelectorsAndRecordsWatchedBytes(t *testing.T) {
+	s, w, root := verificationFixture(t)
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	in := verificationInput(w)
+	in.WatchedPaths = []string{"go.mod"}
+	in.Checks[0].TestReport = &local.JUnitTestReport{Format: "junit", Selectors: map[string][]local.SelectedTestCase{
+		"local-1": {{ClassName: "pkg.Test", Name: "works"}},
+	}}
+	c, err := s.PinVerificationContract(t.Context(), w.WorkspaceID, w.Key, root, "human", in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Version != 2 || len(c.WatchedPaths) != 1 || c.WatchedPaths[0].Path != "go.mod" || c.WatchedPaths[0].Digest == "" {
+		t.Fatalf("v2 contract = %#v", c)
+	}
+	if c.Digest == "" || c.Digest == verificationInput(w).ContextDigest {
+		t.Fatalf("missing v2 digest: %#v", c)
+	}
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module changed\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	drift := local.WatchedPathDriftFor(root, c.WatchedPaths)
+	if len(drift) != 1 || drift[0].State != "changed" || drift[0].CurrentDigest == drift[0].PinnedDigest {
+		t.Fatalf("watched drift = %#v", drift)
+	}
+}
+
+func TestReportEnabledPinRejectsMissingOrAmbiguousSelectors(t *testing.T) {
+	for _, selectors := range []map[string][]local.SelectedTestCase{
+		nil,
+		{"local-1": {{ClassName: "pkg.Test", Name: "works"}, {ClassName: "pkg.Test", Name: "works"}}},
+		{"unknown": {{ClassName: "pkg.Test", Name: "works"}}},
+	} {
+		s, w, root := verificationFixture(t)
+		in := verificationInput(w)
+		in.Checks[0].TestReport = &local.JUnitTestReport{Format: "junit", Selectors: selectors}
+		if _, err := s.PinVerificationContract(t.Context(), w.WorkspaceID, w.Key, root, "human", in); err == nil {
+			t.Fatalf("accepted selectors %#v", selectors)
+		}
+	}
+}
+
+func TestWatchedFilesBoundedAndMissingState(t *testing.T) {
+	s, w, root := verificationFixture(t)
+	path := filepath.Join(root, "large.bin")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(16*1024*1024 + 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	in := verificationInput(w)
+	in.WatchedPaths = []string{"large.bin"}
+	if _, err := s.PinVerificationContract(t.Context(), w.WorkspaceID, w.Key, root, "human", in); err == nil {
+		t.Fatal("accepted oversized watched file")
+	}
+	drift := local.WatchedPathDriftFor(root, []local.WatchedPath{{Path: "missing.txt", Digest: "old"}})
+	if drift[0].State != "missing" {
+		t.Fatalf("missing state = %s", drift[0].State)
 	}
 }

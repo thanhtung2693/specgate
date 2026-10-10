@@ -8,10 +8,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
+	"github.com/pelletier/go-toml/v2/unstable"
 
 	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/output"
@@ -90,6 +92,12 @@ func (i *pluginInstaller) mergeCodexMarketplace(path string) error {
 		i.printf("[dry-run] add or update specgate entry in %s\n", path)
 		return nil
 	}
+	mode := os.FileMode(0o644)
+	if info, err := os.Lstat(path); err == nil {
+		mode = info.Mode().Perm()
+	} else if !os.IsNotExist(err) {
+		return err
+	}
 	var tmpl struct {
 		Name      string           `json:"name"`
 		Interface map[string]any   `json:"interface"`
@@ -111,10 +119,18 @@ func (i *pluginInstaller) mergeCodexMarketplace(path string) error {
 		Interface map[string]any   `json:"interface"`
 		Plugins   []map[string]any `json:"plugins"`
 	}
+	fields := map[string]json.RawMessage{}
 	if existing, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(existing))) > 0 {
-		if err := json.Unmarshal(existing, &data); err != nil {
+		if err := json.Unmarshal(existing, &fields); err != nil {
 			return fmt.Errorf("parse %s: %w", path, err)
 		}
+		decoder := json.NewDecoder(bytes.NewReader(existing))
+		decoder.UseNumber()
+		if err := decoder.Decode(&data); err != nil {
+			return fmt.Errorf("parse %s: %w", path, err)
+		}
+	} else if err != nil && !os.IsNotExist(err) {
+		return err
 	}
 	if data.Name == "" {
 		data.Name = tmpl.Name
@@ -135,11 +151,20 @@ func (i *pluginInstaller) mergeCodexMarketplace(path string) error {
 		}
 	}
 	data.Plugins = append(filtered, entry)
-	out, err := json.MarshalIndent(data, "", "  ")
+	managed, err := json.Marshal(data)
 	if err != nil {
 		return err
 	}
-	return i.writeFile(path, append(out, '\n'), 0o644)
+	// Overlay only the managed fields; retain future/user-owned marketplace
+	// metadata without decoding it through floating-point numbers.
+	if err := json.Unmarshal(managed, &fields); err != nil {
+		return err
+	}
+	out, err := json.MarshalIndent(fields, "", "  ")
+	if err != nil {
+		return err
+	}
+	return i.writeFile(path, append(out, '\n'), mode)
 }
 
 func (i *pluginInstaller) enableCodexConfig(path string, marketplaceRoot string) error {
@@ -210,7 +235,10 @@ func updateCodexConfig(text string, marketplaceRoot string) ([]byte, error) {
 			continue
 		}
 		var removed bool
-		base, removed = removeTOMLSections(base, map[string]bool{target: true})
+		base, removed, err = removeTOMLSections(base, map[string]bool{target: true})
+		if err != nil {
+			return nil, err
+		}
 		if !removed {
 			return nil, fmt.Errorf("refusing to rewrite non-section TOML for [%s]", target)
 		}
@@ -221,7 +249,7 @@ func updateCodexConfig(text string, marketplaceRoot string) ([]byte, error) {
 	if strings.TrimSpace(base) != "" && !strings.HasSuffix(base, "\n\n") {
 		base += "\n"
 	}
-	base += "[plugins.\"specgate@personal\"]\nenabled = true\n\n"
+	base += "[plugins.\"specgate@personal\"]\nenabled = true\n"
 	base += "[marketplaces.personal]\nsource_type = \"local\"\nsource = " + fmt.Sprintf("%q", cleanRoot) + "\n"
 	return []byte(base), nil
 }
@@ -237,47 +265,64 @@ func parseTOML(text string) (map[string]any, error) {
 	return config, nil
 }
 
-func removeTOMLSections(text string, targets map[string]bool) (string, bool) {
-	lines := strings.Split(text, "\n")
-	out := make([]string, 0, len(lines))
-	skip := false
+func removeTOMLSections(text string, targets map[string]bool) (string, bool, error) {
+	parser := unstable.Parser{KeepComments: true}
+	parser.Reset([]byte(text))
+	var out strings.Builder
+	cursor := 0
+	owned := false
 	changed := false
-	for _, line := range lines {
-		if section, ok := tomlSectionName(line); ok {
-			skip = targets[section]
-			if skip {
-				changed = true
+	for parser.NextExpression() {
+		node := parser.Expression()
+		start, end := 0, 0
+		switch node.Kind {
+		case unstable.Table, unstable.ArrayTable:
+			owned = false
+			var key []string
+			keys := node.Key()
+			for keys.Next() {
+				if len(key) == 0 {
+					start = int(keys.Node().Raw.Offset)
+				}
+				key = append(key, string(keys.Node().Data))
+			}
+			if node.Kind == unstable.Table {
+				for target, enabled := range targets {
+					if enabled && slices.Equal(key, strings.Split(target, ".")) {
+						owned = true
+						break
+					}
+				}
+			}
+			if !owned {
 				continue
 			}
+			end = start
+		case unstable.KeyValue:
+			if !owned {
+				continue
+			}
+			start = int(node.Raw.Offset)
+			end = start + int(node.Raw.Length)
+		default:
+			continue
 		}
-		if !skip {
-			out = append(out, line)
+		// Splice whole owned expressions; never interpret string contents as headers.
+		start = strings.LastIndexByte(text[:start], '\n') + 1
+		if newline := strings.IndexByte(text[end:], '\n'); newline >= 0 {
+			end += newline + 1
+		} else {
+			end = len(text)
 		}
+		out.WriteString(text[cursor:start])
+		cursor = end
+		changed = true
 	}
-	result := strings.Join(out, "\n")
-	result = strings.TrimRight(result, "\n")
-	if result != "" {
-		result += "\n"
+	if err := parser.Error(); err != nil {
+		return text, false, err
 	}
-	return result, changed
-}
-
-func tomlSectionName(line string) (string, bool) {
-	line = strings.TrimSpace(line)
-	if !strings.HasPrefix(line, "[") {
-		return "", false
-	}
-	closeAt := strings.Index(line, "]")
-	if closeAt < 2 {
-		return "", false
-	}
-	if trailing := strings.TrimSpace(line[closeAt+1:]); trailing != "" && !strings.HasPrefix(trailing, "#") {
-		return "", false
-	}
-	name := strings.TrimSpace(line[1:closeAt])
-	name = strings.ReplaceAll(name, `"`, "")
-	name = strings.ReplaceAll(name, `'`, "")
-	return name, name != ""
+	out.WriteString(text[cursor:])
+	return out.String(), changed, nil
 }
 
 func codexConfigRegistersPersonalMarketplace(text, marketplaceRoot string) bool {
@@ -305,11 +350,17 @@ type pluginAgentFileLayout struct {
 	ownershipTargets []pluginOwnershipTarget
 }
 
-func (l *pluginAgentFileLayout) addSkills(dir string, skills []string) {
-	for _, skill := range skills {
+func (l *pluginAgentFileLayout) addSkills(dir string, pkg *client.PluginPackage) {
+	for _, skill := range pluginSkillsFromPackage(pkg) {
 		skillDir := filepath.Join(dir, skill)
-		l.required = append(l.required, filepath.Join(skillDir, "SKILL.md"))
 		l.ownershipTargets = append(l.ownershipTargets, pluginOwnershipTarget{path: skillDir, directory: true})
+	}
+	for _, file := range pluginSkillFiles(pkg) {
+		installed := filepath.Join(dir, strings.TrimPrefix(file, "skills/"))
+		l.required = append(l.required, installed)
+		if !isPluginSkillEntry(file) {
+			l.ownershipTargets = append(l.ownershipTargets, pluginOwnershipTarget{path: installed})
+		}
 	}
 }
 
@@ -378,23 +429,21 @@ func finishPluginAgentHealth(health pluginAgentHealth, projectLocal bool) plugin
 
 func checkCursorPluginAgent(home string, projectLocal bool, pkg *client.PluginPackage, projectRoots ...string) pluginAgentHealth {
 	root := pluginHealthRoot(home, projectLocal, projectRoots...)
-	skills := pluginSkillsFromPackage(pkg)
 	pluginRoot := filepath.Join(root, ".cursor")
 	rule := filepath.Join(pluginRoot, "rules", "using-specgate.mdc")
 	layout := pluginAgentFileLayout{
 		required:         []string{rule},
 		ownershipTargets: []pluginOwnershipTarget{{path: rule}},
 	}
-	layout.addSkills(filepath.Join(pluginRoot, "skills"), skills)
+	layout.addSkills(filepath.Join(pluginRoot, "skills"), pkg)
 	return finishPluginAgentHealth(checkPluginAgentFiles("cursor", projectLocal, pkg, layout), projectLocal)
 }
 
 func checkCodexPluginAgent(home string, projectLocal bool, pkg *client.PluginPackage, projectRoots ...string) pluginAgentHealth {
 	root := pluginHealthRoot(home, projectLocal, projectRoots...)
-	skills := pluginSkillsFromPackage(pkg)
 	layout := pluginAgentFileLayout{}
 	if projectLocal {
-		layout.addSkills(filepath.Join(root, ".agents", "skills"), skills)
+		layout.addSkills(filepath.Join(root, ".agents", "skills"), pkg)
 		return finishPluginAgentHealth(checkPluginAgentFiles("codex", projectLocal, pkg, layout), projectLocal)
 	}
 	pluginRoot := filepath.Join(root, ".codex", "plugins", specgatePluginName)
@@ -411,7 +460,7 @@ func checkCodexPluginAgent(home string, projectLocal bool, pkg *client.PluginPac
 		configPath,
 	)
 	layout.ownershipTargets = append(layout.ownershipTargets, pluginOwnershipTarget{path: pluginRoot, directory: true})
-	layout.addSkills(filepath.Join(pluginRoot, "skills"), skills)
+	layout.addSkills(filepath.Join(pluginRoot, "skills"), pkg)
 	health := checkPluginAgentFiles("codex", projectLocal, pkg, layout)
 	marketplaceRoot, rootErr := filepath.Abs(root)
 	if rootErr != nil {
@@ -434,7 +483,7 @@ func checkCodexPluginAgent(home string, projectLocal bool, pkg *client.PluginPac
 		}
 	}
 	if pkg != nil && strings.TrimSpace(pkg.Version) != "" {
-		cacheWarnings := codexCacheWarnings(home, pluginRoot, strings.TrimSpace(pkg.Version), skills)
+		cacheWarnings := codexCacheWarnings(home, pluginRoot, strings.TrimSpace(pkg.Version), pkg)
 		health.Warnings = append(health.Warnings, cacheWarnings...)
 		health.NeedsUpdate = health.NeedsUpdate || len(cacheWarnings) > 0
 	}
@@ -443,7 +492,6 @@ func checkCodexPluginAgent(home string, projectLocal bool, pkg *client.PluginPac
 
 func checkClaudePluginAgent(home string, projectLocal bool, pkg *client.PluginPackage, projectRoots ...string) pluginAgentHealth {
 	root := pluginHealthRoot(home, projectLocal, projectRoots...)
-	skills := pluginSkillsFromPackage(pkg)
 	layout := pluginAgentFileLayout{}
 	if projectLocal {
 		hookDir := filepath.Join(root, ".claude", specgateHookDirName)
@@ -454,7 +502,7 @@ func checkClaudePluginAgent(home string, projectLocal bool, pkg *client.PluginPa
 			settingsPath,
 		)
 		layout.ownershipTargets = append(layout.ownershipTargets, pluginOwnershipTarget{path: hookDir, directory: true})
-		layout.addSkills(filepath.Join(root, ".claude", "skills"), skills)
+		layout.addSkills(filepath.Join(root, ".claude", "skills"), pkg)
 		health := checkPluginAgentFiles("claude", projectLocal, pkg, layout)
 		if isRegularPluginFile(settingsPath) {
 			settings, _, err := readClaudeSettings(settingsPath)
@@ -481,7 +529,7 @@ func checkClaudePluginAgent(home string, projectLocal bool, pkg *client.PluginPa
 		filepath.Join(pluginRoot, "hooks", "session-start"),
 	)
 	layout.ownershipTargets = append(layout.ownershipTargets, pluginOwnershipTarget{path: pluginRoot, directory: true})
-	layout.addSkills(filepath.Join(pluginRoot, "skills"), skills)
+	layout.addSkills(filepath.Join(pluginRoot, "skills"), pkg)
 	return finishPluginAgentHealth(checkPluginAgentFiles("claude", projectLocal, pkg, layout), projectLocal)
 }
 
@@ -605,22 +653,22 @@ func readPluginManifestVersion(path string) string {
 	return strings.TrimSpace(manifest.Version)
 }
 
-func codexCacheWarnings(home, pluginRoot, latestVersion string, skills []string) []string {
+func codexCacheWarnings(home, pluginRoot, latestVersion string, pkg *client.PluginPackage) []string {
 	cacheRoot := filepath.Join(home, ".codex", "plugins", "cache", "personal", specgatePluginName, latestVersion)
 	if _, err := os.Stat(cacheRoot); err != nil {
 		return nil
 	}
 	var warnings []string
-	for _, skill := range skills {
-		cacheSkill := filepath.Join(cacheRoot, "skills", skill, "SKILL.md")
-		sourceSkill := filepath.Join(pluginRoot, "skills", skill, "SKILL.md")
+	for _, file := range pluginSkillFiles(pkg) {
+		cacheSkill := filepath.Join(cacheRoot, file)
+		sourceSkill := filepath.Join(pluginRoot, file)
 		if _, err := os.Stat(cacheSkill); err == nil {
 			continue
 		}
 		if _, err := os.Stat(sourceSkill); err != nil {
 			continue
 		}
-		warnings = append(warnings, fmt.Sprintf("Codex plugin cache is stale and is missing %s; restart Codex so the refreshed plugin loads.", skill))
+		warnings = append(warnings, fmt.Sprintf("Codex plugin cache is stale and is missing %s; restart Codex so the refreshed plugin loads.", file))
 	}
 	if installed := readPluginManifestVersion(filepath.Join(pluginRoot, ".codex-plugin", "plugin.json")); installed == latestVersion {
 		cached := readPluginManifestVersion(filepath.Join(cacheRoot, ".codex-plugin", "plugin.json"))

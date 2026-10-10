@@ -15,6 +15,7 @@ System:
 | `GET` | `/healthz` | Liveness; routine probes are omitted from request logs |
 | `GET` | `/api/v1/schema/status` | Read-only database schema compatibility diagnostic for required columns and workspace ownership constraints |
 | `GET` | `/readyz` | Readiness; routine probes are omitted from request logs |
+| `GET` | `/plugins/*` | Canonical IDE package assets; only paths in the package `served_files` inventory are served, including declared skill references. This route returns file content or ordinary HTTP errors rather than Huma problem details |
 | `POST` | `/maintenance/cleanup` | Retention sweep, demo seed removal, archived CR purge |
 | `POST` | `/maintenance/demo-remove` | Remove fixed demo seed rows |
 

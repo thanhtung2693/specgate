@@ -1,5 +1,5 @@
 """Headless governance-chat node — a single LangChain agent that answers questions
-over governed artifacts and invokes governance-ops as tools. No drafting."""
+over governed artifacts using read-only tools. No drafting."""
 
 from __future__ import annotations
 
@@ -222,11 +222,6 @@ GOVERNANCE_TOOLS: list[BaseTool] = [
 ]
 
 
-def governance_tool_names() -> set[str]:
-    """Names of the governance-op tools bound to the chat node (no drafting tools)."""
-    return {t.name for t in GOVERNANCE_TOOLS}
-
-
 def _cap_user_messages_for_model(messages: list[AnyMessage]) -> list[AnyMessage]:
     """Copy oversized user messages into a bounded model-only representation."""
     bounded: list[AnyMessage] = []
@@ -278,4 +273,4 @@ def graph() -> Any:
     return build_governance_chat_graph()
 
 
-__all__ = ["build_governance_chat_graph", "graph", "governance_tool_names", "GOVERNANCE_TOOLS"]
+__all__ = ["build_governance_chat_graph", "graph", "GOVERNANCE_TOOLS"]

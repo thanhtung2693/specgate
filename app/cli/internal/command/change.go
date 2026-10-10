@@ -17,23 +17,43 @@ import (
 )
 
 type changeStatusResult struct {
-	VerificationContract string      `json:"verification_contract,omitempty"`
-	Mode                 config.Mode `json:"mode"`
-	Ref                  string      `json:"ref"`
-	Title                string      `json:"title"`
-	State                string      `json:"state"`
-	Evidence             string      `json:"evidence"`
-	Assurance            string      `json:"assurance"`
-	Decision             string      `json:"decision"`
-	Receipt              string      `json:"receipt"`
-	Freshness            string      `json:"freshness"`
-	NextActor            string      `json:"next_actor"`
-	Missing              []string    `json:"missing"`
-	Guidance             string      `json:"guidance,omitempty"`
-	Stale                bool        `json:"stale"`
-	StaleReason          string      `json:"stale_reason,omitempty"`
-	NextCommand          string      `json:"next_command"`
-	ReviewID             string      `json:"review_id,omitempty"`
+	Inspection              *local.AcceptanceInspection         `json:"-"`
+	VerificationContract    string                              `json:"verification_contract,omitempty"`
+	VerificationVersion     int                                 `json:"verification_version,omitempty"`
+	VerificationDigest      string                              `json:"verification_digest,omitempty"`
+	Mode                    config.Mode                         `json:"mode"`
+	Ref                     string                              `json:"ref"`
+	Title                   string                              `json:"title"`
+	State                   string                              `json:"state"`
+	Evidence                string                              `json:"evidence"`
+	Assurance               string                              `json:"assurance"`
+	Decision                string                              `json:"decision"`
+	Receipt                 string                              `json:"receipt"`
+	Freshness               string                              `json:"freshness"`
+	FreshnessUnchecked      bool                                `json:"-"`
+	NextActor               string                              `json:"next_actor"`
+	Missing                 []string                            `json:"missing"`
+	Guidance                string                              `json:"guidance,omitempty"`
+	Stale                   bool                                `json:"stale"`
+	StaleReason             string                              `json:"stale_reason,omitempty"`
+	NextCommand             string                              `json:"next_command"`
+	ReviewID                string                              `json:"review_id,omitempty"`
+	CompletionID            string                              `json:"completion_id,omitempty"`
+	ContextDigest           string                              `json:"context_digest,omitempty"`
+	ArtifactID              string                              `json:"artifact_id,omitempty"`
+	ArtifactVersion         int                                 `json:"artifact_version,omitempty"`
+	ArtifactDigest          string                              `json:"artifact_digest,omitempty"`
+	PeerState               string                              `json:"peer_state,omitempty"`
+	CriterionEvidence       []local.AcceptanceCriterionEvidence `json:"criterion_evidence,omitempty"`
+	SourceCoverage          string                              `json:"source_coverage,omitempty"`
+	SourceRequirements      []sourceRequirementCoverage         `json:"source_requirements,omitempty"`
+	SelectedImpact          *local.ArtifactImpact               `json:"selected_impact,omitempty"`
+	SelectedCheckpoint      *checkpointOutputView               `json:"selected_checkpoint,omitempty"`
+	SelectedCheckpointDelta *checkpointDelta                    `json:"selected_checkpoint_comparison,omitempty"`
+	Risks                   []acceptanceRiskCategory            `json:"risks,omitempty"`
+	BasisDigest             string                              `json:"basis_digest,omitempty"`
+	AcceptanceBasis         *local.AcceptanceBasis              `json:"acceptance_basis,omitempty"`
+	RecordedBasis           *local.AcceptanceBasis              `json:"recorded_acceptance_basis,omitempty"`
 	// Criteria carries each acceptance criterion's verdict and the reason for it,
 	// including the check that decided a bound criterion. A human accepting or
 	// rejecting delivery decides from this payload and must not need the
@@ -73,11 +93,14 @@ func newChangeCmd(deps *Deps) *cobra.Command {
 	cmd.AddCommand(newChangeApproveCmd(deps))
 	cmd.AddCommand(newChangeDecisionCmd(deps, "accept", "Accept a change as a human reviewer", "change.accept", "approve", "Accept change for %s?"))
 	cmd.AddCommand(newChangeDecisionCmd(deps, "request-changes", "Request changes from the implementing agent", "change.request-changes", "reject", "Request changes for %s?"))
-	cmd.AddCommand(&cobra.Command{
+	statusCmd := &cobra.Command{
 		Use:   "status <work-ref>",
 		Short: "Show actionable change status",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := rejectFullAcceptanceSelections(cmd, deps, "change.status"); err != nil {
+				return err
+			}
 			var (
 				result changeStatusResult
 				err    error
@@ -102,10 +125,14 @@ func newChangeCmd(deps *Deps) *cobra.Command {
 				deps.Printer.Success("change.status", result)
 				return nil
 			}
-			printChangeStatus(deps, result)
+			detail, _ := cmd.Flags().GetBool("detail")
+			printChangeStatus(deps, result, detail)
 			return nil
 		},
-	})
+	}
+	acceptanceSelectionFlags(statusCmd)
+	statusCmd.Flags().Bool("detail", false, "Show Local criterion evidence and selected comparison details")
+	cmd.AddCommand(statusCmd)
 	return cmd
 }
 
@@ -453,6 +480,8 @@ func newChangeDecisionCmd(deps *Deps, use, short, operation, decision, prompt st
 	}
 	cmd.Flags().StringVar(&note, "note", "", "Optional reviewer note recorded with the decision")
 	cmd.Flags().String("review-id", "", "Exact reviewed delivery ID from status (required in Local mode)")
+	cmd.Flags().String("basis-digest", "", "Exact enhanced acceptance basis from Local change status")
+	acceptanceSelectionFlags(cmd)
 	return cmd
 }
 
@@ -500,9 +529,20 @@ func changeStatusLocal(cmd *cobra.Command, deps *Deps, ref string) (changeStatus
 		return changeStatusResult{}, err
 	}
 	if report == nil {
+		for _, name := range []string{"checkpoint", "impact-base", "impact-target"} {
+			if cmd.Flags().Changed(name) {
+				return changeStatusResult{}, fmt.Errorf("cannot select --%s before delivery review", name)
+			}
+		}
+		result.Risks = acceptanceRisks(result)
 		return result, nil
 	}
-	return applyCheckoutFreshness(cmd.Context(), deps, result, mapGitReceipt(report.Body)), nil
+	result, err = augmentAcceptanceStatus(cmd, deps, store, selection.Workspace.ID, ref, result)
+	if err != nil {
+		return result, err
+	}
+	result.Risks = acceptanceRisks(result)
+	return result, nil
 }
 
 func deriveLocalChangeStatusFromStore(ctx context.Context, store *local.Store, workspaceID string, work local.WorkItem) (result changeStatusResult, reportOut *local.DeliveryReport, resultErr error) {
@@ -518,6 +558,12 @@ func deriveLocalChangeStatusWithContract(ctx context.Context, store *local.Store
 	defer func() {
 		if resultErr == nil {
 			result.VerificationContract = contract.Status
+			result.VerificationVersion = contract.Version
+			result.VerificationDigest = contract.Digest
+			if reportOut != nil {
+				result.CriterionEvidence, _ = local.ProjectAcceptanceEvidence(work.AcceptanceCriteria, reportOut.Body, contract)
+			}
+			result, resultErr = enrichLocalStatusScope(ctx, store, workspaceID, work, result)
 		}
 	}()
 	review, err := store.DeliveryStatus(ctx, workspaceID, work.Key)
@@ -536,6 +582,27 @@ func deriveLocalChangeStatusWithContract(ctx context.Context, store *local.Store
 		return changeStatusResult{}, nil, err
 	}
 	return deriveLocalChangeStatus(work, &review, &report, peer), &report, nil
+}
+
+func enrichLocalStatusScope(ctx context.Context, store *local.Store, workspaceID string, work local.WorkItem, result changeStatusResult) (changeStatusResult, error) {
+	result.ContextDigest = work.ContextDigest
+	result.ArtifactID = work.ArtifactID
+	if work.ArtifactID == "" {
+		return result, nil
+	}
+	artifact, err := store.GetArtifact(ctx, workspaceID, work.ArtifactID)
+	if err != nil {
+		return result, err
+	}
+	result.ArtifactVersion, result.ArtifactDigest = artifact.Version, artifact.SnapshotDigest
+	items, err := store.ListWork(ctx, workspaceID)
+	if err != nil {
+		return result, err
+	}
+	coverage := localArtifactCoverageView(artifact, items)
+	result.SourceCoverage, _ = coverage["source_coverage"].(string)
+	result.SourceRequirements, _ = coverage["source_requirements"].([]sourceRequirementCoverage)
+	return result, nil
 }
 
 func deriveFullChangeStatus(work *client.ResolvedWork, delivery *client.DeliveryStatusResult) changeStatusResult {
@@ -595,6 +662,9 @@ func deriveLocalChangeStatus(work local.WorkItem, review *local.DeliveryReview, 
 	}
 	result.Evidence = deliveryEvidenceLabel(review.Verdict, "")
 	result.ReviewID = review.ID
+	result.CompletionID = review.ReportID
+	result.PeerState = peer.State
+	result.CriterionEvidence, _ = local.ProjectAcceptanceEvidence(work.AcceptanceCriteria, report.Body)
 	result.Assurance = localDeliveryAssuranceLabel(report.Body, peer)
 	result.Decision = localDeliveryDecisionLabel(review.HumanDecision)
 	result.Receipt = localDeliveryReceiptLabel(report.Body)
@@ -713,39 +783,4 @@ func changeFreshness(hasReceipt bool, peerState string) (string, bool, string) {
 		return "No stored receipt was checked against the current checkout.", false, ""
 	}
 	return "The stored receipt was not checked against the current checkout.", false, ""
-}
-
-func printChangeStatus(deps *Deps, result changeStatusResult) {
-	if result.VerificationContract != "" {
-		fmt.Fprintf(deps.Stdout, "Verification contract: %s\n", result.VerificationContract)
-	}
-	fmt.Fprintf(deps.Stdout, "Change: %s — %s\n", result.Ref, result.Title)
-	fmt.Fprintf(deps.Stdout, "State: %s\n", result.State)
-	fmt.Fprintf(deps.Stdout, "Evidence: %s\n", result.Evidence)
-	fmt.Fprintf(deps.Stdout, "Assurance: %s\n", result.Assurance)
-	fmt.Fprintf(deps.Stdout, "Decision: %s\n", result.Decision)
-	fmt.Fprintf(deps.Stdout, "Receipt: %s\n", result.Receipt)
-	fmt.Fprintf(deps.Stdout, "Freshness: %s\n", result.Freshness)
-	// Same shape as `verify`: the criterion text and the reason, so a human can
-	// see which one is weak without opening the completion file.
-	if len(result.Criteria) > 0 {
-		fmt.Fprintln(deps.Stdout, "Criteria:")
-		for _, criterion := range result.Criteria {
-			fmt.Fprintf(deps.Stdout, "  [%s] %s — %s\n", criterion.Verdict, criterion.Text, criterion.Why)
-		}
-	}
-	fmt.Fprintf(deps.Stdout, "Next actor: %s\n", result.NextActor)
-	missing := strings.Join(result.Missing, ", ")
-	if missing == "" {
-		missing = "none"
-	}
-	fmt.Fprintf(deps.Stdout, "Missing: %s\n", missing)
-	if result.Guidance != "" {
-		fmt.Fprintf(deps.Stdout, "Requested changes: %s\n", result.Guidance)
-	}
-	fmt.Fprintf(deps.Stdout, "Stale: %t\n", result.Stale)
-	if result.StaleReason != "" {
-		fmt.Fprintf(deps.Stdout, "Stale reason: %s\n", result.StaleReason)
-	}
-	fmt.Fprintf(deps.Stdout, "Next: %s\n", result.NextCommand)
 }

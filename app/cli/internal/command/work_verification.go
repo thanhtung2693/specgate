@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"sort"
 	"strings"
 
 	"github.com/specgate/specgate/app/cli/internal/config"
@@ -37,6 +39,7 @@ func newWorkVerificationCmd(deps *Deps) *cobra.Command {
 				return localExitError(deps, op, err)
 			}
 			contract, err := store.GetVerificationContract(cmd.Context(), sel.Workspace.ID, args[0])
+			var upgrade *local.StoreUpgrade
 			if err != nil {
 				return localExitError(deps, op, err)
 			}
@@ -63,17 +66,21 @@ func newWorkVerificationCmd(deps *Deps) *cobra.Command {
 				if err != nil {
 					return localExitError(deps, op, err)
 				}
+				if contract.Version >= 2 {
+					upgrade, err = store.PendingStoreUpgrade(cmd.Context())
+					if err != nil {
+						return localExitError(deps, op, err)
+					}
+				}
 				if !dryRun {
 					if !deps.Yes {
-						for _, check := range contract.Checks {
-							fmt.Fprintf(deps.Stderr, "sh in %s: %s\n", check.Cwd, check.Command)
-						}
+						printVerificationAgreement(deps.Stderr, contract)
 					}
-					proceed, err := requireConfirm(deps, "Pin these verification commands? They cannot be changed for this work.")
+					proceed, err := confirmStoreWrite(deps, op, "Pin these verification commands? They cannot be changed for this work.", upgrade)
 					if err != nil || !proceed {
 						return err
 					}
-					contract, err = store.PinVerificationContract(cmd.Context(), sel.Workspace.ID, args[0], root, sel.User.Username, input)
+					contract, err = store.PinVerificationContract(cmd.Context(), sel.Workspace.ID, args[0], root, sel.User.Username, input, contract.Digest)
 					if err != nil {
 						return localExitError(deps, op, err)
 					}
@@ -82,13 +89,14 @@ func newWorkVerificationCmd(deps *Deps) *cobra.Command {
 				}
 			}
 			if deps.Printer.Mode() == output.ModeJSON {
-				deps.Printer.Success(op, contract)
+				deps.Printer.Success(op, struct {
+					local.VerificationContract
+					Upgrade *local.StoreUpgrade `json:"store_upgrade,omitempty"`
+				}{contract, upgrade})
 				return nil
 			}
 			fmt.Fprintf(deps.Stdout, "Verification contract: %s\n", contract.Status)
-			for _, check := range contract.Checks {
-				fmt.Fprintf(deps.Stdout, "  %s (sh, %s): %s\n", check.Name, check.Cwd, check.Command)
-			}
+			printVerificationAgreement(deps.Stdout, contract)
 			if contract.Status == "unconfigured" {
 				fmt.Fprintln(deps.Stdout, "Checks are self-selected; pin reviewed commands with --file checks.json before the first submission.")
 			} else {
@@ -100,6 +108,27 @@ func newWorkVerificationCmd(deps *Deps) *cobra.Command {
 	cmd.Flags().StringVar(&file, "file", "", "JSON containing context_digest, shell (sh), and checks [{name,command,cwd}]")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview the contract without pinning it")
 	return cmd
+}
+
+func printVerificationAgreement(out io.Writer, contract local.VerificationContract) {
+	for _, check := range contract.Checks {
+		fmt.Fprintf(out, "  %s (sh, %s): %s\n", check.Name, check.Cwd, check.Command)
+		if check.TestReport != nil {
+			ids := make([]string, 0, len(check.TestReport.Selectors))
+			for id := range check.TestReport.Selectors {
+				ids = append(ids, id)
+			}
+			sort.Strings(ids)
+			for _, id := range ids {
+				for _, selector := range check.TestReport.Selectors[id] {
+					fmt.Fprintf(out, "    %s JUnit selector: classname=%q name=%q\n", id, selector.ClassName, selector.Name)
+				}
+			}
+		}
+	}
+	for _, watched := range contract.WatchedPaths {
+		fmt.Fprintf(out, "  Watched: %s sha256:%s\n", watched.Path, watched.Digest)
+	}
 }
 
 func shellQuote(value string) string { return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'" }

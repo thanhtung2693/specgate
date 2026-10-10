@@ -15,7 +15,7 @@ func TestConfigSetServerPersists(t *testing.T) {
 	t.Parallel()
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
 
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 	// config server doesn't call the API, so we don't need a real server.
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--server", "http://localhost:8080", "config", "server", "https://my.specgate.example")
@@ -37,7 +37,7 @@ func TestConfigSetServerRejectsMalformedConfigWithoutReplacingIt(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte("{broken"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "config", "server", "https://example.test")

@@ -304,7 +304,7 @@ func TestVerifyLocalRequiresAndReportsHumanApprovedDelivery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.DecideDelivery(context.Background(), selection.Workspace.ID, work.Key, "approve", "human", "verified", localReviewID(t, store, selection.Workspace.ID, work.Key)); err != nil {
+	if err := store.DecideDeliveryWithBasis(context.Background(), selection.Workspace.ID, work.Key, "approve", "human", "verified", localReviewID(t, store, selection.Workspace.ID, work.Key), ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Close(); err != nil {
@@ -375,7 +375,7 @@ func TestVerifyLocalSupportsAcceptedQuickWorkWithoutArtifact(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.DecideDelivery(t.Context(), selection.Workspace.ID, work.Key, "approve", "human", "verified", localReviewID(t, store, selection.Workspace.ID, work.Key)); err != nil {
+	if err := store.DecideDeliveryWithBasis(t.Context(), selection.Workspace.ID, work.Key, "approve", "human", "verified", localReviewID(t, store, selection.Workspace.ID, work.Key), ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Close(); err != nil {
@@ -497,7 +497,7 @@ func TestVerifyLocalHumanOverrideIsCleanupEligibleWithoutHidingEvidenceGap(t *te
 	if review.Verdict != "failed" {
 		t.Fatalf("review = %#v, want failed evidence", review)
 	}
-	if err := store.DecideDelivery(t.Context(), selection.Workspace.ID, work.Key, "approve", "human", "reviewed false negative", localReviewID(t, store, selection.Workspace.ID, work.Key)); err != nil {
+	if err := store.DecideDeliveryWithBasis(t.Context(), selection.Workspace.ID, work.Key, "approve", "human", "reviewed false negative", localReviewID(t, store, selection.Workspace.ID, work.Key), ""); err != nil {
 		t.Fatal(err)
 	}
 	closeLocalChangeStore(t, deps, stateDir, store)

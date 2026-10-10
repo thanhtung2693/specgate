@@ -2,6 +2,7 @@ package local_test
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -176,5 +177,73 @@ func TestPeerReviewUsesBoundCheckFromLatestCompletion(t *testing.T) {
 	}
 	if second.ID != first.ID || second.CreatedAt != first.CreatedAt {
 		t.Fatalf("exact retry created another review: first=%#v second=%#v", first, second)
+	}
+	for _, field := range []string{"completion_feedback_event_id", "git_receipt"} {
+		t.Run(field, func(t *testing.T) {
+			binding := peer["peer_review_of"].(map[string]any)
+			original := binding[field]
+			binding[field] = "stale"
+			defer func() { binding[field] = original }()
+			if _, err := store.PeerReviewDelivery(context.Background(), workspaceID, work.Key, peer); !errors.Is(err, local.ErrReviewChanged) {
+				t.Fatalf("stale binding must be conflict, got %v", err)
+			}
+		})
+	}
+}
+
+func TestPeerReviewCanRecoverAfterAnInterveningFailedReview(t *testing.T) {
+	for _, interveningAgent := range []string{"reviewer", "other-reviewer"} {
+		t.Run(interveningAgent, func(t *testing.T) {
+			store, workspaceID, work := boundWork(t, "Retries stop after three attempts")
+			if _, err := store.SubmitDelivery(t.Context(), workspaceID, work.Key, boundCompletion(work)); err != nil {
+				t.Fatal(err)
+			}
+			completion, err := store.LatestDeliveryReport(t.Context(), workspaceID, work.Key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			criterion := map[string]any{
+				"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"heading": "reviewed"},
+			}
+			peer := map[string]any{
+				"agent":    map[string]any{"name": "reviewer"},
+				"criteria": []any{criterion},
+				"peer_review_of": map[string]any{
+					"completion_feedback_event_id": completion.ID,
+					"git_receipt":                  completion.Body["git_receipt"],
+				},
+			}
+			first, err := store.PeerReviewDelivery(t.Context(), workspaceID, work.Key, peer)
+			if err != nil {
+				t.Fatal(err)
+			}
+			criterion["claim"] = "partial"
+			peer["agent"] = map[string]any{"name": interveningAgent}
+			failed, err := store.PeerReviewDelivery(t.Context(), workspaceID, work.Key, peer)
+			if err != nil {
+				t.Fatal(err)
+			}
+			status, err := store.PeerReviewStatus(t.Context(), workspaceID, work.Key)
+			if err != nil || status.State != "failed" {
+				t.Fatalf("intervening review status = %#v, err = %v", status, err)
+			}
+			criterion["claim"] = "satisfied"
+			peer["agent"] = map[string]any{"name": "reviewer"}
+			recovered, err := store.PeerReviewDelivery(t.Context(), workspaceID, work.Key, peer)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if recovered.ID == first.ID || recovered.ID == failed.ID {
+				t.Fatalf("recovery reused historical evidence instead of recording the new review: %#v", recovered)
+			}
+			status, err = store.PeerReviewStatus(t.Context(), workspaceID, work.Key)
+			if err != nil || status.State != "passed" || status.ReviewedAt != recovered.CreatedAt {
+				t.Fatalf("recovered review must be the current readback: %#v, err = %v", status, err)
+			}
+			retry, err := store.PeerReviewDelivery(t.Context(), workspaceID, work.Key, peer)
+			if err != nil || retry.ID != recovered.ID || retry.CreatedAt != recovered.CreatedAt {
+				t.Fatalf("immediate retry must reuse the current review: %#v, err = %v", retry, err)
+			}
+		})
 	}
 }

@@ -66,6 +66,15 @@ specgate container
 It publishes one port and uses one named volume. Postgres and internal APIs bind
 inside the container.
 
+Supervisor component state, restart counters, and `/data/diagnostics` are
+root-owned and not writable by application component users. Startup rejects
+symlinks and special files in these state trees without removing operator data,
+then migrates regular legacy state ownership and permissions. Finish handlers
+validate bounded decimal counters before arithmetic and create diagnostic
+temporary files exclusively. The loopback-only health adapter runs as root to
+clear successful components' protected restart counters; it accepts only its
+two fixed health routes and does not accept caller-selected paths or commands.
+
 The gateway is the appliance's authentication boundary. When any member holds a
 credential it verifies every request through `auth_request` against Doc
 Registry's `/internal/auth`, then sets `X-SpecGate-User` from the verifier's
@@ -122,6 +131,37 @@ SpecGate v0.1 assumes a trusted local or private network.
 - Settings secrets are encrypted at rest with `SETTINGS_ENCRYPTION_KEY`.
 - IDE-agent output is evidence, not approval.
 - Human approval and deterministic checks outrank model judgment.
+
+Full-mode browser opening treats server-advertised metadata as URL data, not
+host commands. The CLI validates absolute HTTP(S) URLs before deep-link
+resolution, printing or opening. Windows uses native ShellExecute with the
+validated URL as its document and no command parameters, with thread-bound COM
+initialization; macOS/Linux retain direct browser-launcher arguments. Do not
+route URLs through a command interpreter or accept local executable paths and
+arbitrary protocol handlers as web UI destinations.
+
+Enhanced Local assurance records stay inside the same SQLite trust boundary.
+The CLI captures an opted-in JUnit report and watched inputs, parses a bounded
+subset into normalized observations, and binds them to the existing work and
+review. It never treats a report as runner attestation. Checkpoint manifests
+and acceptance bases are stored locally and projected compactly; the basis is
+re-read transactionally before a human decision. The first enhanced write makes
+a disclosed backup and installs an old-writer guard, so older CLIs cannot
+silently mutate upgraded state. Frozen portable and handoff exports refuse data
+they cannot preserve.
+
+Portable workspace export, impact and acceptance projections share
+transaction-scoped readers; export includes compatibility checks in its read
+snapshot rather than checking eligibility before opening that snapshot. Avoid
+parallel store-only implementations that can assemble evidence from different
+SQLite snapshots. Read historical acceptance records through the same inspection
+as the displayed review, rather than independently resolving the latest review
+again. Default checkpoint lookup is checkout-scoped; explicit checkpoint IDs
+use work/workspace-scoped reads. Do not reintroduce an unqualified latest
+checkpoint reader. Resume compares captured checkout content and Git trees,
+not just changed-path membership. Keep v1 serialization and old-writer guards
+while older records and released CLIs remain supported; those are compatibility
+and data-safety boundaries, not disposable development scaffolding.
 
 See [Trust and security](../using-specgate/concepts/trust-and-security.md).
 

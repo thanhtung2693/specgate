@@ -16,11 +16,11 @@ Local: read scope/criteria, verification, document index, status:
 specgate work resume "$WORK_REF" --json
 ```
 
-Reuse pins; declining leaves unconfigured work usable. For a requested
-Local pin, read the proposed scripts; show work, digest, every binding/criterion,
-literal command and checkout-relative cwd. Explain: immutable command/cwd,
-replacement work to change; scripts remain mutable; no test-pass/coverage proof;
-unsandboxed shell; portable/v1 export blocked, Local backup available.
+Pins are optional; for one, show work/digest/bindings/literal command/cwd.
+They freeze commands/cwd, exact selectors, and watched paths;
+scripts remain mutable/untrusted, shell is unsandboxed, and portable/v1
+export is blocked. JUnit selectors are exact;
+`--run-checks` observes a fresh ignored report, not a trustworthy runner.
 
 Preserve drafts. Choose an unused work-specific `$CHECKS_PATH` under
 `.specgate/work` with `context_digest`, `shell: "sh"`, and
@@ -68,6 +68,8 @@ Reuse results until state changes; avoid duplicate reads. Follow status:
 Map every change/check to a criterion or required repository-doc update.
 
 ## 2. Resume safely
+
+Checkpoints need human request; resume is read-only.
 
 For `next_actor=implementing_agent` in `implementation` or `rework_requested`,
 inspect edits, rerun checks, submit fresh evidence. Otherwise require

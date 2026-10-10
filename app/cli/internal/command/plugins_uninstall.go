@@ -1,10 +1,13 @@
 package command
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/specgate/specgate/app/cli/internal/fsutil"
@@ -208,6 +211,14 @@ func removeOwnedPluginDir(path string) (bool, bool, error) {
 	} else if !os.IsNotExist(err) {
 		return false, false, err
 	}
+	// Supplemental skill files carry their own markers so package refreshes and
+	// uninstall never infer ownership from a user-populated reference directory.
+	markedFiles, markedDirs, err := markedPluginFiles(path)
+	if err != nil {
+		return false, false, err
+	}
+	managedFiles = append(managedFiles, markedFiles...)
+	managedDirs = append(managedDirs, markedDirs...)
 	managedFiles = append(managedFiles, filepath.Join(path, pluginOwnerMarker))
 	for _, file := range managedFiles {
 		info, err := os.Lstat(file)
@@ -229,6 +240,7 @@ func removeOwnedPluginDir(path string) (bool, bool, error) {
 			return false, false, err
 		}
 	}
+	sort.Strings(managedDirs)
 	for index := len(managedDirs) - 1; index >= 0; index-- {
 		if _, err := removeDirIfEmpty(managedDirs[index]); err != nil {
 			return false, false, err
@@ -239,6 +251,28 @@ func removeOwnedPluginDir(path string) (bool, bool, error) {
 		return false, false, err
 	}
 	return changed, fullyRemoved, nil
+}
+
+func markedPluginFiles(root string) (files, dirs []string, err error) {
+	root = filepath.Clean(root)
+	err = filepath.WalkDir(root, func(marker string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || entry.Name() == pluginOwnerMarker || !strings.HasSuffix(entry.Name(), pluginOwnerMarker) {
+			return nil
+		}
+		file := strings.TrimSuffix(marker, pluginOwnerMarker)
+		if validatePluginOwnerMarker(marker, file) != nil {
+			return nil
+		}
+		files = append(files, file, marker)
+		for dir := filepath.Dir(file); dir != root; dir = filepath.Dir(dir) {
+			dirs = append(dirs, dir)
+		}
+		return nil
+	})
+	return files, dirs, err
 }
 
 func removeOwnedPluginFile(path string) (bool, error) {
@@ -324,7 +358,10 @@ func removeCodexConfigSections(path string, removePersonalMarketplace bool, mark
 			continue
 		}
 		var removed bool
-		out, removed = removeTOMLSections(out, map[string]bool{target: true})
+		out, removed, err = removeTOMLSections(out, map[string]bool{target: true})
+		if err != nil {
+			return false, err
+		}
 		if !removed {
 			return false, fmt.Errorf("refusing to rewrite non-section TOML for [%s]", target)
 		}
@@ -382,7 +419,9 @@ func removeCodexMarketplaceEntry(path string) (bool, error) {
 		return false, nil
 	}
 	var plugins []map[string]any
-	if err := json.Unmarshal(pluginsRaw, &plugins); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(pluginsRaw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&plugins); err != nil {
 		return false, fmt.Errorf("parse %s plugins: %w", path, err)
 	}
 	if len(plugins) == 0 {
@@ -419,8 +458,22 @@ func removeCodexMarketplaceEntry(path string) (bool, error) {
 }
 
 func codexMarketplaceHasOnlyManagedFields(data map[string]json.RawMessage) bool {
-	for key := range data {
-		if key != "name" && key != "interface" && key != "plugins" {
+	// A shared catalog's name/interface may be user-owned even when its last
+	// plugin is ours. Delete only metadata matching the shipped defaults.
+	body, err := localPluginAssets.ReadFile("local_plugin_assets/" + codexPersonalMarketURL)
+	if err != nil {
+		return false
+	}
+	var defaults map[string]json.RawMessage
+	if err := json.Unmarshal(body, &defaults); err != nil {
+		return false
+	}
+	for key, raw := range data {
+		if key == "plugins" {
+			continue
+		}
+		var actual, expected any
+		if json.Unmarshal(raw, &actual) != nil || json.Unmarshal(defaults[key], &expected) != nil || !reflect.DeepEqual(actual, expected) {
 			return false
 		}
 	}

@@ -97,7 +97,22 @@ SpecGate records evidence provenance. Policies can require corroborated evidence
 for stricter delivery review. It does not ingest provider CI state or create a
 delivery-assurance source from it.
 
+Optional Local selected-test receipts are observations from the same user and
+process boundary as the command they run. SpecGate bounds and normalizes the
+report, avoids retaining raw XML or command output, and records endpoint
+freshness limits, but it cannot attest test quality or defend against a hostile
+runner. An enhanced-store compatibility guard blocks pre-upgrade CLIs from
+writing the store; it is a data-loss safeguard, not hostile-agent isolation or
+authorization.
+
 ## Data sensitivity
+
+Git origin authentication is not delivery evidence. New CLI receipts remove
+URL authentication, query and fragment data before persistence or submission.
+Local handoff and portable export project old receipt metadata without those
+credentials and leave the original database evidence unchanged. This applies
+only to known Git receipt fields; it is not a general secret scanner for
+arbitrary user-authored evidence, source text or already-shared artifacts.
 
 Artifact/spec data may include product plans, source paths, issue details, and
 implementation evidence. Treat the Full appliance's managed `specgate-data`

@@ -25,7 +25,7 @@ jobs:
         with:
           go-version-file: app/doc-registry/go.mod
           cache-dependency-path: app/doc-registry/go.sum
-      - run: go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...
+      - run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
       - name: Test
         # CI runners are tighter than local machines; avoid starting multiple
         # Testcontainers-backed packages at once.

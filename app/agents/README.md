@@ -57,7 +57,9 @@ uv run langgraph dev
 Default API: `http://127.0.0.1:2024` (see LangGraph CLI docs). Checkpoints and
 thread metadata live in memory and disappear when the process stops. Long dev
 sessions with large agent state (markdown fields, message history) can push
-memory high — restart the server or prune threads when that happens.
+memory high — restart the development server when that happens. Restarting
+discards its ephemeral chat history; durable governance records remain in Doc
+Registry.
 
 ### Work with the local appliance
 
@@ -70,15 +72,10 @@ make up` before validating the packaged runtime.
 
 The root `docker-compose.yml` is reserved for separable self-host/cloud
 deployment validation. It is not part of the normal local development loop.
-
-### Prune all threads
-
-With the LangGraph API running:
-
-```bash
-node scripts/prune-langgraph-threads.mjs
-node scripts/prune-langgraph-threads.mjs --dry-run   # list only
-```
+Its agents image uses the same frozen production `uv.lock` as the appliance,
+with `langgraph`, `uvicorn`, and `python` on `PATH` from the installed virtual
+environment. `uv` is build-only, not a runtime dependency; command overrides can
+invoke `uvicorn specgate_agents.governance.webapp:app` directly.
 
 Stop `langgraph dev` before switching to Postgres. Its in-memory state is not
 migrated.
@@ -100,6 +97,24 @@ uv run ruff check src tests
 uv run ruff format --check src tests
 uv run deptry src evals
 ```
+
+Dependency upgrades must preserve a compatible runtime, not merely maximize
+each transitive version. The tested LangGraph API floor is 0.15.1. Its
+Prometheus exporter requires OpenTelemetry SDK/API 1.42.1, which conflicts
+with FastAPI 0.142.2's OpenTelemetry API minimum of 1.44.0; the lock therefore
+retains FastAPI 0.141.1. Recheck upstream constraints before lifting this limit.
+Do not use `--no-deps` or prerelease runtime builds to bypass it. After changing
+the lock, rerun the tests above, build a wheel, and smoke-test `langgraph dev`
+with isolated config/state and tracing disabled before invoking live providers.
+
+Inspect proposed lock changes before applying a blanket upgrade: resolving the
+whole graph can downgrade a model integration to satisfy unrelated transitive
+constraints. Prefer targeted upgrades that retain the tested provider major.
+The current Google GenAI SDK caps Tenacity below 9.2, and LangGraph API caps
+gRPC below 1.82, Protobuf below 7, JSONSchema-RS below 0.45, and Structlog below
+26. These are upstream compatibility constraints, not independent latest-version
+targets. Its Prometheus exporter explicitly requires a beta release; keep that
+existing dependency constraint without opting other packages into prereleases.
 
 The default `pytest` run covers routing, wiring, governance tools, and mocked
 integration checks. Run the external-service smoke checks only when you

@@ -211,10 +211,27 @@ an empty change. Unrelated dirty files remain warnings.
 
 `freshness_scope=shared_repository` compares the stored receipt with the
 current repository, branch, base, HEAD, and working-tree digest.
-`freshness_scope=local_checkout` compares branch, HEAD, and working-tree digest
-in the checkout that recorded it; it is not portable provenance. A match is
-reported explicitly. A mismatch is a stale warning; unavailable non-Git
-metadata is reported as unverified rather than guessed.
+`freshness_scope=local_checkout` requires the same recorded checkout identity
+before comparing branch, HEAD, and working-tree digest; it is not portable
+provenance. A missing or different checkout identity is unverified, not a stale
+comparison, even when branch and HEAD match. Within a comparable checkout, a
+match is reported explicitly and a mismatch is a stale warning. Unavailable
+non-Git metadata is also reported as unverified rather than guessed.
+
+### Selected Local test observations
+
+An optional Local verification pin can bind a criterion to exact JUnit case
+names and explicitly watched verification files. During a confirmed run,
+SpecGate observes the command's newly allocated report and bounded endpoint
+snapshots. That makes missing, skipped, duplicate, or reported-failing cases
+visible; it does not prove the runner was honest, the test was sufficient, or
+files did not change and revert between snapshots. Watched-input drift is a
+review warning, not an automatic accusation or a different approval entity.
+
+`work checkpoint` records an explicit pickup baseline. It preserves approved
+scope while `work resume --since` describes only a compatible Local checkout
+delta. Neither checkpoint data nor a current freshness observation changes a
+historical evidence result or grants acceptance.
 
 ## Corroborated evidence
 

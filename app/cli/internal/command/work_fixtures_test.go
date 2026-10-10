@@ -734,27 +734,28 @@ func (f *fakeClient) ListWorkspaceMembers(_ context.Context, id, currentUserID, 
 }
 
 type fakePrompter struct {
-	selectObserver func()
-	selectedValue  string
-	multiValues    []string
-	multiDefaults  []string
-	searchValue    string
-	selectOptions  []interactive.Option
-	multiTitle     string
-	multiOptions   []interactive.Option
-	searchTitle    string
-	searchOptions  []interactive.Option
-	inputValue     string
-	inputValues    []string
-	inputTitle     string
-	inputTitles    []string
-	suggestions    []string
-	secretValue    string
-	secretTitle    string
-	confirmValue   bool
-	confirmTitle   string
-	inputCalls     int
-	secretCalls    int
+	confirmObserver func()
+	selectObserver  func()
+	selectedValue   string
+	multiValues     []string
+	multiDefaults   []string
+	searchValue     string
+	selectOptions   []interactive.Option
+	multiTitle      string
+	multiOptions    []interactive.Option
+	searchTitle     string
+	searchOptions   []interactive.Option
+	inputValue      string
+	inputValues     []string
+	inputTitle      string
+	inputTitles     []string
+	suggestions     []string
+	secretValue     string
+	secretTitle     string
+	confirmValue    bool
+	confirmTitle    string
+	inputCalls      int
+	secretCalls     int
 }
 
 func (f *fakePrompter) Select(_ string, options []interactive.Option) (string, error) {
@@ -807,6 +808,9 @@ func (f *fakePrompter) Secret(title string) (string, error) {
 }
 
 func (f *fakePrompter) Confirm(title string, _ bool) (bool, error) {
+	if f.confirmObserver != nil {
+		f.confirmObserver()
+	}
 	f.confirmTitle = title
 	return f.confirmValue, nil
 }

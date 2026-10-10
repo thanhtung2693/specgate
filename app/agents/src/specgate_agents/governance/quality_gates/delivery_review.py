@@ -268,7 +268,7 @@ def derive_review_from_claims(
     ``_resolve_overall`` so the aggregation matches the model-judged path. Iterate
     the *defined* acceptance criteria so an under-reported criterion resolves to
     ``unclear`` rather than silently passing. The verdict carries the agent's
-    self-assessment unless every criterion is bound to a locally reproduced
+    self-assessment unless every criterion is bound to a reported named
     check. Partial/missing claims resolve to ``needs_human_review``, leaving the
     final call to a human.
     """
@@ -328,7 +328,10 @@ def derive_review_from_claims(
     hint = "Verdict derived from the coding agent's acceptance-criteria claims."
     judge_model = "agent_attested"
     if all_bound:
-        hint = "Verdict derived from locally reproduced deterministic checks."
+        hint = (
+            "Verdict derived from reported named check results; "
+            "the service does not execute commands."
+        )
         judge_model = "deterministic_checks"
     elif some_bound:
         hint = "Verdict derived from deterministic checks and coding-agent evidence."

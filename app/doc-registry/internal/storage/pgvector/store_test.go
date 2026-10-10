@@ -20,7 +20,7 @@ func startPGVector(t *testing.T, dim int) *pgvec.Store {
 
 	container, err := tcpostgres.Run(
 		ctx,
-		"pgvector/pgvector:0.8.3-pg18",
+		"pgvector/pgvector:0.8.7-pg18-trixie",
 		tcpostgres.WithDatabase("pgvectest"),
 		tcpostgres.WithUsername("docreg"),
 		tcpostgres.WithPassword("docreg"),

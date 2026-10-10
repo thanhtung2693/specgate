@@ -60,53 +60,7 @@ specgate model test`),
 						"`doctor --fix` repairs only a CLI-managed Full appliance; run `specgate doctor` without --fix in Local mode",
 					)
 				}
-				store, err := openLocalStore(deps)
-				if err != nil {
-					return localExitError(deps, "doctor", err)
-				}
-				defer store.Close()
-				selection, err := store.Current(cmd.Context())
-				if err != nil {
-					return localExitError(deps, "doctor", err)
-				}
-				// A stale project binding must not make doctor itself unavailable.
-				// Keep the durable selection for its base health view and surface the
-				// failed override as an actionable repository diagnostic below.
-				resolvedSelection, selectionErr := localSelection(cmd.Context(), deps, store)
-				if selectionErr == nil {
-					selection = resolvedSelection
-				}
-				cfg, _ := config.LoadFrom(deps.ConfigPath)
-				result := map[string]any{
-					"mode":      "local",
-					"store":     map[string]any{"path": cfg.Local.Path, "id": selection.StoreID, "status": "ok"},
-					"identity":  map[string]any{"status": "ok", "username": selection.User.Username},
-					"workspace": map[string]any{"status": "ok", "slug": selection.Workspace.Slug},
-					"network":   map[string]any{"status": "not_required", "message": "Local mode uses no server or TCP service"},
-				}
-				diagnostics := buildLocalDoctorDiagnostics(cmd.Context(), deps, cfg, selectionErr, selection.Workspace.Slug)
-				for key, value := range diagnostics {
-					result[key] = value
-				}
-				if deps.Printer.Mode() == output.ModeJSON {
-					deps.Printer.Success("doctor", result)
-					return nil
-				}
-				fmt.Fprintln(deps.Stdout, title(deps, "SpecGate Doctor"))
-				fmt.Fprintln(deps.Stdout, notice(deps, output.StyleSuccess, "Local mode", "ready"))
-				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Store:"), cfg.Local.Path)
-				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "User:"), selection.User.Username)
-				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Workspace:"), selection.Workspace.Slug)
-				fmt.Fprintf(deps.Stdout, "%s not required\n", label(deps, "Network:"))
-				for _, key := range []string{"repository", "shell", "plugins"} {
-					check := diagnostics[key].(doctorCheck)
-					checkLabel := map[string]string{"repository": "Repository:", "shell": "Shell:", "plugins": "Plugins:"}[key]
-					fmt.Fprintf(deps.Stdout, "%s %s — %s\n", label(deps, checkLabel), check.Status, check.Message)
-					if check.Command != "" {
-						fmt.Fprintf(deps.Stdout, "  %s %s\n", label(deps, "next:"), check.Command)
-					}
-				}
-				return nil
+				return runLocalDoctor(cmd.Context(), deps)
 			}
 			ctx := cmd.Context()
 

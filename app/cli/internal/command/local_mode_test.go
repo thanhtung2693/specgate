@@ -56,7 +56,7 @@ func TestModelSetIgnoresRepositoryServerForEnvironmentSecrets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.WorkingDir = repo
 	if err := (config.Config{Mode: config.ModeFull, Server: trusted.URL}).SaveTo(deps.ConfigPath); err != nil {
 		t.Fatal(err)
@@ -76,7 +76,7 @@ func TestModelSetIgnoresRepositoryServerForEnvironmentSecrets(t *testing.T) {
 }
 
 func TestLocalWorkspaceCreateSelectAndCurrentNeedNoHTTP(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	stateDir := filepath.Join(t.TempDir(), "local")
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--no-input", "init", "--mode", "local", "--local-dir", stateDir, "--workspace-name", "Alpha", "--display-name", "Human", "--username", "human"); code != output.ExitOK {
 		t.Fatalf("init exit = %d; output=%s", code, out.String())
@@ -99,7 +99,7 @@ func TestLocalWorkspaceCreateSelectAndCurrentNeedNoHTTP(t *testing.T) {
 }
 
 func TestLocalUserLoginCreatesWorkspaceAndPersistsSelection(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	stateDir := filepath.Join(t.TempDir(), "local")
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--no-input", "init", "--mode", "local", "--local-dir", stateDir, "--workspace-name", "Alpha", "--display-name", "Human", "--username", "human"); code != output.ExitOK {
 		t.Fatalf("init exit = %d; output=%s", code, out.String())
@@ -122,7 +122,7 @@ func TestLocalUserLoginCreatesWorkspaceAndPersistsSelection(t *testing.T) {
 }
 
 func TestLocalWorkspaceBindPersistsProjectStoreAndSelection(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	repo := t.TempDir()
 	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
 		t.Fatal(err)
@@ -160,7 +160,7 @@ func TestLocalWorkspaceBindPersistsProjectStoreAndSelection(t *testing.T) {
 }
 
 func TestLocalProjectWorkspaceBindingOverridesGlobalSelection(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	repo := t.TempDir()
 	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
 		t.Fatal(err)
@@ -186,7 +186,7 @@ func TestLocalProjectWorkspaceBindingOverridesGlobalSelection(t *testing.T) {
 }
 
 func TestLocalArtifactPublishListShowAndCoverageNeedNoHTTP(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	repo := t.TempDir()
 	for _, dir := range []string{".git", "docs/framework", ".specgate/work"} {
 		if err := os.MkdirAll(filepath.Join(repo, dir), 0o755); err != nil {
@@ -295,7 +295,7 @@ func TestLocalArtifactPublishListShowAndCoverageNeedNoHTTP(t *testing.T) {
 }
 
 func TestLocalArtifactPublishPreviewCompareNeedNoHTTP(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	stateDir := filepath.Join(t.TempDir(), "local")
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--no-input", "init", "--mode", "local", "--local-dir", stateDir, "--workspace-name", "Alpha", "--display-name", "Human", "--username", "human"); code != output.ExitOK {
 		t.Fatalf("init exit = %d; output=%s", code, out.String())
@@ -348,7 +348,7 @@ func TestLocalArtifactPublishPreviewCompareNeedNoHTTP(t *testing.T) {
 }
 
 func TestLocalWorkspaceOverrideScopesArtifactWithoutChangingSelection(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	stateDir := filepath.Join(t.TempDir(), "local")
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--no-input", "init", "--mode", "local", "--local-dir", stateDir, "--workspace-name", "Alpha", "--display-name", "Human", "--username", "human"); code != output.ExitOK {
 		t.Fatalf("init exit = %d; output=%s", code, out.String())
@@ -388,7 +388,7 @@ func TestLocalWorkspaceOverrideScopesArtifactWithoutChangingSelection(t *testing
 }
 
 func TestLocalArtifactPackageWorkspaceScopesPublishWithoutChangingSelection(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	stateDir := filepath.Join(t.TempDir(), "local")
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--no-input", "init", "--mode", "local", "--local-dir", stateDir, "--workspace-name", "Alpha", "--display-name", "Human", "--username", "human"); code != output.ExitOK {
 		t.Fatalf("init exit = %d; output=%s", code, out.String())
@@ -424,7 +424,7 @@ func TestLocalArtifactPackageWorkspaceScopesPublishWithoutChangingSelection(t *t
 }
 
 func TestLocalReadinessThenHumanApprovalNeedNoHTTP(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	repoDir := t.TempDir()
 	deps.WorkingDir = repoDir
 	deps.DeployRunner = deliveryGitRunner(repoDir, nil)
@@ -624,7 +624,7 @@ func TestLocalPluginRequiresIDEAgentConfirmedAcceptanceCriteria(t *testing.T) {
 }
 
 func TestLocalGateTaskLoopNeedsNoHTTP(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	stateDir := filepath.Join(t.TempDir(), "local")
 	execute := func(args ...string) int {
 		out.Reset()
@@ -701,7 +701,7 @@ func TestLocalGateTaskLoopNeedsNoHTTP(t *testing.T) {
 }
 
 func TestLocalWorkCreatePersistsIDEAgentConfirmedAcceptanceCriteria(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	stateDir := filepath.Join(t.TempDir(), "local")
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--no-input", "init", "--mode", "local", "--local-dir", stateDir, "--workspace-name", "Alpha", "--display-name", "Human", "--username", "human"); code != output.ExitOK {
 		t.Fatalf("init exit = %d; output=%s", code, out.String())
@@ -823,7 +823,7 @@ func TestLocalWorkCreatePersistsIDEAgentConfirmedAcceptanceCriteria(t *testing.T
 }
 
 func TestLocalPluginInstallUsesEmbeddedPackageWithoutHTTP(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	stateDir := filepath.Join(t.TempDir(), "local")
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--no-input", "init", "--mode", "local", "--local-dir", stateDir, "--workspace-name", "Alpha", "--display-name", "Human", "--username", "human"); code != output.ExitOK {
 		t.Fatalf("init exit = %d; output=%s", code, out.String())
@@ -883,7 +883,7 @@ func TestLocalPluginInstallUsesEmbeddedPackageWithoutHTTP(t *testing.T) {
 func TestLocalParentCommandsShowHelp(t *testing.T) {
 	for _, family := range []string{"artifact", "delivery", "gates", "plugins", "portable"} {
 		t.Run(family, func(t *testing.T) {
-			deps, out := newTestDeps(t, "")
+			deps, out := newTestDeps(t)
 			deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 			if err := (config.Config{Mode: config.ModeLocal}).SaveTo(deps.ConfigPath); err != nil {
 				t.Fatal(err)

@@ -1,10 +1,13 @@
 package command_test
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -308,5 +311,130 @@ func TestDeliveryHandoffExportIsVisibleToGitFromAFreshWorkingDir(t *testing.T) {
 	// committed, so it must survive the same ignore file.
 	if !strings.Contains(string(ignore), "!handoffs/") || !strings.Contains(string(ignore), "!handoffs/**") {
 		t.Fatalf("handoffs are not re-included by the .specgate ignore file:\n%s", ignore)
+	}
+}
+
+func TestDefaultHandoffExportRefusesLocalStateAlias(t *testing.T) {
+	deps, _, _, out := newFakeDeps(t)
+	stateDir, work := handoffWork(t, deps, "Retries stop @check:unit",
+		[]any{map[string]any{"name": "unit", "status": "pass", "command": "go test ./..."}})
+	t.Chdir(t.TempDir())
+	if err := os.MkdirAll(filepath.Join(".specgate", "handoffs"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	statePath := filepath.Join(stateDir, "state.db")
+	destination := filepath.Join(".specgate", "handoffs", work.Key+".json")
+	if err := os.Link(statePath, destination); err != nil {
+		t.Skipf("hardlinks unavailable: %v", err)
+	}
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "delivery", "handoff", "export", work.Key)
+	if code != output.ExitUsage || !strings.Contains(out.String(), "SQLite") {
+		t.Errorf("default SQLite alias not refused: exit=%d output=%s", code, out.String())
+	}
+	store, err := local.Open(statePath)
+	if err != nil {
+		t.Fatalf("export damaged Local state: %v", err)
+	}
+	defer store.Close()
+	selection, err := store.Current(t.Context())
+	if err != nil {
+		t.Fatalf("export damaged Local selection: %v", err)
+	}
+	if got, err := store.GetWork(t.Context(), selection.Workspace.ID, work.Key); err != nil || got.Title != work.Title {
+		t.Fatalf("export damaged stored work: got=%+v err=%v", got, err)
+	}
+}
+
+func TestDeliveryHandoffExportPreservesSymlinkDestination(t *testing.T) {
+	for _, explicit := range []bool{false, true} {
+		t.Run(fmt.Sprintf("explicit=%v", explicit), func(t *testing.T) {
+			deps, _, _, out := newFakeDeps(t)
+			_, work := handoffWork(t, deps, "Retries stop @check:unit",
+				[]any{map[string]any{"name": "unit", "status": "pass", "command": "go test ./..."}})
+			t.Chdir(t.TempDir())
+			if err := os.MkdirAll(filepath.Join(".specgate", "handoffs"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			unrelated := filepath.Join(t.TempDir(), "user-notes.txt")
+			before := []byte("user content must survive\n")
+			if err := os.WriteFile(unrelated, before, 0600); err != nil {
+				t.Fatal(err)
+			}
+			destination := filepath.Join(".specgate", "handoffs", work.Key+".json")
+			if err := os.Symlink(unrelated, destination); err != nil {
+				t.Skipf("symlinks unavailable: %v", err)
+			}
+			args := []string{"--json", "delivery", "handoff", "export", work.Key}
+			if explicit {
+				args = append(args, "--file", destination)
+			}
+			if code := command.ExecuteForCode(command.NewRootCommand(deps), args...); code != output.ExitUsage {
+				t.Errorf("symlink should be refused: exit=%d output=%s", code, out.String())
+			}
+			after, err := os.ReadFile(unrelated)
+			if err != nil || !bytes.Equal(before, after) {
+				t.Fatalf("export overwrote unrelated symlink target: %q err=%v", after, err)
+			}
+			if target, err := os.Readlink(destination); err != nil || target != unrelated {
+				t.Fatalf("export replaced user symlink: target=%q err=%v", target, err)
+			}
+		})
+	}
+}
+
+func TestDefaultHandoffExportRefusesSymlinkedDirectory(t *testing.T) {
+	deps, _, _, out := newFakeDeps(t)
+	_, work := handoffWork(t, deps, "Retries stop @check:unit",
+		[]any{map[string]any{"name": "unit", "status": "pass", "command": "go test ./..."}})
+	t.Chdir(t.TempDir())
+	if err := os.Mkdir(".specgate", 0700); err != nil {
+		t.Fatal(err)
+	}
+	userDir := t.TempDir()
+	unrelated := filepath.Join(userDir, work.Key+".json")
+	before := []byte("user content must survive\n")
+	if err := os.WriteFile(unrelated, before, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(userDir, filepath.Join(".specgate", "handoffs")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "delivery", "handoff", "export", work.Key); code != output.ExitUsage {
+		t.Errorf("default symlinked directory should be refused: exit=%d output=%s", code, out.String())
+	}
+	after, err := os.ReadFile(unrelated)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatalf("export overwrote file outside default handoff directory: %q err=%v", after, err)
+	}
+}
+
+func TestDeliveryHandoffExportReplacesExistingFilePrivatelyWithoutChangingHardlink(t *testing.T) {
+	deps, _, _, out := newFakeDeps(t)
+	_, work := handoffWork(t, deps, "Retries stop @check:unit",
+		[]any{map[string]any{"name": "unit", "status": "pass", "command": "go test ./..."}})
+	dir := t.TempDir()
+	destination := filepath.Join(dir, "handoff.json")
+	before := []byte("old review\n")
+	if err := os.WriteFile(destination, before, 0644); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(dir, "old-review.json")
+	if err := os.Link(destination, alias); err != nil {
+		t.Skipf("hardlinks unavailable: %v", err)
+	}
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "delivery", "handoff", "export", work.Key, "--file", destination); code != output.ExitOK {
+		t.Fatalf("export exit=%d output=%s", code, out.String())
+	}
+	after, err := os.ReadFile(alias)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Errorf("export mutated unrelated hardlink: %q err=%v", after, err)
+	}
+	info, err := os.Stat(destination)
+	if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0600) {
+		t.Errorf("exported bundle is not private: info=%v err=%v", info, err)
+	}
+	reviewer, _, _, reviewerOut := newFakeDeps(t)
+	if code := command.ExecuteForCode(command.NewRootCommand(reviewer), "--json", "delivery", "handoff", "show", "--file", destination); code != output.ExitOK {
+		t.Fatalf("export did not produce valid checksummed handoff: exit=%d output=%s", code, reviewerOut.String())
 	}
 }

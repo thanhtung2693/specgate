@@ -28,10 +28,74 @@ human acceptance. Local same-user storage is not an authentication or hostile
 agent security boundary. Portable/v1 cannot transfer these Local-only pins and
 must refuse export rather than silently weaken them in Full mode.
 
+Local report-enabled checks use exact JUnit identities, not text matching.
+Every reported failure/error fails the observation, including unselected cases;
+selected cases must each occur once and pass. Shared identities across criteria
+are deduplicated only for execution, not removed from criterion bindings.
+When a selected case is missing or the report is invalid, the Local criterion
+reason includes the CLI-observed report diagnostic; agent-supplied check details
+are not promoted to that trusted reason.
+The CLI supplies the output path to the actual shell process, verifies Git
+ignores it, and retains normalized evidence rather than XML or output tails.
+Run receipts bind work/context/pin/check/completion identity and endpoint
+observations. Changed endpoints fail; unavailable endpoints stay explicit.
+Cleanup must not remove unrelated files in the run directory.
+
+Watched files resolve inside the checkout and use confined, bounded reads
+(16 MiB each), rejecting oversized or unstable observations. Current watched
+digests participate in enhanced acceptance material: changing them after status
+invalidates the old basis token. This is a review freshness boundary, not a
+claim that an input was intentionally weakened or that a same-user runner is
+trustworthy. Full mode rejects Local comparison selections before API calls.
+
 Local `work resume` and context summary/document views are additive read-only
 projections. They never select work from branches, revise approved content,
 change Context Pack digests, or summarize away acceptance criteria. A document
-index is not a substitute for reading the indexed scope and non-goals.
+index is not a substitute for reading the indexed scope and non-goals. Resume
+path deltas compare recorded file bytes/modes, not receipt timestamps; plain
+and JSON views retain counts and explicitly label limits.
+Feature-backed Local work reads retain the workspace-scoped `feature_key` on
+list, show, summary, and resume, matching creation. Quick work has no feature
+key. Resolving this display identity does not change the pinned artifact or
+Context Pack digest.
+
+Local artifact impact compares one exact declared lineage pair. Its source
+transitions contain recorded before/after fields and literal change flags, not
+semantic equivalence. Old work remains bound to its original artifact. Overlap
+hints use exact linked source IDs or latest reported affected-file paths; path
+comparison requires a shared repository receipt or same-checkout ID. Missing
+lists/provenance stay unknown or noncomparable, and an empty hint set is not a
+parallel-safety claim. A base inventory with no criteria and no prior lineage is
+unknown; a target cannot turn that legacy absence into a declared empty base.
+Selected checkpoint-to-current deltas are part of the acceptance-basis digest;
+unavailable comparisons remain visible as unknown rather than unchanged.
+Local acceptance inspection reads displayed work, completion, review, peer,
+coverage, historical decision and the current basis from one SQLite snapshot.
+Concurrent writes must not produce a displayed old review with a newer basis
+token. Checkout freshness remains a separate endpoint observation, not an atomic
+filesystem/database snapshot.
+The basis retains normalized current-checkout freshness and peer-review state
+alongside their identities and gaps, so historical decisions remain inspectable
+without decoding opaque hashes. Matching endpoints do not prove continuous
+immutability or correctness.
+Compact Local risk counts classify unavailable or noncomparable current
+freshness as unknown using that normalized basis state, not its rendered prose.
+Historical passing test results stay passing; unknown provenance is separate.
+For legacy records without a normalized basis state, the CLI uses the actual
+checkout-comparison outcome; an unchecked comparison is an unknown risk.
+
+An explicitly selected acceptance checkpoint must belong to the same work,
+workspace, and comparable checkout. An unavailable or noncomparable comparison
+is invalid for basis generation and decisions; resume may still display that
+limitation without claiming an unchanged delta.
+
+The first enhanced Local write snapshots the legacy store inside a private
+temporary directory before publishing a mode-`0600` backup without overwrite.
+The compatibility marker, guards, and first record then commit together. The
+backup is an older recovery point, not a lossless downgrade.
+Portable and delivery-handoff exports reject this recovery backup as a
+destination, including symlink and hard-link aliases, regardless of which
+workspace is selected in the store.
 
 ## Module Boundaries
 
@@ -78,6 +142,9 @@ They do not grant access.
 - CLI user and workspace selection live in local user config.
 - `specgate init` binds its current Git checkout. Other checkouts can be bound
   with `specgate workspace bind`; bindings remain local and are not committed.
+- Named `workspace bind` changes only that project's binding, not the global
+  workspace selection. `workspace unbind` is config-only in both modes: it
+  preserves global selection, identity, other projects, and stored work data.
 - Workspace-scoped CLI operations in a Git checkout must resolve through an
   explicit override, project binding, or repo default. They fail before Local
   storage or Full API access when only a global fallback exists.
@@ -112,6 +179,12 @@ not spread into routing or policy decisions. Acceptance-criterion `source`
 records authorship (`human` or `llm`), not approval, so it cannot safely replace
 the missing approval fact.
 
+Quick-work request criteria contain only `text` and optional
+`verification_binding`; clients, including portable import, do not send
+`source`. The governance service records supplied criteria as `human` and its
+own model-drafted criteria as `llm`. Stored provenance remains visible without
+making it a client-controlled approval signal.
+
 ### Mode-aware handoff
 
 For an artifact-backed work item, the IDE agent reads every explicitly mapped
@@ -128,6 +201,9 @@ preserve the work item's exact approved artifact when a newer version is
 canonical; the server verifies the artifact's feature, workspace, and status.
 
 Full mode may return a server-advertised URL through `specgate open --print`.
+Both printing and browser opening require an absolute HTTP(S) URL with a host
+and no control characters. Invalid metadata URLs return unavailable (exit 5);
+they do not launch local files or arbitrary protocol handlers.
 Local CLI mode has no browser UI or server: a handoff names the human-readable
 work/artifact title and stable ID, then gives the exact CLI action such as
 `specgate --yes change accept <work-ref> --review-id <review-id>`, using the
@@ -563,7 +639,9 @@ per-criterion trust tiers and never represents human acceptance.
 Completion `git_receipt` payloads may set `freshness_scope=shared_repository`
 when an origin URL identifies the checkout, or `local_checkout` when no origin
 exists. Local scope supports CLI staleness comparison of branch, HEAD, and
-working-tree digest in that checkout only; it never supports
+working-tree digest in that checkout only. CLI freshness requires a matching
+recorded `checkout_id`; a missing or different identity is noncomparable, not a
+matching or stale observation. It never supports
 `repository_observed` corroboration. Missing scope remains compatible with old
 origin-backed receipts.
 
@@ -664,6 +742,11 @@ from the completion agent, bind to the latest
 `coding_agent.completed` event and identical Git receipt, and claim every
 canonical acceptance criterion exactly once. A newer completion invalidates an
 older peer-review binding.
+
+Local peer-review retries reuse only an identical current latest review for that
+work item. After any intervening review, resubmitting an earlier assessment
+records a new review instead of returning an older record that cannot affect
+current status. History is append-only; the latest review determines peer state.
 
 ## Stale Warnings
 

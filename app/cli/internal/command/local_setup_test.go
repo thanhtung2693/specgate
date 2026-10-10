@@ -14,7 +14,7 @@ import (
 
 func TestLocalInitRejectsInvalidPluginScopeBeforeStateMutation(t *testing.T) {
 	stateDir := filepath.Join(t.TempDir(), "state")
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	deps.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
 
@@ -30,6 +30,137 @@ func TestLocalInitRejectsInvalidPluginScopeBeforeStateMutation(t *testing.T) {
 	}
 }
 
+func TestLocalWorkspaceUnbindPreservesIdentityAndOtherProjects(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	deps, out := newTestDeps(t)
+	deps.WorkingDir = repo
+	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
+	home := t.TempDir()
+	deps.UserHomeDir = func() (string, error) { return home, nil }
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "init",
+		"--mode", "local", "--local-dir", filepath.Join(t.TempDir(), "state"),
+		"--workspace-name", "Alpha", "--display-name", "Human", "--username", "human"); code != 0 {
+		t.Fatalf("init exit=%d output=%s", code, out.String())
+	}
+	cfg, err := config.LoadFrom(deps.ConfigPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := cfg.Workspace
+	other := filepath.Join(t.TempDir(), "other-project")
+	cfg.SetProjectWorkspace(other, workspace)
+	if err := cfg.SaveTo(deps.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "workspace", "unbind"); code != 0 {
+		t.Fatalf("unbind exit=%d output=%s", code, out.String())
+	}
+	loaded, err := config.LoadFrom(deps.ConfigPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Projects) != 1 || loaded.Workspace != workspace || loaded.Projects[other].Workspace != workspace {
+		t.Fatalf("unbind altered unrelated selection: %#v", loaded)
+	}
+	if deps.Client != nil {
+		t.Fatal("Local unbind created an HTTP client")
+	}
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "user", "current"); code != 0 {
+		t.Fatalf("identity lost: exit=%d output=%s", code, out.String())
+	}
+}
+
+func TestLocalNamedWorkspaceBindDoesNotChangeGlobalSelection(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	deps, out := newTestDeps(t)
+	deps.WorkingDir = repo
+	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
+	home := t.TempDir()
+	deps.UserHomeDir = func() (string, error) { return home, nil }
+	commands := [][]string{
+		{"init", "--mode", "local", "--local-dir", filepath.Join(t.TempDir(), "state"), "--workspace-name", "Alpha", "--display-name", "Human", "--username", "human"},
+		{"workspace", "create", "Beta"},
+		{"workspace", "bind", "beta"},
+	}
+	for _, args := range commands {
+		out.Reset()
+		if code := command.ExecuteForCode(command.NewRootCommand(deps), append([]string{"--json"}, args...)...); code != 0 {
+			t.Fatalf("%v: exit=%d output=%s", args, code, out.String())
+		}
+	}
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "workspace", "current"); code != 0 || !strings.Contains(out.String(), `"slug":"beta"`) {
+		t.Fatalf("project binding missing: exit=%d output=%s", code, out.String())
+	}
+	deps.WorkingDir = t.TempDir()
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "workspace", "current"); code != 0 || !strings.Contains(out.String(), `"slug":"alpha"`) {
+		t.Fatalf("named bind changed global selection: exit=%d output=%s", code, out.String())
+	}
+	if deps.Client != nil {
+		t.Fatal("Local bind created an HTTP client")
+	}
+}
+
+func TestLocalArtifactStaleBaseIsConflictWithoutPublishing(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	deps, out := newTestDeps(t)
+	deps.WorkingDir = repo
+	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
+	home := t.TempDir()
+	deps.UserHomeDir = func() (string, error) { return home, nil }
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "init", "--mode", "local",
+		"--local-dir", filepath.Join(t.TempDir(), "state"), "--workspace-name", "Alpha",
+		"--display-name", "Human", "--username", "human"); code != 0 {
+		t.Fatalf("init exit=%d output=%s", code, out.String())
+	}
+	file := filepath.Join(repo, "artifact.json")
+	if err := os.WriteFile(file, []byte(`{"feature_key":"versions","request_type":"new_feature","documents":[{"path":"spec.md","role":"spec","content":"Fixture contract"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "publish", "--file", file); code != 0 {
+		t.Fatalf("publish exit=%d output=%s", code, out.String())
+	}
+	var published struct {
+		Data struct {
+			ID string `json:"artifact_id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &published); err != nil {
+		t.Fatal(err)
+	}
+	for _, extra := range [][]string{nil, {"--preview", "--compare", published.Data.ID}} {
+		out.Reset()
+		args := append([]string{"--json", "artifact", "publish", "--file", file}, extra...)
+		if code := command.ExecuteForCode(command.NewRootCommand(deps), args...); code != output.ExitConflict {
+			t.Fatalf("%v exit=%d output=%s", extra, code, out.String())
+		}
+	}
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "artifact", "list"); code != 0 {
+		t.Fatalf("list exit=%d output=%s", code, out.String())
+	}
+	var listed struct {
+		Data struct {
+			Items []json.RawMessage `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &listed); err != nil || len(listed.Data.Items) != 1 {
+		t.Fatalf("refusal mutated artifacts: %v %s", err, out.String())
+	}
+}
+
 func TestLocalInitProjectPluginScopeRejectsNestedInvocationBeforeStateMutation(t *testing.T) {
 	repo := t.TempDir()
 	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
@@ -40,7 +171,7 @@ func TestLocalInitProjectPluginScopeRejectsNestedInvocationBeforeStateMutation(t
 		t.Fatal(err)
 	}
 	stateDir := filepath.Join(t.TempDir(), "state")
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.WorkingDir = nested
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	deps.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
@@ -68,7 +199,7 @@ func TestLocalDoctorReportsRepositoryShellAndOptionalPlugins(t *testing.T) {
 	}
 	stateDir := filepath.Join(t.TempDir(), "state")
 	home := t.TempDir()
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.WorkingDir = repo
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	deps.UserHomeDir = func() (string, error) { return home, nil }
@@ -104,7 +235,7 @@ func TestLocalDoctorReportsRepositoryShellAndOptionalPlugins(t *testing.T) {
 
 func TestLocalDoctorSeparatesMissingRepositoryAndShellDiagnostics(t *testing.T) {
 	stateDir := filepath.Join(t.TempDir(), "state")
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.WorkingDir = t.TempDir()
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	deps.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
@@ -127,7 +258,7 @@ func TestLocalDoctorMarksMismatchedProjectBindingStale(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.WorkingDir = repo
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	stateDir := filepath.Join(t.TempDir(), "state")
@@ -184,7 +315,7 @@ func TestLocalInitPluginNextAndDoctorPreserveScope(t *testing.T) {
 				if err := os.Mkdir(".git", 0755); err != nil {
 					t.Fatal(err)
 				}
-				deps, out := newTestDeps(t, "")
+				deps, out := newTestDeps(t)
 				deps.WorkingDir = repo
 				deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 				deps.UserHomeDir = func() (string, error) { return home, nil }
@@ -250,7 +381,7 @@ func TestLocalInitPluginFailureKeepsRepairScope(t *testing.T) {
 			if err := os.Mkdir(".git", 0755); err != nil {
 				t.Fatal(err)
 			}
-			deps, out := newTestDeps(t, "")
+			deps, out := newTestDeps(t)
 			deps.WorkingDir = repo
 			deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 			calls := 0

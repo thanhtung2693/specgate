@@ -11,7 +11,7 @@ contract](api.md) before changing the corresponding behavior.
 
 ## Stack
 
-- Go 1.26.4
+- Go 1.26.4 minimum; Go 1.27.1 selected build toolchain
 - Postgres — metadata, manifest, events (see spec §3.2)
 - GORM — ORM over Postgres (raw-SQL migrations remain authoritative per spec §3.2)
 - Local filesystem (default) or S3 / MinIO — artifact files via the shared object-store interface

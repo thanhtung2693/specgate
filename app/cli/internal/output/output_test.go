@@ -11,7 +11,7 @@ import (
 
 func TestJSONErrorEnvelope(t *testing.T) {
 	var buf bytes.Buffer
-	p := output.New(&buf, io.Discard, output.ModeJSON)
+	p := output.NewWithColor(&buf, io.Discard, output.ModeJSON, false)
 	code := p.Error("work.show", output.ErrorPayload{
 		Code:    "not_found",
 		Message: "work item not found",
@@ -27,7 +27,7 @@ func TestJSONErrorEnvelope(t *testing.T) {
 
 func TestJSONErrorDetails(t *testing.T) {
 	var buf bytes.Buffer
-	p := output.New(&buf, io.Discard, output.ModeJSON)
+	p := output.NewWithColor(&buf, io.Discard, output.ModeJSON, false)
 	p.Error("gates.run", output.ErrorPayload{
 		Code:    "governance_failed",
 		Message: "gate failed",
@@ -50,7 +50,7 @@ func TestLocalErrorCodesHaveStableExitAndTransientFields(t *testing.T) {
 		{code: "store_busy", exit: output.ExitUnavailable, transient: true},
 	} {
 		var buf bytes.Buffer
-		got := output.New(&buf, io.Discard, output.ModeJSON).Error("local.test", output.ErrorPayload{Code: tc.code, Message: "test", Transient: tc.transient})
+		got := output.NewWithColor(&buf, io.Discard, output.ModeJSON, false).Error("local.test", output.ErrorPayload{Code: tc.code, Message: "test", Transient: tc.transient})
 		if got != tc.exit {
 			t.Fatalf("%s exit = %d, want %d", tc.code, got, tc.exit)
 		}
@@ -63,7 +63,7 @@ func TestLocalErrorCodesHaveStableExitAndTransientFields(t *testing.T) {
 
 func TestJSONSuccessEnvelope(t *testing.T) {
 	var buf bytes.Buffer
-	p := output.New(&buf, io.Discard, output.ModeJSON)
+	p := output.NewWithColor(&buf, io.Discard, output.ModeJSON, false)
 	code := p.Success("meta", map[string]string{"version": "dev"})
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, want 0", code)
@@ -74,17 +74,17 @@ func TestJSONSuccessEnvelope(t *testing.T) {
 }
 
 func TestStyleOnlyAppliesInHumanMode(t *testing.T) {
-	human := output.New(io.Discard, io.Discard, output.ModeHuman)
+	human := output.NewWithColor(io.Discard, io.Discard, output.ModeHuman, true)
 	if got := human.Style("pass", output.StyleSuccess); got != "\x1b[32mpass\x1b[0m" {
 		t.Fatalf("human style = %q", got)
 	}
 
-	plain := output.New(io.Discard, io.Discard, output.ModePlain)
+	plain := output.NewWithColor(io.Discard, io.Discard, output.ModePlain, false)
 	if got := plain.Style("pass", output.StyleSuccess); got != "pass" {
 		t.Fatalf("plain style = %q", got)
 	}
 
-	json := output.New(io.Discard, io.Discard, output.ModeJSON)
+	json := output.NewWithColor(io.Discard, io.Discard, output.ModeJSON, false)
 	if got := json.Style("pass", output.StyleSuccess); got != "pass" {
 		t.Fatalf("json style = %q", got)
 	}
@@ -148,7 +148,7 @@ func TestExitCodeFromError_unknownError(t *testing.T) {
 func TestErrorPrintsReadableLineInHumanMode(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
-	p := output.New(&stdout, &stderr, output.ModeHuman)
+	p := output.NewWithColor(&stdout, &stderr, output.ModeHuman, true)
 
 	code := p.Error("work.list", output.ErrorPayload{Code: "unavailable", Message: "Internal Server Error: governance-status"})
 
@@ -166,7 +166,7 @@ func TestErrorPrintsReadableLineInHumanMode(t *testing.T) {
 func TestErrorKeepsEnvelopeInJSONMode(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
-	p := output.New(&stdout, &stderr, output.ModeJSON)
+	p := output.NewWithColor(&stdout, &stderr, output.ModeJSON, false)
 
 	p.Error("work.list", output.ErrorPayload{Code: "unavailable", Message: "boom"})
 
@@ -178,7 +178,7 @@ func TestErrorKeepsEnvelopeInJSONMode(t *testing.T) {
 func TestErrorPrintsValidationDetailsInHumanMode(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
-	p := output.New(&stdout, &stderr, output.ModeHuman)
+	p := output.NewWithColor(&stdout, &stderr, output.ModeHuman, true)
 
 	p.Error("artifact.publish", output.ErrorPayload{
 		Code:    "incompatible",
@@ -203,7 +203,7 @@ func TestErrorPrintsValidationDetailsInHumanMode(t *testing.T) {
 func TestErrorPrintsTypedDetailSliceInHumanMode(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
-	p := output.New(&stdout, &stderr, output.ModeHuman)
+	p := output.NewWithColor(&stdout, &stderr, output.ModeHuman, true)
 
 	p.Error("artifact.publish", output.ErrorPayload{
 		Code:    "incompatible",

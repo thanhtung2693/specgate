@@ -83,20 +83,6 @@ def _provider_chat_kwargs(
     return kwargs
 
 
-def _configured_provider_chat_kwargs(
-    provider: str,
-    *,
-    thinking_level: str = "low",
-    temperature: float = DEFAULT_MODEL_TEMPERATURE,
-) -> dict:
-    return _provider_chat_kwargs(
-        provider,
-        api_key=provider_api_key_kwargs(provider)["api_key"],
-        thinking_level=thinking_level,
-        temperature=temperature,
-    )
-
-
 def build_model(*, thinking_level: str | None = None) -> Any:
     """Settings-backed server-side governance model for non-chat workloads.
 
@@ -110,7 +96,11 @@ def build_model(*, thinking_level: str | None = None) -> Any:
     return init_chat_model(
         model_id,
         model_provider=provider,
-        **_configured_provider_chat_kwargs(provider, thinking_level=level),
+        **_provider_chat_kwargs(
+            provider,
+            api_key=provider_api_key_kwargs(provider)["api_key"],
+            thinking_level=level,
+        ),
     )
 
 

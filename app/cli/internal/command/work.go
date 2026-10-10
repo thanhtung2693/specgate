@@ -32,6 +32,7 @@ func registerWorkCommands(root *cobra.Command, deps *Deps) {
 	work.AddCommand(newWorkShowCmd(deps))
 	work.AddCommand(newWorkContextCmd(deps))
 	work.AddCommand(newWorkVerificationCmd(deps))
+	work.AddCommand(newWorkCheckpointCmd(deps))
 	work.AddCommand(newWorkResumeCmd(deps))
 	work.AddCommand(newWorkArchiveCmd(deps))
 	work.AddCommand(newWorkCreateQuickCmd(deps))

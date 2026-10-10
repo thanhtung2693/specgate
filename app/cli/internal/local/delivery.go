@@ -78,8 +78,7 @@ func (s *Store) SubmitDelivery(ctx context.Context, workspaceID, ref string, bod
 	if digest, _ := body["context_digest"].(string); digest != work.ContextDigest {
 		return DeliveryReview{}, fmt.Errorf("completion context_digest does not match %s; rerun `specgate work context %s --json`", work.Key, work.Key)
 	}
-	encoded, err := json.Marshal(body)
-	if err != nil {
+	if _, err := json.Marshal(body); err != nil {
 		return DeliveryReview{}, err
 	}
 	reportID, err := newID()
@@ -131,6 +130,12 @@ func (s *Store) SubmitDelivery(ctx context.Context, workspaceID, ref string, bod
 	if err := validateVerificationReport(contract, root, body); err != nil {
 		return DeliveryReview{}, err
 	}
+	bindObservedChecks(body, contract, reportID)
+	review.Verdict, review.Summary = DeliveryVerdict(body, work.AcceptanceCriteria)
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return DeliveryReview{}, err
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO delivery_reports(id, workspace_id, work_id, context_digest, body, created_at) VALUES (?, ?, ?, ?, ?, ?)`, reportID, workspaceID, work.ID, work.ContextDigest, encoded, now); err != nil {
 		return DeliveryReview{}, err
 	}
@@ -146,20 +151,41 @@ func (s *Store) SubmitDelivery(ctx context.Context, workspaceID, ref string, bod
 	return review, nil
 }
 
-func (s *Store) DecideDelivery(ctx context.Context, workspaceID, ref, decision, actor, note, reviewID string) error {
+// DecideDeliveryWithBasis retains legacy review-ID decisions for unenhanced
+// work. Enhanced verification or a Local checkpoint requires the digest from a
+// fresh status read and persists that exact basis with the decision.
+func (s *Store) DecideDeliveryWithBasis(ctx context.Context, workspaceID, ref, decision, actor, note, reviewID, basisDigest string, options ...AcceptanceOptions) error {
 	if decision != "approve" && decision != "reject" {
 		return fmt.Errorf("delivery decision must be approve or reject")
 	}
-	work, err := s.GetWork(ctx, workspaceID, ref)
-	if err != nil {
-		return err
+	actor = strings.TrimSpace(actor)
+	if actor == "" {
+		actor = "human"
+	}
+	write := func(tx *sql.Tx) error {
+		return decideDeliveryTx(ctx, tx, workspaceID, ref, decision, actor, note, reviewID, basisDigest, options...)
+	}
+	selected := len(options) > 0 && (options[0].CheckpointID != "" || options[0].ImpactBase != "" || options[0].ImpactTarget != "")
+	if strings.TrimSpace(basisDigest) != "" || selected {
+		return s.WithEnhancedWrite(ctx, write)
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	if err := write(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func decideDeliveryTx(ctx context.Context, tx *sql.Tx, workspaceID, ref, decision, actor, note, reviewID, basisDigest string, options ...AcceptanceOptions) error {
 	var review DeliveryReview
+	work, err := getWork(ctx, tx, workspaceID, ref)
+	if err != nil {
+		return err
+	}
 	err = tx.QueryRowContext(ctx, `SELECT id, work_id, report_id, verdict, summary, human_decision, note, created_at FROM delivery_reviews WHERE workspace_id = ? AND work_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`, workspaceID, work.ID).Scan(&review.ID, &review.WorkID, &review.ReportID, &review.Verdict, &review.Summary, &review.HumanDecision, &review.Note, &review.CreatedAt)
 	if err == sql.ErrNoRows {
 		return fmt.Errorf("%w: run `specgate change submit %s --file <completion.json>` before a human decision", ErrPreconditionNotMet, work.Key)
@@ -173,9 +199,24 @@ func (s *Store) DecideDelivery(ctx context.Context, workspaceID, ref, decision, 
 	if strings.TrimSpace(reviewID) == "" || reviewID != review.ID {
 		return fmt.Errorf("%w: read `specgate change status %s --json` and decide that review with --review-id", ErrReviewChanged, work.Key)
 	}
-	actor = strings.TrimSpace(actor)
-	if actor == "" {
-		actor = "human"
+	requiresBasis, err := acceptanceBasisRequired(ctx, tx, workspaceID, work)
+	if err != nil {
+		return err
+	}
+	selected := len(options) > 0 && (options[0].CheckpointID != "" || options[0].ImpactBase != "" || options[0].ImpactTarget != "")
+	if strings.TrimSpace(basisDigest) != "" || requiresBasis || selected {
+		basis, basisErr := acceptanceBasis(ctx, tx, workspaceID, work, review, options...)
+		if basisErr != nil {
+			return basisErr
+		}
+		if !matchingBasis(basisDigest, basis.Digest) {
+			return fmt.Errorf("%w: read `specgate change status %s --json` and decide with its --basis-digest", ErrReviewChanged, work.Key)
+		}
+		basis.Actor, basis.Note, basis.Decision = actor, note, decision
+		basis.ObservedAt = time.Now().UTC().Format(time.RFC3339Nano)
+		if err := persistAcceptanceBasis(ctx, tx, workspaceID, work, basis); err != nil {
+			return err
+		}
 	}
 	if decision == "approve" {
 		report, reportErr := deliveryReportByID(ctx, tx, workspaceID, work.ID, review.ReportID)
@@ -219,7 +260,7 @@ func (s *Store) DecideDelivery(ctx context.Context, workspaceID, ref, decision, 
 	if err != nil {
 		return err
 	}
-	return tx.Commit()
+	return nil
 }
 
 func (s *Store) DeliveryStatus(ctx context.Context, workspaceID, ref string) (DeliveryReview, error) {
@@ -227,12 +268,16 @@ func (s *Store) DeliveryStatus(ctx context.Context, workspaceID, ref string) (De
 	if err != nil {
 		return DeliveryReview{}, err
 	}
+	return deliveryStatus(ctx, s.db, workspaceID, work)
+}
+
+func deliveryStatus(ctx context.Context, q verificationQuerier, workspaceID string, work WorkItem) (DeliveryReview, error) {
 	var review DeliveryReview
 	query := `SELECT id, work_id, report_id, verdict, summary, human_decision, note, created_at FROM delivery_reviews WHERE workspace_id = ? AND work_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`
 	if work.Phase == "delivered" {
 		query = `SELECT id, work_id, report_id, verdict, summary, human_decision, note, created_at FROM delivery_reviews WHERE workspace_id = ? AND work_id = ? AND human_decision = 'approve' ORDER BY created_at DESC, id DESC LIMIT 1`
 	}
-	err = s.db.QueryRowContext(ctx, query, workspaceID, work.ID).Scan(&review.ID, &review.WorkID, &review.ReportID, &review.Verdict, &review.Summary, &review.HumanDecision, &review.Note, &review.CreatedAt)
+	err := q.QueryRowContext(ctx, query, workspaceID, work.ID).Scan(&review.ID, &review.WorkID, &review.ReportID, &review.Verdict, &review.Summary, &review.HumanDecision, &review.Note, &review.CreatedAt)
 	return review, err
 }
 
@@ -273,6 +318,9 @@ func deliveryReportByID(
 	if err := json.Unmarshal([]byte(encoded), &report.Body); err != nil {
 		return DeliveryReport{}, fmt.Errorf("bound completion report is unreadable")
 	}
+	if err := validateObservedRunVersions(report.Body); err != nil {
+		return DeliveryReport{}, err
+	}
 	return report, nil
 }
 
@@ -281,17 +329,25 @@ func (s *Store) LatestDeliveryReport(ctx context.Context, workspaceID, ref strin
 	if err != nil {
 		return DeliveryReport{}, err
 	}
-	var report DeliveryReport
-	var encoded string
-	err = s.db.QueryRowContext(ctx, `SELECT id, body FROM delivery_reports WHERE workspace_id = ? AND work_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`, workspaceID, work.ID).Scan(&report.ID, &encoded)
+	report, err := latestDeliveryReportQuery(ctx, s.db, workspaceID, work.ID)
 	if err == sql.ErrNoRows {
 		return DeliveryReport{}, fmt.Errorf("%w: submit a completion report before peer review", ErrPreconditionNotMet)
 	}
+	return report, err
+}
+
+func latestDeliveryReportQuery(ctx context.Context, q deliveryReportQueryer, workspaceID, workID string) (DeliveryReport, error) {
+	var report DeliveryReport
+	var encoded string
+	err := q.QueryRowContext(ctx, `SELECT id, body FROM delivery_reports WHERE workspace_id = ? AND work_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`, workspaceID, workID).Scan(&report.ID, &encoded)
 	if err != nil {
 		return DeliveryReport{}, err
 	}
 	if err := json.Unmarshal([]byte(encoded), &report.Body); err != nil {
 		return DeliveryReport{}, fmt.Errorf("latest completion report is unreadable")
+	}
+	if err := validateObservedRunVersions(report.Body); err != nil {
+		return DeliveryReport{}, err
 	}
 	return report, nil
 }
@@ -301,9 +357,13 @@ func (s *Store) PeerReviewStatus(ctx context.Context, workspaceID, ref string) (
 	if err != nil {
 		return PeerReviewStatus{}, err
 	}
+	return peerReviewStatus(ctx, s.db, workspaceID, work)
+}
+
+func peerReviewStatus(ctx context.Context, q deliveryReportQueryer, workspaceID string, work WorkItem) (PeerReviewStatus, error) {
 	var peer PeerReview
 	var encoded string
-	err = s.db.QueryRowContext(ctx, `SELECT id, work_id, agent_name, body, created_at FROM delivery_peer_reviews WHERE workspace_id = ? AND work_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`, workspaceID, work.ID).Scan(&peer.ID, &peer.WorkID, &peer.AgentName, &encoded, &peer.CreatedAt)
+	err := q.QueryRowContext(ctx, `SELECT id, work_id, agent_name, body, created_at FROM delivery_peer_reviews WHERE workspace_id = ? AND work_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`, workspaceID, work.ID).Scan(&peer.ID, &peer.WorkID, &peer.AgentName, &encoded, &peer.CreatedAt)
 	if err == sql.ErrNoRows {
 		return PeerReviewStatus{State: "not_run"}, nil
 	}
@@ -315,7 +375,7 @@ func (s *Store) PeerReviewStatus(ctx context.Context, workspaceID, ref string) (
 	if err := json.Unmarshal([]byte(encoded), &body); err != nil {
 		return PeerReviewStatus{}, fmt.Errorf("latest peer review is unreadable")
 	}
-	completion, err := s.LatestDeliveryReport(ctx, workspaceID, ref)
+	completion, err := latestDeliveryReportQuery(ctx, q, workspaceID, work.ID)
 	if err != nil {
 		return PeerReviewStatus{}, err
 	}
@@ -360,12 +420,12 @@ func (s *Store) PeerReviewDelivery(ctx context.Context, workspaceID, ref string,
 	}
 	peerReviewOf, _ := body["peer_review_of"].(map[string]any)
 	if completionID, _ := peerReviewOf["completion_feedback_event_id"].(string); completionID != completion.ID {
-		return PeerReview{}, fmt.Errorf("peer review must bind the latest completion report")
+		return PeerReview{}, fmt.Errorf("%w: peer review must bind the latest completion report", ErrReviewChanged)
 	}
 	completionReceipt, _ := completion.Body["git_receipt"].(map[string]any)
 	peerReceipt, _ := peerReviewOf["git_receipt"].(map[string]any)
 	if completionReceipt == nil || peerReceipt == nil || !reflect.DeepEqual(completionReceipt, peerReceipt) {
-		return PeerReview{}, fmt.Errorf("peer review git_receipt must match the latest completion receipt")
+		return PeerReview{}, fmt.Errorf("%w: peer review git_receipt must match the latest completion receipt", ErrReviewChanged)
 	}
 	if err := validateLocalPeerCriteria(body, completion.Body, work.AcceptanceCriteria); err != nil {
 		return PeerReview{}, err
@@ -377,7 +437,11 @@ func (s *Store) PeerReviewDelivery(ctx context.Context, workspaceID, ref string,
 	var existing PeerReview
 	err = s.db.QueryRowContext(
 		ctx,
-		`SELECT id, work_id, agent_name, created_at FROM delivery_peer_reviews WHERE workspace_id = ? AND work_id = ? AND agent_name = ? AND CAST(body AS TEXT) = ? LIMIT 1`,
+		`SELECT id, work_id, agent_name, created_at FROM (
+  SELECT id, work_id, agent_name, body, created_at FROM delivery_peer_reviews
+  WHERE workspace_id = ? AND work_id = ?
+  ORDER BY created_at DESC, id DESC LIMIT 1
+) WHERE agent_name = ? AND CAST(body AS TEXT) = ?`,
 		workspaceID,
 		work.ID,
 		peer,

@@ -25,12 +25,101 @@ func registerArtifactCommands(root *cobra.Command, deps *Deps) {
 	art.AddCommand(newArtifactListCmd(deps))
 	art.AddCommand(newArtifactShowCmd(deps))
 	art.AddCommand(newArtifactCoverageCmd(deps))
+	art.AddCommand(newArtifactImpactCmd(deps))
 	art.AddCommand(newArtifactFilesCmd(deps))
 	art.AddCommand(newArtifactPublishCmd(deps))
 	art.AddCommand(newArtifactApproveCmd(deps))
 	art.AddCommand(newArtifactPromoteCmd(deps))
 	art.AddCommand(newArtifactRequestChangesCmd(deps))
 	root.AddCommand(art)
+}
+
+func newArtifactImpactCmd(deps *Deps) *cobra.Command {
+	var base string
+	cmd := &cobra.Command{Use: "impact <target-artifact-id>", Short: "Compare an exact Local artifact pair without inferring lineage", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		const op = "artifact.impact"
+		if deps.Topology != config.ModeLocal {
+			return incompatibleCommand(deps, op, "artifact impact is Local-only")
+		}
+		if strings.TrimSpace(base) == "" {
+			return completionValidationError(deps, op, "--compare <base-artifact-id> is required")
+		}
+		store, err := openLocalStore(deps)
+		if err != nil {
+			return localExitError(deps, op, err)
+		}
+		defer store.Close()
+		sel, err := localSelection(cmd.Context(), deps, store)
+		if err != nil {
+			return localExitError(deps, op, err)
+		}
+		impact, err := store.ArtifactImpact(cmd.Context(), sel.Workspace.ID, args[0], base)
+		if err != nil {
+			return localExitError(deps, op, err)
+		}
+		if deps.Printer.Mode() == output.ModeJSON {
+			deps.Printer.Success(op, impact)
+			return nil
+		}
+		printArtifactImpact(deps, impact)
+		return nil
+	}}
+	cmd.Flags().StringVar(&base, "compare", "", "Exact base artifact ID")
+	return cmd
+}
+
+func printArtifactImpact(deps *Deps, impact local.ArtifactImpact) {
+	fmt.Fprintf(deps.Stdout, "Impact %s → %s: %s\n", impact.BaseArtifactID, impact.TargetArtifactID, impact.RequirementImpact)
+	fmt.Fprintf(deps.Stdout, "Snapshots: %s (%s) → %s (%s)\n", impact.BaseStatus, impact.BaseSnapshotDigest, impact.TargetStatus, impact.TargetSnapshotDigest)
+	if impact.RequirementReason != "" {
+		fmt.Fprintln(deps.Stdout, impact.RequirementReason)
+	}
+	for _, group := range []struct {
+		name  string
+		paths []string
+	}{{"Document added", impact.DocumentDelta.Added}, {"Document removed", impact.DocumentDelta.Removed}, {"Document modified", impact.DocumentDelta.Modified}} {
+		for _, path := range group.paths {
+			fmt.Fprintf(deps.Stdout, "%s: %s\n", group.name, path)
+		}
+	}
+	for _, row := range impact.Transitions {
+		fmt.Fprintf(deps.Stdout, "Source: %s → %s (%s; fields: %s)\n", row.BaseID, strings.Join(row.TargetIDs, ", "), row.Summary, strings.Join(row.ChangedFields, ", "))
+		fmt.Fprintf(deps.Stdout, "  Before: %q [%s; defer: %q]\n", row.Before.Text, row.Before.SourcePath, row.Before.DeferredReason)
+		for _, after := range row.After {
+			fmt.Fprintf(deps.Stdout, "  After %s: %q [%s; defer: %q]\n", after.ID, after.Text, after.SourcePath, after.DeferredReason)
+		}
+	}
+	for _, group := range []struct {
+		name  string
+		items []local.SourceCriterion
+	}{{"Source added", impact.AddedRequirements}, {"Source removed", impact.RemovedRequirements}, {"Source deferred", impact.DeferredRequirements}, {"Target source without work", impact.UnassignedRequirements}} {
+		for _, item := range group.items {
+			fmt.Fprintf(deps.Stdout, "%s: %s\n", group.name, item.ID)
+		}
+	}
+	fmt.Fprintf(deps.Stdout, "Recorded work: %d base-linked, %d target-linked, %d unlinked\n", len(impact.BaseWorkItems), len(impact.TargetWorkItems), len(impact.UnlinkedWorkItems))
+	for _, group := range []struct {
+		name  string
+		items []local.ImpactWorkLink
+	}{{"Base work", impact.BaseWorkItems}, {"Target work", impact.TargetWorkItems}, {"Unlinked work (unassessed)", impact.UnlinkedWorkItems}} {
+		for _, item := range group.items {
+			fmt.Fprintf(deps.Stdout, "%s: %s (%s; sources: %s; evidence: %s; inspection: %s)\n", group.name, item.Key, item.Phase, strings.Join(item.SourceCriteria, ", "), item.Evidence, item.Inspection)
+		}
+	}
+	fmt.Fprintf(deps.Stdout, "Overlap: %s (no recorded overlap does not establish safety)\n", impact.SourceOverlapState)
+	for _, overlap := range impact.SourceOverlaps {
+		fmt.Fprintf(deps.Stdout, "Overlap source %s: %s (reports: %s)\n", overlap.SourceCriterion, strings.Join(overlap.WorkKeys, ", "), strings.Join(overlap.ReportIDs, ", "))
+	}
+	fmt.Fprintf(deps.Stdout, "Path overlap: %s (reported files only; no recorded overlap does not establish safety)\n", impact.PathOverlapState)
+	for _, overlap := range impact.PathOverlaps {
+		fmt.Fprintf(deps.Stdout, "Overlap path %s: %s (reports: %s)\n", overlap.Path, strings.Join(overlap.WorkKeys, ", "), strings.Join(overlap.ReportIDs, ", "))
+	}
+	if impact.SourceOverlapTruncated {
+		fmt.Fprintln(deps.Stdout, "Overlap list capped at 100 hints")
+	}
+	if impact.PathOverlapTruncated {
+		fmt.Fprintln(deps.Stdout, "Path overlap list capped at 100 hints")
+	}
 }
 
 // specgate artifact coverage <artifact-id>

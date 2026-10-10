@@ -2,12 +2,15 @@ package local
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -16,22 +19,51 @@ var ErrVerificationConflict = errors.New("verification contract already pinned o
 var ErrVerificationInvalid = errors.New("invalid verification contract or report")
 
 type VerificationCheck struct {
-	Name    string `json:"name"`
-	Command string `json:"command"`
-	Cwd     string `json:"cwd"`
+	Name       string           `json:"name"`
+	Command    string           `json:"command"`
+	Cwd        string           `json:"cwd"`
+	TestReport *JUnitTestReport `json:"test_report,omitempty"`
+}
+
+// JUnitTestReport is an opt-in v2 assertion over a report created by a
+// reviewed command. It deliberately contains only exact testcase identities;
+// callers must not infer selectors from a framework, heading, or test name.
+type JUnitTestReport struct {
+	Format    string                        `json:"format"`
+	Selectors map[string][]SelectedTestCase `json:"selectors"`
+}
+
+type SelectedTestCase struct {
+	ClassName string `json:"classname"`
+	Name      string `json:"name"`
+}
+
+type WatchedPath struct {
+	Path   string `json:"path"`
+	Digest string `json:"digest"`
+}
+
+type WatchedPathDrift struct {
+	Path          string `json:"path"`
+	PinnedDigest  string `json:"pinned_digest"`
+	CurrentDigest string `json:"current_digest,omitempty"`
+	State         string `json:"state"`
 }
 type VerificationContractInput struct {
 	ContextDigest string              `json:"context_digest"`
 	Shell         string              `json:"shell"`
 	Checks        []VerificationCheck `json:"checks"`
+	WatchedPaths  []string            `json:"watched_paths,omitempty"`
 }
 type VerificationContract struct {
+	Version       int                 `json:"version,omitempty"`
 	Status        string              `json:"status"`
 	WorkID        string              `json:"work_id"`
 	ContextDigest string              `json:"context_digest"`
 	Digest        string              `json:"digest,omitempty"`
 	Shell         string              `json:"shell,omitempty"`
 	Checks        []VerificationCheck `json:"checks,omitempty"`
+	WatchedPaths  []WatchedPath       `json:"watched_paths,omitempty"`
 	Bindings      map[string]string   `json:"bindings,omitempty"`
 	Actor         string              `json:"actor,omitempty"`
 	CreatedAt     string              `json:"created_at,omitempty"`
@@ -51,6 +83,9 @@ func getVerificationContract(ctx context.Context, q verificationQuerier, work Wo
 	}
 	var c VerificationContract
 	err = json.Unmarshal([]byte(body), &c)
+	if err == nil && (c.Version < 0 || c.Version > 2) {
+		return VerificationContract{}, fmt.Errorf("%w: verification contract version %d", ErrStoreIncompatible, c.Version)
+	}
 	return c, err
 }
 func (s *Store) GetVerificationContract(ctx context.Context, workspaceID, ref string) (VerificationContract, error) {
@@ -161,22 +196,213 @@ func buildVerificationContract(work WorkItem, root, actor string, input Verifica
 	if len(seen) != len(names) {
 		return bad("every stored bound check must be configured")
 	}
-	c := VerificationContract{Status: "pinned", WorkID: work.ID, ContextDigest: work.ContextDigest, Shell: "sh", Checks: checks, Bindings: bindings, Actor: strings.TrimSpace(actor), CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	watched, err := resolveWatchedPaths(root, input.WatchedPaths)
+	if err != nil {
+		return VerificationContract{}, err
+	}
+	version := 0
+	for _, check := range checks {
+		if check.TestReport == nil {
+			continue
+		}
+		version = 2
+		if err := validateJUnitSelectors(check.Name, check.TestReport, bindings); err != nil {
+			return VerificationContract{}, err
+		}
+	}
+	if len(watched) > 0 {
+		version = 2
+	}
+	c := VerificationContract{Version: version, Status: "pinned", WorkID: work.ID, ContextDigest: work.ContextDigest, Shell: "sh", Checks: checks, WatchedPaths: watched, Bindings: bindings, Actor: strings.TrimSpace(actor), CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	encoded, err := json.Marshal(struct {
+		Version       int
 		WorkspaceID   string
 		WorkID        string
 		ContextDigest string
 		Shell         string
 		Checks        []VerificationCheck
+		WatchedPaths  []WatchedPath
 		Bindings      map[string]string
-	}{work.WorkspaceID, work.ID, c.ContextDigest, c.Shell, c.Checks, c.Bindings})
+	}{c.Version, work.WorkspaceID, work.ID, c.ContextDigest, c.Shell, c.Checks, c.WatchedPaths, c.Bindings})
 	if err != nil {
 		return VerificationContract{}, err
+	}
+	// Keep the v1 serialization byte-for-byte stable: a legacy pin must retain
+	// its old digest as promised by the Local compatibility contract.
+	if c.Version == 0 {
+		encoded, err = json.Marshal(struct {
+			WorkspaceID   string
+			WorkID        string
+			ContextDigest string
+			Shell         string
+			Checks        []VerificationCheck
+			Bindings      map[string]string
+		}{work.WorkspaceID, work.ID, c.ContextDigest, c.Shell, c.Checks, c.Bindings})
+		if err != nil {
+			return VerificationContract{}, err
+		}
 	}
 	c.Digest = digestText(string(encoded))
 	return c, nil
 }
-func (s *Store) PinVerificationContract(ctx context.Context, workspaceID, ref, repoRoot, actor string, input VerificationContractInput) (VerificationContract, error) {
+
+func validateJUnitSelectors(checkName string, report *JUnitTestReport, bindings map[string]string) error {
+	if report.Format != "junit" {
+		return fmt.Errorf("%w: test_report format must be junit", ErrVerificationInvalid)
+	}
+	bound := map[string]bool{}
+	for criterionID, boundCheck := range bindings {
+		if boundCheck == checkName {
+			bound[criterionID] = true
+		}
+	}
+	for criterionID := range bound {
+		selectors := report.Selectors[criterionID]
+		if len(selectors) == 0 {
+			return fmt.Errorf("%w: report-enabled check %q needs selectors for %s", ErrVerificationInvalid, checkName, criterionID)
+		}
+		seen := map[string]bool{}
+		for _, selector := range selectors {
+			key := selector.ClassName + "\x00" + selector.Name
+			if strings.TrimSpace(selector.ClassName) == "" || strings.TrimSpace(selector.Name) == "" || seen[key] {
+				return fmt.Errorf("%w: selectors must be unique exact classname/name pairs", ErrVerificationInvalid)
+			}
+			seen[key] = true
+		}
+	}
+	for criterionID := range report.Selectors {
+		if !bound[criterionID] {
+			return fmt.Errorf("%w: selector references unbound criterion %s", ErrVerificationInvalid, criterionID)
+		}
+	}
+	return nil
+}
+
+func resolveWatchedPaths(root string, paths []string) ([]WatchedPath, error) {
+	if len(paths) == 0 {
+		return nil, nil
+	}
+	seen := map[string]bool{}
+	result := make([]WatchedPath, 0, len(paths))
+	for _, raw := range paths {
+		clean, _, err := ResolveVerificationFile(root, raw)
+		if err != nil {
+			return nil, err
+		}
+		if seen[clean] {
+			return nil, fmt.Errorf("%w: watched_paths must be unique", ErrVerificationInvalid)
+		}
+		seen[clean] = true
+		bytes, err := readWatchedFile(root, clean)
+		if err != nil {
+			return nil, fmt.Errorf("%w: watched path is unreadable", ErrVerificationInvalid)
+		}
+		digest := sha256.Sum256(bytes)
+		result = append(result, WatchedPath{Path: clean, Digest: fmt.Sprintf("%x", digest)})
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Path < result[j].Path })
+	return result, nil
+}
+
+// ResolveVerificationFile is the regular-file analogue of
+// ResolveVerificationCwd. It rejects symlinks and anything outside the
+// checkout, so a pin cannot hash arbitrary machine files.
+func ResolveVerificationFile(repoRoot, path string) (string, string, error) {
+	if repoRoot == "" || filepath.IsAbs(path) || strings.TrimSpace(path) == "" {
+		return "", "", fmt.Errorf("%w: watched path must be a repository-relative regular file", ErrVerificationInvalid)
+	}
+	clean := filepath.Clean(path)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", "", fmt.Errorf("%w: watched path must remain inside repository", ErrVerificationInvalid)
+	}
+	root, err := filepath.EvalSymlinks(repoRoot)
+	if err != nil {
+		return "", "", ErrVerificationInvalid
+	}
+	root, err = filepath.Abs(root)
+	if err != nil {
+		return "", "", ErrVerificationInvalid
+	}
+	joined := filepath.Join(root, clean)
+	info, err := os.Lstat(joined)
+	if err != nil {
+		return "", "", fmt.Errorf("%w: watched path: %w", ErrVerificationInvalid, err)
+	}
+	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+		return "", "", fmt.Errorf("%w: watched path must be a regular non-symlink file", ErrVerificationInvalid)
+	}
+	abs, err := filepath.EvalSymlinks(joined)
+	if err != nil {
+		return "", "", ErrVerificationInvalid
+	}
+	rel, err := filepath.Rel(root, abs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", "", ErrVerificationInvalid
+	}
+	return filepath.ToSlash(clean), abs, nil
+}
+
+// Open relative to a confined root and bound the read, including growth after
+// stat. Comparing the opened inode prevents silently hashing a replacement.
+func readWatchedFile(root, path string) ([]byte, error) {
+	_, abs, err := ResolveVerificationFile(root, path)
+	if err != nil {
+		return nil, err
+	}
+	before, err := os.Lstat(abs)
+	if err != nil {
+		return nil, err
+	}
+	f, err := os.OpenInRoot(root, path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	opened, err := f.Stat()
+	const limit = 16 * 1024 * 1024
+	if err != nil {
+		return nil, err
+	}
+	if !opened.Mode().IsRegular() || !os.SameFile(before, opened) || opened.Size() > limit {
+		return nil, fmt.Errorf("%w: watched file changed or exceeds 16 MiB", ErrVerificationInvalid)
+	}
+	body, err := io.ReadAll(io.LimitReader(f, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	after, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > limit || opened.Size() != after.Size() || !opened.ModTime().Equal(after.ModTime()) {
+		return nil, fmt.Errorf("%w: watched file changed during read or exceeds 16 MiB", ErrVerificationInvalid)
+	}
+	return body, nil
+}
+
+// WatchedPathDrift compares only the explicitly pinned regular files. It is a
+// review warning, never an automatic claim that a test was weakened; endpoint
+// hashes cannot observe a change that was reverted before this read.
+func WatchedPathDriftFor(root string, watched []WatchedPath) []WatchedPathDrift {
+	result := make([]WatchedPathDrift, 0, len(watched))
+	for _, pinned := range watched {
+		item := WatchedPathDrift{Path: pinned.Path, PinnedDigest: pinned.Digest, State: "unavailable"}
+		body, err := readWatchedFile(root, pinned.Path)
+		if err == nil {
+			digest := sha256.Sum256(body)
+			item.CurrentDigest = fmt.Sprintf("%x", digest)
+			item.State = "unchanged"
+			if item.CurrentDigest != item.PinnedDigest {
+				item.State = "changed"
+			}
+		} else if errors.Is(err, os.ErrNotExist) {
+			item.State = "missing"
+		}
+		result = append(result, item)
+	}
+	return result
+}
+func (s *Store) PinVerificationContract(ctx context.Context, workspaceID, ref, repoRoot, actor string, input VerificationContractInput, reviewedDigests ...string) (VerificationContract, error) {
 	work, err := s.GetWork(ctx, workspaceID, ref)
 	if err != nil {
 		return VerificationContract{}, err
@@ -185,11 +411,41 @@ func (s *Store) PinVerificationContract(ctx context.Context, workspaceID, ref, r
 	if err != nil {
 		return VerificationContract{}, err
 	}
+	if len(reviewedDigests) > 0 && c.Digest != reviewedDigests[0] {
+		return VerificationContract{}, fmt.Errorf("%w: verification inputs changed after preview; review again", ErrVerificationConflict)
+	}
+	if c.Version >= 2 {
+		var pinned VerificationContract
+		err := s.WithEnhancedWrite(ctx, func(tx *sql.Tx) error {
+			current, err := buildVerificationContract(work, repoRoot, actor, input)
+			if err != nil {
+				return err
+			}
+			if current.Digest != c.Digest {
+				return fmt.Errorf("%w: verification inputs changed before pinning; review again", ErrVerificationConflict)
+			}
+			var pinErr error
+			pinned, pinErr = pinVerificationContractTx(ctx, tx, workspaceID, work, c)
+			return pinErr
+		})
+		return pinned, err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return VerificationContract{}, err
 	}
 	defer tx.Rollback()
+	pinned, err := pinVerificationContractTx(ctx, tx, workspaceID, work, c)
+	if err != nil {
+		return VerificationContract{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return VerificationContract{}, err
+	}
+	return pinned, nil
+}
+
+func pinVerificationContractTx(ctx context.Context, tx *sql.Tx, workspaceID string, work WorkItem, c VerificationContract) (VerificationContract, error) {
 	var phase, digest string
 	if err := tx.QueryRowContext(ctx, `SELECT phase, context_digest FROM work_items WHERE workspace_id = ? AND id = ?`, workspaceID, work.ID).Scan(&phase, &digest); err != nil {
 		return VerificationContract{}, err
@@ -213,9 +469,6 @@ func (s *Store) PinVerificationContract(ctx context.Context, workspaceID, ref, r
 		return VerificationContract{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO verification_contracts(workspace_id,work_id,body) VALUES (?,?,?)`, workspaceID, work.ID, encoded); err != nil {
-		return VerificationContract{}, err
-	}
-	if err := tx.Commit(); err != nil {
 		return VerificationContract{}, err
 	}
 	return c, nil

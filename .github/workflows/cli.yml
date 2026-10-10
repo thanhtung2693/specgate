@@ -21,8 +21,11 @@ jobs:
         with:
           go-version-file: app/cli/go.mod
           cache-dependency-path: app/cli/go.sum
-      - run: go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...
+      - run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
       - run: make test
+      - name: Verify legacy Local compatibility and recovery
+        working-directory: .
+        run: bash .github/scripts/check-legacy-cli.sh
 
   windows-update:
     runs-on: windows-latest
@@ -35,7 +38,7 @@ jobs:
         with:
           go-version-file: app/cli/go.mod
           cache-dependency-path: app/cli/go.sum
-      - name: Test native Windows updater
-        run: go test ./internal/command -run 'TestUpdateWindows|TestSelfUpdateWindowsCLI' -count=1
+      - name: Test native Windows CLI boundaries
+        run: go test ./internal/command -run 'TestUpdateWindows|TestSelfUpdateWindowsCLI|TestWindowsBrowser|TestOpen' -count=1
       - name: Build native Windows CLI
         run: go build -o "${{ runner.temp }}\specgate.exe" ./cmd/specgate

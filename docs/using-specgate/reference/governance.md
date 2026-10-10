@@ -144,6 +144,16 @@ Delivery-relevant ACs retain:
 Changing AC text or verification changes its digest. Older evidence becomes
 stale for the new content.
 
+## Local acceptance basis
+
+For enhanced Local work, `change status` returns a `basis_digest` with the
+exact `review_id`. A human decision repeats both values, and any selected
+checkpoint or impact pair, so it is attached to the inspected evidence rather
+than a later replacement. The stored basis preserves the human actor, note,
+and observed gaps; it is not a confidence score, identity proof, or an approval
+of a different artifact version. Legacy Local work with no enhanced record and
+no optional comparison keeps the review-ID-only flow.
+
 ## Related
 
 - [Gate catalog](gates.md)

@@ -3,8 +3,10 @@ package local
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path"
 	"regexp"
@@ -27,12 +29,32 @@ var artifactRequestTypes = map[string]struct{}{
 
 var sourceCriterionIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 
+var ErrArtifactVersionConflict = errors.New("artifact version conflict")
+
 type ArtifactInput struct {
 	FeatureKey     string
 	RequestType    string
 	BaseVersion    string
 	Documents      []ArtifactDocumentInput
 	SourceCriteria []SourceCriterion
+	SourceLineage  *SourceLineage
+}
+
+// SourceLineage is an optional, reviewed declaration relating only an exact
+// base snapshot to the new snapshot. It is intentionally not a graph: callers
+// must never traverse it to infer a relationship for another pair.
+type SourceLineage struct {
+	Version        int          `json:"version"`
+	BaseArtifactID string       `json:"base_artifact_id"`
+	BaseDigest     string       `json:"base_digest"`
+	Rows           []LineageRow `json:"rows"`
+	Added          []string     `json:"added,omitempty"`
+}
+
+type LineageRow struct {
+	BaseID    string   `json:"base_id"`
+	TargetIDs []string `json:"target_ids"`
+	Reason    string   `json:"reason,omitempty"`
 }
 
 type SourceCriterion struct {
@@ -61,6 +83,7 @@ type Artifact struct {
 	CreatedAt      string
 	Documents      []ArtifactDocument
 	SourceCriteria []SourceCriterion
+	SourceLineage  *SourceLineage
 }
 
 type ArtifactDocument struct {
@@ -72,6 +95,28 @@ type ArtifactDocument struct {
 }
 
 func (s *Store) PublishArtifact(ctx context.Context, workspaceID string, input ArtifactInput) (Artifact, error) {
+	if input.SourceLineage != nil {
+		var result Artifact
+		err := s.WithEnhancedWrite(ctx, func(tx *sql.Tx) error {
+			var err error
+			result, err = publishArtifactTx(ctx, tx, workspaceID, input)
+			return err
+		})
+		return result, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Artifact{}, err
+	}
+	defer tx.Rollback()
+	result, err := publishArtifactTx(ctx, tx, workspaceID, input)
+	if err != nil {
+		return Artifact{}, err
+	}
+	return result, tx.Commit()
+}
+
+func publishArtifactTx(ctx context.Context, tx *sql.Tx, workspaceID string, input ArtifactInput) (Artifact, error) {
 	input, documents, digest, criteria, err := normalizedArtifactInput(input)
 	if err != nil {
 		return Artifact{}, err
@@ -79,23 +124,10 @@ func (s *Store) PublishArtifact(ctx context.Context, workspaceID string, input A
 	if workspaceID == "" {
 		return Artifact{}, fmt.Errorf("workspace, feature key, request type, and at least one document are required")
 	}
-	if len(criteria) > 0 {
-		hash := sha256.New()
-		_, _ = hash.Write([]byte(digest + "\n"))
-		for _, criterion := range criteria {
-			_, _ = hash.Write([]byte(criterion.ID + "\x00" + criterion.Text + "\x00" + criterion.SourcePath + "\x00" + criterion.DeferredReason + "\n"))
-		}
-		digest = "sha256:" + hex.EncodeToString(hash.Sum(nil))
-	}
 	criteriaJSON, err := json.Marshal(criteria)
 	if err != nil {
 		return Artifact{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return Artifact{}, err
-	}
-	defer tx.Rollback()
 	var latestVersion int
 	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(version), 0) FROM artifacts WHERE workspace_id = ? AND feature_key = ?`, workspaceID, input.FeatureKey).Scan(&latestVersion); err != nil {
 		return Artifact{}, err
@@ -106,9 +138,43 @@ func (s *Store) PublishArtifact(ctx context.Context, workspaceID string, input A
 	}
 	if strings.TrimSpace(input.BaseVersion) != wantBase {
 		if wantBase == "" {
-			return Artifact{}, fmt.Errorf("base_version must be empty when publishing the first version")
+			return Artifact{}, fmt.Errorf("%w: base_version must be empty when publishing the first version", ErrArtifactVersionConflict)
 		}
-		return Artifact{}, fmt.Errorf("base_version %q does not match latest version %q", input.BaseVersion, wantBase)
+		return Artifact{}, fmt.Errorf("%w: base_version %q does not match latest version %q", ErrArtifactVersionConflict, input.BaseVersion, wantBase)
+	}
+	if input.SourceLineage != nil {
+		if latestVersion == 0 {
+			return Artifact{}, fmt.Errorf("source_lineage requires an exact base artifact")
+		}
+		var baseID, baseDigest, baseCriteriaJSON, baseLineageJSON string
+		if err := tx.QueryRowContext(ctx, `SELECT id, snapshot_digest, source_criteria_json, source_lineage_json FROM artifacts WHERE workspace_id = ? AND feature_key = ? AND version = ?`, workspaceID, input.FeatureKey, latestVersion).Scan(&baseID, &baseDigest, &baseCriteriaJSON, &baseLineageJSON); err != nil {
+			return Artifact{}, err
+		}
+		var base Artifact
+		base.ID, base.SnapshotDigest = baseID, baseDigest
+		if err := json.Unmarshal([]byte(baseCriteriaJSON), &base.SourceCriteria); err != nil {
+			return Artifact{}, fmt.Errorf("decode base source criteria: %w", err)
+		}
+		if baseLineageJSON != "" {
+			if err := json.Unmarshal([]byte(baseLineageJSON), &base.SourceLineage); err != nil {
+				return Artifact{}, fmt.Errorf("decode base source lineage: %w", err)
+			}
+			if err := validateLineageVersion(base.SourceLineage); err != nil {
+				return Artifact{}, err
+			}
+		}
+		if !sourceInventoryKnown(base) {
+			return Artifact{}, fmt.Errorf("source_lineage cannot declare impact because the base requirement inventory is unknown")
+		}
+		lineage, err := validateSourceLineage(*input.SourceLineage, baseID, baseDigest, base.SourceCriteria, criteria)
+		if err != nil {
+			return Artifact{}, err
+		}
+		input.SourceLineage = &lineage
+	}
+	digest, lineageJSON, err := artifactSnapshotDigest(digest, criteria, input.SourceLineage)
+	if err != nil {
+		return Artifact{}, err
 	}
 	version := latestVersion + 1
 	policySnapshot, policyDigest, err := localPolicySnapshot()
@@ -133,7 +199,8 @@ func (s *Store) PublishArtifact(ctx context.Context, workspaceID string, input A
 		Documents:      documents,
 	}
 	artifact.SourceCriteria = criteria
-	if _, err := tx.ExecContext(ctx, `INSERT INTO artifacts(id, workspace_id, feature_key, request_type, version, status, snapshot_digest, policy_digest, policy_snapshot_json, source_criteria_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, artifact.ID, artifact.WorkspaceID, artifact.FeatureKey, artifact.RequestType, artifact.Version, artifact.Status, artifact.SnapshotDigest, artifact.PolicyDigest, artifact.PolicySnapshot, string(criteriaJSON), artifact.CreatedAt); err != nil {
+	artifact.SourceLineage = input.SourceLineage
+	if _, err := tx.ExecContext(ctx, `INSERT INTO artifacts(id, workspace_id, feature_key, request_type, version, status, snapshot_digest, policy_digest, policy_snapshot_json, source_criteria_json, source_lineage_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, artifact.ID, artifact.WorkspaceID, artifact.FeatureKey, artifact.RequestType, artifact.Version, artifact.Status, artifact.SnapshotDigest, artifact.PolicyDigest, artifact.PolicySnapshot, string(criteriaJSON), lineageJSON, artifact.CreatedAt); err != nil {
 		return Artifact{}, err
 	}
 	for _, document := range artifact.Documents {
@@ -141,10 +208,94 @@ func (s *Store) PublishArtifact(ctx context.Context, workspaceID string, input A
 			return Artifact{}, err
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		return Artifact{}, err
-	}
 	return artifact, nil
+}
+
+func artifactSnapshotDigest(digest string, criteria []SourceCriterion, lineage *SourceLineage) (string, string, error) {
+	if len(criteria) > 0 {
+		hash := sha256.New()
+		_, _ = hash.Write([]byte(digest + "\n"))
+		for _, criterion := range criteria {
+			_, _ = hash.Write([]byte(criterion.ID + "\x00" + criterion.Text + "\x00" + criterion.SourcePath + "\x00" + criterion.DeferredReason + "\n"))
+		}
+		digest = "sha256:" + hex.EncodeToString(hash.Sum(nil))
+	}
+	if lineage == nil {
+		return digest, "", nil
+	}
+	encoded, err := json.Marshal(lineage)
+	if err != nil {
+		return "", "", err
+	}
+	lineageJSON := string(encoded)
+	hash := sha256.New()
+	_, _ = hash.Write([]byte(digest + "\n" + lineageJSON))
+	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), lineageJSON, nil
+}
+
+func validateSourceLineage(input SourceLineage, baseID, baseDigest string, base, target []SourceCriterion) (SourceLineage, error) {
+	if input.Version != 1 || input.BaseArtifactID != baseID || input.BaseDigest != baseDigest {
+		return SourceLineage{}, fmt.Errorf("source_lineage must name this exact base artifact and digest")
+	}
+	baseIDs, targetIDs := map[string]bool{}, map[string]bool{}
+	for _, criterion := range base {
+		baseIDs[criterion.ID] = true
+	}
+	for _, criterion := range target {
+		targetIDs[criterion.ID] = true
+	}
+	seenBase, incoming, added := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	incomingCount := map[string]int{}
+	for i := range input.Rows {
+		row := &input.Rows[i]
+		row.BaseID = strings.TrimSpace(row.BaseID)
+		row.Reason = strings.TrimSpace(row.Reason)
+		if !baseIDs[row.BaseID] || seenBase[row.BaseID] {
+			return SourceLineage{}, fmt.Errorf("source_lineage rows must name each base requirement once")
+		}
+		seenBase[row.BaseID] = true
+		if len(row.TargetIDs) == 0 && row.Reason == "" {
+			return SourceLineage{}, fmt.Errorf("source_lineage removal requires a reason")
+		}
+		if len(row.TargetIDs) > 1 && row.Reason == "" {
+			return SourceLineage{}, fmt.Errorf("source_lineage split requires a reason")
+		}
+		seenTarget := map[string]bool{}
+		for index, id := range row.TargetIDs {
+			id = strings.TrimSpace(id)
+			if !targetIDs[id] || seenTarget[id] {
+				return SourceLineage{}, fmt.Errorf("source_lineage target ids must be known and unique per row")
+			}
+			row.TargetIDs[index] = id
+			seenTarget[id], incoming[id] = true, true
+			incomingCount[id]++
+		}
+	}
+	for _, row := range input.Rows {
+		for _, id := range row.TargetIDs {
+			if incomingCount[id] > 1 && row.Reason == "" {
+				return SourceLineage{}, fmt.Errorf("source_lineage merge requires a reason on each incoming row")
+			}
+		}
+	}
+	for id := range baseIDs {
+		if !seenBase[id] {
+			return SourceLineage{}, fmt.Errorf("source_lineage must cover every base requirement")
+		}
+	}
+	for i, id := range input.Added {
+		id = strings.TrimSpace(id)
+		if !targetIDs[id] || incoming[id] || added[id] {
+			return SourceLineage{}, fmt.Errorf("source_lineage additions must be target-only and unique")
+		}
+		input.Added[i], added[id] = id, true
+	}
+	for id := range targetIDs {
+		if !incoming[id] && !added[id] {
+			return SourceLineage{}, fmt.Errorf("source_lineage must declare every target requirement as mapped or added")
+		}
+	}
+	return input, nil
 }
 
 // ValidateArtifactInput applies the same immutable-package checks as PublishArtifact
@@ -155,6 +306,9 @@ func ValidateArtifactInput(input ArtifactInput) error {
 }
 
 func normalizedArtifactInput(input ArtifactInput) (ArtifactInput, []ArtifactDocument, string, []SourceCriterion, error) {
+	if input.SourceLineage != nil && input.SourceCriteria == nil {
+		return input, nil, "", nil, fmt.Errorf("source_lineage requires an explicit source_criteria array (use [] for intentional removal of all requirements)")
+	}
 	input.FeatureKey = strings.TrimSpace(input.FeatureKey)
 	input.RequestType = strings.TrimSpace(input.RequestType)
 	if input.FeatureKey == "" || input.RequestType == "" || len(input.Documents) == 0 {
@@ -175,7 +329,11 @@ func normalizedArtifactInput(input ArtifactInput) (ArtifactInput, []ArtifactDocu
 }
 
 func (s *Store) ListArtifacts(ctx context.Context, workspaceID string) ([]Artifact, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, workspace_id, feature_key, request_type, version, status, snapshot_digest, policy_digest, policy_snapshot_json, source_criteria_json, created_at FROM artifacts WHERE workspace_id = ? ORDER BY created_at DESC`, workspaceID)
+	return listArtifacts(ctx, s.db, workspaceID)
+}
+
+func listArtifacts(ctx context.Context, q artifactQueryer, workspaceID string) ([]Artifact, error) {
+	rows, err := q.QueryContext(ctx, `SELECT id, workspace_id, feature_key, request_type, version, status, snapshot_digest, policy_digest, policy_snapshot_json, source_criteria_json, source_lineage_json, created_at FROM artifacts WHERE workspace_id = ? ORDER BY created_at DESC`, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -183,12 +341,20 @@ func (s *Store) ListArtifacts(ctx context.Context, workspaceID string) ([]Artifa
 	var artifacts []Artifact
 	for rows.Next() {
 		var artifact Artifact
-		var criteria string
-		if err := rows.Scan(&artifact.ID, &artifact.WorkspaceID, &artifact.FeatureKey, &artifact.RequestType, &artifact.Version, &artifact.Status, &artifact.SnapshotDigest, &artifact.PolicyDigest, &artifact.PolicySnapshot, &criteria, &artifact.CreatedAt); err != nil {
+		var criteria, lineage string
+		if err := rows.Scan(&artifact.ID, &artifact.WorkspaceID, &artifact.FeatureKey, &artifact.RequestType, &artifact.Version, &artifact.Status, &artifact.SnapshotDigest, &artifact.PolicyDigest, &artifact.PolicySnapshot, &criteria, &lineage, &artifact.CreatedAt); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(criteria), &artifact.SourceCriteria); err != nil {
 			return nil, fmt.Errorf("decode source criteria for artifact %q: %w", artifact.ID, err)
+		}
+		if lineage != "" {
+			if err := json.Unmarshal([]byte(lineage), &artifact.SourceLineage); err != nil {
+				return nil, fmt.Errorf("decode source lineage for artifact %q: %w", artifact.ID, err)
+			}
+			if err := validateLineageVersion(artifact.SourceLineage); err != nil {
+				return nil, err
+			}
 		}
 		artifacts = append(artifacts, artifact)
 	}
@@ -196,16 +362,33 @@ func (s *Store) ListArtifacts(ctx context.Context, workspaceID string) ([]Artifa
 }
 
 func (s *Store) GetArtifact(ctx context.Context, workspaceID, id string) (Artifact, error) {
+	return getArtifact(ctx, s.db, workspaceID, id)
+}
+
+type artifactQueryer interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func getArtifact(ctx context.Context, q artifactQueryer, workspaceID, id string) (Artifact, error) {
 	var artifact Artifact
-	var criteria string
-	err := s.db.QueryRowContext(ctx, `SELECT id, workspace_id, feature_key, request_type, version, status, snapshot_digest, policy_digest, policy_snapshot_json, source_criteria_json, created_at FROM artifacts WHERE workspace_id = ? AND id = ?`, workspaceID, id).Scan(&artifact.ID, &artifact.WorkspaceID, &artifact.FeatureKey, &artifact.RequestType, &artifact.Version, &artifact.Status, &artifact.SnapshotDigest, &artifact.PolicyDigest, &artifact.PolicySnapshot, &criteria, &artifact.CreatedAt)
+	var criteria, lineage string
+	err := q.QueryRowContext(ctx, `SELECT id, workspace_id, feature_key, request_type, version, status, snapshot_digest, policy_digest, policy_snapshot_json, source_criteria_json, source_lineage_json, created_at FROM artifacts WHERE workspace_id = ? AND id = ?`, workspaceID, id).Scan(&artifact.ID, &artifact.WorkspaceID, &artifact.FeatureKey, &artifact.RequestType, &artifact.Version, &artifact.Status, &artifact.SnapshotDigest, &artifact.PolicyDigest, &artifact.PolicySnapshot, &criteria, &lineage, &artifact.CreatedAt)
 	if err != nil {
 		return Artifact{}, err
 	}
 	if err := json.Unmarshal([]byte(criteria), &artifact.SourceCriteria); err != nil {
 		return Artifact{}, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT path, role, content, digest FROM artifact_documents WHERE artifact_id = ? ORDER BY path`, id)
+	if lineage != "" {
+		if err := json.Unmarshal([]byte(lineage), &artifact.SourceLineage); err != nil {
+			return Artifact{}, err
+		}
+		if err := validateLineageVersion(artifact.SourceLineage); err != nil {
+			return Artifact{}, err
+		}
+	}
+	rows, err := q.QueryContext(ctx, `SELECT path, role, content, digest FROM artifact_documents WHERE artifact_id = ? ORDER BY path`, id)
 	if err != nil {
 		return Artifact{}, err
 	}
@@ -219,6 +402,17 @@ func (s *Store) GetArtifact(ctx context.Context, workspaceID, id string) (Artifa
 		artifact.Documents = append(artifact.Documents, document)
 	}
 	return artifact, rows.Err()
+}
+
+func validateLineageVersion(lineage *SourceLineage) error {
+	if lineage == nil || lineage.Version != 1 {
+		return fmt.Errorf("%w: unsupported source lineage version", ErrStoreIncompatible)
+	}
+	return nil
+}
+
+func sourceInventoryKnown(artifact Artifact) bool {
+	return len(artifact.SourceCriteria) > 0 || artifact.SourceLineage != nil
 }
 
 func validateSourceCriteria(input []SourceCriterion, documents []ArtifactDocument) ([]SourceCriterion, error) {

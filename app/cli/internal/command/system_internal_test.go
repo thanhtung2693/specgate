@@ -63,21 +63,6 @@ func TestMapAPIErrorMarksServiceUnavailableTransient(t *testing.T) {
 	}
 }
 
-func TestUpdateInstallerArgsIncludesInstallDir(t *testing.T) {
-	t.Parallel()
-
-	args := updateInstallerArgs()
-	if len(args) != 2 {
-		t.Fatalf("len(args) = %d, want 2 (%v)", len(args), args)
-	}
-	if args[0] != "--install-dir" {
-		t.Fatalf("args[0] = %q, want --install-dir", args[0])
-	}
-	if strings.TrimSpace(args[1]) == "" {
-		t.Fatalf("args[1] empty, want install dir")
-	}
-}
-
 func TestFetchAndRunScriptPassesAllArgs(t *testing.T) {
 	t.Parallel()
 

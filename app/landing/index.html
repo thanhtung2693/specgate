@@ -129,7 +129,7 @@
                 "name": "What does the delivery review check?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "Each acceptance criterion is checked against reported evidence and automated checks such as tests, types, and lint. Failed criteria stay visible for the next handoff."
+                  "text": "Each acceptance criterion is reviewed against its evidence. In Local mode, you can pin exact JUnit testcase selectors and watch verification files for drift. Existing behavior can be recorded as preservation criteria. These are locally observed results, not proof that the runner is honest or the code is correct. Failed evidence stays visible even after a human accepts delivery."
                 }
               },
               {
@@ -305,7 +305,7 @@
             <div>
               <span class="loop-verb">Hand off</span>
               <h3>Approve one Context Pack</h3>
-              <p>Switch between specs and plans without losing the approved scope. In Local mode, a resume packet gives the agent each work item's criteria, pinned document index, and next action.</p>
+              <p>Switch between specs and plans without losing the approved scope. In Local mode, resume packets carry criteria, pinned documents, and the next action. Explicit checkpoints show what changed since your last handoff.</p>
             </div>
             <div class="loop-artifact" aria-hidden="true">
               <span class="la-head"><span>context-pack.md</span><span class="la-acc">approved</span></span>
@@ -318,7 +318,7 @@
             <div>
               <span class="loop-verb">Review</span>
               <h3>Review delivery evidence</h3>
-              <p>Compare evidence against every acceptance criterion. Local mode can pin reviewed check commands before reporting, then bind your acceptance to the exact delivery review.</p>
+              <p>Compare evidence against every acceptance criterion. Local mode can pin reviewed commands and exact test selectors. Inspect declared requirement lineage when specs change, then bind your decision to the exact review and acceptance basis.</p>
             </div>
             <div class="loop-artifact" aria-hidden="true">
               <span class="la-head"><span>delivery review</span><span class="la-ok">pass</span></span>
@@ -469,7 +469,7 @@ $ specgate --yes artifact approve &lt;artifact-id&gt;
           </details>
           <details class="faq-item reveal-up">
             <summary><span>What does the delivery review check?</span></summary>
-            <p>Each acceptance criterion is checked against reported evidence and automated checks such as tests, types, and lint. Failed criteria stay visible for the next handoff.</p>
+            <p>Each acceptance criterion is reviewed against its evidence. In Local mode, you can pin exact JUnit testcase selectors and watch verification files for drift. Existing behavior can be recorded as preservation criteria. These are locally observed results, not proof that the runner is honest or the code is correct. Failed evidence stays visible even after a human accepts delivery.</p>
           </details>
           <details class="faq-item reveal-up">
             <summary><span>How should we roll this out?</span></summary>

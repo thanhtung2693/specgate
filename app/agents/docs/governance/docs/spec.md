@@ -61,7 +61,10 @@ The chat node binds four read-only governance tools (`GOVERNANCE_TOOLS` in `gove
 | `list_artifact_readiness` | List the stored readiness / quality-gate runs for an artifact (to explain failures) |
 | `search_governance_knowledge` | Search active-workspace Governance Knowledge and return cited reference chunks |
 
-`governance_tool_names()` exposes this set for tests. All four go through the Doc Registry REST client (`registry/client.py`); there is no direct SQLite / S3 coupling. Running readiness remains an explicit IDE-agent or CLI workflow, not a conversational action.
+Tests compile the `graph()` entry point and check that its tool node binds exactly
+these four tools. All four go through the Doc Registry REST client
+(`registry/client.py`); there is no direct SQLite / S3 coupling. Running readiness
+remains an explicit IDE-agent or CLI workflow, not a conversational action.
 
 All four tools inject `workspace_id` from trusted LangGraph runtime/thread
 context. `workspace_id` is not a model-controlled tool argument. A missing

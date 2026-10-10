@@ -60,6 +60,9 @@ to compare explicit paths, roles, and hashes against one stored artifact.`,
 			if _, hasSourceCriteria := body["source_criteria"]; hasSourceCriteria && deps.Topology != config.ModeLocal {
 				return incompatibleCommand(deps, "artifact.publish", "source_criteria is available only in Local mode")
 			}
+			if _, hasLineage := body["source_lineage"]; hasLineage && deps.Topology != config.ModeLocal {
+				return incompatibleCommand(deps, "artifact.publish", "source_lineage is available only in Local mode")
+			}
 			projectRoot, _ := config.FindProjectRoot(deps.WorkingDir)
 			documentSources, err := expandArtifactDocumentSources(body, filePath, projectRoot)
 			if err != nil {
@@ -95,6 +98,7 @@ to compare explicit paths, roles, and hashes against one stored artifact.`,
 					preview["omitted"] = []string{}
 				}
 				var comparison *artifactComparison
+				var impact *local.ArtifactImpact
 				if compareArtifactID != "" {
 					var base *client.Artifact
 					var baseFiles []client.ArtifactFile
@@ -112,6 +116,12 @@ to compare explicit paths, roles, and hashes against one stored artifact.`,
 						if err != nil {
 							return localExitError(deps, "artifact.publish.preview", err)
 						}
+						projected, err := store.PreviewArtifactImpact(cmd.Context(), selection.Workspace.ID, compareArtifactID, localInput)
+						if err != nil {
+							return localExitError(deps, "artifact.publish.preview", err)
+						}
+						impact = &projected
+						preview["impact"] = projected
 						base, baseFiles = localArtifactComparisonBase(localBase)
 					} else {
 						previewCtx, err := artifactPublishPreviewContext(cmd.Context(), deps, body)
@@ -166,6 +176,9 @@ to compare explicit paths, roles, and hashes against one stored artifact.`,
 				if comparison != nil {
 					writeArtifactComparison(deps.Stdout, *comparison)
 				}
+				if impact != nil {
+					printArtifactImpact(deps, *impact)
+				}
 				fmt.Fprintln(deps.Stdout, notice(deps, output.StyleWarning, "No publication performed", "Human confirmation required before publishing."))
 				return nil
 			}
@@ -179,11 +192,27 @@ to compare explicit paths, roles, and hashes against one stored artifact.`,
 				if err != nil {
 					return localExitError(deps, "artifact.publish", err)
 				}
+				var upgrade *local.StoreUpgrade
+				if localInput.SourceLineage != nil {
+					upgrade, err = store.PendingStoreUpgrade(cmd.Context())
+					if err != nil {
+						return localExitError(deps, "artifact.publish", err)
+					}
+					if upgrade != nil {
+						proceed, err := confirmStoreWrite(deps, "artifact.publish", "Publish this lineage artifact?", upgrade)
+						if err != nil || !proceed {
+							return err
+						}
+					}
+				}
 				artifact, err := store.PublishArtifact(cmd.Context(), selection.Workspace.ID, localInput)
 				if err != nil {
 					return localExitError(deps, "artifact.publish", err)
 				}
 				result := map[string]any{"artifact_id": artifact.ID, "version": artifact.Version, "status": artifact.Status, "snapshot_digest": artifact.SnapshotDigest}
+				if upgrade != nil {
+					result["store_upgrade"] = upgrade
+				}
 				if deps.Printer.Mode() == output.ModeJSON {
 					deps.Printer.Success("artifact.publish", result)
 					return nil
@@ -289,6 +318,27 @@ func artifactString(body map[string]any, field string) string {
 	return strings.TrimSpace(value)
 }
 
+func artifactNumber(body map[string]any, field string) float64 {
+	value, _ := body[field].(float64)
+	return value
+}
+
+func artifactStringSlice(value any, field string) ([]string, error) {
+	items, ok := value.([]any)
+	if !ok {
+		return nil, fmt.Errorf("%s must be an array of strings", field)
+	}
+	result := make([]string, 0, len(items))
+	for _, item := range items {
+		text, ok := item.(string)
+		if !ok {
+			return nil, fmt.Errorf("%s must be an array of strings", field)
+		}
+		result = append(result, text)
+	}
+	return result, nil
+}
+
 func localArtifactSelection(
 	ctx context.Context,
 	deps *Deps,
@@ -349,6 +399,7 @@ func localArtifactInput(body map[string]any) (local.ArtifactInput, error) {
 		if !ok {
 			return input, fmt.Errorf("source_criteria must be an array")
 		}
+		input.SourceCriteria = []local.SourceCriterion{}
 		for _, raw := range items {
 			item, ok := raw.(map[string]any)
 			if !ok {
@@ -356,6 +407,43 @@ func localArtifactInput(body map[string]any) (local.ArtifactInput, error) {
 			}
 			input.SourceCriteria = append(input.SourceCriteria, local.SourceCriterion{ID: artifactString(item, "id"), Text: artifactString(item, "text"), SourcePath: artifactString(item, "source_path"), DeferredReason: artifactString(item, "deferred_reason")})
 		}
+	}
+	if rawLineage, found := body["source_lineage"]; found {
+		lineageBody, ok := rawLineage.(map[string]any)
+		if !ok {
+			return input, fmt.Errorf("source_lineage must be an object")
+		}
+		if artifactNumber(lineageBody, "version") != 1 {
+			return input, fmt.Errorf("source_lineage.version must be 1")
+		}
+		lineage := local.SourceLineage{Version: 1, BaseArtifactID: artifactString(lineageBody, "base_artifact_id"), BaseDigest: artifactString(lineageBody, "base_digest")}
+		rows, ok := lineageBody["rows"].([]any)
+		if !ok {
+			return input, fmt.Errorf("source_lineage.rows must be an array")
+		}
+		for i, raw := range rows {
+			rowBody, ok := raw.(map[string]any)
+			if !ok {
+				return input, fmt.Errorf("source_lineage.rows must contain objects")
+			}
+			row := local.LineageRow{BaseID: artifactString(rowBody, "base_id"), Reason: artifactString(rowBody, "reason")}
+			if rawTargets, found := rowBody["target_ids"]; found {
+				targets, err := artifactStringSlice(rawTargets, fmt.Sprintf("source_lineage.rows[%d].target_ids", i))
+				if err != nil {
+					return input, err
+				}
+				row.TargetIDs = targets
+			}
+			lineage.Rows = append(lineage.Rows, row)
+		}
+		if rawAdded, found := lineageBody["added"]; found {
+			added, err := artifactStringSlice(rawAdded, "source_lineage.added")
+			if err != nil {
+				return input, err
+			}
+			lineage.Added = added
+		}
+		input.SourceLineage = &lineage
 	}
 	return input, nil
 }
@@ -383,7 +471,7 @@ func localArtifactComparisonBase(artifact local.Artifact) (*client.Artifact, []c
 }
 
 func localArtifactView(artifact local.Artifact) map[string]any {
-	return map[string]any{"id": artifact.ID, "workspace_id": artifact.WorkspaceID, "feature_key": artifact.FeatureKey, "request_type": artifact.RequestType, "version": artifact.Version, "status": artifact.Status, "snapshot_digest": artifact.SnapshotDigest, "source_criteria": artifact.SourceCriteria, "created_at": artifact.CreatedAt}
+	return map[string]any{"id": artifact.ID, "workspace_id": artifact.WorkspaceID, "feature_key": artifact.FeatureKey, "request_type": artifact.RequestType, "version": artifact.Version, "status": artifact.Status, "snapshot_digest": artifact.SnapshotDigest, "source_criteria": artifact.SourceCriteria, "source_lineage": artifact.SourceLineage, "created_at": artifact.CreatedAt}
 }
 
 func artifactPublishPreview(body map[string]any, sources []string) map[string]any {
@@ -470,7 +558,7 @@ func validateArtifactPublishFields(body map[string]any) error {
 		"source_revision": true, "source_id": true, "created_by": true,
 		"impact_level": true, "request_type": true, "authority": true,
 		"requested_governance_level": true, "impact_declaration": true,
-		"source_criteria": true,
+		"source_criteria": true, "source_lineage": true,
 	}
 	var unknown []string
 	for field := range body {

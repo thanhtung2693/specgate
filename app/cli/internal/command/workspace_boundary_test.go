@@ -181,7 +181,7 @@ func TestWorkspaceBoundaryAllowsGlobalDefaultOutsideGit(t *testing.T) {
 
 func TestLocalWorkspaceUsesRepoDefault(t *testing.T) {
 	t.Parallel()
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	stateDir := filepath.Join(t.TempDir(), "local")
 	if code := command.ExecuteForCode(
 		command.NewRootCommand(deps),
@@ -222,7 +222,7 @@ func TestLocalWorkspaceUsesRepoDefault(t *testing.T) {
 
 func TestLocalWorkspaceCurrentExplainsUnboundProject(t *testing.T) {
 	t.Parallel()
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	stateDir := filepath.Join(t.TempDir(), "local")
 	if code := command.ExecuteForCode(
 		command.NewRootCommand(deps),

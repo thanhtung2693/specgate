@@ -145,6 +145,60 @@ func TestPluginsInstallGlobalRejectsProjectOnlyMarketplacePointer(t *testing.T) 
 	}
 }
 
+func TestCodexMarketplaceRoundTripPreservesUserMetadata(t *testing.T) {
+	srv := newPluginRegistry(t)
+	home := t.TempDir()
+	marketplace := filepath.Join(home, ".agents", "plugins", "marketplace.json")
+	writeTestFile(t, marketplace, `{
+		"name":"personal",
+		"interface":{"displayName":"My tools","revision":9007199254740993},
+		"user_note":{"keep":true,"revision":9007199254740993},
+		"plugins":[{"name":"other","revision":9007199254740993}]
+	}`)
+	if err := os.Chmod(marketplace, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, action := range []string{"install", "install", "uninstall"} {
+		deps, out := newPluginDeps(home)
+		deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
+		args := []string{"--json", "--server", srv.URL, "plugins", "install", "--agent", "codex"}
+		if action == "uninstall" {
+			args = []string{"--json", "--no-input", "uninstall", "--dir", filepath.Join(t.TempDir(), "deploy")}
+		}
+		if code := command.ExecuteForCode(command.NewRootCommand(deps), args...); code != output.ExitOK {
+			t.Fatalf("%s exit=%d output=%s", action, code, out.String())
+		}
+		body, err := os.ReadFile(marketplace)
+		if err != nil {
+			t.Fatal(err)
+		}
+		info, err := os.Stat(marketplace)
+		if err != nil || info.Mode().Perm() != 0o600 {
+			t.Fatalf("%s widened private marketplace permissions: info=%v err=%v", action, info, err)
+		}
+		var data map[string]json.RawMessage
+		if err := json.Unmarshal(body, &data); err != nil {
+			t.Fatal(err)
+		}
+		for _, field := range []string{"user_note", "interface", "plugins"} {
+			if !bytes.Contains(data[field], []byte("9007199254740993")) {
+				t.Fatalf("%s lost or rounded %s: %s", action, field, body)
+			}
+		}
+		var plugins []map[string]any
+		if err := json.Unmarshal(data["plugins"], &plugins); err != nil {
+			t.Fatal(err)
+		}
+		wantCount := 2
+		if action == "uninstall" {
+			wantCount = 1
+		}
+		if len(plugins) != wantCount || plugins[0]["name"] != "other" {
+			t.Fatalf("%s changed unrelated plugin inventory: %s", action, body)
+		}
+	}
+}
+
 func TestLocalPluginsInstallLeavesProjectInstructionsUntouched(t *testing.T) {
 	workDir := t.TempDir()
 	t.Chdir(workDir)

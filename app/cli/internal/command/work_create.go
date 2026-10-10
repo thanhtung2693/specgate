@@ -49,6 +49,11 @@ acceptance criterion explicitly with a repeated --ac flag.`,
 				body["acceptance_criteria"] = criteria
 			}
 			if deps.Topology == config.ModeLocal {
+				input, err := localWorkInput(body)
+				if err != nil {
+					code := deps.Printer.Error("work.create", output.ErrorPayload{Code: "validation", Message: err.Error()})
+					return &output.ExitError{Code: code, Err: err}
+				}
 				store, err := openLocalStore(deps)
 				if err != nil {
 					return localExitError(deps, "work.create", err)
@@ -58,7 +63,7 @@ acceptance criterion explicitly with a repeated --ac flag.`,
 				if err != nil {
 					return localExitError(deps, "work.create", err)
 				}
-				work, err := store.CreateWork(cmd.Context(), selection.Workspace.ID, local.WorkInput{FeatureRef: feature, Title: title, Description: description, AcceptanceCriteria: criteria})
+				work, err := store.CreateWork(cmd.Context(), selection.Workspace.ID, local.WorkInput{FeatureRef: feature, Title: input.Title, Description: input.Description, AcceptanceCriteria: input.AcceptanceCriteria})
 				if err != nil {
 					return localExitError(deps, "work.create", err)
 				}
@@ -198,9 +203,10 @@ func newWorkCreateQuickCmd(deps *Deps) *cobra.Command {
 				}
 			}
 			if deps.Topology == config.ModeLocal {
-				input, err := localQuickWorkInput(body)
+				input, err := localWorkInput(body)
 				if err != nil {
-					return localExitError(deps, "work.create-quick", err)
+					code := deps.Printer.Error("work.create-quick", output.ErrorPayload{Code: "validation", Message: err.Error()})
+					return &output.ExitError{Code: code, Err: err}
 				}
 				store, err := openLocalStore(deps)
 				if err != nil {
@@ -278,7 +284,7 @@ func newWorkCreateQuickCmd(deps *Deps) *cobra.Command {
 	return cmd
 }
 
-func localQuickWorkInput(body map[string]any) (local.QuickWorkInput, error) {
+func localWorkInput(body map[string]any) (local.QuickWorkInput, error) {
 	title, _ := body["title"].(string)
 	description, _ := body["description"].(string)
 	input := local.QuickWorkInput{
@@ -291,14 +297,25 @@ func localQuickWorkInput(body map[string]any) (local.QuickWorkInput, error) {
 			input.AcceptanceCriteria = appendLocalQuickCriterion(input.AcceptanceCriteria, row["text"], row["verification_binding"])
 		}
 	case []any:
-		for _, raw := range rows {
+		for index, raw := range rows {
 			switch row := raw.(type) {
 			case string:
 				input.AcceptanceCriteria = appendLocalQuickCriterion(input.AcceptanceCriteria, row, "")
 			case map[string]any:
-				text, _ := row["text"].(string)
-				binding, _ := row["verification_binding"].(string)
+				text, ok := row["text"].(string)
+				if !ok {
+					return local.QuickWorkInput{}, fmt.Errorf("acceptance criterion %d text must be a string", index+1)
+				}
+				binding := ""
+				if value, present := row["verification_binding"]; present {
+					binding, ok = value.(string)
+					if !ok {
+						return local.QuickWorkInput{}, fmt.Errorf("acceptance criterion %d verification_binding must be a string", index+1)
+					}
+				}
 				input.AcceptanceCriteria = appendLocalQuickCriterion(input.AcceptanceCriteria, text, binding)
+			default:
+				return local.QuickWorkInput{}, fmt.Errorf("acceptance criterion %d must be a string or an object with text", index+1)
 			}
 		}
 	case []string:
@@ -357,13 +374,9 @@ func acceptanceCriteriaBody(criteria []string) any {
 	}
 	out := make([]map[string]string, 0, len(parsed))
 	for _, ac := range parsed {
-		// Every criterion the CLI sends was typed or confirmed by a human: both
-		// `work create-quick` and `change approve` require them explicitly, and the
-		// installed skills must not create the record until the displayed contract
-		// is approved. Recording that keeps the stored provenance a fact rather than
-		// the schema's `llm` default, which is what a human-approved contract used to
-		// be filed as.
-		row := map[string]string{"text": ac.Text, "source": "human"}
+		// Quick-work requests carry text and binding only. The service records
+		// supplied criteria as human-authored and model-drafted criteria as llm.
+		row := map[string]string{"text": ac.Text}
 		if ac.VerificationBinding != "" {
 			row["verification_binding"] = ac.VerificationBinding
 		}

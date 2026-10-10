@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.27.1
 
 # --- deps ---
 FROM node:26-alpine AS deps
@@ -11,15 +11,14 @@ RUN --mount=type=cache,target=/root/.npm \
 # --- build ---
 FROM deps AS build
 
-# BUILD_MODE picks which .env.<mode> file Vite loads at build time. The CI
-# pipeline sets this from $CI_COMMIT_REF_NAME (see ui/README.md — branch name
-# == Vite mode == ui/.env.<mode> file). Defaults to production so untagged
-# manual builds get the production env.
+# BUILD_MODE picks which .env.<mode> file Vite loads at build time. Defaults to
+# production; choose another mode explicitly with --build-arg BUILD_MODE=<mode>.
 #
-# VITE_* values default to ui/.env.<mode>. Declare them here so docker-compose
-# (or CI) can override via build-arg — shell env takes priority over .env files
+# VITE_* values default to the same-origin appliance proxy paths below. Declare
+# them here so Docker Compose (or CI) can override via build-arg. Shell env
+# takes priority over .env files
 # in Vite's resolution order. Add new VITE_* vars by: (1) ARG + ENV here,
-# (2) docker-compose build.args, (3) ui/.env.<mode> as fallback default.
+# (2) Compose build.args, (3) app/ui/.env.<mode> for non-Docker builds.
 ARG BUILD_MODE=production
 ARG VITE_DOC_REGISTRY_URL=/api/doc-registry
 ARG VITE_LANGGRAPH_API_URL=/api/agents
@@ -32,7 +31,7 @@ RUN npm run build -- --mode ${BUILD_MODE}
 # --- static SPA ---
 # Keep this as the final stage so plain `docker build -f docker/Dockerfile.ui .`
 # produces the production image.
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.30.5-alpine AS runtime
 ARG VERSION=dev
 ARG COMMIT=unknown
 ARG BUILD_DATE=unknown

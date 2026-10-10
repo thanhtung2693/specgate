@@ -7,6 +7,16 @@ const html = readFileSync(new URL("index.html", here), "utf8");
 const styles = readFileSync(new URL("styles.css", here), "utf8");
 const timeline = readFileSync(new URL("timeline.js", here), "utf8");
 const readme = readFileSync(new URL("../../README.md", here), "utf8");
+const packageJSON = JSON.parse(readFileSync(new URL("package.json", here), "utf8"));
+
+test("media commands share one stable tool pin documented for contributors", () => {
+  const versions = Object.values(packageJSON.scripts)
+    .filter(command => command.includes("hyperframes@"))
+    .map(command => command.match(/hyperframes@(\d+\.\d+\.\d+)\s/)[1]);
+  assert.equal(versions.length, 4);
+  assert.equal(new Set(versions).size, 1);
+  assert.ok(readFileSync(new URL("README.md", here), "utf8").includes(`HyperFrames ${versions[0]}`));
+});
 
 test("peer connector reaches the peer note instead of dangling in the proof lane", () => {
   const path = html.match(/id="peer-connector"[^>]+d="M710 \d+ V(?<vertical>\d+) H(?<horizontal>\d+)"/);

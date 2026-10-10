@@ -8,11 +8,57 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/specgate/specgate/app/cli/internal/local"
+	"github.com/spf13/cobra"
 )
 
 type gitReceiptRunner struct {
 	outputs map[string][]byte
 	errors  map[string]error
+}
+
+func TestGitReceiptIncludesCommittedBracketFilename(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "[]"), []byte("fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	runner := &gitReceiptRunner{outputs: map[string][]byte{
+		receiptCommand(dir, "rev-parse", "--show-toplevel"):        []byte(dir),
+		receiptCommand(dir, "remote", "get-url", "origin"):         []byte("https://example.invalid/repo.git"),
+		receiptCommand(dir, "branch", "--show-current"):            []byte("main"),
+		receiptCommand(dir, "rev-parse", "HEAD"):                   []byte("head"),
+		receiptCommand(dir, "merge-base", "HEAD", "origin/main"):   []byte("base"),
+		receiptCommand(dir, "diff", "--name-only", "base", "head"): []byte("[]\n"),
+	}}
+	receipt := collectGitReceipt(t.Context(), runner, dir, []string{"[]"})
+	if len(receipt.ChangedFiles) != 1 || receipt.ChangedFiles[0] != "[]" {
+		t.Fatalf("valid committed filename disappeared: %v", receipt.ChangedFiles)
+	}
+	if len(receipt.Warnings) != 0 {
+		t.Fatalf("matching reported file should not produce scope warnings: %v", receipt.Warnings)
+	}
+}
+
+func TestGitReceiptReportedPathsUseRepositoryCoordinates(t *testing.T) {
+	root := t.TempDir()
+	for _, sub := range []string{"frontend", "backend"} {
+		dir := filepath.Join(root, sub)
+		if err := os.Mkdir(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "index.js"), []byte("fixture"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		runner := &gitReceiptRunner{outputs: map[string][]byte{
+			receiptCommand(dir, "rev-parse", "--show-toplevel"): []byte(root),
+		}}
+		got := collectGitReceipt(t.Context(), runner, dir, []string{"index.js", filepath.Join(dir, "other.js")})
+		want := []string{sub + "/index.js", sub + "/other.js"}
+		if strings.Join(got.ReportedFiles, ",") != strings.Join(want, ",") {
+			t.Fatalf("reported files in %s: got=%v want=%v", sub, got.ReportedFiles, want)
+		}
+	}
 }
 
 func (r *gitReceiptRunner) Run(context.Context, string, ...string) error { return nil }
@@ -126,6 +172,40 @@ func TestGitReceiptUsesPriorBaseForPushedCommitScope(t *testing.T) {
 	}
 	if len(receipt.Warnings) != 0 {
 		t.Fatalf("warnings = %#v, want none", receipt.Warnings)
+	}
+	store, err := local.Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	sel, err := store.Initialize(t.Context(), local.InitInput{WorkspaceName: "pushed", Username: "human", DisplayName: "Human"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	work, err := store.CreateQuickWork(t.Context(), sel.Workspace.ID, local.QuickWorkInput{Title: "pushed receipt", AcceptanceCriteria: []string{"Works"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var storedReceipt map[string]any
+	if err := json.Unmarshal(raw, &storedReceipt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SubmitDelivery(t.Context(), sel.Workspace.ID, work.Key, map[string]any{"context_digest": work.ContextDigest, "agent": map[string]any{"name": "builder"}, "git_receipt": storedReceipt}, dir); err != nil {
+		t.Fatal(err)
+	}
+	cmd := &cobra.Command{}
+	acceptanceSelectionFlags(cmd)
+	opts, _, err := acceptanceOptions(cmd, &Deps{WorkingDir: dir, DeployRunner: runner}, store, sel.Workspace.ID, work.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	basis, err := store.AcceptanceBasis(t.Context(), sel.Workspace.ID, work.Key, opts)
+	if err != nil || basis.Freshness != "matching_endpoints" {
+		t.Fatalf("pushed base falsely stale: %+v %v", basis, err)
 	}
 }
 
@@ -368,7 +448,7 @@ func TestGitReceiptUsesLocalCheckoutScopeWithoutOrigin(t *testing.T) {
 		},
 	}
 
-	receipt := collectGitReceipt(context.Background(), runner, dir, nil)
+	receipt := collectGitReceipt(context.Background(), runner, dir, []string{"local.go"})
 	if receipt.Availability != "available" {
 		t.Fatalf("availability = %q, want available", receipt.Availability)
 	}
@@ -385,6 +465,9 @@ func TestGitReceiptUsesLocalCheckoutScopeWithoutOrigin(t *testing.T) {
 	}
 	if payload["freshness_scope"] != "local_checkout" {
 		t.Errorf("freshness_scope = %#v, want local_checkout", payload["freshness_scope"])
+	}
+	if receipt.CheckoutID == "" || len(receipt.ReportedFiles) != 1 || receipt.ReportedFiles[0] != "local.go" {
+		t.Errorf("missing same-checkout affected-file provenance: %+v", receipt)
 	}
 	if len(receipt.Warnings) == 0 || !strings.Contains(strings.ToLower(receipt.Warnings[0]), "shared") {
 		t.Errorf("warnings = %#v, want shared-provenance warning", receipt.Warnings)

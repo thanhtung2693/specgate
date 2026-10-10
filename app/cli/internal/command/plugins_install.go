@@ -58,8 +58,8 @@ func (i *pluginInstaller) preloadPluginFiles(agents []string) error {
 }
 
 func (i *pluginInstaller) addFocusedSkillFiles(paths map[string]bool) {
-	for _, skill := range i.pkg.Skills {
-		paths["skills/"+skill+"/SKILL.md"] = true
+	for _, file := range pluginSkillFiles(i.pkg) {
+		paths[file] = true
 	}
 }
 
@@ -112,6 +112,13 @@ func (i *pluginInstaller) validateFocusedSkills(dir string) error {
 			return err
 		}
 	}
+	for _, file := range pluginSkillFiles(i.pkg) {
+		if !isPluginSkillEntry(file) {
+			if err := validateOwnedPluginFile(filepath.Join(dir, strings.TrimPrefix(file, "skills/"))); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
@@ -130,8 +137,14 @@ func validateCodexPluginInstall(i *pluginInstaller, root string) error {
 	if err := validateOwnedPluginDir(filepath.Join(root, ".codex", "plugins", specgatePluginName)); err != nil {
 		return err
 	}
+	if err := i.validateFocusedSkills(filepath.Join(root, ".codex", "plugins", specgatePluginName, "skills")); err != nil {
+		return err
+	}
 	if strings.TrimSpace(i.pkg.Version) != "" {
 		if err := validateOwnedPluginDir(filepath.Join(root, ".codex", "plugins", "cache", "personal", specgatePluginName, i.pkg.Version)); err != nil {
+			return err
+		}
+		if err := i.validateFocusedSkills(filepath.Join(root, ".codex", "plugins", "cache", "personal", specgatePluginName, i.pkg.Version, "skills")); err != nil {
 			return err
 		}
 	}
@@ -165,7 +178,11 @@ func validateCodexPluginInstall(i *pluginInstaller, root string) error {
 
 func validateClaudePluginInstall(i *pluginInstaller, root string) error {
 	if !i.opts.ProjectLocal {
-		return validateOwnedPluginDir(filepath.Join(root, ".claude", "skills", specgatePluginName))
+		pluginRoot := filepath.Join(root, ".claude", "skills", specgatePluginName)
+		if err := validateOwnedPluginDir(pluginRoot); err != nil {
+			return err
+		}
+		return i.validateFocusedSkills(filepath.Join(pluginRoot, "skills"))
 	}
 	if err := i.validateFocusedSkills(filepath.Join(root, ".claude", "skills")); err != nil {
 		return err
@@ -319,7 +336,10 @@ func rejectSymlinksWithin(root string) error {
 func validateOwnedPluginFile(path string) error {
 	info, err := os.Lstat(path)
 	if os.IsNotExist(err) {
-		return nil
+		if _, markerErr := os.Lstat(path + pluginOwnerMarker); os.IsNotExist(markerErr) {
+			return nil
+		}
+		return validatePluginOwnerMarker(path+pluginOwnerMarker, path)
 	} else if err != nil {
 		return err
 	}
@@ -599,11 +619,19 @@ func readClaudeSettings(path string) (map[string]any, os.FileMode, error) {
 }
 
 func (i *pluginInstaller) installFocusedSkills(destDir string) error {
-	for _, skill := range i.pkg.Skills {
-		skillDir := filepath.Join(destDir, skill)
-		if err := i.writePluginFile("skills/"+skill+"/SKILL.md", filepath.Join(skillDir, "SKILL.md"), 0o644); err != nil {
+	for _, file := range pluginSkillFiles(i.pkg) {
+		dest := filepath.Join(destDir, strings.TrimPrefix(file, "skills/"))
+		if err := i.writePluginFile(file, dest, 0o644); err != nil {
 			return err
 		}
+		if !isPluginSkillEntry(file) {
+			if err := i.writeFile(dest+pluginOwnerMarker, []byte(pluginOwnerMarkerValue(i.pkg.Version)), 0o600); err != nil {
+				return err
+			}
+		}
+	}
+	for _, skill := range i.pkg.Skills {
+		skillDir := filepath.Join(destDir, skill)
 		if err := i.writeFile(filepath.Join(skillDir, pluginOwnerMarker), []byte(pluginOwnerMarkerValue(i.pkg.Version)), 0o600); err != nil {
 			return err
 		}

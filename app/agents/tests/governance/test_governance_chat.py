@@ -15,18 +15,6 @@ from specgate_agents.governance.prompt_budget import (
 )
 
 
-def test_governance_chat_tool_surface() -> None:
-    names = governance_chat.governance_tool_names()
-    assert names == {
-        "get_artifact",
-        "get_artifact_documents",
-        "list_artifact_readiness",
-        "search_governance_knowledge",
-    }
-    for forbidden in ("draft_prd", "draft_spec", "draft_fe", "draft_be", "draft_qa", "read_draft"):
-        assert forbidden not in names
-
-
 def test_governance_knowledge_tool_schema_has_no_workspace_id() -> None:
     assert "workspace_id" not in governance_chat.search_governance_knowledge.args
 
@@ -169,14 +157,17 @@ def test_system_prompt_preserves_knowledge_precedence_and_citation_rules() -> No
     assert "specgate gates check <artifact-id>" in prompt
 
 
-def test_governance_chat_graph_builds(monkeypatch) -> None:
+def test_governance_chat_entrypoint_binds_exactly_the_read_only_tools(monkeypatch) -> None:
     fake = FakeMessagesListChatModel(responses=[AIMessage(content="ok")])
     monkeypatch.setattr(governance_chat, "build_governance_ops_model", lambda **_: fake)
-    compiled = governance_chat.build_governance_chat_graph()
+    compiled = governance_chat.graph()
     assert compiled is not None
-    assert (
-        set(compiled.nodes["tools"].bound.tools_by_name) == governance_chat.governance_tool_names()
-    )
+    assert set(compiled.nodes["tools"].bound.tools_by_name) == {
+        "get_artifact",
+        "get_artifact_documents",
+        "list_artifact_readiness",
+        "search_governance_knowledge",
+    }
     assert "SummarizationMiddleware.before_model" in compiled.nodes
 
 

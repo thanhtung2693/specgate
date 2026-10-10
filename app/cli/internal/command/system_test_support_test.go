@@ -26,7 +26,7 @@ type fakeDeployRunner struct {
 	Commands  []string
 	Err       error
 	OnCommand func()
-	// OutputData, when non-nil, is returned by Output instead of "[]".
+	// OutputData, when non-nil, overrides the command's default empty output.
 	OutputData      []byte
 	OutputByCommand map[string][]byte
 }
@@ -50,6 +50,9 @@ func (f *fakeDeployRunner) Output(_ context.Context, name string, args ...string
 	}
 	if f.OutputData != nil {
 		return f.OutputData, f.Err
+	}
+	if name == "git" {
+		return nil, f.Err
 	}
 	return []byte("[]"), f.Err
 }
@@ -177,7 +180,9 @@ func jsonStatus(total, ready int) http.HandlerFunc {
 	}
 }
 
-func newTestDeps(t *testing.T, srvURL string) (*command.Deps, *bytes.Buffer) {
+// newTestDeps isolates streams and filesystem state. Tests select their server
+// explicitly through command arguments or config; this helper does not route HTTP.
+func newTestDeps(t *testing.T) (*command.Deps, *bytes.Buffer) {
 	t.Helper()
 	var out bytes.Buffer
 	homeDir := t.TempDir()
@@ -196,7 +201,6 @@ func newTestDeps(t *testing.T, srvURL string) (*command.Deps, *bytes.Buffer) {
 			return homeDir, nil
 		},
 	}
-	_ = srvURL // deps.Client left nil → PersistentPreRunE constructs it
 	return deps, &out
 }
 

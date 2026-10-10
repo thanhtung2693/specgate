@@ -136,7 +136,7 @@ func rejectPortableStateDestination(deps *Deps, destination string) error {
 	if err != nil {
 		return err
 	}
-	for _, suffix := range []string{"", "-wal", "-shm", "-journal"} {
+	for _, suffix := range []string{"", "-wal", "-shm", "-journal", ".pre-enhanced.bak"} {
 		protectedPath := statePath + suffix
 		protected, err := canonicalComparisonPath(protectedPath)
 		if err != nil {
@@ -147,7 +147,7 @@ func rejectPortableStateDestination(deps *Deps, destination string) error {
 			samePath = strings.EqualFold(target, protected)
 		}
 		if samePath || sameExistingFile(destination, protectedPath) {
-			return fmt.Errorf("export destination cannot be the active Local SQLite file %s; choose a different --file path", protectedPath)
+			return fmt.Errorf("export destination cannot be a Local SQLite state or recovery file %s; choose a different --file path", protectedPath)
 		}
 	}
 	return nil
@@ -348,12 +348,13 @@ func validatePortableRelationships(payload local.PortableWorkspace) error {
 		default:
 			return fmt.Errorf("artifact %s has unsupported Local status %q", artifact.ID, artifact.Status)
 		}
-		seenPaths := make(map[string]bool, len(artifact.Documents))
+		seenDocuments := make(map[string]bool, len(artifact.Documents))
 		packageBytes := 0
 		for _, document := range artifact.Documents {
 			normalizedPath, safe := normalizeArtifactDocumentPath(document.Path)
 			normalizedRole := normalizeArtifactDocumentRole(document.Role)
-			if !safe || normalizedPath != document.Path || normalizedRole != document.Role || seenPaths[document.Path] {
+			identity := document.Path + "\x00" + document.Role
+			if !safe || normalizedPath != document.Path || normalizedRole != document.Role || seenDocuments[identity] {
 				return fmt.Errorf("artifact %s contains an invalid or duplicate document", artifact.ID)
 			}
 			if len(document.Content) > portableArtifactDocumentMaxBytes {
@@ -363,7 +364,7 @@ func validatePortableRelationships(payload local.PortableWorkspace) error {
 			if packageBytes > portableArtifactPackageMaxBytes {
 				return fmt.Errorf("artifact %s package exceeds the 10 MiB limit", artifact.ID)
 			}
-			seenPaths[document.Path] = true
+			seenDocuments[identity] = true
 		}
 		if digest := portableArtifactDigest(artifact); digest != artifact.SnapshotDigest {
 			return fmt.Errorf("artifact %s content digest mismatch", artifact.ID)

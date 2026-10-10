@@ -37,6 +37,15 @@ its interfaces are the more likely to change.
   before reporting; Local acceptance requires the exact `--review-id` from
   reviewed status. Pinned contracts and source-criterion inventory cannot be
   exported to Full mode.
+- Local-only optional delivery-assurance extensions: exact selected JUnit-case
+  observations, explicitly watched verification inputs, append-only checkpoints
+  and resume deltas, declared exact-pair source lineage impact, and an
+  acceptance basis bound to the human decision. They never infer tests,
+  requirements, or approval, and Full mode rejects their selection flags.
+- A first enhanced Local record upgrades the store's write compatibility after
+  confirmation and creates a disclosed pre-upgrade backup. Older CLIs cannot
+  write that upgraded store; portable and handoff v1 exports refuse records
+  they could not preserve.
 - `specgate stats` governance-value reporting from real gate and delivery
   history in both modes, including first-pass yield, pre/post-build governance
   signals, rework, and cycle time.

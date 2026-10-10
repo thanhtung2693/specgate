@@ -16,9 +16,15 @@ title, description, observable criteria, and non-goals; split independently
 accepted work. Bind `@check:<name>` only after the human confirms that check and
 show which criteria it enforces and which remain reviewed claims.
 
+When the change touches existing behavior, ask what it must preserve. Read
+existing tests; propose ordinary acceptance criteria. Bind `@check` only to
+exercised behavior; rerun after implementation. Follow the
+[preservation recipe](references/preservation.md) when relevant.
+
 In Local mode, offer pinning only when the human wants reviewed commands stable
 across agents or resumes; never make it a default quick-work step. Carry each
 candidate binding and command/cwd proof to delivery.
+
 
 Choose one route with the human:
 
@@ -58,20 +64,17 @@ Roles are routing labels. Map each human-selected source explicitly; never
 detect a framework or manufacture documents. Reuse a path under a second role
 when policy requires it.
 
-Keep the transient manifest at `.specgate/work/artifact.json`: unchanged
-repository-relative `path`, explicit `role`, and exactly one source. Use
-`content`, `repo_file` in the repository, `source_file` beneath the manifest,
-or absolute `file_url` outside it.
+Keep the manifest at `.specgate/work/artifact.json`: unchanged relative `path`,
+explicit `role`, and one source. Use `content`, repository `repo_file`,
+manifest-relative `source_file`, or external absolute `file_url`.
 
 ### Local source inventory
 
-For Local artifact-backed work, propose inventory only for several independent
-slices, explicit deferrals, or a human request for source coverage; never for
-quick work or by inferring entries from source structure. In the existing
-preview, show each proposed ID, text, unchanged path, slice mapping, and
-deferral. The human reviews completeness and confirms `source_criteria` entries
-safe for exact `@source:<id>` mappings. State that inventory is Local-only and
-any historical inventory blocks portable/v1 export to Full mode; Local backup remains.
+For Local artifacts, propose inventory only for independent slices, deferrals,
+or requested source coverage; never infer it or add it to quick work. Preview
+each ID, text, unchanged path, slice, and deferral. The human confirms complete
+`source_criteria` for exact `@source:<id>` mappings. Inventory is Local-only;
+historical inventory blocks portable/v1 export. Local backup remains.
 
 Use the human-selected `feature_key`; `request_type` is `new_feature`,
 `change_request`, `bugfix`, or `unknown`:
@@ -102,13 +105,12 @@ specgate artifact publish --file .specgate/work/artifact.json \
   --preview --compare "$BASE_ARTIFACT_ID" --json
 ```
 
-Show source mapping and exact policy projection, including added, removed, changed,
-and unchanged paths. Ask for each omitted impact's exact `yes`, `no`, or
-`unknown`; resolve feature identity from human selection or a named work item.
+Show source mapping, exact policy projection, and added/removed/changed/unchanged paths.
+Ask `yes`, `no`, or `unknown` for each omitted impact; use human-selected feature
+identity or a named work item.
 
-Completion criterion: every selected source appears once under its unchanged
-path and role; source files and Git policy remain unchanged except for
-authorized edits.
+Completion criterion: each source appears once with unchanged path/role;
+source files and Git policy change only with authorization.
 
 Publish only after explicit human confirmation of that preview:
 

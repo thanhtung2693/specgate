@@ -3,6 +3,39 @@
 Delivery evidence tells SpecGate what changed and why the acceptance criteria
 should be considered satisfied.
 
+Git receipts preserve committed filenames literally; a file named `[]` is a
+normal changed file, not an empty-result marker.
+
+When reading stored Git receipts, missing or null string metadata remains
+absent; non-string values are not coerced into Git identities. A receipt without
+a HEAD cannot establish checkout freshness. Legacy receipts without an explicit
+freshness scope retain the shared-repository comparison behavior, using only
+the fields actually present. This does not supply missing evidence or upgrade
+an incomplete receipt into a checkpoint baseline.
+
+For an originless `local_checkout` receipt, the recorded `checkout_id` must
+match the current checkout before comparing branch, HEAD, and working-tree
+digest. Equal endpoints in two different checkouts do not establish a match.
+Missing or different checkout identity leaves freshness unverified rather
+than declaring the evidence stale or changing historical test outcomes.
+
+New Git receipts use credential-free repository coordinates: URL userinfo,
+query and fragment data are removed; SSH usernames and scp-style coordinates
+remain supported, but SSH passwords are removed. Origins that cannot be safely
+projected, such as opaque remote helpers, retain only local-checkout provenance.
+Handoff and portable exports also redact repository credentials in legacy
+completion/peer receipt copies. Stored history and opaque `diff_digest` values
+are not rewritten. A pre-fix credential-bearing receipt can therefore become
+stale against a fresh checkout observation; submit fresh completion evidence
+instead of treating that old receipt as newly verified.
+
+Peer-review scaffolding and submission refuse credential-bearing legacy
+completion bindings. Submit a fresh completion first; SpecGate does not rewrite
+the receipt that a peer review must match exactly. Portable import verifies the
+original bundle checksum before projecting both completion and peer receipt
+copies for the destination. The source bundle is not modified, and imported
+peer reviews retain their exact receipt binding to the imported completion.
+
 ## Completion report
 
 Create a scaffold:
@@ -96,6 +129,22 @@ refused later by a Full appliance.
 
 ## Bound criteria
 
+Local acceptance bases retain current-checkout `freshness` and `peer_review`
+state alongside criterion results, identities, and gaps. `matching_endpoints`
+means the observed endpoints match, not continuous immutability. `stale`,
+`noncomparable`, and `unavailable` stay inspectable in the historical basis
+even when a human accepts residual risk. The original test outcomes do not
+change with that decision.
+Compact Local acceptance risk counts show `unavailable` and `noncomparable`
+current freshness as unknown even when all historical selected tests passed
+and watched files remain unchanged.
+Legacy records without that basis state still report an unknown risk when the
+current checkout comparison cannot run or its local identity is noncomparable.
+
+Full-mode `delivery report` and `delivery submit` reject Local-only
+`test_report`, `test_observation`, and `test_run` check fields before network
+calls. Supply ordinary command-level completion evidence in Full mode.
+
 An acceptance criterion carrying `@check:<name>` is verified from the named
 `checks[]` row rather than from its prose claim, in both Local and Full mode.
 The stored acceptance criterion is the authority for the binding, so a
@@ -139,6 +188,28 @@ Weak evidence is vague:
 - "looks good";
 - "tests pass" without naming the command;
 - a summary that does not mention acceptance criteria.
+
+## Local observed JUnit evidence
+
+Local verification pins may opt in to a `test_report` for a check. The only
+supported format is a bounded JUnit subset with exact `(classname, name)`
+selectors mapped to existing criterion IDs. `change submit --run-checks` gives
+the reviewed command a fresh, ignored `SPECGATE_TEST_REPORT` path and stores
+only normalized case outcomes and digests. It does not install a runner, select
+tests, retain XML or command output, or prove that a runner did not fabricate a
+report.
+
+An exit code of zero is not enough for a report-enabled check. Missing,
+malformed, duplicate, selected skipped, or any failing/error case makes the
+check fail. Observed passed/failed/skipped totals retain unselected skips
+without treating them as a failure. Before/after checkout and explicitly watched-file observations show
+endpoint drift; equal endpoints do not prove that nothing changed during a run.
+For a criterion bound to that check, `change submit` and detailed status include
+the CLI-observed JUnit failure reason (for example, that a required testcase is
+missing), rather than only the generic failed-check summary.
+Human acceptance remains a separate decision and does not turn failed evidence
+into a pass. See [the CLI reference](cli.md#local-resume-and-verification-contracts)
+for the report limits, cleanup rules, and supported recovery.
 
 ## Rework loop
 

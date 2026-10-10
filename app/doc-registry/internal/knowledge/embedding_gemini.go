@@ -56,7 +56,30 @@ func geminiGenerativeBaseURL() string {
 }
 
 // Embed implements Embedder.
-func (e *GeminiEmbedder) Embed(ctx context.Context, text string, purpose EmbeddingPurpose) ([]float32, error) {
+func (e *GeminiEmbedder) Embed(ctx context.Context, text string, purpose EmbeddingPurpose) (vector []float32, err error) {
+	defer func() {
+		if err == nil || e.APIKey == "" {
+			return
+		}
+		message := strings.NewReplacer(
+			e.APIKey, "[redacted]",
+			url.QueryEscape(e.APIKey), "[redacted]",
+			url.PathEscape(e.APIKey), "[redacted]",
+		).Replace(err.Error())
+		if message == err.Error() {
+			return
+		}
+		// Do not retain a secret-bearing cause through Unwrap. Preserve the
+		// cancellation classification callers use without exposing that cause.
+		switch {
+		case errors.Is(err, context.Canceled):
+			err = fmt.Errorf("%s: %w", message, context.Canceled)
+		case errors.Is(err, context.DeadlineExceeded):
+			err = fmt.Errorf("%s: %w", message, context.DeadlineExceeded)
+		default:
+			err = errors.New(message)
+		}
+	}()
 	taskType := "RETRIEVAL_DOCUMENT"
 	if purpose == EmbeddingQuery {
 		taskType = "RETRIEVAL_QUERY"
@@ -74,15 +97,11 @@ func (e *GeminiEmbedder) Embed(ctx context.Context, text string, purpose Embeddi
 	if err != nil {
 		return nil, err
 	}
-	// POST .../models/{model}:embedContent?key=...
+	// Header-only authentication keeps transport URL diagnostics credential-free.
 	u, err := url.Parse(e.BaseURL + "/models/" + url.PathEscape(e.Model) + ":embedContent")
 	if err != nil {
 		return nil, err
 	}
-	q := u.Query()
-	q.Set("key", e.APIKey)
-	u.RawQuery = q.Encode()
-
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
@@ -100,7 +119,13 @@ func (e *GeminiEmbedder) Embed(ctx context.Context, text string, purpose Embeddi
 		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("gemini embedContent: status %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+		var failure geminiEmbedResponse
+		if json.Unmarshal(respBody, &failure) == nil && failure.Error != nil && failure.Error.Message != "" {
+			return nil, fmt.Errorf("gemini embedContent: status %d: %s", resp.StatusCode, failure.Error.Message)
+		}
+		// Unstructured bodies may contain encoded credentials. Do not publish
+		// opaque provider bytes as a document diagnostic.
+		return nil, fmt.Errorf("gemini embedContent: status %d", resp.StatusCode)
 	}
 	var parsed geminiEmbedResponse
 	if err := json.Unmarshal(respBody, &parsed); err != nil {

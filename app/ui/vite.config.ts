@@ -41,9 +41,6 @@ export default defineConfig(({ mode }) => {
             if (id.includes('@assistant-ui/react-langgraph')) {
               return 'assistant-langgraph'
             }
-            if (id.includes('node_modules/mermaid')) {
-              return 'mermaid'
-            }
           },
         },
       },
