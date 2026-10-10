@@ -58,26 +58,15 @@ func geminiGenerativeBaseURL() string {
 // Embed implements Embedder.
 func (e *GeminiEmbedder) Embed(ctx context.Context, text string, purpose EmbeddingPurpose) (vector []float32, err error) {
 	defer func() {
-		if err == nil || e.APIKey == "" {
+		if err == nil {
 			return
 		}
-		message := strings.NewReplacer(
-			e.APIKey, "[redacted]",
-			url.QueryEscape(e.APIKey), "[redacted]",
-			url.PathEscape(e.APIKey), "[redacted]",
-		).Replace(err.Error())
-		if message == err.Error() {
-			return
-		}
-		// Do not retain a secret-bearing cause through Unwrap. Preserve the
-		// cancellation classification callers use without exposing that cause.
+		// External diagnostics can encode credentials; expose only safe causes.
 		switch {
 		case errors.Is(err, context.Canceled):
-			err = fmt.Errorf("%s: %w", message, context.Canceled)
+			err = fmt.Errorf("gemini embedContent: %w", context.Canceled)
 		case errors.Is(err, context.DeadlineExceeded):
-			err = fmt.Errorf("%s: %w", message, context.DeadlineExceeded)
-		default:
-			err = errors.New(message)
+			err = fmt.Errorf("gemini embedContent: %w", context.DeadlineExceeded)
 		}
 	}()
 	taskType := "RETRIEVAL_DOCUMENT"
@@ -100,39 +89,40 @@ func (e *GeminiEmbedder) Embed(ctx context.Context, text string, purpose Embeddi
 	// Header-only authentication keeps transport URL diagnostics credential-free.
 	u, err := url.Parse(e.BaseURL + "/models/" + url.PathEscape(e.Model) + ":embedContent")
 	if err != nil {
-		return nil, err
+		return nil, errors.New("gemini embedContent: invalid endpoint")
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(raw))
 	if err != nil {
-		return nil, err
+		return nil, errors.New("gemini embedContent: invalid request")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-goog-api-key", e.APIKey)
 
 	resp, err := e.client().Do(req)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err // The deferred boundary replaces the external cause.
+		}
+		return nil, errors.New("gemini embedContent: transport failed")
 	}
 	defer resp.Body.Close()
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return nil, err
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
+		}
+		return nil, errors.New("gemini embedContent: response read failed")
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		var failure geminiEmbedResponse
-		if json.Unmarshal(respBody, &failure) == nil && failure.Error != nil && failure.Error.Message != "" {
-			return nil, fmt.Errorf("gemini embedContent: status %d: %s", resp.StatusCode, failure.Error.Message)
-		}
-		// Unstructured bodies may contain encoded credentials. Do not publish
-		// opaque provider bytes as a document diagnostic.
+		// Provider text is untrusted even after JSON decoding.
 		return nil, fmt.Errorf("gemini embedContent: status %d", resp.StatusCode)
 	}
 	var parsed geminiEmbedResponse
 	if err := json.Unmarshal(respBody, &parsed); err != nil {
-		return nil, fmt.Errorf("gemini embedContent: decode: %w", err)
+		return nil, errors.New("gemini embedContent: invalid response JSON")
 	}
 	if parsed.Error != nil && parsed.Error.Message != "" {
-		return nil, fmt.Errorf("gemini embedContent: %s", parsed.Error.Message)
+		return nil, errors.New("gemini embedContent: provider error")
 	}
 	vals := parsed.Embedding.Values
 	if len(vals) == 0 {

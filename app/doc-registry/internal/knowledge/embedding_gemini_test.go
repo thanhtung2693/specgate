@@ -3,6 +3,7 @@ package knowledge
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -134,8 +135,12 @@ func TestGeminiEmbeddingProviderErrorsDoNotExposeAPIKey(t *testing.T) {
 			}
 			e.BaseURL, e.HTTPClient = srv.URL, srv.Client()
 			_, err = e.Embed(t.Context(), "hello", EmbeddingDocument)
-			if err == nil || !strings.Contains(err.Error(), "invalid key") {
-				t.Fatalf("expected useful provider diagnostic, got %v", err)
+			want := "gemini embedContent: provider error"
+			if status != http.StatusOK {
+				want = "gemini embedContent: status 400"
+			}
+			if err == nil || err.Error() != want {
+				t.Fatalf("expected safe provider diagnostic, got %v", err)
 			}
 			for _, secret := range []string{key, url.QueryEscape(key)} {
 				if strings.Contains(err.Error(), secret) {
@@ -214,7 +219,52 @@ func TestGeminiProviderJSONEscapesCannotBypassCredentialRedaction(t *testing.T) 
 	}
 	e.BaseURL, e.HTTPClient = srv.URL, srv.Client()
 	_, err = e.Embed(t.Context(), "hello", EmbeddingDocument)
-	if err == nil || !strings.Contains(err.Error(), "invalid key [redacted]") {
-		t.Fatalf("expected decoded and redacted provider diagnostic, got %v", err)
+	if err == nil || err.Error() != "gemini embedContent: status 400" {
+		t.Fatalf("expected safe provider diagnostic, got %v", err)
+	}
+}
+
+func TestGeminiProviderEncodedCredentialIsNotReturned(t *testing.T) {
+	t.Parallel()
+	const key = "synthetic-google-secret"
+	encoded := base64.StdEncoding.EncodeToString([]byte(key))
+	for _, status := range []int{http.StatusUnauthorized, http.StatusOK} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+				_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"message": "credential " + encoded}})
+			}))
+			defer srv.Close()
+			e, err := NewGeminiEmbedder(key, "gemini-embedding-2-preview", 3)
+			if err != nil {
+				t.Fatal(err)
+			}
+			e.BaseURL, e.HTTPClient = srv.URL, srv.Client()
+			_, err = e.Embed(t.Context(), "hello", EmbeddingDocument)
+			want := "gemini embedContent: provider error"
+			if status == http.StatusUnauthorized {
+				want = "gemini embedContent: status 401"
+			}
+			if err == nil || err.Error() != want {
+				t.Fatalf("expected status diagnostic, got %v", err)
+			}
+			if strings.Contains(err.Error(), encoded) {
+				t.Fatal("encoded credential escaped the provider boundary")
+			}
+		})
+	}
+}
+
+func TestGeminiTransportOpaqueDiagnosticIsNotReturned(t *testing.T) {
+	t.Parallel()
+	e, err := NewGeminiEmbedder("synthetic-google-secret", "gemini-embedding-2-preview", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.HTTPClient = &http.Client{Transport: geminiFailureTransport{reflectedCause: errors.New("opaque sensitive diagnostic")}}
+	_, err = e.Embed(t.Context(), "hello", EmbeddingDocument)
+	if err == nil || err.Error() != "gemini embedContent: transport failed" || errors.Unwrap(err) != nil {
+		t.Fatalf("expected safe cause-free transport error, got %v", err)
 	}
 }

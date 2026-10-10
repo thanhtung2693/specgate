@@ -452,11 +452,11 @@ Provider delivery events:
 ## 12. Errors
 
 Google embedding requests authenticate through `x-goog-api-key`, never a
-credential-bearing query parameter. The Gemini adapter removes its configured
-key (including URL-encoded forms) from all returned diagnostics before ingestion
-can persist or log them, without retaining a secret-bearing error cause.
-Provider JSON errors are decoded before redaction; unstructured failure bodies
-are omitted and only their HTTP status is reported.
+credential-bearing query parameter. The Gemini adapter returns only stable
+failure stages and HTTP status, not provider messages or external transport,
+read, or decoder error text. This prevents encoded credentials in untrusted
+diagnostics from reaching ingestion persistence, logs, or search responses.
+No secret-bearing error cause is retained.
 Cancellation and deadline classification remain available through `errors.Is`.
 This does not rewrite previously stored error messages; operators must treat
 historical diagnostics from affected versions as potentially sensitive.
