@@ -87,6 +87,9 @@ distribution. They are not an official-directory availability claim.
 - Remove duplicated explanation before adding guidance.
 - Keep examples portable across repositories and build systems.
 - Add metadata once in `package.json`, then regenerate.
+- Declare each shipped skill reference in `served_files`; CLI preload, install,
+  and doctor use this inventory. Supplemental files receive individual ownership
+  markers so uninstall can preserve user-added reference directory content.
 
 After changing metadata, skills, hooks, rules, or assets:
 

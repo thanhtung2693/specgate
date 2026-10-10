@@ -23,8 +23,10 @@
 // app/cli/internal/command/docs_contract_internal_test.go, where the Cobra tree
 // and the structs are in memory. Do not re-pin them as literals here.
 
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, readFileSync, statSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, dirname } from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -45,6 +47,45 @@ const markdownFiles = () =>
 
 const uniqueMatches = (text, pattern) => [...new Set([...text.matchAll(pattern)].map(([, value]) => value))];
 const wordCount = (text) => text.trim().split(/\s+/).length;
+
+test("release Compose validation preserves an existing environment on success and failure", { skip: process.platform === "win32" }, () => {
+  const example = read("docs/contributing/release.md").match(/Validate Compose:\s+```bash\n([\s\S]*?)\n```/);
+  assert.ok(example, "release Compose validation example missing");
+  for (const dockerExit of [0, 7]) {
+    const fixture = mkdtempSync(join(tmpdir(), "specgate-release-env-"));
+    try {
+      const bundle = join(fixture, "deploy/local");
+      const bin = join(fixture, "bin");
+      const trace = join(fixture, "docker-args");
+      mkdirSync(bundle, { recursive: true });
+      mkdirSync(bin);
+      for (const name of ["compose.yml", ".env.example", "specgate.env.example"]) {
+        writeFileSync(join(bundle, name), read(`deploy/local/${name}`));
+      }
+      const secret = "SETTINGS_ENCRYPTION_KEY=synthetic-preserved-key\n";
+      writeFileSync(join(bundle, "specgate.env"), secret, { mode: 0o600 });
+      writeFileSync(join(bundle, "unrelated.txt"), "keep me");
+      // Replace only the external Compose process; execute the actual documented
+      // copy/cleanup workflow against disposable files.
+      writeFileSync(join(bin, "docker"), '#!/bin/sh\nprintf "%s\\n" "$@" > "$DOCKER_CHECK_TRACE"\nexit "$DOCKER_CHECK_EXIT"\n', { mode: 0o700 });
+      const result = spawnSync("bash", ["-c", example[1]], {
+        cwd: fixture,
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, DOCKER_CHECK_TRACE: trace, DOCKER_CHECK_EXIT: String(dockerExit) },
+        encoding: "utf8",
+      });
+      assert.equal(result.status, dockerExit, result.stderr);
+      assert.equal(readFileSync(join(bundle, "specgate.env"), "utf8"), secret);
+      assert.equal(statSync(join(bundle, "specgate.env")).mode & 0o777, 0o600);
+      assert.equal(readFileSync(join(bundle, "unrelated.txt"), "utf8"), "keep me");
+      const args = readFileSync(trace, "utf8").trim().split("\n");
+      const composePath = args[args.indexOf("-f") + 1];
+      assert.notEqual(dirname(composePath), bundle, "validation must use an isolated bundle");
+      assert.equal(existsSync(dirname(composePath)), false, "temporary validation bundle was not cleaned up");
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Derived: the code is the source of truth and the docs must keep up.
@@ -242,6 +283,18 @@ test("every GitHub workflow uses supported action majors", () => {
   assert.deepEqual(stale, []);
 });
 
+test("Dockerfiles share one explicit stable frontend documented for build verification", () => {
+  const dockerfiles = trackedFiles().filter((path) => /(?:^|\/)Dockerfile[.\w-]*$/.test(path) && !path.endsWith(".dockerignore"));
+  assert.ok(dockerfiles.length > 0, "no Dockerfiles found");
+  const versions = dockerfiles.map((path) => {
+    const version = read(path).match(/^# syntax=docker\/dockerfile:(\d+\.\d+\.\d+)\s*$/m)?.[1];
+    assert.ok(version, `${path}: use an explicit stable frontend patch, not a floating or labs tag`);
+    return version;
+  });
+  assert.equal(new Set(versions).size, 1, "Dockerfile frontends must upgrade together");
+  assert.ok(read("docs/contributing/testing.md").includes(`docker/dockerfile:${versions[0]}`), "frontend verification pin missing from contributor docs");
+});
+
 test("every image that builds the UI uses the supported Node major", () => {
   const dockerfiles = trackedFiles().filter((path) => /(?:^|\/)Dockerfile[.\w-]*$/.test(path));
   assert.ok(dockerfiles.length > 0, "no Dockerfiles found");
@@ -254,6 +307,19 @@ test("every image that builds the UI uses the supported Node major", () => {
   }
 
   assert.deepEqual(stale, []);
+});
+
+test("both agents image recipes use the production lock without extra dependency resolution", () => {
+  for (const path of ["docker/Dockerfile.local", "docker/Dockerfile.agents"]) {
+    const text = read(path);
+    assert.match(text, /COPY app\/agents\/pyproject\.toml app\/agents\/uv\.lock app\/agents\/README\.md/, `${path}: copy dependency inputs before syncing`);
+    assert.match(text, /uv sync --frozen --no-dev/, `${path}: install the frozen production environment`);
+    assert.doesNotMatch(text, /(?:pip install uv|uv pip install)/, `${path}: no parallel unlocked resolver`);
+  }
+  const standalone = read("docker/Dockerfile.agents");
+  assert.match(standalone, /--mount=from=ghcr\.io\/astral-sh\/uv:[\d.]+,source=\/uv,target=/, "standalone build tool must be temporary");
+  assert.doesNotMatch(standalone, /COPY --from=ghcr\.io\/astral-sh\/uv/, "standalone runtime must not copy the build tool");
+  assert.match(standalone, /ENV PATH=\/deps\/agents\/\.venv\/bin:\$PATH/, "supported commands must use the locked environment");
 });
 
 // Every word in a skill is paid on each IDE agent session. Raise a budget only
@@ -494,6 +560,15 @@ test("each lifecycle skill stays inside its phase", () => {
   assert.deepEqual(crossings, []);
 });
 
+test("preparation teaches conditional preservation criteria without inventing a new workflow", () => {
+  const skill = read("plugins/skills/specgate-work-preparation/SKILL.md");
+  assert.match(skill, /when the change touches existing behavior/i);
+  assert.match(skill, /must preserve/i);
+  assert.match(skill, /existing tests/i);
+  assert.match(skill, /rerun.*after/i);
+  assert.match(skill, /ordinary acceptance criteri/i);
+});
+
 test("the delivery skill reads the authoritative actor before it acts", () => {
   const skill = read("plugins/skills/specgate-work-delivery/SKILL.md");
   const at = (needle) => {
@@ -719,6 +794,26 @@ test("release verification covers every module a release ships", () => {
   }
 });
 
+test("CLI and release CI execute the real legacy compatibility gate", () => {
+  const gatePath = ".github/scripts/check-legacy-cli.sh";
+  for (const path of [".github/workflows/cli.yml", ".github/workflows/release.yml"]) {
+    const workflow = read(path);
+    assert.ok(workflow.includes(`bash ${gatePath}`), `${path} does not run the compatibility gate`);
+  }
+  const gate = read(gatePath);
+  assert.match(gate, /baseline=[a-f0-9]{40}\b/, "baseline must be an immutable pre-enhancement revision");
+  assert.match(gate, /git archive.*\bapp\/cli\b/, "build the baseline, not the implementation under test");
+  assert.match(gate, /go build.*-o/, "gate must supply an actual executable");
+  assert.match(gate, /SPECGATE_LEGACY_CLI=.*go test.*-count=1/, "legacy tests must run without cache or optional skip");
+  for (const path of workingFiles().filter(path => path.startsWith("app/cli/internal/local/") && path.endsWith("_test.go"))) {
+    for (const [, name, body] of read(path).matchAll(/func (Test\w+)\(t \*testing\.T\) \{([\s\S]*?)(?=\nfunc |$)/g)) {
+      if (body.includes('os.Getenv("SPECGATE_LEGACY_CLI")')) {
+        assert.ok(gate.includes(name.replace(/^Test/, "")), `gate omits ${name}`);
+      }
+    }
+  }
+});
+
 test("release workflow builds only the single local appliance, with provenance and a blocking scan", () => {
   const workflow = read(".github/workflows/release.yml");
 
@@ -753,7 +848,7 @@ test("Pages validates landing changes without redeploying unrelated main pushes"
   );
 });
 
-test("the local appliance deployment directory is the only Compose entry point", () => {
+test("contributor appliance commands use the released local Compose entry point", () => {
   const makefile = read("Makefile");
 
   assert.match(makefile, /LOCAL_DEPLOY_DIR := deploy\/local/);

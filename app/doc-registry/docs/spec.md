@@ -451,6 +451,16 @@ Provider delivery events:
 
 ## 12. Errors
 
+Google embedding requests authenticate through `x-goog-api-key`, never a
+credential-bearing query parameter. The Gemini adapter returns only stable
+failure stages and HTTP status, not provider messages or external transport,
+read, or decoder error text. This prevents encoded credentials in untrusted
+diagnostics from reaching ingestion persistence, logs, or search responses.
+No secret-bearing error cause is retained.
+Cancellation and deadline classification remain available through `errors.Is`.
+This does not rewrite previously stored error messages; operators must treat
+historical diagnostics from affected versions as potentially sensitive.
+
 Huma routes return RFC 9457 problem details. Important mappings:
 
 | Status | Common cause |
@@ -468,7 +478,9 @@ Huma routes return RFC 9457 problem details. Important mappings:
 
 The Go module owns one REST process with optional workers and scheduled cleanup.
 
-Sentry is optional. `SENTRY_DSN` enables reporting; `SENTRY_ENVIRONMENT` defaults
+Sentry is optional. Middleware registration is controlled by the configured DSN,
+not SDK client nilness: a disabled SDK may return a non-nil no-op client.
+`SENTRY_DSN` enables reporting; `SENTRY_ENVIRONMENT` defaults
 to `development`, `SENTRY_RELEASE` is optional, and
 `SENTRY_TRACES_SAMPLE_RATE` defaults to `0`. Panic reporting is wired through
 middleware, and request IDs are the primary correlation key because the HTTP

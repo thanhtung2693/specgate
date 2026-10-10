@@ -1,6 +1,12 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "project": ["src/**/*.{ts,tsx,css}", "scripts/*.mjs"],
+  "project": [
+    "src/**/*.{ts,tsx,css}!",
+    "!src/**/*.test.{ts,tsx}!",
+    "!src/app-test-support.tsx!",
+    "scripts/*.mjs"
+  ],
   "ignore": ["src/api/schema.d.ts", "src/components/ui/**"],
+  "ignoreExportsUsedInFile": true,
   "ignoreBinaries": ["go"]
 }

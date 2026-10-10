@@ -538,7 +538,7 @@ func validatePluginPackage(pkg *client.PluginPackage) error {
 		}
 		seenSkills[skill] = true
 	}
-	return nil
+	return validatePluginFileInventory(pkg, seenSkills)
 }
 
 func validPluginVersion(version string) bool {

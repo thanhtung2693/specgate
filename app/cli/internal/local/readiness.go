@@ -106,7 +106,7 @@ func (s *Store) ApproveArtifact(ctx context.Context, workspaceID, artifactID, ac
 	}
 	aggregate := aggregateChecks(checks)
 	if aggregate != "pass" && aggregate != "warn" {
-		return fmt.Errorf("artifact readiness is %s; %s", aggregate, unresolvedReadinessRemedy(checks, artifactID))
+		return fmt.Errorf("%w: artifact readiness is %s; %s", ErrPreconditionNotMet, aggregate, unresolvedReadinessRemedy(checks, artifactID))
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE artifacts SET status = 'approved' WHERE id = ? AND workspace_id = ?`, artifactID, workspaceID)
 	if err != nil {

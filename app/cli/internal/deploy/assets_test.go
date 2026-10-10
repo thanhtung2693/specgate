@@ -53,12 +53,12 @@ func TestLocalBundleOverridesInheritedPostgresVolume(t *testing.T) {
 func TestLocalApplianceContainsFullRuntime(t *testing.T) {
 	dockerfile := readRepoFile(t, "../../../../docker/Dockerfile.local")
 	for _, want := range []string{
-		"pgvector/pgvector:0.8.5-pg18-trixie",
-		"golang:1.26.6-bookworm",
+		"pgvector/pgvector:0.8.7-pg18-trixie",
+		"golang:1.27.1-bookworm",
 		"python:3.13-slim-trixie",
-		"ghcr.io/astral-sh/uv:0.11.15",
+		"COPY --from=ghcr.io/astral-sh/uv:0.12.23 /uv /usr/bin/uv",
 		"github.com/tianon/gosu@1.19",
-		"S6_OVERLAY_VERSION=3.2.2.0",
+		"S6_OVERLAY_VERSION=3.2.3.2",
 		"uv sync --frozen --no-dev",
 		"/out/doc-registry",
 		"/usr/share/nginx/html",

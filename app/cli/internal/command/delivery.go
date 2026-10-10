@@ -18,7 +18,6 @@ import (
 	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/deploy"
 	"github.com/specgate/specgate/app/cli/internal/fsutil"
-	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
@@ -115,7 +114,7 @@ func deliveryScaffoldWriteError(deps *Deps, command, path string, err error) err
 // readJSONBodyFile reads and parses a JSON object file before any network
 // call, emitting a usage error envelope on failure.
 func readJSONBodyFile(deps *Deps, command, filePath string) (map[string]any, error) {
-	data, err := os.ReadFile(filePath)
+	data, err := readJSONInputFile(filePath)
 	if err != nil {
 		payload := output.ErrorPayload{Code: "usage", Message: fmt.Sprintf("read file %s: %v", filePath, err)}
 		code := deps.Printer.Error(command, payload)
@@ -134,6 +133,30 @@ func readJSONBodyFile(deps *Deps, command, filePath string) (map[string]any, err
 		return nil, &output.ExitError{Code: code}
 	}
 	return body, nil
+}
+
+// Leave room for the 10 MiB artifact package even when JSON escapes each
+// content byte as six bytes, while bounding input before allocating a map.
+const maxJSONInputBytes = 64 << 20
+
+func readJSONInputFile(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if info.Size() > maxJSONInputBytes {
+		return nil, errors.New("JSON input exceeds 64 MiB")
+	}
+	data, err := io.ReadAll(io.LimitReader(f, maxJSONInputBytes+1))
+	if len(data) > maxJSONInputBytes {
+		return nil, errors.New("JSON input exceeds 64 MiB")
+	}
+	return data, err
 }
 
 // collectMissingAffectedPaths returns affected_files entries that do not exist
@@ -181,6 +204,21 @@ func verifyCompletionEvidence(deps *Deps, command string, body map[string]any) e
 }
 
 func validateCompletionReport(deps *Deps, command string, body map[string]any, allowPendingChecks bool) error {
+	if raw, exists := body["peer_review_of"]; exists {
+		binding, ok := raw.(map[string]any)
+		if !ok {
+			return completionValidationError(deps, command, "peer_review_of must be an object")
+		}
+		if raw, exists := binding["git_receipt"]; exists {
+			receipt, ok := raw.(map[string]any)
+			if !ok {
+				return completionValidationError(deps, command, "peer_review_of.git_receipt must be an object")
+			}
+			if err := validatePeerReceiptOrigin(deps, command, receipt); err != nil {
+				return err
+			}
+		}
+	}
 	if strings.TrimSpace(fmt.Sprint(body["event_type"])) == "coding_agent.completed" {
 		if completionAgentName(body) == "" {
 			return completionValidationError(deps, command, "completion agent.name is required")
@@ -439,78 +477,6 @@ func anchored(excerpt string) (string, string) {
 		return "", "empty_at_anchor"
 	}
 	return excerpt, "grounded"
-}
-
-// executeCompletionChecks re-runs each checks[].command locally and replaces the
-// claimed status with the observed result, converting narrated checks into
-// executed checks. Skipped checks and checks without an explicit command are
-// untouched. The corrected body is submitted either way — an observed failure
-// is honest data for the delivery review, which already fails the verdict on any
-// failed check.
-// Observation metadata belongs to this execution, never to the input file.
-// Clear it once at ingress, not during validation after --run-checks.
-func clearCheckObservations(body map[string]any) {
-	checks, _ := body["checks"].([]any)
-	for _, raw := range checks {
-		entry, _ := raw.(map[string]any)
-		delete(entry, "source")
-		delete(entry, "claimed_status")
-	}
-}
-
-func executeCompletionChecks(ctx context.Context, deps *Deps, body map[string]any, repoRoots ...string) {
-	runner := deps.RunCheckCommand
-	if runner == nil {
-		runner = defaultRunCheckCommand
-	}
-	checks, _ := body["checks"].([]any)
-	for _, raw := range checks {
-		entry, _ := raw.(map[string]any)
-		if entry == nil {
-			continue
-		}
-		command, _ := entry["command"].(string)
-		claimed, _ := entry["status"].(string)
-		command = strings.TrimSpace(command)
-		if command == "" || claimed == "skipped" {
-			continue
-		}
-		executable := command
-		if len(repoRoots) > 0 {
-			cwd, _ := entry["cwd"].(string)
-			_, dir, err := local.ResolveVerificationCwd(repoRoots[0], cwd)
-			if err != nil {
-				entry["status"] = "fail"
-				entry["detail"] = err.Error()
-				continue
-			}
-			executable = "cd " + shellQuote(dir) + " && " + command
-		}
-		exitCode, combined := runner(ctx, executable)
-		observed := "pass"
-		if exitCode != 0 {
-			observed = "fail"
-		}
-		detail := fmt.Sprintf("executed by specgate: exit %d", exitCode)
-		if tail := lastOutputLine(combined); tail != "" {
-			detail += " — " + tail
-		}
-		entry["status"] = observed
-		entry["detail"] = detail
-		entry["source"] = "specgate_cli"
-		// Keep the superseded claim so the stored report — and the delivery
-		// receipt read back from it — shows what re-execution corrected.
-		if claimed = strings.TrimSpace(claimed); claimed != "" && observed != claimed {
-			entry["claimed_status"] = claimed
-		}
-		if deps.Printer.Mode() != output.ModeJSON {
-			note := ""
-			if observed != claimed {
-				note = fmt.Sprintf(" (reported %q)", claimed)
-			}
-			fmt.Fprintf(deps.Stderr, "Executed check %q → %s%s\n", command, observed, note)
-		}
-	}
 }
 
 func confirmCompletionChecks(deps *Deps, operation string, body map[string]any) (bool, error) {

@@ -86,6 +86,24 @@ missing.
 Failed criteria carry into the next Context Pack, so the next handoff
 targets the gaps.
 
+## Local assurance evidence is missing or stale
+
+For a report-enabled Local check, read `change status --json` and fix the
+specific reported condition: write the selected JUnit cases to the transient
+path supplied during `--run-checks`; correct duplicate, skipped, malformed, or
+unselected failing cases; or review an explicitly changed watched input. Do
+not copy an old XML file into a new completion or change the pin after a report;
+pin changes require replacement work.
+
+If an enhanced `basis_digest` conflicts, rerun status, inspect the changed
+evidence or checkout observation, then ask the human to review the new result.
+Never substitute a fresh digest into an old approval. A wrong checkpoint or an
+incompatible worktree is informationally unavailable/noncomparable: select the
+correct work-local checkpoint or continue without a baseline. Export refusal
+means the v1 format would lose Local assurance records; keep using the Local
+store or restore its disclosed pre-upgrade backup in a separately chosen
+location.
+
 ## The verdict passed but was clamped to `needs_human_review`
 
 Under the `corroborated_required` evidence policy, a pass needs a matched

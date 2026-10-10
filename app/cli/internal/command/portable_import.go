@@ -10,6 +10,7 @@ import (
 
 	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/local"
+	"github.com/specgate/specgate/app/cli/internal/provenance"
 )
 
 func executePortableImport(cmd *cobra.Command, deps *Deps, bundle portableBundle, preflight portablePreflight, workspaceID, actor string) (portableImportResult, error) {
@@ -187,7 +188,7 @@ func importPortableDelivery(cmd *cobra.Command, deps *Deps, workID, artifactID s
 			return false, nil
 		}
 	}
-	report := cloneMap(delivery.Report)
+	report := provenance.Receipts(cloneMap(delivery.Report))
 	normalizePortableFeedback(report, workID, artifactID)
 	if strings.TrimSpace(fmt.Sprint(report["event_type"])) == "" {
 		report["event_type"] = "coding_agent.completed"
@@ -208,7 +209,7 @@ func importPortableDelivery(cmd *cobra.Command, deps *Deps, workID, artifactID s
 		return false, err
 	}
 	if delivery.PeerReview != nil {
-		peer := cloneMap(delivery.PeerReview)
+		peer := provenance.Receipts(cloneMap(delivery.PeerReview))
 		normalizePortableFeedback(peer, workID, artifactID)
 		if err := remapPortableCriteria(peer, criterionIDs); err != nil {
 			return false, err

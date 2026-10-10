@@ -54,7 +54,7 @@ func TestUninstallKeepsDataByDefaultAndRemovesUserFiles(t *testing.T) {
 	}
 
 	runner := &fakeDeployRunner{}
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 	deps.UserHomeDir = func() (string, error) { return home, nil }
 	deps.DeployRunner = runner
@@ -113,7 +113,7 @@ func TestUninstallRejectsUnmanagedComposeDirectoryBeforeDown(t *testing.T) {
 		t.Fatal(err)
 	}
 	runner := &fakeDeployRunner{}
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.DeployRunner = runner
 
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall", "--dir", dir)
@@ -144,7 +144,7 @@ func TestLocalUninstallPurgeDataRemovesSQLiteFilesWithoutDocker(t *testing.T) {
 		t.Fatal(err)
 	}
 	runner := &fakeDeployRunner{}
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 	deps.DeployRunner = runner
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "--yes", "uninstall", "--purge-data")
@@ -180,7 +180,7 @@ func TestLocalUninstallPreflightsEverySQLitePathBeforePurge(t *testing.T) {
 	if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: stateDir}}).SaveTo(cfgPath); err != nil {
 		t.Fatal(err)
 	}
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "--yes", "uninstall", "--purge-data")
@@ -208,7 +208,7 @@ func TestLocalUninstallRejectsFullOnlyDirWithoutRemovingAnything(t *testing.T) {
 			if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: stateDir}}).SaveTo(cfgPath); err != nil {
 				t.Fatal(err)
 			}
-			deps, out := newTestDeps(t, "")
+			deps, out := newTestDeps(t)
 			deps.ConfigPath = cfgPath
 			var stderr bytes.Buffer
 			deps.Stderr = &stderr
@@ -251,7 +251,7 @@ func TestUninstallRejectsMalformedConfigBeforeAnyMutation(t *testing.T) {
 			writeTestFile(t, filepath.Join(pluginPath, ".specgate-owned"), "specgate-plugin-v1\n")
 
 			runner := &fakeDeployRunner{}
-			deps, out := newTestDeps(t, "")
+			deps, out := newTestDeps(t)
 			deps.ConfigPath = cfgPath
 			deps.DeployRunner = runner
 			deps.UserHomeDir = func() (string, error) { return home, nil }
@@ -294,7 +294,7 @@ func TestLocalUninstallPurgeDataRemovesEmptySpecGateParent(t *testing.T) {
 	if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: stateDir}}).SaveTo(cfgPath); err != nil {
 		t.Fatal(err)
 	}
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "--yes", "uninstall", "--purge-data")
@@ -320,7 +320,7 @@ func TestLocalUninstallPurgeDataRejectsSymlinkedStateDirectory(t *testing.T) {
 	if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: stateDir}}).SaveTo(cfgPath); err != nil {
 		t.Fatal(err)
 	}
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "--yes", "uninstall", "--purge-data")
@@ -351,7 +351,7 @@ func TestLocalUninstallPurgeDataRejectsSymlinkedStateAncestor(t *testing.T) {
 	if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: stateDir}}).SaveTo(cfgPath); err != nil {
 		t.Fatal(err)
 	}
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "--yes", "uninstall", "--purge-data")
@@ -380,7 +380,7 @@ func TestLocalUninstallRejectsSymlinkedConfigAncestorBeforePluginRemoval(t *test
 	home := t.TempDir()
 	pluginMarker := filepath.Join(home, ".codex", "plugins", "specgate", ".specgate-owned")
 	writeTestFile(t, pluginMarker, "specgate-plugin-v1\n")
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = filepath.Join(linkParent, "config.json")
 	deps.UserHomeDir = func() (string, error) { return home, nil }
 
@@ -404,7 +404,7 @@ func TestLocalUninstallPurgeDataWarnsBeforeDeletingSQLiteFiles(t *testing.T) {
 	if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: stateDir}}).SaveTo(cfgPath); err != nil {
 		t.Fatal(err)
 	}
-	deps, _ := newTestDeps(t, "")
+	deps, _ := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 	var stderr bytes.Buffer
 	deps.Stderr = &stderr
@@ -433,7 +433,7 @@ func TestUninstallRemovesSpecGateOnlyPluginConfigFiles(t *testing.T) {
 	writeTestFile(t, filepath.Join(home, ".codex", "plugins", "specgate", ".codex-plugin", "plugin.json"), "{}")
 	writeTestFile(t, filepath.Join(home, ".codex", "plugins", "specgate", ".specgate-owned"), "specgate-plugin-v1\n")
 
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	deps.UserHomeDir = func() (string, error) { return home, nil }
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall", "--dir", filepath.Join(t.TempDir(), "deploy"))
@@ -461,7 +461,7 @@ func TestUninstallReportsUnownedFilesPreservedInsideManagedPluginDirectory(t *te
 	writeTestFile(t, filepath.Join(pluginRoot, ".specgate-owned"), "specgate-plugin-v1\n")
 	writeTestFile(t, userFile, "user-owned")
 
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	deps.UserHomeDir = func() (string, error) { return home, nil }
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall", "--dir", filepath.Join(t.TempDir(), "deploy"))
@@ -492,7 +492,7 @@ func TestUninstallCleansManagedCodexConfigWhenPluginDirectoryIsMissing(t *testin
 }
 `)
 
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	deps.UserHomeDir = func() (string, error) { return home, nil }
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall", "--dir", filepath.Join(t.TempDir(), "deploy"))
@@ -524,7 +524,7 @@ func TestUninstallKeepsUnownedCodexMarketplaceAndConfig(t *testing.T) {
 	writeTestFile(t, filepath.Join(home, ".codex", "plugins", "specgate", ".codex-plugin", "plugin.json"), "{}")
 	writeTestFile(t, filepath.Join(home, ".codex", "plugins", "specgate", ".specgate-owned"), "specgate-plugin-v1\n")
 
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	deps.UserHomeDir = func() (string, error) { return home, nil }
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall", "--dir", filepath.Join(t.TempDir(), "deploy"))
@@ -550,7 +550,7 @@ func TestUninstallPreservesEmptySharedMarketplaceFile(t *testing.T) {
 	writeTestFile(t, marketplacePath, `{"name":"personal","plugins":[]}`)
 	writeTestFile(t, filepath.Join(home, ".codex", "plugins", "specgate", ".specgate-owned"), "specgate-plugin-v1\n")
 
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	deps.UserHomeDir = func() (string, error) { return home, nil }
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall", "--dir", filepath.Join(t.TempDir(), "deploy"))
@@ -574,7 +574,7 @@ func TestUninstallPurgeDataRequiresConfirmation(t *testing.T) {
 	dir := t.TempDir()
 	setupTestBundle(t, dir)
 
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.DeployRunner = &fakeDeployRunner{}
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall", "--dir", dir, "--purge-data")
 	if code != output.ExitUsage {
@@ -590,7 +590,7 @@ func TestUninstallPurgeDataRejectsUnmanagedDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	runner := &fakeDeployRunner{}
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.DeployRunner = runner
 
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "uninstall", "--dir", dir, "--purge-data")
@@ -611,7 +611,7 @@ func TestUninstallPlainPurgeDataRequiresYes(t *testing.T) {
 	setupTestBundle(t, dir)
 
 	runner := &fakeDeployRunner{}
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.DeployRunner = runner
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "uninstall", "--dir", dir, "--purge-data")
 	if code != output.ExitUsage {
@@ -631,7 +631,7 @@ func TestUninstallPurgeDataRemovesDeploymentDir(t *testing.T) {
 	}
 
 	runner := &fakeDeployRunner{}
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.DeployRunner = runner
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "uninstall", "--dir", dir, "--purge-data")
 	if code != output.ExitOK {
@@ -669,7 +669,7 @@ func TestUninstallPurgeDataScopesLabeledCleanupToComposeProject(t *testing.T) {
 	runner := &fakeDeployRunner{OutputByCommand: map[string][]byte{
 		"docker compose -f " + filepath.Join(dir, "compose.yml") + " config --images": []byte("ghcr.io/thanhtung2693/agents:v9.9.0-rc.1\n"),
 	}}
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.DeployRunner = runner
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "uninstall", "--dir", dir, "--purge-data")
 	if code != output.ExitOK {
@@ -693,7 +693,7 @@ func TestUninstallPlainPurgeDataKeepsImages(t *testing.T) {
 	setupTestBundle(t, dir)
 
 	runner := &fakeDeployRunner{}
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.DeployRunner = runner
 	var stderr bytes.Buffer
 	deps.Stderr = &stderr

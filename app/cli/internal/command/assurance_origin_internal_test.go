@@ -183,3 +183,36 @@ func TestLocalReportEvidenceCarriesCheckProvenance(t *testing.T) {
 		t.Fatalf("reviews = %+v, want the observed origin in why", reviews)
 	}
 }
+
+func TestLocalReportEvidenceExplainsMissingSelectedJUnitCase(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		source string
+		want   bool
+	}{
+		{name: "CLI observed diagnostic", source: "specgate_cli", want: true},
+		{name: "agent supplied detail is not trusted", source: "", want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			reviews, _ := localReportEvidence(
+				[]string{"Selected test @check:unit"},
+				local.DeliveryReport{Body: map[string]any{
+					"checks": []any{map[string]any{
+						"name": "unit", "status": "fail", "source": tc.source,
+						"detail": "executed by specgate: exit 0 — selected-test report: invalid verification contract or report: selected testcase is missing",
+					}},
+					"criteria": []any{map[string]any{"criterion_id": "local-1", "claim": "satisfied"}},
+				}},
+			)
+			if len(reviews) != 1 || reviews[0].Verdict != "unmet" {
+				t.Fatalf("reviews = %+v, want one unmet criterion", reviews)
+			}
+			got := strings.Contains(reviews[0].Why, "selected testcase is missing")
+			if got != tc.want {
+				t.Fatalf("why = %q, contains missing-case diagnostic = %v, want %v", reviews[0].Why, got, tc.want)
+			}
+		})
+	}
+}

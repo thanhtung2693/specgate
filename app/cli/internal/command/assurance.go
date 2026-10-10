@@ -65,8 +65,10 @@ var localCommandCapabilities = map[string]string{
 	"workspace current":         "core",
 	"workspace list":            "core",
 	"workspace select":          "core",
+	"workspace unbind":          "core",
 	"artifact approve":          "artifact_versions",
 	"artifact coverage":         "artifact_versions",
+	"artifact impact":           "artifact_versions",
 	"artifact list":             "artifact_versions",
 	"artifact promote":          "artifact_versions",
 	"artifact publish":          "artifact_versions",
@@ -81,6 +83,7 @@ var localCommandCapabilities = map[string]string{
 	"gates tasks dispatch":      "ide_agent_gates",
 	"work context":              "core",
 	"work verification":         "core",
+	"work checkpoint":           "core",
 	"work resume":               "core",
 	"work create":               "core",
 	"work create-quick":         "core",
@@ -434,6 +437,9 @@ func localReportEvidence(criteria []string, report local.DeliveryReport) ([]clie
 			continue
 		}
 		verdict, why := boundCriterionOutcome(review.VerificationBinding, checks)
+		if diagnostic := selectedJUnitDiagnostic(review.VerificationBinding, checks); diagnostic != "" {
+			why += "; " + diagnostic
+		}
 		// The bound check decides, so a bad citation must not flip the verdict —
 		// a wrong pointer to the proof is not a broken feature. It still belongs
 		// on this line: overwriting `why` wholesale hid a fabricated citation
@@ -444,6 +450,19 @@ func localReportEvidence(criteria []string, report local.DeliveryReport) ([]clie
 		reviews[index].Verdict, reviews[index].Why = verdict, why
 	}
 	return reviews, checks
+}
+
+func selectedJUnitDiagnostic(binding string, checks []client.CheckResult) string {
+	const marker = " — selected-test report: "
+	for _, check := range checks {
+		if check.Name != binding || check.Source != "specgate_cli" {
+			continue
+		}
+		if _, diagnostic, ok := strings.Cut(check.Detail, marker); ok {
+			return strings.TrimSpace(diagnostic)
+		}
+	}
+	return ""
 }
 
 // citationWeakness describes a cited-evidence problem worth showing next to a

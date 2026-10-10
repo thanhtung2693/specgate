@@ -111,9 +111,11 @@ type DiffLine = {
   text: string
 }
 
-function buildLineDiff(before: string, after: string): DiffLine[] {
+function buildLineDiff(before: string, after: string): DiffLine[] | null {
   const beforeLines = before.replaceAll("\\n", "\n").split("\n")
   const afterLines = after.replaceAll("\\n", "\n").split("\n")
+  // Bound both the quadratic comparison and the number of rendered rows.
+  if ((beforeLines.length + 1) * (afterLines.length + 1) > 250_000 || beforeLines.length + afterLines.length > 4_000) return null
   const matrix = Array.from({ length: beforeLines.length + 1 }, () => Array(afterLines.length + 1).fill(0) as number[])
 
   for (let beforeIndex = beforeLines.length - 1; beforeIndex >= 0; beforeIndex -= 1) {
@@ -156,8 +158,12 @@ function buildLineDiff(before: string, after: string): DiffLine[] {
   return diff
 }
 
-function DocumentDiffView({ before, after }: { before: string; after: string }) {
+export function DocumentDiffView({ before, after }: { before: string; after: string }) {
   const diff = useMemo(() => buildLineDiff(before, after), [before, after])
+
+  if (diff === null) {
+    return <p role="status" className="sg-inset p-4 text-sm text-muted-foreground">These documents are too large for an inline diff. Use View and Code to inspect or copy each version for comparison outside the browser.</p>
+  }
 
   return (
     <div className="overflow-hidden sg-inset">

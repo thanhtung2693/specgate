@@ -141,6 +141,16 @@ specgate artifact publish --file artifact.json
 
 The new version can be reviewed through the normal artifact-decision flow.
 
+For a Local version that declares exact source lineage, `artifact impact
+<target> --compare <base>` reports only that declared pair's literal source
+transitions and immutable document delta. It does not infer relationships from
+matching prose or IDs, walk a chain of versions, reopen old work, or carry old
+delivery into the target. A missing, reverse, or nonadjacent declaration stays
+unavailable rather than meaning “nothing changed.”
+Lineage can be declared only from a known base inventory (recorded source
+criteria or earlier lineage). An empty inventory on an older artifact is
+unknown, not an intentional empty spec, and cannot support a declared delta.
+
 ## Related
 
 - [How SpecGate works](how-specgate-works.md)

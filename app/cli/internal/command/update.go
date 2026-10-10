@@ -282,11 +282,6 @@ func fetchAndRunScript(ctx context.Context, deps *Deps, url string, extraArgs ..
 	return sh.Run()
 }
 
-func updateInstallerArgs() []string {
-	exe, err := updateExecutablePath(nil)
-	return updateInstallerArgsForExecutable(exe, err)
-}
-
 func updateExecutablePath(deps *Deps) (string, error) {
 	executable := os.Executable
 	if deps != nil && deps.ExecutablePath != nil {

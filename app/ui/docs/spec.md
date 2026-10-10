@@ -113,6 +113,16 @@ visible while data loads, then disappear for a settled empty library or review
 queue. Registry failures render an unavailable state, never an empty-workspace
 claim.
 
+Mermaid previews load the renderer and diagram/layout chunks on demand, use
+strict rendering, and retain Dagre/classic defaults across renderer upgrades.
+Source inspection remains available if rendering fails. The Mermaid 12 browser
+floor is ES2024 with Safari 17.4+; older browser rendering is not supported.
+
+Inline version diffs normalize escaped newlines and reject comparisons above
+250,000 matrix cells (including boundary rows/columns) or 4,000 combined lines
+before allocating the matrix. An explicit message directs reviewers to View
+and Code for source inspection or copy; no truncated diff implies completeness.
+
 Reviews owns durable artifact decisions. It lists draft and needs-changes
 artifacts and delivery evidence. Artifact approve/request-changes actions use
 the backed Doc Registry flow. Delivery rows link to Work verification, where

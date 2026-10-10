@@ -17,7 +17,7 @@ import (
 // TestDoctorGreenExitsOK verifies doctor exits 0 when server is healthy.
 func TestDoctorFixRejectsLocalMode(t *testing.T) {
 	t.Parallel()
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	if err := (config.Config{
 		Mode:  config.ModeLocal,
@@ -52,7 +52,7 @@ func TestDoctorReportsKnowledgeEmbeddingsMissing(t *testing.T) {
 		},
 	}).build(t)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--server", srv.URL, "doctor")
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
@@ -101,7 +101,7 @@ func TestDoctorReportsKnowledgeEmbeddingsConfigured(t *testing.T) {
 		},
 	}).build(t)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--server", srv.URL, "doctor")
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
@@ -131,7 +131,7 @@ func TestDoctorGreenExitsOK(t *testing.T) {
 		metaHandler: jsonMeta("specgate.api/v1", map[string]bool{"agents": true}),
 	}).build(t)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--server", srv.URL, "doctor")
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, want 0", code)
@@ -172,7 +172,7 @@ func TestDoctorReportsIncompatibleDatabaseSchema(t *testing.T) {
 		},
 	}).build(t)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	if err := (config.Config{Workspace: config.CurrentWorkspace{ID: "ws-1", Slug: "platform", Name: "Platform"}}).SaveTo(deps.ConfigPath); err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +226,7 @@ func TestDoctorShowsActionableSetupSummary(t *testing.T) {
 		},
 	}).build(t)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	if err := (config.Config{
 		CurrentUser: config.CurrentUser{ID: "user-1", Username: "thanhtung2693", DisplayName: "Thanh Tung"},
 		Workspace:   config.CurrentWorkspace{ID: "ws-1", Slug: "platform", Name: "Platform"},
@@ -275,7 +275,7 @@ func TestDoctorWarnsSelfAttestedWhenModelKeyMissing(t *testing.T) {
 		},
 	}).build(t)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	if err := (config.Config{
 		CurrentUser: config.CurrentUser{ID: "user-1", Username: "thanhtung2693", DisplayName: "Thanh Tung"},
 		Workspace:   config.CurrentWorkspace{ID: "ws-1", Slug: "platform", Name: "Platform"},
@@ -302,7 +302,7 @@ func TestDoctorShowsFullApplianceSection(t *testing.T) {
 	dir := t.TempDir()
 	setupTestBundle(t, dir)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	if err := (config.Config{DeploymentDir: dir}).SaveTo(deps.ConfigPath); err != nil {
 		t.Fatal(err)
 	}
@@ -330,7 +330,7 @@ func TestDoctorSkipsFullApplianceWithoutDeployment(t *testing.T) {
 		metaHandler: jsonMeta("specgate.api/v1", map[string]bool{"agents": true}),
 	}).build(t)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	// DeploymentDir points at an empty dir: no compose.yml → no section.
 	if err := (config.Config{DeploymentDir: t.TempDir()}).SaveTo(deps.ConfigPath); err != nil {
 		t.Fatal(err)
@@ -369,7 +369,7 @@ func TestDoctorFixOffersFullApplianceRepairChecklist(t *testing.T) {
 
 	runner := &fakeDeployRunner{}
 	prompter := &fakePrompter{multiValues: []string{"full-appliance"}}
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	deps.DeployRunner = runner
 	deps.Prompter = prompter
 	if err := (config.Config{DeploymentDir: dir, Workspace: config.CurrentWorkspace{ID: "ws-1", Slug: "platform", Name: "Platform"}}).SaveTo(deps.ConfigPath); err != nil {
@@ -418,7 +418,7 @@ func TestDoctorFixYesRepairsWithoutPrompt(t *testing.T) {
 
 	runner := &fakeDeployRunner{}
 	prompter := &fakePrompter{}
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	deps.DeployRunner = runner
 	deps.Prompter = prompter
 	if err := (config.Config{DeploymentDir: dir, Workspace: config.CurrentWorkspace{ID: "ws-1", Slug: "platform", Name: "Platform"}}).SaveTo(deps.ConfigPath); err != nil {
@@ -448,7 +448,7 @@ func TestDoctorAgentsUnavailableExits5(t *testing.T) {
 		metaHandler: jsonMeta("specgate.api/v1", map[string]bool{"agents": false}),
 	}).build(t)
 
-	deps, _ := newTestDeps(t, srv.URL)
+	deps, _ := newTestDeps(t)
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--server", srv.URL, "doctor")
 	if code != output.ExitUnavailable {
 		t.Fatalf("exit = %d, want %d (ExitUnavailable)", code, output.ExitUnavailable)
@@ -461,7 +461,7 @@ func TestDoctorMissingAgentsCapabilityExits6(t *testing.T) {
 		metaHandler: jsonMeta("specgate.api/v1", nil),
 	}).build(t)
 
-	deps, _ := newTestDeps(t, srv.URL)
+	deps, _ := newTestDeps(t)
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--server", srv.URL, "doctor")
 	if code != output.ExitIncompatible {
 		t.Fatalf("exit = %d, want %d (ExitIncompatible)", code, output.ExitIncompatible)
@@ -475,7 +475,7 @@ func TestDoctorBadAPIVersionExits6(t *testing.T) {
 		metaHandler: jsonMeta("specgate.api/v0", nil),
 	}).build(t)
 
-	deps, _ := newTestDeps(t, srv.URL)
+	deps, _ := newTestDeps(t)
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--server", srv.URL, "doctor")
 	if code != output.ExitIncompatible {
 		t.Fatalf("exit = %d, want %d (ExitIncompatible)", code, output.ExitIncompatible)
@@ -485,7 +485,7 @@ func TestDoctorBadAPIVersionExits6(t *testing.T) {
 // TestDoctorServerDownExits5 verifies unreachable server → exit 5.
 func TestDoctorServerDownExits5(t *testing.T) {
 	t.Parallel()
-	deps, _ := newTestDeps(t, "")
+	deps, _ := newTestDeps(t)
 	// Point at an address that refuses connections.
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--server", "http://127.0.0.1:1", "doctor")
 	if code != output.ExitUnavailable {
@@ -509,7 +509,7 @@ func TestDoctorUsesInContainerDiagnosticsWhenGatewayProbeFails(t *testing.T) {
 	runner := &fakeDeployRunner{OutputByCommand: map[string][]byte{}}
 	commandLine := "docker compose -f " + filepath.Join(deployDir, "compose.yml") + " exec -T specgate curl --fail --silent --show-error --max-time 5 http://127.0.0.1:9090/healthz/components"
 	runner.OutputByCommand[commandLine] = []byte(`{"status":"degraded","components":{"nginx":{"status":"fail","state":"failed"}}}`)
-	deps, out := newTestDeps(t, srv.URL+"/api/doc-registry")
+	deps, out := newTestDeps(t)
 	deps.DeployRunner = runner
 	if err := (config.Config{DeploymentDir: deployDir}).SaveTo(deps.ConfigPath); err != nil {
 		t.Fatal(err)

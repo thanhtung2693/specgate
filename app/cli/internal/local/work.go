@@ -6,11 +6,14 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 	"time"
 )
+
+var ErrSourceCriterionInvalid = errors.New("invalid source criterion")
 
 type Feature struct {
 	ID                  string
@@ -21,7 +24,11 @@ type Feature struct {
 }
 
 func (s *Store) ListFeatures(ctx context.Context, workspaceID string) ([]Feature, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, workspace_id, key, canonical_artifact_id, version FROM features WHERE workspace_id = ? ORDER BY key`, workspaceID)
+	return listFeatures(ctx, s.db, workspaceID)
+}
+
+func listFeatures(ctx context.Context, q artifactQueryer, workspaceID string) ([]Feature, error) {
+	rows, err := q.QueryContext(ctx, `SELECT id, workspace_id, key, canonical_artifact_id, version FROM features WHERE workspace_id = ? ORDER BY key`, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +85,7 @@ func (s *Store) PromoteArtifact(ctx context.Context, workspaceID, artifactID str
 		return Feature{}, err
 	}
 	if artifact.Status != "approved" {
-		return Feature{}, fmt.Errorf("artifact %s must be approved before promotion", artifactID)
+		return Feature{}, fmt.Errorf("%w: artifact %s must be approved before promotion", ErrPreconditionNotMet, artifactID)
 	}
 	feature := Feature{WorkspaceID: workspaceID, Key: artifact.FeatureKey, CanonicalArtifactID: artifact.ID, Version: artifact.Version}
 	err = s.db.QueryRowContext(ctx, `SELECT id FROM features WHERE workspace_id = ? AND key = ?`, workspaceID, feature.Key).Scan(&feature.ID)
@@ -154,7 +161,7 @@ func validateSourceCriterionMappings(criteria []string, source []SourceCriterion
 			}
 			id := strings.TrimPrefix(token, "@source:")
 			if id == "" || !known[id] {
-				return fmt.Errorf("unknown source criterion %q", id)
+				return fmt.Errorf("%w: unknown source criterion %q", ErrSourceCriterionInvalid, id)
 			}
 		}
 	}
@@ -194,9 +201,15 @@ func (s *Store) CreateQuickWork(ctx context.Context, workspaceID string, input Q
 }
 
 func (s *Store) GetWork(ctx context.Context, workspaceID, ref string) (WorkItem, error) {
+	return getWork(ctx, s.db, workspaceID, ref)
+}
+
+func getWork(ctx context.Context, q verificationQuerier, workspaceID, ref string) (WorkItem, error) {
 	var work WorkItem
 	var criteria string
-	err := scanWork(s.db.QueryRowContext(ctx, `SELECT id, key, workspace_id, feature_id, artifact_id, title, description, phase, context_digest, acceptance_criteria, created_at FROM work_items WHERE workspace_id = ? AND (id = ? OR key = ?)`, workspaceID, ref, ref), &work, &criteria)
+	err := scanWork(q.QueryRowContext(ctx, `SELECT id, key, workspace_id, feature_id, artifact_id, title, description, phase, context_digest, acceptance_criteria, created_at,
+		(SELECT key FROM features WHERE id = work_items.feature_id AND workspace_id = work_items.workspace_id)
+		FROM work_items WHERE workspace_id = ? AND (id = ? OR key = ?)`, workspaceID, ref, ref), &work, &criteria)
 	if err != nil {
 		return WorkItem{}, err
 	}
@@ -207,7 +220,13 @@ func (s *Store) GetWork(ctx context.Context, workspaceID, ref string) (WorkItem,
 }
 
 func (s *Store) ListWork(ctx context.Context, workspaceID string) ([]WorkItem, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, key, workspace_id, feature_id, artifact_id, title, description, phase, context_digest, acceptance_criteria, created_at FROM work_items WHERE workspace_id = ? ORDER BY created_at`, workspaceID)
+	return listWork(ctx, s.db, workspaceID)
+}
+
+func listWork(ctx context.Context, q artifactQueryer, workspaceID string) ([]WorkItem, error) {
+	rows, err := q.QueryContext(ctx, `SELECT id, key, workspace_id, feature_id, artifact_id, title, description, phase, context_digest, acceptance_criteria, created_at,
+		(SELECT key FROM features WHERE id = work_items.feature_id AND workspace_id = work_items.workspace_id)
+		FROM work_items WHERE workspace_id = ? ORDER BY created_at`, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -254,14 +273,15 @@ type workScanner interface {
 }
 
 func scanWork(scanner workScanner, work *WorkItem, criteria *string) error {
-	var featureID, artifactID sql.NullString
+	var featureID, artifactID, featureKey sql.NullString
 	if err := scanner.Scan(
 		&work.ID, &work.Key, &work.WorkspaceID, &featureID, &artifactID,
-		&work.Title, &work.Description, &work.Phase, &work.ContextDigest, criteria, &work.CreatedAt,
+		&work.Title, &work.Description, &work.Phase, &work.ContextDigest, criteria, &work.CreatedAt, &featureKey,
 	); err != nil {
 		return err
 	}
 	work.FeatureID = featureID.String
+	work.FeatureKey = featureKey.String
 	work.ArtifactID = artifactID.String
 	return nil
 }

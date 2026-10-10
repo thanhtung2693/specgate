@@ -1,6 +1,7 @@
 package command
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -317,6 +318,51 @@ func TestRemoveCodexMarketplacePreservesUnknownTopLevelFields(t *testing.T) {
 	plugins, _ := got["plugins"].([]any)
 	if len(plugins) != 1 || plugins[0].(map[string]any)["name"] != "other" {
 		t.Fatalf("unexpected remaining plugins: %s", body)
+	}
+}
+
+func TestRemoveLastCodexPluginPreservesCustomMarketplaceIdentity(t *testing.T) {
+	for _, metadata := range []string{
+		`"name":"my-catalog"`,
+		`"name":"personal","interface":{"displayName":"My tools","revision":9007199254740993}`,
+	} {
+		path := filepath.Join(t.TempDir(), "marketplace.json")
+		original := `{` + metadata + `,"plugins":[{"name":"specgate","source":{"source":"local","path":"./.codex/plugins/specgate"}}]}`
+		if err := os.WriteFile(path, []byte(original), 0600); err != nil {
+			t.Fatal(err)
+		}
+		changed, err := removeCodexMarketplaceEntry(path)
+		if err != nil || !changed {
+			t.Fatalf("managed entry removal: changed=%v err=%v", changed, err)
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("custom shared marketplace deleted: %v", err)
+		}
+		var got, before map[string]json.RawMessage
+		if err := json.Unmarshal(body, &got); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal([]byte(original), &before); err != nil {
+			t.Fatal(err)
+		}
+		for _, field := range []string{"name", "interface"} {
+			if len(before[field]) > 0 {
+				var want, actual bytes.Buffer
+				if err := json.Compact(&want, before[field]); err != nil {
+					t.Fatal(err)
+				}
+				if err := json.Compact(&actual, got[field]); err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(want.Bytes(), actual.Bytes()) {
+					t.Fatalf("custom %s changed: %s", field, body)
+				}
+			}
+		}
+		if string(got["plugins"]) != "[]" {
+			t.Fatalf("managed entry retained: %s", body)
+		}
 	}
 }
 

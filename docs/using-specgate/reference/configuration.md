@@ -61,7 +61,9 @@ switching modes does not migrate its history or remove those Local records.
 Local state defaults to the OS SpecGate config location. Use `--local-dir` at
 initialization to select another store, or `SPECGATE_LOCAL_DIR` for a
 non-persisting Local-command override. `SPECGATE_CONFIG_PATH` selects an
-isolated CLI config file for automation and dogfood sessions.
+isolated CLI config file for automation and dogfood sessions. Local `doctor`
+reports the effective store directory, including environment or project-binding
+overrides, without persisting that selection to global configuration.
 
 Local mode has no Docker daemon, server, browser UI, governance chat, Knowledge,
 or integrations. Its Local governed route is:
@@ -165,7 +167,10 @@ status` and `specgate workspace current` show the source as `.specgate/config`.
 Project bindings are stored under canonical Git root paths so they can be
 removed cleanly when a checkout-specific selection is cleared. `specgate
 workspace select <slug>` in non-interactive mode saves the global workspace;
-use `workspace bind` when automation should bind a project. `specgate user
+Local selection preserves existing project bindings, while Full global
+selection clears the current checkout's binding only. Local selection always
+requires an explicit slug and never opens the Full-mode save-scope prompt.
+Use `workspace bind` when automation should bind a project. `specgate user
 logout` clears both the global workspace and project-scoped workspace bindings.
 `specgate user login` records the user and global workspace and leaves existing
 project bindings alone, so signing in never unbinds other checkouts; a binding
@@ -193,6 +198,13 @@ CLI environment variables:
 | `SPECGATE_NO_UPDATE_CHECK` | Set to `1`, `true`, `yes`, or `on` to disable the public GitHub release freshness check. |
 | `SPECGATE_ACCESSIBLE` | Set to `1` to render interactive prompts in accessible mode, which screen readers can follow. |
 | `CI` | When truthy, suppresses human-facing public update checks. |
+
+`SPECGATE_TEST_REPORT` is deliberately absent from this table. For an opted-in
+Local JUnit check, SpecGate creates it only in the child process environment for
+one confirmed `--run-checks` invocation. Do not place it in `.env`, shell
+profiles, or committed project configuration: the generated path is transient,
+must be absent before the run, and must remain in the checkout's ignored
+`.specgate/` directory.
 
 ### Repo-level `.specgate/` directory
 

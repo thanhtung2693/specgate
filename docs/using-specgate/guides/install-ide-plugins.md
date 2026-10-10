@@ -246,6 +246,17 @@ colliding with general-purpose IDE skills. The installer rejects empty,
 duplicate, or unnamespaced package inventories before writing or removing
 anything.
 
+Skill reference files declared in the package inventory are installed beside
+their owning skill in every CLI-managed IDE scope. `plugins doctor` checks
+these files too; if one is missing, rerun the matching `plugins install` command.
+Reference downloads finish before any install writes. Unsafe or nonportable
+inventory paths, case/Unicode-normalization aliases, and collisions with
+installer ownership markers are rejected. Unmarked user files at a reference
+destination or its sidecar stop installation rather than being overwritten.
+A valid ownership sidecar allows repair when the reference itself is missing.
+Uninstall removes marked reference files while keeping unrelated content in
+those directories.
+
 Re-running `plugins install` refreshes those focused skills and removes obsolete
 SpecGate-owned skill names and prior versioned Codex cache bundles in the
 selected IDE scope. It preserves unowned skills and files.
@@ -254,6 +265,20 @@ For a global Codex install, the installer edits only SpecGate-owned
 `config.toml` sections. Unrelated settings, ordering, whitespace, and comments
 are preserved. Project-local installs do not change Codex configuration or
 plugin-manager files.
+
+Section edits follow TOML grammar: quoted dotted keys are not treated as nested
+tables, and header-like text inside multiline strings or arrays is not treated
+as a section. Unrelated array tables and line endings survive install and
+uninstall. Malformed TOML and managed entries expressed as inline tables are
+refused without rewriting the configuration.
+
+Marketplace refresh and uninstall preserve unrelated top-level metadata and
+other plugin entries, including exact numeric values. Only the SpecGate-owned
+entry is replaced or removed; an unreadable existing marketplace is not
+overwritten with defaults, and existing file permissions are preserved.
+After removing the last managed entry, a catalog with a custom name, interface,
+or other metadata remains with an empty plugin list. Only a catalog whose
+remaining metadata matches the shipped defaults can be deleted.
 
 ## Refresh an existing install
 

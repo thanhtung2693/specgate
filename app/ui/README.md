@@ -6,6 +6,12 @@ This folder contains the responsive app shell, vertical sidebar, light/dark them
 
 ## Setup
 
+Use Node.js 26+, matching CI and the release image.
+When selecting an alternate Node runtime locally, put its executable directory
+on `PATH` before invoking npm. Avoid wrapping the command matrix in `npx -c`:
+the API-contract generator itself invokes npx, and inherited npm exec options
+can make that nested invocation fail before generation.
+
 ```bash
 cd app/ui
 npm install
@@ -55,7 +61,7 @@ URL.
 
 ## Scripts
 
-React compiler diagnostics remain enabled. Existing effects that synchronize
+React `set-state-in-effect` diagnostics remain enabled. Existing effects that synchronize
 request, route, or dialog state have line-scoped `set-state-in-effect`
 exceptions with reasons; do not disable these rules globally during dependency
 updates. Validate exceptions with
@@ -70,12 +76,26 @@ behavioral tests covering those transitions.
 | `npm run build` | Type-check and build production assets |
 | `npm run api:generate` | Regenerate the committed OpenAPI document and TypeScript contract |
 | `npm run api:check` | Fail when the committed API contract differs from Doc Registry |
-| `npm run deadcode` | Find unused UI files, exports, and dependencies with Knip |
+| `npm run deadcode` | Run both comprehensive and production-only Knip audits |
 | `npm run preview` | Preview a production build |
 | `npm run docker:build` | Build the production nginx image as `specgate-ui:latest` |
 | `npm run docker:run` | Run the image on [http://localhost:3000](http://localhost:3000) |
 
-The production build keeps Mermaid in a separate lazy-loaded vendor chunk for document previews. The Vite chunk-size warning limit is set above that expected Mermaid payload so new warnings point to unexpected app-bundle growth.
+The dead-code gate checks the production graph separately so test imports cannot
+hide unused application exports. Exports also used inside their defining module
+remain valid test seams; generated API types and shadcn primitives retain their
+existing exclusions. Build-only Vite plugins belong in `devDependencies`.
+
+Document previews load Mermaid on demand. Let Vite preserve Mermaid's native
+diagram/layout chunks instead of merging every diagram into one vendor chunk;
+the existing chunk-size warning limit still detects unexpected bundle growth.
+Diagram defaults retain Dagre/classic layout and strict rendering. Mermaid 12
+requires ES2024-capable browsers (Safari 17.4+).
+
+Vitest 5 matcher declarations use `Matchers<R, T>`. Until jest-dom updates its
+Vitest integration types, the test setup registers its standalone matchers and
+the shared declaration extends the new interface; do not disable type-checking
+or add matcher declarations to individual test files.
 
 CI runs these in [`.github/workflows/ui.yml`](../../.github/workflows/ui.yml):
 `npm ci`, API contract drift, dead-code analysis, lint, build, and tests on Node
@@ -84,6 +104,12 @@ CI runs these in [`.github/workflows/ui.yml`](../../.github/workflows/ui.yml):
 ## Docker
 
 The production image is built from the monorepo root with [`../../docker/Dockerfile.ui`](../../docker/Dockerfile.ui). It compiles the Vite bundle and serves it through nginx with SPA route fallback, so deep links like `/work/SG-155` load correctly. In release Compose, nginx also proxies `/api/doc-registry` to the Doc Registry service and `/api/agents` to the agents service.
+
+The standalone image pins nginx's stable 1.30.5 Alpine runtime. After upgrading
+that pin, rebuild the image and run `nginx -t` with both upstream service names
+resolvable, then check `/healthz` and authenticated application routes. The
+single-container appliance uses its distribution nginx package instead; a
+standalone-image check is not evidence of appliance health.
 
 From this folder:
 
@@ -102,7 +128,13 @@ For UI-only iteration, run `npm run dev` and proxy both API paths to the
 appliance gateway as shown above. Rebuild the appliance with `make build &&
 make up` when validating its embedded production bundle.
 
-Vite `VITE_*` values are baked into the production image at build time. The release image uses `app/ui/.env.production`, which points the browser at the same-origin nginx proxy paths.
+Vite `VITE_*` values are baked into the production image at build time. Docker
+builds default to `BUILD_MODE=production` and same-origin gateway API paths.
+Explicit `VITE_*` build arguments override `.env.<mode>` values; root Compose
+sets host-exposed API URLs for its separate-container topology. Choose a
+different Vite mode explicitly with `--build-arg BUILD_MODE=<mode>`; CI does not
+infer it from the branch name. Non-Docker builds load `app/ui/.env.production`
+by default.
 
 ## Routes
 

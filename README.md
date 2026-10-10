@@ -116,9 +116,11 @@ specgate status
 Restart selected IDEs after plugin install so new skills, hooks, and rules load.
 
 Already using SpecGate? Run `specgate update` or rerun the installer.
-Users on `v0.1.4` can upgrade to `v0.1.7` directly. Refresh CLI-managed IDE
-files with the same plugin install command and scope, or update native plugins
-through their IDE plugin manager. See the [changelog](CHANGELOG.md) for details.
+Before upgrading, back up your Local store and read the
+[changelog](CHANGELOG.md), especially if you use verification pins, checkpoints,
+or source lineage: the first such write upgrades store compatibility.
+Refresh CLI-managed IDE files with the same plugin install command and scope,
+or update native plugins through their IDE plugin manager.
 
 Continue with the [full quickstart](docs/using-specgate/quickstart.md).
 
@@ -138,6 +140,11 @@ publish artifact
 This workflow works without a server-side model, in both Local and Full mode.
 Quick work items are available in both too; Local asks you to supply each
 acceptance criterion with `--ac`.
+
+For longer Local work, explicit checkpoints help an agent resume against the
+same checkout; optional verification pins, requirement lineage, and an exact
+acceptance basis make the final decision auditable. See the
+[Local CLI workflow](docs/using-specgate/guides/cli-workflow.md).
 
 Add a server-side model in Full mode when you want independent readiness
 judgment, model-backed delivery review, governance chat, or the platform to

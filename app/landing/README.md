@@ -48,7 +48,7 @@ initial Publish frame is present in HTML for no-JavaScript use; `script.js`
 enhances it with accessible tabs and plain-text playback.
 
 The page keeps the public story compact: hero, compatibility, governed loop,
-CLI demo, where-it-fits comparison, five-question FAQ, and CTA. The governed
+CLI demo, where-it-fits comparison, six-question FAQ, and CTA. The governed
 loop should describe the real product boundary: OpenSpec, Spec Kit, Superpowers,
 Markdown, and custom documents remain in their authoring systems; users map
 their roles explicitly; SpecGate records approval for one immutable version and

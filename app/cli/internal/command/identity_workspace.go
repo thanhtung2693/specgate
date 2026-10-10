@@ -231,7 +231,9 @@ func newWorkspaceSelectCmd(deps *Deps) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if deps.Topology == config.ModeLocal {
 				if len(args) != 1 || strings.TrimSpace(args[0]) == "" {
-					return localExitError(deps, "workspace.select", fmt.Errorf("workspace slug is required"))
+					payload := output.ErrorPayload{Code: "usage", Message: "workspace slug is required in Local mode; run `specgate workspace select <slug>`"}
+					code := deps.Printer.Error("workspace.select", payload)
+					return &output.ExitError{Code: code}
 				}
 				store, err := openLocalStore(deps)
 				if err != nil {
@@ -346,7 +348,9 @@ func localIdentitySelection(selection local.Selection) client.IdentitySelection 
 
 func localExitError(deps *Deps, command string, err error) error {
 	payload := output.ErrorPayload{Code: "unavailable", Message: err.Error()}
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, local.ErrStoreIncompatible) {
+		payload = output.ErrorPayload{Code: "incompatible", Message: err.Error()}
+	} else if errors.Is(err, sql.ErrNoRows) {
 		payload = output.ErrorPayload{Code: "not_found", Message: "not found in the selected Local workspace; run `specgate workspace current` or `specgate workspace select <workspace>`"}
 	} else if errors.Is(err, local.ErrGateTaskNotFound) {
 		payload = output.ErrorPayload{Code: "not_found", Message: "gate task not found in the selected Local workspace"}
@@ -356,9 +360,9 @@ func localExitError(deps *Deps, command string, err error) error {
 		// A policy refusal, not an outage: exit 1 tells a caller the governance
 		// answer was no, where exit 5 would invite a retry that can never pass.
 		payload = output.ErrorPayload{Code: "governance_failed", Message: err.Error()}
-	} else if errors.Is(err, local.ErrVerificationInvalid) {
+	} else if errors.Is(err, local.ErrVerificationInvalid) || errors.Is(err, local.ErrSourceCriterionInvalid) || errors.Is(err, local.ErrArtifactPairInvalid) {
 		payload = output.ErrorPayload{Code: "validation", Message: err.Error()}
-	} else if errors.Is(err, local.ErrVerificationConflict) || errors.Is(err, local.ErrDeliveryApproved) || errors.Is(err, local.ErrDecisionRecorded) || errors.Is(err, local.ErrReviewChanged) {
+	} else if errors.Is(err, local.ErrArtifactVersionConflict) || errors.Is(err, local.ErrVerificationConflict) || errors.Is(err, local.ErrDeliveryApproved) || errors.Is(err, local.ErrDecisionRecorded) || errors.Is(err, local.ErrReviewChanged) {
 		payload = output.ErrorPayload{Code: "conflict", Message: err.Error()}
 	} else if errors.Is(err, local.ErrPreconditionNotMet) {
 		// "Not yet" is a governance answer. Exit 5 would tell an automated caller
@@ -393,13 +397,10 @@ func newWorkspaceBindCmd(deps *Deps) *cobra.Command {
 					return localExitError(deps, "workspace.bind", err)
 				}
 				defer store.Close()
-				if len(args) == 1 {
-					if err := store.SelectWorkspace(cmd.Context(), strings.TrimSpace(args[0])); err != nil {
-						return localExitError(deps, "workspace.bind", err)
-					}
-				}
 				selection, err := store.Current(cmd.Context())
-				if len(args) == 0 {
+				if err == nil && len(args) == 1 {
+					selection.Workspace, err = store.Workspace(cmd.Context(), strings.TrimSpace(args[0]))
+				} else if err == nil {
 					selection, err = localSelection(cmd.Context(), deps, store)
 				}
 				if err != nil {

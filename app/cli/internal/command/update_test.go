@@ -40,7 +40,7 @@ func TestJSONModeSuppressesCLIUpdateWarning(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	deps, _ := newTestDeps(t, srv.URL)
+	deps, _ := newTestDeps(t)
 	deps.Stderr = &stderr
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--server", srv.URL, "status", "--all-workspaces")
 	if code != output.ExitOK {
@@ -48,6 +48,47 @@ func TestJSONModeSuppressesCLIUpdateWarning(t *testing.T) {
 	}
 	if got := stderr.String(); got != "" {
 		t.Fatalf("json mode should not emit warning, got %q", got)
+	}
+}
+
+func TestUpdateUsesResolvedExecutableDirectory(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "install target")
+	if err := os.Mkdir(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	exe := filepath.Join(dir, "specgate")
+	if err := os.WriteFile(exe, []byte("original binary"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "specgate")
+	if err := os.Symlink(exe, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "#!/bin/sh\nprintf 'INSTALL_ARG:%s\\n' \"$@\"\n")
+	}))
+	defer srv.Close()
+	deps, out := newTestDeps(t)
+	deps.RuntimeGOOS = "linux"
+	deps.CLIInstallURL = srv.URL
+	deps.ExecutablePath = func() (string, error) { return link, nil }
+	if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: t.TempDir()}}).SaveTo(deps.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "update", "--version", "v9.9.9")
+	if code != 0 {
+		t.Fatalf("update exit=%d: %s", code, out.String())
+	}
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "INSTALL_ARG:--install-dir\nINSTALL_ARG:" + resolved + "\nINSTALL_ARG:--version\nINSTALL_ARG:v9.9.9\n"
+	if !strings.Contains(out.String(), want) {
+		t.Fatalf("installer did not receive exact resolved target/version: %s", out.String())
+	}
+	if data, err := os.ReadFile(exe); err != nil || string(data) != "original binary" {
+		t.Fatalf("test installer changed the executable: %q %v", data, err)
 	}
 }
 
@@ -59,7 +100,7 @@ func TestUpdateWindowsUsesNativeSelfUpdaterWithoutShell(t *testing.T) {
 	}))
 	defer cliSrv.Close()
 
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.CLIInstallURL = cliSrv.URL
 	deps.RuntimeGOOS = "windows"
 	deps.ExecutablePath = func() (string, error) {
@@ -109,7 +150,7 @@ func TestUpdateJSONProgressEmitsEventsAndFinalEnvelope(t *testing.T) {
 	defer srv.Close()
 	plugins := newPluginRegistry(t)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	deps.CLIInstallURL = srv.URL + "/cli/install.sh"
 	deps.PublicRegistryURL = plugins.URL
 	deps.PluginRegistryURL = srv.URL
@@ -161,7 +202,7 @@ func TestLocalUpdateRefreshesCLIWithoutInspectingOrUpdatingAppliance(t *testing.
 	deployDir := t.TempDir()
 	setupTestBundle(t, deployDir)
 	runner := &fakeDeployRunner{}
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.CLIInstallURL = cliSrv.URL
 	deps.DeployRunner = runner
 	deps.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
@@ -214,7 +255,7 @@ func TestUpdateVersionResolutionFailurePrecedesMutationInEveryMode(t *testing.T)
 				cfg.Local.Path = t.TempDir()
 				cfg.DeploymentDir = ""
 			}
-			deps, out := newTestDeps(t, "")
+			deps, out := newTestDeps(t)
 			if err := cfg.SaveTo(deps.ConfigPath); err != nil {
 				t.Fatal(err)
 			}
@@ -265,7 +306,7 @@ func TestUpdateRejectsMalformedConfigBeforeAnyMutation(t *testing.T) {
 	pluginMarker := filepath.Join(home, ".codex", "plugins", "specgate", ".specgate-owned")
 	writeTestFile(t, pluginMarker, "specgate-plugin-v1\n")
 	runner := &fakeDeployRunner{}
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 	deps.CLIInstallURL = cliSrv.URL
 	deps.UserHomeDir = func() (string, error) { return home, nil }
@@ -297,7 +338,7 @@ func TestUpdateHumanShowsStepLabels(t *testing.T) {
 	defer srv.Close()
 	plugins := newPluginRegistry(t)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	deps.CLIInstallURL = srv.URL + "/cli/install.sh"
 	deps.PluginRegistryURL = plugins.URL
 	home := t.TempDir()
@@ -333,7 +374,7 @@ func TestUpdateRefreshesInstalledIDEPluginsFromPublicRegistry(t *testing.T) {
 	writeTestFile(t, filepath.Join(home, ".codex", "plugins", "specgate", ".codex-plugin", "plugin.json"), "{}")
 	writeTestFile(t, filepath.Join(home, ".codex", "plugins", "specgate", ".specgate-owned"), "specgate-plugin-v1\n")
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	deps.CLIInstallURL = srv.URL + "/cli/install.sh"
 	deps.PublicRegistryURL = plugins.URL
 	deps.PluginRegistryURL = srv.URL
@@ -360,7 +401,7 @@ func TestUpdateDoesNotCreateIDEFilesWhenNoneAreInstalled(t *testing.T) {
 	plugins := newPluginRegistry(t)
 	home := t.TempDir()
 
-	deps, out := newTestDeps(t, "http://127.0.0.1:1")
+	deps, out := newTestDeps(t)
 	deps.CLIInstallURL = cliSrv.URL
 	deps.PluginRegistryURL = plugins.URL
 	deps.UserHomeDir = func() (string, error) { return home, nil }
@@ -389,14 +430,23 @@ func TestUpdateFetchHonorsTimeout(t *testing.T) {
 	defer srv.Close()
 	plugins := newPluginRegistry(t)
 
-	deps, out := newTestDeps(t, srv.URL)
-	deps.CLIInstallURL = srv.URL + "/cli/install.sh"
-	deps.PluginRegistryURL = plugins.URL
-	home := t.TempDir()
-	deps.UserHomeDir = func() (string, error) { return home, nil }
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--timeout", "50ms", "--server", srv.URL, "update", "--version", "v9.9.9")
-	if code != output.ExitUnavailable {
-		t.Fatalf("exit = %d, want unavailable; output = %s", code, out.String())
+	for _, mode := range []config.Mode{config.ModeLocal, config.ModeFull} {
+		t.Run(string(mode), func(t *testing.T) {
+			deps, out := newTestDeps(t)
+			var stderr bytes.Buffer
+			deps.Stderr = &stderr
+			deps.CLIInstallURL = srv.URL + "/cli/install.sh"
+			deps.PluginRegistryURL = plugins.URL
+			home := t.TempDir()
+			deps.UserHomeDir = func() (string, error) { return home, nil }
+			if err := (config.Config{Mode: mode, Server: srv.URL}).SaveTo(deps.ConfigPath); err != nil {
+				t.Fatal(err)
+			}
+			code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--timeout", "50ms", "update", "--version", "v9.9.9")
+			if code != output.ExitUnavailable || !strings.Contains(stderr.String(), "Client.Timeout") {
+				t.Fatalf("exit = %d, want timeout failure; output = %s; stderr = %s", code, out.String(), stderr.String())
+			}
+		})
 	}
 }
 
@@ -406,7 +456,7 @@ func TestUpdateRejectsOversizedInstallerScript(t *testing.T) {
 	}))
 	defer cliSrv.Close()
 
-	deps, out := newTestDeps(t, "http://127.0.0.1:1")
+	deps, out := newTestDeps(t)
 	deps.CLIInstallURL = cliSrv.URL
 	deps.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "update", "--version", "v9.9.9")
@@ -434,7 +484,7 @@ func TestUpdateUsesPublicCLIInstallerInsteadOfConnectedServer(t *testing.T) {
 	defer srv.Close()
 	plugins := newPluginRegistry(t)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	deps.CLIInstallURL = cliSrv.URL
 	deps.PluginRegistryURL = plugins.URL
 	home := t.TempDir()
@@ -461,7 +511,7 @@ func TestUpdateRefreshesInstalledIDEPluginWhenConnectedServerUnavailable(t *test
 	srv := httptest.NewServer(http.NotFoundHandler())
 	defer srv.Close()
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	deps.CLIInstallURL = cliSrv.URL
 	deps.PublicRegistryURL = plugins.URL
 	deps.PluginRegistryURL = srv.URL
@@ -492,7 +542,7 @@ func TestUpdateRefreshesLocalDeploymentBundleAndImages(t *testing.T) {
 	}
 
 	runner := &fakeDeployRunner{OutputData: localBackupPayload(t)}
-	deps, out := newTestDeps(t, "http://127.0.0.1:1")
+	deps, out := newTestDeps(t)
 	deps.CLIInstallURL = cliSrv.URL
 	deps.PluginRegistryURL = plugins.URL
 	deps.BundleBaseURL = bundles.URL + "/v9.9.9"

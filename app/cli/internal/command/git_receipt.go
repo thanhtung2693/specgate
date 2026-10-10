@@ -11,18 +11,21 @@ import (
 	"strings"
 
 	"github.com/specgate/specgate/app/cli/internal/deploy"
+	"github.com/specgate/specgate/app/cli/internal/provenance"
 )
 
 // gitReceipt is local repository identity and status metadata. It deliberately
 // contains no patch text or file contents; the digest is computed locally.
 type gitReceipt struct {
 	Repository     string   `json:"repository"`
+	CheckoutID     string   `json:"checkout_id,omitempty"`
 	Availability   string   `json:"availability"`
 	FreshnessScope string   `json:"freshness_scope"`
 	Branch         string   `json:"branch"`
 	BaseRevision   string   `json:"base_revision"`
 	HeadRevision   string   `json:"head_revision"`
 	ChangedFiles   []string `json:"changed_files"`
+	ReportedFiles  []string `json:"reported_files,omitempty"`
 	DiffDigest     string   `json:"diff_digest"`
 	Warnings       []string `json:"warnings"`
 }
@@ -61,16 +64,33 @@ func collectGitReceiptWithPriorBase(ctx context.Context, runner deploy.CommandRu
 		return receipt
 	}
 	repoRoot := filepath.Clean(strings.TrimSpace(string(root)))
+	if canonical, err := filepath.EvalSymlinks(repoRoot); err == nil {
+		identity := sha256.Sum256([]byte(canonical))
+		receipt.CheckoutID = fmt.Sprintf("%x", identity)
+	}
+	for _, name := range normalizeReportedPaths(reported, dir, repoRoot) {
+		clean := filepath.Clean(name)
+		if name != "" && !filepath.IsAbs(clean) && clean != "." && clean != ".." && !strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+			receipt.ReportedFiles = append(receipt.ReportedFiles, filepath.ToSlash(clean))
+		}
+	}
+	sort.Strings(receipt.ReportedFiles)
 
 	receipt.Availability = "available"
 	remote, err := gitOutput(ctx, runner, dir, "remote", "get-url", "origin")
-	if err == nil && strings.TrimSpace(string(remote)) != "" {
-		receipt.Repository = strings.TrimSpace(string(remote))
+	if err == nil {
+		receipt.Repository = provenance.Repository(string(remote))
+	}
+	if receipt.Repository != "" {
 		receipt.FreshnessScope = "shared_repository"
 	} else {
 		receipt.FreshnessScope = "local_checkout"
+		reason := "no origin remote"
+		if err == nil && strings.TrimSpace(string(remote)) != "" {
+			reason = "no usable credential-free origin"
+		}
 		receipt.Warnings = append(receipt.Warnings,
-			"Shared repository provenance is unavailable: no origin remote; SpecGate can still detect changes in this local checkout")
+			"Shared repository provenance is unavailable: "+reason+"; SpecGate can still detect changes in this local checkout")
 	}
 
 	if branch, err := gitOutput(ctx, runner, dir, "branch", "--show-current"); err == nil {
@@ -198,11 +218,6 @@ func parseGitStatus(data []byte) []gitStatusEntry {
 }
 
 func parseGitDiffNames(data []byte) []gitStatusEntry {
-	if strings.TrimSpace(string(data)) == "[]" {
-		// The command-layer fake runner's default output; git emits an empty
-		// stream when no names are selected.
-		return nil
-	}
 	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
 	entries := make([]gitStatusEntry, 0, len(lines))
 	for _, line := range lines {

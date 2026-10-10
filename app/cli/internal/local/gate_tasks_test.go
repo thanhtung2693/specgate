@@ -121,8 +121,8 @@ func TestLocalReadinessBlocksApprovalUntilSemanticResultsExist(t *testing.T) {
 	if run.Aggregate != "not_run" {
 		t.Fatalf("aggregate = %q, want not_run", run.Aggregate)
 	}
-	if err := store.ApproveArtifact(ctx, selection.Workspace.ID, artifact.ID, "human", ""); err == nil {
-		t.Fatal("approval succeeded with pending semantic tasks")
+	if err := store.ApproveArtifact(ctx, selection.Workspace.ID, artifact.ID, "human", ""); !errors.Is(err, local.ErrPreconditionNotMet) {
+		t.Fatalf("pending semantic tasks must refuse as governance precondition: %v", err)
 	}
 
 	tasks, err := store.ListGateTasks(ctx, selection.Workspace.ID, artifact.ID)

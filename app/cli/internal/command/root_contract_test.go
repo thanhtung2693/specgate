@@ -86,7 +86,7 @@ func TestVersionStillWorksWithMalformedConfig(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte("{broken"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "version"); code != output.ExitOK {
@@ -98,7 +98,7 @@ func TestVersionStillWorksWithMalformedConfig(t *testing.T) {
 }
 
 func TestFlagErrorDoesNotColorRedirectedStderr(t *testing.T) {
-	deps, _ := newTestDeps(t, "")
+	deps, _ := newTestDeps(t)
 	var stderr bytes.Buffer
 	deps.Stderr = &stderr
 	deps.StdoutIsTTY = func() bool { return true }
@@ -117,7 +117,7 @@ func TestFlagErrorDoesNotColorRedirectedStderr(t *testing.T) {
 }
 
 func TestPositionalArgumentErrorJSONIsMachineReadable(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "audit")
 	if code != output.ExitUsage {
 		t.Fatalf("exit = %d, want %d; output = %s", code, output.ExitUsage, out.String())
@@ -135,7 +135,7 @@ func TestPositionalArgumentErrorJSONIsMachineReadable(t *testing.T) {
 }
 
 func TestJSONProgressRequiresJSONOutput(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.Stderr = out
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--json-progress", "version")
 	if code != output.ExitUsage {
@@ -151,7 +151,7 @@ func TestNoArgCommandRejectsUnexpectedArgument(t *testing.T) {
 		{"version", "extra"},
 		{"feature", "extra"},
 	} {
-		deps, out := newTestDeps(t, "")
+		deps, out := newTestDeps(t)
 		deps.Stderr = out
 		code := command.ExecuteForCode(command.NewRootCommand(deps), append([]string{"--plain"}, args...)...)
 		if code != output.ExitUsage {

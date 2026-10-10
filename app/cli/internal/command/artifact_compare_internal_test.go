@@ -59,6 +59,53 @@ func TestBuildArtifactComparisonClassifiesExplicitDocuments(t *testing.T) {
 	}
 }
 
+func TestLocalArtifactInputRejectsMalformedLineageArrays(t *testing.T) {
+	for _, tc := range []struct {
+		name, field string
+		targets     any
+		added       any
+	}{
+		{"target_ids scalar", "source_lineage.rows[0].target_ids", "replacement", []any{}},
+		{"target_ids mixed", "source_lineage.rows[0].target_ids", []any{"one", 2}, []any{}},
+		{"added scalar", "source_lineage.added", []any{}, "new"},
+		{"added mixed", "source_lineage.added", []any{}, []any{"one", 2}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := map[string]any{"documents": []any{}, "source_lineage": map[string]any{
+				"version": float64(1),
+				"rows":    []any{map[string]any{"base_id": "old", "target_ids": tc.targets}},
+				"added":   tc.added,
+			}}
+			_, err := localArtifactInput(body)
+			if err == nil || !strings.Contains(err.Error(), tc.field) {
+				t.Fatalf("err = %v, want %s validation", err, tc.field)
+			}
+		})
+	}
+}
+
+func TestLocalArtifactInputRejectsUnsupportedLineageVersion(t *testing.T) {
+	for _, version := range []any{1.5, 2.0, "1", nil} {
+		_, err := localArtifactInput(map[string]any{"documents": []any{}, "source_lineage": map[string]any{"version": version, "rows": []any{}}})
+		if err == nil || !strings.Contains(err.Error(), "source_lineage.version") {
+			t.Fatalf("version %v accepted: %v", version, err)
+		}
+	}
+}
+
+func TestLocalArtifactInputPreservesExplicitEmptyInventory(t *testing.T) {
+	body := map[string]any{"documents": []any{}, "source_criteria": []any{}}
+	input, err := localArtifactInput(body)
+	if err != nil || input.SourceCriteria == nil {
+		t.Fatalf("explicit empty inventory lost: %#v %v", input, err)
+	}
+	delete(body, "source_criteria")
+	input, err = localArtifactInput(body)
+	if err != nil || input.SourceCriteria != nil {
+		t.Fatalf("omitted inventory invented: %#v %v", input, err)
+	}
+}
+
 func TestBuildArtifactComparisonRejectsMissingBaseHash(t *testing.T) {
 	t.Parallel()
 

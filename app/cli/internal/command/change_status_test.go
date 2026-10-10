@@ -165,6 +165,11 @@ func TestChangeSubmitRunChecksMarksLocalAssuranceAsReproduced(t *testing.T) {
 	if fc.calls != 0 || !strings.Contains(out.String(), `"assurance":"Agent-reported; locally reproduced"`) {
 		t.Fatalf("submit assurance did not expose local reproduction: calls=%d output=%s", fc.calls, out.String())
 	}
+	for _, field := range []string{`"context_digest":"` + work.ContextDigest + `"`, `"completion_id":"`, `"criterion_evidence":`, `"risks":`} {
+		if !strings.Contains(out.String(), field) {
+			t.Fatalf("submit omitted status material %s: %s", field, out.String())
+		}
+	}
 	out.Reset()
 	got := runChangeStatusJSON(t, deps, out, work.Key)
 	if got.Assurance != "Agent-reported; locally reproduced" {
@@ -612,7 +617,7 @@ func TestChangeStatusLocalApprovedDeliveryIsAccepted(t *testing.T) {
 	deps, _, _, out := newFakeDeps(t)
 	stateDir, store, selection, work := newLocalChangeWork(t, deps)
 	submitLocalChangeDelivery(t, store, selection.Workspace.ID, work, "builder", "receipt-1")
-	if err := store.DecideDelivery(t.Context(), selection.Workspace.ID, work.Key, "approve", "human", "accepted", localReviewID(t, store, selection.Workspace.ID, work.Key)); err != nil {
+	if err := store.DecideDeliveryWithBasis(t.Context(), selection.Workspace.ID, work.Key, "approve", "human", "accepted", localReviewID(t, store, selection.Workspace.ID, work.Key), ""); err != nil {
 		t.Fatal(err)
 	}
 	closeLocalChangeStore(t, deps, stateDir, store)
@@ -640,7 +645,7 @@ func TestChangeStatusLocalHumanCanAcceptEvidenceGapWithoutHidingIt(t *testing.T)
 	if review.Verdict != "failed" {
 		t.Fatalf("review = %#v, want failed evidence", review)
 	}
-	if err := store.DecideDelivery(t.Context(), selection.Workspace.ID, work.Key, "approve", "human", "reviewed the false negative", localReviewID(t, store, selection.Workspace.ID, work.Key)); err != nil {
+	if err := store.DecideDeliveryWithBasis(t.Context(), selection.Workspace.ID, work.Key, "approve", "human", "reviewed the false negative", localReviewID(t, store, selection.Workspace.ID, work.Key), ""); err != nil {
 		t.Fatal(err)
 	}
 	closeLocalChangeStore(t, deps, stateDir, store)
@@ -687,7 +692,7 @@ func TestChangeStatusLocalHumanRejectionRequestsRework(t *testing.T) {
 	deps, _, _, out := newFakeDeps(t)
 	stateDir, store, selection, work := newLocalChangeWork(t, deps)
 	submitLocalChangeDelivery(t, store, selection.Workspace.ID, work, "builder", "receipt-1")
-	if err := store.DecideDelivery(t.Context(), selection.Workspace.ID, work.Key, "reject", "human", "rework", localReviewID(t, store, selection.Workspace.ID, work.Key)); err != nil {
+	if err := store.DecideDeliveryWithBasis(t.Context(), selection.Workspace.ID, work.Key, "reject", "human", "rework", localReviewID(t, store, selection.Workspace.ID, work.Key), ""); err != nil {
 		t.Fatal(err)
 	}
 	closeLocalChangeStore(t, deps, stateDir, store)

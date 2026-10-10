@@ -3,33 +3,30 @@ package command
 import (
 	"fmt"
 	"net/url"
-	"os/exec"
-	"runtime"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/spf13/cobra"
 
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
-func defaultOpener(url string) error {
-	var cmd string
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = "open"
-	case "windows":
-		cmd = "cmd"
-	default:
-		cmd = "xdg-open"
+func validateBrowserURL(target string) error {
+	u, err := url.Parse(target)
+	if err != nil || !utf8.ValidString(target) || strings.IndexFunc(target, unicode.IsControl) >= 0 ||
+		(!strings.EqualFold(u.Scheme, "http") && !strings.EqualFold(u.Scheme, "https")) || u.Hostname() == "" || u.Opaque != "" {
+		return fmt.Errorf("web UI URL must be an absolute HTTP(S) URL without control characters")
 	}
-	var args []string
-	if runtime.GOOS == "windows" {
-		args = []string{"/c", "start", url}
-	} else {
-		args = []string{url}
+	return nil
+}
+
+func defaultOpener(target string) error {
+	if err := validateBrowserURL(target); err != nil {
+		return err
 	}
-	if err := exec.Command(cmd, args...).Start(); err != nil {
-		return fmt.Errorf("open %s: %w", url, err)
+	if err := launchBrowser(target); err != nil {
+		return fmt.Errorf("open browser: %w", err)
 	}
 	return nil
 }
@@ -60,6 +57,10 @@ func newOpenCmd(deps *Deps) *cobra.Command {
 			if hasWebURL {
 				webURL = meta.WebURL
 			}
+			if err := validateBrowserURL(webURL); err != nil {
+				code := deps.Printer.Error("open", output.ErrorPayload{Code: "unavailable", Message: err.Error()})
+				return &output.ExitError{Code: code}
+			}
 			// Deep links point at web UI pages; without an advertised web_url
 			// the fallback is the API server, where those routes don't exist.
 			// Bare `open` still opens the configured server URL; deployments
@@ -89,6 +90,10 @@ func newOpenCmd(deps *Deps) *cobra.Command {
 					}
 					target = base + "/work/" + url.PathEscape(work.ChangeRequestKey)
 				}
+			}
+			if err := validateBrowserURL(target); err != nil {
+				code := deps.Printer.Error("open", output.ErrorPayload{Code: "unavailable", Message: err.Error()})
+				return &output.ExitError{Code: code}
 			}
 			if !printOnly {
 				if deps.Opener == nil {

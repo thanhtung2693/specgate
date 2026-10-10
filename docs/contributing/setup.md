@@ -5,7 +5,8 @@ the product, use the [Quickstart](../using-specgate/quickstart.md).
 
 ## Prerequisites
 
-- Go 1.26+
+- Go 1.26.4+ with automatic toolchain selection enabled; both Go modules select
+  Go 1.27.1 for contributor/CI builds through their `toolchain` directive.
 - Node.js 26+ (matches CI)
 - Python 3.12+
 - `uv`

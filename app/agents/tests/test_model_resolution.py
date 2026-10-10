@@ -170,6 +170,9 @@ def _capture_build_kwargs(monkeypatch, *, provider, model_id, level=None) -> dic
         factories.build_model()
     else:
         factories.build_model(thinking_level=level)
+    assert captured["model"] == model_id
+    assert captured["provider"] == provider
+    assert captured["kwargs"]["api_key"] == "sk-test"  # type: ignore[index]
     return captured["kwargs"]  # type: ignore[return-value]
 
 

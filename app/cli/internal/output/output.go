@@ -132,14 +132,8 @@ type Printer struct {
 	emitted bool
 }
 
-// New creates a Printer with the given streams and output mode.
-func New(stdout, stderr io.Writer, mode Mode) *Printer {
-	return NewWithColor(stdout, stderr, mode, mode == ModeHuman)
-}
-
 // NewWithColor creates a Printer with explicit ANSI capability. Root commands
-// derive this from the output stream and terminal environment; direct callers
-// can retain the existing New behavior when that distinction is irrelevant.
+// derive this from the output stream and terminal environment.
 func NewWithColor(stdout, stderr io.Writer, mode Mode, color bool) *Printer {
 	return NewWithCapabilities(stdout, stderr, mode, color, color)
 }

@@ -10,7 +10,8 @@ Release only when:
 
 - release-readiness passes;
 - every release-facing module passes its test and static-analysis checks;
-- the native Windows CLI build and updater regression tests pass;
+- the native Windows CLI build, updater and browser-boundary regression tests
+  pass;
 - public install works from a clean machine or scratch `HOME`;
 - no secrets, local config, or generated machine files are staged;
 - release images and local appliance bundle match the tag.
@@ -28,10 +29,16 @@ Check that:
 - current docs are linked from [docs home](../README.md);
 - retired terminology and placeholder text are absent from public docs.
 
+Before tagging, move the reviewed `Unreleased` changelog into a dated section
+for the exact target version. Include new features, improvements, fixes, and
+upgrade limits. The release workflow extracts that section with
+`.github/scripts/release-notes.mjs` and passes it to GoReleaser; missing or empty
+version notes fail rather than falling back to a commit-only changelog.
+
 Run:
 
 ```bash
-node --test docs/release-readiness.test.mjs
+node --test docs/release-readiness.test.mjs .github/scripts/release-notes.test.mjs
 ```
 
 ## Source Hygiene
@@ -67,6 +74,10 @@ for iteration but never replace the tag's own evidence. A separate
 `windows-latest` job builds the native executable and runs the updater
 regressions before GoReleaser may publish CLI assets.
 
+The CLI packaging job pins GoReleaser 2.18.2 and checks the downloaded archive
+against its upstream SHA-256 file. Recheck `.goreleaser.yaml` with that version
+when changing packaging; configuration validation is not proof of publication.
+
 ## Packaging
 
 Check that:
@@ -87,10 +98,20 @@ Check that:
 Validate Compose:
 
 ```bash
-(trap 'rm -f deploy/local/specgate.env' EXIT
- cp deploy/local/specgate.env.example deploy/local/specgate.env
- docker compose --env-file deploy/local/.env.example -f deploy/local/compose.yml config --quiet)
+(
+ set -e
+ compose_check_dir=$(mktemp -d)
+ trap 'rm -f -- "$compose_check_dir/compose.yml" "$compose_check_dir/.env.example" "$compose_check_dir/specgate.env"; rmdir "$compose_check_dir"' EXIT
+ cp deploy/local/compose.yml deploy/local/.env.example "$compose_check_dir/"
+ cp deploy/local/specgate.env.example "$compose_check_dir/specgate.env"
+ docker compose --env-file "$compose_check_dir/.env.example" -f "$compose_check_dir/compose.yml" config --quiet
+)
 ```
+
+Validation uses an isolated temporary bundle. It never overwrites or removes
+the generated `specgate.env` in `deploy/local/` or its encryption key, including when
+Compose fails. This command only validates configuration; it does not start
+services or touch deployment data.
 
 ## Publish
 

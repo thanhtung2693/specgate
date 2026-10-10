@@ -74,7 +74,7 @@ activate a synthetic chat implementation.
 | Artifact readiness | `board/quality_gates.py`, `quality_gates/judge.py` | Runs policy-enabled gates and persists artifact gate runs |
 | Work-item gates | `board/quality_gates.py` | Runs CR quality gates and persists `gate_runs` |
 | Quick work item | `webapp.py` + Doc Registry client | Creates CR, AC rows, and quick handoff when possible |
-| Delivery review | `quality_gates/delivery_review.py`, `board/delivery_review.py` | Judges built result and persists `delivery_review`; an Agent-reported (`agent_attested`) pass requires a valid bound peer review or human review, while an all-bound locally reproduced result records `deterministic_checks` |
+| Delivery review | `quality_gates/delivery_review.py`, `board/delivery_review.py` | Judges built result and persists `delivery_review`; an Agent-reported (`agent_attested`) pass requires a valid bound peer review or human review, while an all-bound named-check result records `deterministic_checks` |
 
 Doc Registry is the source of truth. Agents code must use the REST API; it must
 not couple to Doc Registry database, S3, or pgvector internals.
@@ -233,8 +233,11 @@ Overall verdict:
   repository-observation assurance source.
 
 When every canonical criterion has a verification binding, the no-model path
-derives the review entirely from locally reproduced named checks, records
-`judge_model=deterministic_checks`, and describes that source directly. Mixed
+derives the review entirely from reported named check results and records
+`judge_model=deterministic_checks`. This names the deterministic verdict rule,
+not server-side execution: the service does not run commands. Full-mode
+Registry strips client-supplied check provenance, so hints must not claim a
+server-observed or locally reproduced result from those rows. Mixed
 bound and claim-based reviews retain the weaker `agent_attested` authority.
 
 `board/delivery_review.py::review_change_request_delivery` loads canonical ACs,
@@ -339,7 +342,9 @@ Observability:
 - route handlers use `_traced` root chain runs tagged `governance` and
   `agent-api`;
 - `custom_metadata.thread_id` carries cross-frame correlation;
-- LangGraph state values plus messages are the durable chat audit surface.
+- LangGraph state values plus messages describe chat state. They are durable
+  only with a durable checkpointer; the v0.1 appliance uses process-lifetime
+  chat state, while governed records remain in Doc Registry.
 
 ## 14. Environment
 

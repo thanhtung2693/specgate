@@ -68,6 +68,8 @@ function MermaidDiagram({ code }: { code: string }) {
           startOnLoad: false,
           securityLevel: "strict",
           theme: document.documentElement.classList.contains("dark") ? "dark" : "default",
+          layout: "dagre",
+          look: "classic",
         })
         const result = await mermaid.render(`specgate-${id}`, code)
         if (!cancelled) {

@@ -37,6 +37,17 @@ even when the file in Git has changed. The full `work context` remains available
 Do not select a work item from its branch name or assume completing one work
 completes other work using the same spec.
 
+When a human names a checkpoint, use `work resume <ref> --since <checkpoint-id>
+--json`. The comparison stays read-only and reports only an available, changed,
+unavailable, or noncomparable baseline; it never switches branches, recovers a
+different worktree, or turns a newer artifact into approved scope. Stored path
+manifests are summarized rather than echoed into the agent context.
+
+Without `--since`, resume prefers a checkpoint from the current checkout. It
+may otherwise show a clearly limited shared-repository completion receipt: only
+committed Git-tree paths are comparable because historical dirty manifests are
+not available.
+
 Before implementation, pin commands only when you want a reviewed agreement to
 survive across agents or resumes. Do not make it a routine quick-work question;
 an `unconfigured` contract remains a normal workflow. When you request one, the
@@ -219,10 +230,12 @@ language.
 Review the implementation and receipt, then run exactly one human decision:
 
 For Local mode, copy `review_id` from the status you reviewed (the handoff's
-`next_command` already includes it). Full mode uses the same verbs without
-`--review-id`.
+`next_command` already includes it). If that status includes `basis_digest`,
+copy the complete returned command including its digest and any selected
+comparison flags. Full mode uses the same verbs without `--review-id`.
 
 ```bash
+# Add --basis-digest only when the reviewed status returned it.
 specgate --yes change accept <work-ref> --review-id <review-id>
 specgate --yes change request-changes <work-ref> --review-id <review-id> --note "<focused feedback>"
 ```

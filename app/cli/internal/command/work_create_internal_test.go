@@ -92,18 +92,17 @@ func TestApprovalCriteriaPromptNamesBoundCount(t *testing.T) {
 	}
 }
 
-// A criterion the human typed must not be filed as an LLM suggestion. The column
-// defaults to `llm`, and the UI renders that value as provenance, so a
-// human-approved contract used to display as machine-drafted.
-func TestAcceptanceCriteriaBodyRecordsHumanProvenance(t *testing.T) {
+// Quick-work API accepts text and binding only; the service owns provenance.
+// Adding a client source field rejects both CLI creation and portable import.
+func TestAcceptanceCriteriaBodyMatchesQuickWorkSchema(t *testing.T) {
 	t.Parallel()
 	rows, ok := acceptanceCriteriaBody([]string{"Tags persist @check:unit", "Errors read clearly"}).([]map[string]string)
 	if !ok || len(rows) != 2 {
 		t.Fatalf("body = %#v, want two criterion rows", rows)
 	}
 	for _, row := range rows {
-		if row["source"] != "human" {
-			t.Fatalf("criterion %q source = %q, want human", row["text"], row["source"])
+		if _, present := row["source"]; present {
+			t.Fatalf("criterion %q includes source outside the quick-work request schema", row["text"])
 		}
 	}
 	if rows[0]["verification_binding"] != "unit" {

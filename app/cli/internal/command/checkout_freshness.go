@@ -42,6 +42,9 @@ func compareCheckoutReceipt(ctx context.Context, deps *Deps, stored gitReceipt) 
 	}
 
 	scope := receiptFreshnessScope(stored)
+	if scope == "local_checkout" && (stored.CheckoutID == "" || current.CheckoutID == "" || stored.CheckoutID != current.CheckoutID) {
+		return checkoutReceiptComparison{Message: "Could not compare the stored receipt with this local checkout: checkout identity is missing or different."}
+	}
 	var differences []string
 	compareReceiptField := func(label, before, after string) {
 		if strings.TrimSpace(before) != "" && strings.TrimSpace(before) != strings.TrimSpace(after) {
@@ -102,15 +105,20 @@ func mapGitReceipt(body map[string]any) gitReceipt {
 	if raw == nil {
 		return gitReceipt{}
 	}
+	text := func(field string) string {
+		value, _ := raw[field].(string)
+		return strings.TrimSpace(value)
+	}
 	return gitReceipt{
-		Repository:     strings.TrimSpace(fmt.Sprint(raw["repository"])),
-		Availability:   strings.TrimSpace(fmt.Sprint(raw["availability"])),
-		FreshnessScope: strings.TrimSpace(fmt.Sprint(raw["freshness_scope"])),
-		Branch:         strings.TrimSpace(fmt.Sprint(raw["branch"])),
-		BaseRevision:   strings.TrimSpace(fmt.Sprint(raw["base_revision"])),
-		HeadRevision:   strings.TrimSpace(fmt.Sprint(raw["head_revision"])),
+		Repository:     text("repository"),
+		CheckoutID:     text("checkout_id"),
+		Availability:   text("availability"),
+		FreshnessScope: text("freshness_scope"),
+		Branch:         text("branch"),
+		BaseRevision:   text("base_revision"),
+		HeadRevision:   text("head_revision"),
 		ChangedFiles:   stringSlice(raw["changed_files"]),
-		DiffDigest:     strings.TrimSpace(fmt.Sprint(raw["diff_digest"])),
+		DiffDigest:     text("diff_digest"),
 		Warnings:       stringSlice(raw["warnings"]),
 	}
 }
@@ -122,6 +130,7 @@ func applyCheckoutFreshness(
 	stored gitReceipt,
 ) changeStatusResult {
 	comparison := compareCheckoutReceipt(ctx, deps, stored)
+	result.FreshnessUnchecked = !comparison.Checked
 	result.Freshness = comparison.Message
 	if comparison.Stale {
 		if result.StaleReason == "" {

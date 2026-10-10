@@ -571,7 +571,9 @@ def test_derive_bound_pass_is_met_with_no_model() -> None:
         },
     )
     assert review.judge_model == "deterministic_checks"
-    assert review.hint == "Verdict derived from locally reproduced deterministic checks."
+    assert review.hint == (
+        "Verdict derived from reported named check results; the service does not execute commands."
+    )
     assert [c.verdict for c in review.criteria] == ["met"]
     assert review.state == "pass"
     assert review.confidence == 1.0  # bound verdict is explicit, not downgraded

@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+
+	"github.com/specgate/specgate/app/cli/internal/provenance"
 )
 
 type PortableWorkspace struct {
@@ -76,19 +78,40 @@ type PortableDeliveryEvidence struct {
 }
 
 func (s *Store) ExportWorkspace(ctx context.Context, workspaceID string) (PortableWorkspace, error) {
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return PortableWorkspace{}, err
+	}
+	defer tx.Rollback()
 	var pinned int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM verification_contracts WHERE workspace_id = ?`, workspaceID).Scan(&pinned); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM verification_contracts WHERE workspace_id = ?`, workspaceID).Scan(&pinned); err != nil {
 		return PortableWorkspace{}, err
 	}
 	if pinned > 0 {
 		return PortableWorkspace{}, fmt.Errorf("%w: portable/v1 Full-mode import cannot preserve Local verification contracts; use a Local database backup instead", ErrVerificationInvalid)
 	}
-	workspace, err := s.Workspace(ctx, workspaceID)
+	var checkpoints int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM work_checkpoints WHERE workspace_id = ?`, workspaceID).Scan(&checkpoints); err != nil {
+		return PortableWorkspace{}, err
+	}
+	if checkpoints > 0 {
+		return PortableWorkspace{}, fmt.Errorf("%w: portable/v1 Full-mode import cannot preserve Local checkpoints; use a Local database backup instead", ErrVerificationInvalid)
+	}
+	var enhanced int
+	if err := tx.QueryRowContext(ctx, `SELECT
+	 (SELECT COUNT(*) FROM acceptance_bases WHERE workspace_id=?) +
+	 (SELECT COUNT(*) FROM artifacts WHERE workspace_id=? AND source_lineage_json!='')`, workspaceID, workspaceID).Scan(&enhanced); err != nil {
+		return PortableWorkspace{}, err
+	}
+	if enhanced > 0 {
+		return PortableWorkspace{}, fmt.Errorf("%w: portable/v1 Full-mode import cannot preserve Local lineage or acceptance bases; use a Local database backup instead", ErrVerificationInvalid)
+	}
+	workspace, err := workspaceByRef(ctx, tx, workspaceID)
 	if err != nil {
 		return PortableWorkspace{}, err
 	}
 	out := PortableWorkspace{Workspace: workspace}
-	features, err := s.ListFeatures(ctx, workspaceID)
+	features, err := listFeatures(ctx, tx, workspaceID)
 	if err != nil {
 		return out, err
 	}
@@ -97,7 +120,7 @@ func (s *Store) ExportWorkspace(ctx context.Context, workspaceID string) (Portab
 			ID: feature.ID, Key: feature.Key, CanonicalArtifactID: feature.CanonicalArtifactID, Version: feature.Version,
 		})
 	}
-	artifacts, err := s.ListArtifacts(ctx, workspaceID)
+	artifacts, err := listArtifacts(ctx, tx, workspaceID)
 	if err != nil {
 		return out, err
 	}
@@ -107,7 +130,7 @@ func (s *Store) ExportWorkspace(ctx context.Context, workspaceID string) (Portab
 		}
 	}
 	for index := len(artifacts) - 1; index >= 0; index-- {
-		artifact, err := s.GetArtifact(ctx, workspaceID, artifacts[index].ID)
+		artifact, err := getArtifact(ctx, tx, workspaceID, artifacts[index].ID)
 		if err != nil {
 			return out, err
 		}
@@ -123,21 +146,21 @@ func (s *Store) ExportWorkspace(ctx context.Context, workspaceID string) (Portab
 		}
 		out.Artifacts = append(out.Artifacts, item)
 	}
-	out.Work, err = s.ListWork(ctx, workspaceID)
+	out.Work, err = listWork(ctx, tx, workspaceID)
 	if err != nil {
 		return out, err
 	}
-	if out.Gates, err = s.exportGateEvidence(ctx, workspaceID); err != nil {
+	if out.Gates, err = exportGateEvidence(ctx, tx, workspaceID); err != nil {
 		return out, err
 	}
-	if out.Delivery, err = s.exportDeliveryEvidence(ctx, workspaceID); err != nil {
+	if out.Delivery, err = exportDeliveryEvidence(ctx, tx, workspaceID); err != nil {
 		return out, err
 	}
 	return out, nil
 }
 
-func (s *Store) exportGateEvidence(ctx context.Context, workspaceID string) ([]PortableGateEvidence, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, artifact_id, gate_key, gate_version, gate_digest, artifact_digest, policy_digest, executor,
+func exportGateEvidence(ctx context.Context, q artifactQueryer, workspaceID string) ([]PortableGateEvidence, error) {
+	rows, err := q.QueryContext(ctx, `SELECT id, artifact_id, gate_key, gate_version, gate_digest, artifact_digest, policy_digest, executor,
 		result_id, result_state, result_summary, evaluator_json, evidence_json, findings_json, submitted_at
 		FROM local_gate_tasks WHERE workspace_id = ? ORDER BY created_at, id`, workspaceID)
 	if err != nil {
@@ -170,7 +193,7 @@ func (s *Store) exportGateEvidence(ctx context.Context, workspaceID string) ([]P
 	return result, rows.Err()
 }
 
-func (s *Store) exportDeliveryEvidence(ctx context.Context, workspaceID string) ([]PortableDeliveryEvidence, error) {
+func exportDeliveryEvidence(ctx context.Context, q artifactQueryer, workspaceID string) ([]PortableDeliveryEvidence, error) {
 	byWork := map[string]*PortableDeliveryEvidence{}
 	order := []string{}
 	get := func(workID string) *PortableDeliveryEvidence {
@@ -182,7 +205,7 @@ func (s *Store) exportDeliveryEvidence(ctx context.Context, workspaceID string) 
 		order = append(order, workID)
 		return row
 	}
-	reportRows, err := s.db.QueryContext(ctx, `SELECT id, work_id, body FROM delivery_reports WHERE workspace_id = ? ORDER BY created_at`, workspaceID)
+	reportRows, err := q.QueryContext(ctx, `SELECT id, work_id, body FROM delivery_reports WHERE workspace_id = ? ORDER BY created_at, id`, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -194,32 +217,56 @@ func (s *Store) exportDeliveryEvidence(ctx context.Context, workspaceID string) 
 		}
 		row := get(workID)
 		row.ReportID = id
+		row.Report = nil
 		if err := json.Unmarshal([]byte(body), &row.Report); err != nil {
 			reportRows.Close()
 			return nil, err
 		}
+		row.Report = provenance.Receipts(row.Report)
 	}
 	if err := reportRows.Close(); err != nil {
 		return nil, err
 	}
-	reviewRows, err := s.db.QueryContext(ctx, `SELECT id, work_id, report_id, verdict, summary, human_decision, note FROM delivery_reviews WHERE workspace_id = ? ORDER BY created_at`, workspaceID)
+	if err := reportRows.Err(); err != nil {
+		return nil, err
+	}
+	reviewRows, err := q.QueryContext(ctx, `SELECT r.id, r.work_id, r.report_id, r.verdict, r.summary, r.human_decision, r.note, p.body
+		FROM delivery_reviews r LEFT JOIN delivery_reports p
+		ON p.id = r.report_id AND p.workspace_id = r.workspace_id AND p.work_id = r.work_id
+		WHERE r.workspace_id = ? ORDER BY r.created_at, r.id`, workspaceID)
 	if err != nil {
 		return nil, err
 	}
 	for reviewRows.Next() {
 		var id, workID, reportID, verdict, summary, decision, note string
-		if err := reviewRows.Scan(&id, &workID, &reportID, &verdict, &summary, &decision, &note); err != nil {
+		var body sql.NullString
+		if err := reviewRows.Scan(&id, &workID, &reportID, &verdict, &summary, &decision, &note, &body); err != nil {
 			reviewRows.Close()
 			return nil, err
 		}
 		row := get(workID)
 		row.ReportID = reportID
+		row.Report = nil
+		if reportID != "" && !body.Valid {
+			reviewRows.Close()
+			return nil, fmt.Errorf("delivery review %s has no matching report %s", id, reportID)
+		}
+		if body.Valid {
+			if err := json.Unmarshal([]byte(body.String), &row.Report); err != nil {
+				reviewRows.Close()
+				return nil, err
+			}
+			row.Report = provenance.Receipts(row.Report)
+		}
 		row.ReviewID, row.Verdict, row.Summary, row.HumanDecision, row.ReviewNote = id, verdict, summary, decision, note
 	}
 	if err := reviewRows.Close(); err != nil {
 		return nil, err
 	}
-	peerRows, err := s.db.QueryContext(ctx, `SELECT id, work_id, agent_name, body FROM delivery_peer_reviews WHERE workspace_id = ? ORDER BY created_at`, workspaceID)
+	if err := reviewRows.Err(); err != nil {
+		return nil, err
+	}
+	peerRows, err := q.QueryContext(ctx, `SELECT id, work_id, agent_name, body FROM delivery_peer_reviews WHERE workspace_id = ? ORDER BY created_at, id`, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -231,12 +278,17 @@ func (s *Store) exportDeliveryEvidence(ctx context.Context, workspaceID string) 
 		}
 		row := get(workID)
 		row.PeerReviewID, row.PeerAgent = id, agent
+		row.PeerReview = nil
 		if err := json.Unmarshal([]byte(body), &row.PeerReview); err != nil {
 			peerRows.Close()
 			return nil, err
 		}
+		row.PeerReview = provenance.Receipts(row.PeerReview)
 	}
 	if err := peerRows.Close(); err != nil {
+		return nil, err
+	}
+	if err := peerRows.Err(); err != nil {
 		return nil, err
 	}
 	result := make([]PortableDeliveryEvidence, 0, len(order))

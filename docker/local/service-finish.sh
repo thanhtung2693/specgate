@@ -2,6 +2,7 @@
 set -euo pipefail
 
 service=$1
+case "$service" in postgres|doc-registry|agents|nginx|health) ;; *) exit 1 ;; esac
 exit_code=${2:-unknown}
 signal=${3:-0}
 state_dir=/run/specgate/components
@@ -9,6 +10,13 @@ restart_dir=/run/specgate/restarts
 failure_file=/data/diagnostics/last-failure.json
 
 mkdir -p "${state_dir}" "${restart_dir}" "$(dirname "${failure_file}")"
+
+for file in "${state_dir}/${service}" "${restart_dir}/${service}"; do
+  if [[ -L "$file" ]] || { [[ -e "$file" ]] && [[ ! -f "$file" ]]; }; then
+    echo "[supervisor] unsafe state file: $file" >&2
+    exit 1
+  fi
+done
 
 # `wantedup` distinguishes a planned s6 down/shutdown from any process exit,
 # including an unexpected clean exit or SIGTERM while the service should run.
@@ -21,14 +29,18 @@ fi
 
 count=0
 if [[ -f "${restart_dir}/${service}" ]]; then
-  read -r count <"${restart_dir}/${service}" || count=0
+  count=$(cat "${restart_dir}/${service}")
 fi
-count=$((count + 1))
+if [[ ! "$count" =~ ^[0-9]{1,6}$ ]]; then
+  echo "[supervisor] invalid restart counter for $service" >&2
+  exit 1
+fi
+count=$((10#$count + 1))
 printf '%s\n' "${count}" >"${restart_dir}/${service}"
 printf 'failed\n' >"${state_dir}/${service}"
 
 reason="exit_code=${exit_code} signal=${signal}"
-tmp="${failure_file}.$$"
+tmp=$(mktemp "${failure_file}.XXXXXX")
 printf '{"component":"%s","reason":"%s","restart_count":%s,"time":"%s"}\n' \
   "${service}" "${reason}" "${count}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"${tmp}"
 mv "${tmp}" "${failure_file}"

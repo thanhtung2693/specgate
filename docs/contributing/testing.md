@@ -17,6 +17,76 @@ broaden only when the change crosses module or contract boundaries.
 Layer 1 runs in CI. Live smoke and evals are opt-in because they need network
 access, provider credentials, or LangSmith credentials.
 
+Both Go modules select Go 1.27.1 through `toolchain` while retaining the Go
+1.26.4 language/dependency floor. Use Staticcheck v0.8.1 with this toolchain;
+v0.7.0 cannot read Go 1.27 export data. Compiler upgrades require both full Go
+suites, Local data/legacy-writer dogfood, and rebuilt release image stages, not
+only successful compilation.
+
+For dependency audits, distinguish `go list -m -u all` from the modules reached
+by `go list -deps -test ./...`. The module graph can include tools, alternate
+platforms and dependency-owned tests not built by the affected module suite;
+check their actual consumers before adding upgrade pins. Keep module checksum
+verification and the affected full suite alongside any lockfile update.
+
+Terminal-width dependency upgrades also need the CLI help/plain/JSON and
+accessible prompt checks. Invisible format controls, combining characters and
+grapheme clusters affect rendering even when the command contract is unchanged;
+do not normalize or rewrite user input to compensate for display width.
+
+All Dockerfiles pin the stable `docker/dockerfile:1.27.1` frontend, independent
+of the Docker Engine and BuildKit versions. Upgrade the four syntax directives
+together, run the release-readiness consistency check, and build each affected
+image with the new frontend. Recheck isolated appliance startup after its full
+build; syntax parsing alone does not establish runtime compatibility. Do not
+switch to floating or labs tags to bypass a build failure.
+
+Python appliance build-tool upgrades require rebuilding the `agents-build`
+stage of `docker/Dockerfile.local` with its frozen production lock, then checking
+the installed package and LangGraph HTTP app inside that Linux environment.
+The build-only `uv` binary stays in `/usr/bin`; the final stage copies
+`/usr/local` and the application environment, not the build tool. A stage build
+does not establish full-appliance health or external-provider behavior.
+
+The separable agents image also installs that frozen production lock. It mounts
+the pinned `uv` binary only during build steps and puts `/deps/agents/.venv/bin`
+on `PATH`; runtime does not need `uv`. Verify both its default `langgraph dev`
+command and the supported `uvicorn` command override, installed dependency
+versions against `app/agents/uv.lock`, and absence of populated `.env` files or
+the build tool. Use isolated container state and disable tracing and provider
+inference for these packaging checks.
+
+The appliance pins s6-overlay 3.2.3.2. Its noarch and architecture-specific
+archives are verified against the upstream SHA-256 files during the image
+build. Supervisor upgrades require a full appliance build and isolated startup
+check with fresh data; a successful stage build alone does not verify service
+ordering, health, or shutdown. Never reuse a user's appliance volume for this
+check.
+
+Supervisor ownership or lifecycle changes also require the disposable-image
+regression: `SPECGATE_TEST_APPLIANCE_IMAGE=<built-image> node --test docker/local/supervisor.test.mjs`.
+It exercises the current startup/finish scripts inside the selected image,
+checks component write denial, malicious counters and symlinks, healthy resets,
+and planned shutdown. The test uses no host data volume and removes its container.
+Without an explicit image the test is skipped; that is not release evidence.
+
+The appliance builds gosu 1.19 with Go 1.27.1, `golang.org/x/sys` v0.48.0
+and `github.com/moby/sys/user` v0.4.1
+in an isolated build module rather than shipping upstream's older compiled
+binary. Verify its installed build metadata and non-root execution, then run
+the fresh appliance startup check; PostgreSQL uses gosu during initialization.
+
+Appliance and separable contributor images use pgvector 0.8.7 on PostgreSQL 18
+Trixie. Verify the installed extension in a fresh disposable database and run
+the vector-store tests. An image update does not itself run `ALTER EXTENSION`
+against existing databases; do not mutate a user's extension state as part of
+verification.
+
+For pgvector image upgrades, retain a disposable old-image database across a
+clean shutdown and new-image start. Check existing vector rows, index-backed
+queries and blob bytes before and after an explicit fixture-only extension
+upgrade. Fresh-database startup alone does not establish upgrade compatibility.
+
 ## Module commands
 
 ### CLI
@@ -25,14 +95,73 @@ access, provider credentials, or LangSmith credentials.
 cd app/cli
 make test
 make lint
-go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...
+go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
 ```
 
 The CLI suite covers command behavior, JSON envelopes, exit codes, local
 configuration, user/workspace selection, plugin installation, and uninstall
 cleanup.
 
-Native Windows updater changes also require the Windows-target build check:
+CLI command fixtures isolate streams, config, working directory, and home.
+Select test HTTP servers explicitly with `--server` or saved configuration;
+the shared `newTestDeps` helper does not select a server or inject a client.
+Direct printer fixtures use `NewWithColor` with an explicit ANSI capability;
+root-command tests still exercise terminal/environment capability detection.
+Local delivery-decision fixtures call `DecideDeliveryWithBasis`, the production
+entry point; an empty digest exercises the supported unenhanced review-ID path.
+
+Enhanced Local-store changes also require a real pre-enhancement CLI, not only
+raw SQLite guard tests. CLI CI and release verification run the shared gate:
+
+```bash
+bash .github/scripts/check-legacy-cli.sh
+```
+
+It builds the immutable pre-enhancement v0.1.4 revision in a temporary directory
+and runs both compatibility tests with that executable. A shallow checkout
+fetches only the required commit; it does not switch or reset the current
+checkout. Temporary baseline files are removed on exit. Updating this baseline
+requires reviewing that it still lacks enhanced-store support, not choosing the
+newest version tag. The normal module suite without the gate may still skip
+these opt-in tests.
+
+For a separately built old executable, run:
+
+```bash
+cd app/cli
+SPECGATE_LEGACY_CLI=/absolute/path/to/old/specgate go test ./internal/local -run 'Test(LegacyBinaryCannotMutateEnhancedStore|PreEnhancedBackupRestoresLegacyWritableSnapshot)$' -v -count=1
+```
+
+The test isolates home, config and database, checks that the binary starts,
+then attempts old startup/read, workspace/work creation, verification, review
+and acceptance against an enhanced store. Each must encounter the capability
+guard without changing any stored rows. Without the environment variable these
+tests are skipped; the normal suite alone is not evidence of downgrade safety.
+
+The recovery test copies the pre-enhanced backup into a separate temporary
+directory, verifies that the old CLI can write there, and compares the original
+work and Context Pack with the restored data. The first checkpoint and later
+work are absent from that snapshot; the live upgraded database and original
+backup remain untouched. This verifies snapshot recovery, not a lossless
+downgrade or a procedure for overwriting a user's running database.
+
+The barrier-only `EnableEnhancedStore` fixture exists only in test builds.
+Production enhanced writes use `WithEnhancedWrite` so the compatibility marker,
+mutation guards, and first enhanced record commit together.
+
+When upgrading `modernc.org/sqlite`, keep `modernc.org/libc` at the exact version
+required by that driver's `go.mod`. Rerun the full CLI suite, the released-binary
+compatibility check, and Local read/write dogfood; a successful build alone does
+not verify stored-data compatibility.
+
+JUnit parser fixtures open temporary directory handles and exercise
+`ObserveJUnitReportFromRoot`, the same reader used by delivery checks. Production
+opens that handle before executing the runner; parser-only fixtures do not
+prove the runner's path-replacement boundary. Keep command-level boundary tests
+when changing report collection.
+
+Native Windows updater or browser-opening changes also require the
+Windows-target build check:
 
 ```bash
 cd app/cli
@@ -40,9 +169,12 @@ GOOS=windows GOARCH=amd64 go build -o /tmp/specgate.exe ./cmd/specgate
 GOOS=windows GOARCH=amd64 go test -c ./internal/command -o /tmp/specgate-command.test.exe
 ```
 
-The CLI and release workflows run the updater regression tests on
-`windows-latest`; the release job cannot build assets until that native check
-passes.
+The CLI and release workflows run updater, browser-boundary and open-command regression
+tests on `windows-latest`; the release job cannot build assets until that native
+check passes. Cross-compilation does not run Windows tests or verify the native
+browser integration. The browser tests inject ShellExecute to verify the fixed
+verb, exact URL document argument, absent parameters and native-error handling
+without opening a real browser.
 
 With a local stack running, the CLI also has opt-in new-user e2e smokes:
 
@@ -77,12 +209,40 @@ approval triggers auto-archive. It restores model and archive settings on exit.
 cd app/doc-registry
 make test
 make lint
-go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...
+go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
 ```
 
 The Doc Registry suite covers API handlers, database behavior, artifact state,
 events, evidence, settings, and contract fixtures. Tests use testcontainers for
 Postgres where needed.
+
+After upgrading the Postgres driver or testcontainers dependencies, confirm
+that the Postgres subtests actually run: they can skip when Docker is
+unavailable. Run an affected database test with `-v -count=1` and inspect its
+`postgres` subtest result; a green package result with skipped database tests
+is not evidence of migration or persistence compatibility. These tests create
+disposable containers and databases, not databases in the contributor stack.
+
+For AWS SDK upgrades, `TestClientRoundTripThroughConfiguredEndpoint` exercises
+signed put/get/delete requests through a loopback HTTP endpoint with fake
+credentials and isolated shared-config paths. It verifies path-style routing,
+object bytes and content type, not real S3/MinIO compatibility or response
+checksum authentication. Queue handler fixtures do not connect to Redis;
+Redis-client upgrades also need a disposable live queue check before claiming
+runtime compatibility. Never use contributor buckets or queues for these checks.
+
+Run the opt-in real Redis roundtrip after a Redis-client upgrade:
+
+```bash
+cd app/doc-registry
+go test -tags integration -race -count=1 ./internal/knowledgequeue -run '^TestRedisQueueRoundTrip$' -v
+```
+
+This starts a fresh Redis 8 testcontainer with tmpfs data, sends both Knowledge
+and webhook tasks through the production enqueuers and handlers, and checks
+unchanged workspace/payload plus successful queue acknowledgements. It fails
+rather than skips if Docker is unavailable. It does not invoke embeddings or
+providers, and does not establish crash recovery, retries or throughput.
 
 ### Governance-ops
 

@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
-  buildChangeRequestsPath,
   fetchWorkboard,
   fetchWorkItemDetail,
   mapAcceptanceCriterion,
@@ -22,9 +21,15 @@ describe("workboard data adapter", () => {
     vi.unstubAllGlobals()
   })
 
-  it("scopes live workboard requests to the selected workspace", () => {
-    expect(buildChangeRequestsPath("ws-current")).toBe("/workboard/change-requests?workspace_id=ws-current")
-    expect(() => buildChangeRequestsPath("")).toThrow("workspaceId is required")
+  it("scopes live workboard requests to the selected workspace", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] })))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await fetchWorkboard("http://registry.test", new AbortController().signal, " ws/current &other=1 ")
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string)
+    expect(url.pathname).toBe("/workboard/change-requests")
+    expect([...url.searchParams]).toEqual([["workspace_id", "ws/current &other=1"]])
   })
 
   it("does not query the registry when no workspace is selected", async () => {

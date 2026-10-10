@@ -1,6 +1,6 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.27.1
 
-FROM golang:1.26.5-alpine AS builder
+FROM golang:1.27.1-alpine AS builder
 RUN apk add --no-cache python3
 WORKDIR /src
 COPY app/doc-registry/go.mod app/doc-registry/go.sum ./

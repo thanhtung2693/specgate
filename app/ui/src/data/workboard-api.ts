@@ -71,12 +71,6 @@ function buildRegistryView(items: WorkItem[]): WorkboardView {
   }
 }
 
-export function buildChangeRequestsPath(workspaceId?: string): string {
-  const trimmed = workspaceId?.trim()
-  if (!trimmed) throw new Error("workspaceId is required")
-  return `/workboard/change-requests?${new URLSearchParams({ workspace_id: trimmed }).toString()}`
-}
-
 export async function fetchWorkboard(baseUrl: string, signal: AbortSignal, selectedWorkspaceId?: string): Promise<WorkboardView> {
   const workspaceId = selectedWorkspaceId?.trim()
   if (!workspaceId) return { ...emptyRegistryView }

@@ -1,11 +1,11 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.27.1
 #
 # Agents container. The default CMD runs the LangGraph dev server (graph + HTTP
 # app from langgraph.json). Deployments may override the command to serve only
-# the FastAPI webapp via uvicorn (installed --system, so it is on PATH). Set
+# the FastAPI webapp via uvicorn (the production environment is on PATH). Set
 # LANGSMITH_API_KEY for optional tracing.
 
-FROM python:3.13-slim
+FROM python:3.13-slim-trixie
 ARG VERSION=dev
 ARG COMMIT=unknown
 ARG BUILD_DATE=unknown
@@ -17,19 +17,22 @@ LABEL org.opencontainers.image.title="SpecGate Agents" \
       org.specgate.managed="true" \
       org.specgate.component="agents"
 
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install uv
-
 WORKDIR /deps/agents
 
-COPY app/agents /deps/agents
+COPY app/agents/pyproject.toml app/agents/uv.lock app/agents/README.md ./
+# Mount the build tool rather than shipping it. Use the same frozen production
+# environment as the appliance; installing the CLI again would resolve outside
+# the project's lockfile.
+RUN --mount=from=ghcr.io/astral-sh/uv:0.12.23,source=/uv,target=/usr/bin/uv \
+    --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project
 
-# langgraph-cli[inmem] bundles the dev server + in-memory checkpointer/store.
-# Install it together with the local package in ONE resolution so the project's
-# [tool.uv] override-dependencies (langgraph-api>=0.8, past the cli's <0.8 cap)
-# is honored instead of being undone by a separate cli install.
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system "langgraph-cli[inmem]" -e .
+COPY app/agents/ ./
+RUN --mount=from=ghcr.io/astral-sh/uv:0.12.23,source=/uv,target=/usr/bin/uv \
+    --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
+
+ENV PATH=/deps/agents/.venv/bin:$PATH
 
 EXPOSE 8000
 

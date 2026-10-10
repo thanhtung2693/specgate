@@ -284,6 +284,10 @@ func NewRootCommand(deps *Deps) *cobra.Command {
 			code := deps.Printer.Error(commandOutputName(cmd), payload)
 			return &output.ExitError{Code: code}
 		}
+		deps.Timeout = defaultTimeout
+		if timeout > 0 {
+			deps.Timeout = timeout
+		}
 
 		cfg, err := config.LoadFrom(deps.ConfigPath)
 		if err != nil && cmd.Name() != "version" && cmd.Name() != "completion" {
@@ -370,12 +374,6 @@ func NewRootCommand(deps *Deps) *cobra.Command {
 		if strings.TrimSpace(deps.PluginRegistryURL) == "" {
 			deps.PluginRegistryURL = config.ResolvePluginRegistry(serverURL, cfg)
 		}
-		if timeout > 0 {
-			deps.Timeout = timeout
-		} else {
-			deps.Timeout = defaultTimeout
-		}
-
 		// Create the HTTP client if one has not been injected (e.g. in tests).
 		if deps.Client == nil {
 			api := client.New(deps.ServerURL, deps.Timeout)

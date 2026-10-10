@@ -12,6 +12,7 @@ import (
 	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/output"
+	"github.com/specgate/specgate/app/cli/internal/provenance"
 )
 
 const deliveryInitAuto = "auto"
@@ -56,6 +57,9 @@ func newDeliveryReportCmd(deps *Deps) *cobra.Command {
 				var err error
 				body, err = readJSONBodyFile(deps, "delivery.report", filePath)
 				if err != nil {
+					return err
+				}
+				if err := rejectFullCheckExtensions(deps, "delivery.report", body); err != nil {
 					return err
 				}
 				clearCheckObservations(body)
@@ -237,6 +241,18 @@ func newDeliveryPeerReviewCmd(deps *Deps) *cobra.Command {
 	return cmd
 }
 
+// Peer reviews must preserve exact completion binding. Refuse unsafe legacy
+// bindings instead of rewriting them into a receipt the completion never had.
+func validatePeerReceiptOrigin(deps *Deps, command string, receipt map[string]any) error {
+	if raw, exists := receipt["repository"]; exists {
+		origin, ok := raw.(string)
+		if !ok || provenance.Repository(origin) != origin {
+			return completionValidationError(deps, command, "legacy git_receipt is not credential-free; submit a fresh completion before peer review")
+		}
+	}
+	return nil
+}
+
 func runLocalDeliveryPeerReviewInit(cmd *cobra.Command, args []string, deps *Deps, path string, force bool) error {
 	if len(args) == 0 {
 		return localExitError(deps, "delivery.peer-review", ErrWorkRefRequired)
@@ -264,6 +280,9 @@ func runLocalDeliveryPeerReviewInit(cmd *cobra.Command, args []string, deps *Dep
 	receipt, _ := completion.Body["git_receipt"].(map[string]any)
 	if receipt == nil {
 		return localExitError(deps, "delivery.peer-review", fmt.Errorf("latest completion has no git_receipt"))
+	}
+	if err := validatePeerReceiptOrigin(deps, "delivery.peer-review", receipt); err != nil {
+		return err
 	}
 	if path == deliveryInitAuto {
 		if err := ensureSpecgateWorkingDir(); err != nil {
@@ -322,6 +341,9 @@ func runDeliveryPeerReviewInit(cmd *cobra.Command, args []string, deps *Deps, pa
 	receipt, _ := payload["git_receipt"].(map[string]any)
 	if receipt == nil {
 		return completionValidationError(deps, "delivery.peer-review", "latest completion has no git_receipt")
+	}
+	if err := validatePeerReceiptOrigin(deps, "delivery.peer-review", receipt); err != nil {
+		return err
 	}
 	criteria, err := deps.Client.ListAcceptanceCriteria(cmd.Context(), work.ChangeRequestID)
 	if err != nil {

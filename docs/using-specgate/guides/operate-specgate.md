@@ -1,5 +1,11 @@
 # Operate SpecGate
 
+If an upgraded Full appliance reports unsafe supervisor state, inspect the
+named path in its managed volume before restarting. Startup preserves regular
+legacy diagnostics while tightening ownership; it refuses symlinks and special
+files rather than following or deleting them. Do not purge the data volume to
+bypass this check.
+
 Use this guide to start, stop, back up, upgrade, or remove SpecGate.
 
 ## Operate Local CLI
@@ -8,10 +14,11 @@ Local mode has no service to start or stop. From the bound repository, run
 `specgate doctor` to check the store, workspace binding, shell, and IDE files.
 Use `specgate work resume <work-ref> --json` to pick up a specific work item.
 
-To upgrade the CLI, run `specgate update` or rerun the installer. Users on
-`v0.1.4` can upgrade directly to `v0.1.7`; existing SQLite stores open in place
-with an additive verification-contract table. Existing work remains
-`unconfigured` until a human pins a contract. See the [changelog](../../../CHANGELOG.md).
+To upgrade the CLI, run `specgate update` or rerun the installer. Back up the
+selected Local store first and review the [changelog](../../../CHANGELOG.md)
+for compatibility changes. Existing work remains `unconfigured` until a human
+pins a verification contract; the first enhanced write upgrades the Local
+store as described below.
 
 Refresh CLI-managed plugins using the same agent and global/project scope used
 at installation. Update native Codex or Claude Code plugins through their IDE
@@ -25,10 +32,20 @@ directory contains the store. Keep SQLite sidecar files with the database if
 present. See [Configuration](../reference/configuration.md#cli).
 
 Portable workspace export is a migration format, not a complete Local backup.
-It refuses workspaces with pinned verification contracts or source criteria
-because Full mode cannot preserve those Local proof records. Switching to Full
+It refuses workspaces carrying enhanced Local verification, checkpoints,
+lineage, or acceptance bases because Full mode cannot preserve those proof
+records. Switching to Full
 does not delete the Local store, but it does not move its history automatically
 either.
+
+The first Local checkpoint, v2 verification pin, or source-lineage publication
+also upgrades the store's write compatibility. The confirmation shows the exact
+`state.db.pre-enhanced.bak` path and requires `--yes` in unattended use. Keep a
+supporting CLI for the upgraded live store: older CLIs are blocked from writes,
+and v1 portable/handoff exports refuse pins, checkpoints, lineage, or decision
+bases rather than dropping them. The backup is a pre-upgrade snapshot, not a
+lossless downgrade of later work. Never overwrite the live database to return
+to an old CLI; copy the backup to a separately selected recovery location.
 
 ## Install the Full appliance
 

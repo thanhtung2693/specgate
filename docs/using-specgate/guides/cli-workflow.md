@@ -119,6 +119,12 @@ file with `--yes`. Pins are immutable for a work, do not establish a passing
 test or requirement coverage, and run later through an unsandboxed shell. See
 [Local verification contracts](../reference/cli.md#local-resume-and-verification-contracts).
 
+When the agreement names exact JUnit selectors, submit with `--run-checks` so
+SpecGate can observe a fresh report from the reviewed command. It records what
+the runner reported, not proof that the tests cover behavior. Use
+`specgate --yes work checkpoint <work-ref> --note "handoff"` only when a human
+wants an explicit Local pickup point; resume never chooses it for acceptance.
+
 ### 3. Check the next action
 
 ```bash
@@ -200,6 +206,7 @@ implementation:
 
 ```bash
 # Local
+# Add --basis-digest only when the reviewed status returned it.
 specgate --yes change accept <work-ref> --review-id <review-id> --note "Approved after review"
 
 # Full
@@ -219,7 +226,9 @@ specgate change request-changes <work-ref> \
 ```
 
 Local mode requires `--yes` and the reviewed status's `review_id` for either
-decision; status returns the complete command. Full mode confirms
+decision. When status returns `basis_digest`, repeat it—and any checkpoint or
+impact-selection flags in its exact `next_command`; legacy work without an
+enhanced basis retains review-ID-only compatibility. Full mode confirms
 interactively when possible. Do not issue both decisions for the same
 completion.
 
@@ -371,6 +380,10 @@ specgate update
 
 In Local mode, `doctor` checks the local store, identity, workspace, and IDE
 setup. In Full mode, it also checks server and appliance health.
+
+After Local `user logout`, `doctor` still inspects the initialized store and
+reports the missing user/workspace. Run `specgate user login` to select them
+again; diagnosis does not log you in or remove stored work.
 
 `update` refreshes the CLI, already-installed global IDE plugin files, and a
 CLI-managed Full appliance when present. Project-local plugin files are scoped

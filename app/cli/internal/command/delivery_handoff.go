@@ -15,8 +15,10 @@ import (
 	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/deploy"
+	"github.com/specgate/specgate/app/cli/internal/fsutil"
 	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
+	"github.com/specgate/specgate/app/cli/internal/provenance"
 )
 
 const deliveryHandoffSchemaVersion = "specgate.delivery-handoff/v1"
@@ -84,6 +86,9 @@ func newDeliveryHandoffExportCmd(deps *Deps) *cobra.Command {
 			if err != nil {
 				return localExitError(deps, "delivery.handoff.export", err)
 			}
+			if err := store.ValidateHandoffExport(cmd.Context(), selection.Workspace.ID, work.Key); err != nil {
+				return localExitError(deps, "delivery.handoff.export", err)
+			}
 			review, err := store.DeliveryStatus(cmd.Context(), selection.Workspace.ID, work.Key)
 			if err == sql.ErrNoRows {
 				payload := output.ErrorPayload{
@@ -111,10 +116,20 @@ func newDeliveryHandoffExportCmd(deps *Deps) *cobra.Command {
 				}
 				_ = config.EnsureSpecgateDirGitignore(".specgate")
 				dir := filepath.Join(".specgate", "handoffs")
+				if err := validateRealDirectoryIfExists(dir); err != nil {
+					return completionValidationError(deps, "delivery.handoff.export", err.Error())
+				}
 				if err := os.MkdirAll(dir, 0o700); err != nil {
 					return localExitError(deps, "delivery.handoff.export", err)
 				}
 				filePath = filepath.Join(dir, work.Key+".json")
+			}
+			// The default path needs the same state-alias guard as an explicit file.
+			if err := rejectPortableStateDestination(deps, filePath); err != nil {
+				return completionValidationError(deps, "delivery.handoff.export", err.Error())
+			}
+			if err := validateRegularFileOrMissing(filePath); err != nil {
+				return completionValidationError(deps, "delivery.handoff.export", err.Error())
 			}
 
 			exported, err := redactHandoffEvidence(report)
@@ -135,7 +150,7 @@ func newDeliveryHandoffExportCmd(deps *Deps) *cobra.Command {
 			if err != nil {
 				return localExitError(deps, "delivery.handoff.export", err)
 			}
-			if err := os.WriteFile(filePath, append(data, '\n'), 0o600); err != nil {
+			if err := fsutil.AtomicWriteFile(filePath, append(data, '\n'), 0o600); err != nil {
 				return localExitError(deps, "delivery.handoff.export", err)
 			}
 
@@ -285,9 +300,12 @@ func redactHandoffEvidence(report local.DeliveryReport) (local.DeliveryReport, e
 		return local.DeliveryReport{}, err
 	}
 	var body map[string]any
-	if err := json.Unmarshal(encoded, &body); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(string(encoded)))
+	decoder.UseNumber()
+	if err := decoder.Decode(&body); err != nil {
 		return local.DeliveryReport{}, err
 	}
+	body = provenance.Receipts(body)
 	criteria, _ := body["criteria"].([]any)
 	for _, raw := range criteria {
 		criterion, _ := raw.(map[string]any)

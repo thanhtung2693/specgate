@@ -6,6 +6,6 @@
     "react/only-export-components": "off",
     "react/globals": "off",
     "react/refs": "off",
-    "react/set-state-in-effect": "off"
+    "react/set-state-in-effect": "error"
   }
 }

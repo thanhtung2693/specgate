@@ -36,7 +36,7 @@ func TestServerCommandWarnsWhenCLIBehindRecommendedVersion(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	deps, _ := newTestDeps(t, srv.URL)
+	deps, _ := newTestDeps(t)
 	deps.Stderr = &stderr
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--server", srv.URL, "status", "--all-workspaces")
 	if code != output.ExitOK {
@@ -62,7 +62,7 @@ func TestCommandWarnsWhenGitHubReleaseIsNewer(t *testing.T) {
 		statusHandler: jsonStatus(1, 0),
 	}).build(t)
 
-	deps, _ := newTestDeps(t, srv.URL)
+	deps, _ := newTestDeps(t)
 	deps.Stderr = &stderr
 	deps.CheckLatestRelease = func(context.Context, time.Duration, string) (string, error) {
 		return "v9.9.0-rc.2", nil
@@ -92,7 +92,7 @@ func TestGitHubReleaseWarningCanBeDisabled(t *testing.T) {
 		statusHandler: jsonStatus(1, 0),
 	}).build(t)
 
-	deps, _ := newTestDeps(t, srv.URL)
+	deps, _ := newTestDeps(t)
 	deps.Stderr = &stderr
 	deps.CheckLatestRelease = func(context.Context, time.Duration, string) (string, error) {
 		called = true

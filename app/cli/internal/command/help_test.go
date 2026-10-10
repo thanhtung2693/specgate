@@ -21,7 +21,7 @@ func TestRootHelpIsStyledOnlyOnTTY(t *testing.T) {
 			t.Setenv("CI", "")
 			t.Setenv("NO_COLOR", "")
 			t.Setenv("TERM", "xterm-256color")
-			deps, out := newTestDeps(t, "")
+			deps, out := newTestDeps(t)
 			deps.StdoutIsTTY = func() bool { return tc.tty }
 			if code := command.ExecuteForCode(command.NewRootCommand(deps), "--help"); code != output.ExitOK {
 				t.Fatalf("exit = %d, output = %s", code, out.String())
@@ -40,7 +40,7 @@ func TestRootHelpIsStyledOnlyOnTTY(t *testing.T) {
 }
 
 func TestRootHelpStartsWithChangeFacade(t *testing.T) {
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--help"); code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
 	}

@@ -26,7 +26,7 @@ func newFakeDeps(t *testing.T) (*command.Deps, *fakeClient, *fakePrompter, *byte
 	homeDir := t.TempDir()
 	// stderr shares the buffer: human-mode errors print there, and tests
 	// assert on combined output.
-	printer := output.New(&out, &out, output.ModeHuman)
+	printer := output.NewWithColor(&out, &out, output.ModeHuman, true)
 	deps := &command.Deps{
 		Stdout:     &out,
 		Stderr:     &out,
@@ -602,6 +602,32 @@ func TestWorkCreateQuickFromFile(t *testing.T) {
 	}
 }
 
+func TestWorkCreateQuickLocalInvalidInputIsUsage(t *testing.T) {
+	for _, args := range [][]string{
+		{"Fix crash"},
+		{"Fix crash", "--ac", " "},
+		{"Fix crash", "--ac", "Login works @check:unit @check:integration"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			deps, fc, _, out := newFakeDeps(t)
+			stateDir := filepath.Join(t.TempDir(), "uninitialized")
+			if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: stateDir}}).SaveTo(deps.ConfigPath); err != nil {
+				t.Fatal(err)
+			}
+			code := command.ExecuteForCode(command.NewRootCommand(deps), append([]string{"--json", "work", "create-quick"}, args...)...)
+			if code != output.ExitUsage || !strings.Contains(out.String(), `"code":"validation"`) {
+				t.Fatalf("exit = %d, output = %s", code, out.String())
+			}
+			if fc.calls != 0 {
+				t.Fatalf("invalid Local input made %d remote calls", fc.calls)
+			}
+			if _, err := os.Stat(stateDir); !os.IsNotExist(err) {
+				t.Fatalf("invalid input created state: %v", err)
+			}
+		})
+	}
+}
+
 func TestWorkCreateQuickRunsEntirelyInLocalMode(t *testing.T) {
 	deps, fc, _, out := newFakeDeps(t)
 	stateDir := t.TempDir()
@@ -916,7 +942,7 @@ func TestWorkShowRichOutputStylesPhaseAndCriteria(t *testing.T) {
 	t.Setenv("CI", "")
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("TERM", "xterm-256color")
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.StdoutIsTTY = func() bool { return true }
 	deps.Client = &fakeClient{
 		resolvedWork: &client.ResolvedWork{

@@ -182,6 +182,28 @@ func TestAgentPackagesServeFocusedSkills(t *testing.T) {
 	}
 }
 
+func TestAgentPackagesServesPreparationPreservationReference(t *testing.T) {
+	t.Parallel()
+	rt := &Router{Handlers: &Handlers{}, Config: testConfig()}
+	srv := httptest.NewServer(rt.Build())
+	defer srv.Close()
+	res, err := http.Get(srv.URL + "/plugins/skills/specgate-work-preparation/references/preservation.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("linked preparation reference is unavailable: status=%d", res.StatusCode)
+	}
+	body, err := io.ReadAll(res.Body)
+	if err != nil || len(body) == 0 {
+		t.Fatalf("reference body missing: bytes=%d err=%v", len(body), err)
+	}
+	if got := res.Header.Get("Content-Type"); !strings.Contains(got, "text/markdown") {
+		t.Fatalf("reference content type=%q", got)
+	}
+}
+
 func TestRequestBaseURL_SanitizesHostHeader(t *testing.T) {
 	t.Parallel()
 	// A valid host[:port] is preserved; an attacker-controlled Host carrying

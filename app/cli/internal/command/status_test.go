@@ -18,7 +18,7 @@ func TestStatusJSONEnvelope(t *testing.T) {
 	t.Parallel()
 	srv := (&fakeServer{statusHandler: jsonStatus(5, 2)}).build(t)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--server", srv.URL, "status", "--all-workspaces")
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
@@ -47,7 +47,7 @@ func TestStatusJSONHasNoSpinnerOrProse(t *testing.T) {
 	t.Parallel()
 	srv := (&fakeServer{statusHandler: jsonStatus(1, 0)}).build(t)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--server", srv.URL, "status", "--all-workspaces")
 
 	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
@@ -72,7 +72,7 @@ func TestStatusUsesSelectedWorkspaceByDefault(t *testing.T) {
 		})
 	}}).build(t)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	if err := (config.Config{
 		Workspace: config.CurrentWorkspace{ID: "ws-1", Slug: "specgate"},
@@ -114,7 +114,7 @@ func TestStatusUsesProjectWorkspaceWhenBound(t *testing.T) {
 		})
 	}}).build(t)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	deps.WorkingDir = nested
 	if err := (config.Config{
 		Workspace: config.CurrentWorkspace{ID: "global-ws", Slug: "global"},
@@ -156,7 +156,7 @@ func TestStatusUsesWorkspaceOverride(t *testing.T) {
 		},
 	}).build(t)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	if err := (config.Config{
 		Workspace: config.CurrentWorkspace{ID: "global-ws", Slug: "global"},
 	}).SaveTo(deps.ConfigPath); err != nil {
@@ -195,7 +195,7 @@ func TestStatusUsesWorkspaceEnvOverride(t *testing.T) {
 		},
 	}).build(t)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	if err := (config.Config{
 		Workspace: config.CurrentWorkspace{ID: "global-ws", Slug: "global"},
 	}).SaveTo(deps.ConfigPath); err != nil {
@@ -223,7 +223,7 @@ func TestStatusAllWorkspacesOmitsWorkspaceFilter(t *testing.T) {
 		})
 	}}).build(t)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	if err := (config.Config{
 		Workspace: config.CurrentWorkspace{ID: "ws-1", Slug: "specgate"},
@@ -253,7 +253,7 @@ func TestStatusPlainShowsScopeAndNextAction(t *testing.T) {
 		})
 	}}).build(t)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	if err := (config.Config{
 		Workspace: config.CurrentWorkspace{ID: "ws-1", Slug: "platform"},
@@ -312,7 +312,7 @@ func TestStatusColorRequiresCapableTerminal(t *testing.T) {
 				t.Setenv(key, value)
 			}
 
-			deps, out := newTestDeps(t, srv.URL)
+			deps, out := newTestDeps(t)
 			deps.StdoutIsTTY = func() bool { return tc.tty }
 			deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 			if err := (config.Config{Workspace: config.CurrentWorkspace{ID: "ws-1", Slug: "platform"}}).SaveTo(deps.ConfigPath); err != nil {
@@ -346,7 +346,7 @@ func TestStatusPlainShowsProjectWorkspaceScope(t *testing.T) {
 		})
 	}}).build(t)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	deps.WorkingDir = nested
 	cfg := config.Config{}
@@ -378,7 +378,7 @@ func TestStatusWithoutWorkspaceRequiresExplicitAllWorkspaces(t *testing.T) {
 		})
 	}}).build(t)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--server", srv.URL, "status")
@@ -415,7 +415,7 @@ func TestStatusHumanUsesDashboardVisuals(t *testing.T) {
 		})
 	}}).build(t)
 
-	deps, out := newTestDeps(t, srv.URL)
+	deps, out := newTestDeps(t)
 	deps.StdoutIsTTY = func() bool { return true }
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--server", srv.URL, "status", "--all-workspaces")
 	if code != output.ExitOK {
@@ -443,7 +443,7 @@ func TestLocalStatusCmdJSON(t *testing.T) {
 	dir := t.TempDir()
 	setupTestBundle(t, dir)
 
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.DeployRunner = &fakeDeployRunner{}
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "local-status", "--dir", dir)
 	if code != output.ExitOK {
@@ -465,7 +465,7 @@ func TestLocalStatusCmdPlainUsesFullApplianceTerminology(t *testing.T) {
 	dir := t.TempDir()
 	setupTestBundle(t, dir)
 
-	deps, out := newTestDeps(t, "")
+	deps, out := newTestDeps(t)
 	deps.DeployRunner = &fakeDeployRunner{
 		OutputData: []byte(`[{"Name":"doc-registry","Status":"running (healthy)"}]`),
 	}

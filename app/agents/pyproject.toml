@@ -15,7 +15,7 @@ dependencies = [
     "pydantic>=2.0.0",
     "langchain-google-genai>=2.0.0",
     "langgraph-cli[inmem]>=0.4.22",
-    "langgraph-api>=0.8.0",
+    "langgraph-api>=0.15.1",
     "fastapi>=0.118.0",
     "jsonschema>=4.0.0",
     # ASGI server for serving webapp.py directly (without the LangGraph runtime).
@@ -32,7 +32,7 @@ dev = [
 ]
 
 [build-system]
-requires = ["uv_build>=0.10.12,<0.11.0"]
+requires = ["uv_build>=0.12.23,<0.13.0"]
 build-backend = "uv_build"
 
 [tool.ruff]
