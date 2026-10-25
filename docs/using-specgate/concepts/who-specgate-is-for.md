@@ -30,9 +30,9 @@ What SpecGate does about it:
 - A criterion tied to a check (`@check:<name>`) takes its verdict from the
   check result. The agent's opinion of its own test run is noted, then
   re-verified.
-- On submit, SpecGate **reruns the commands the agent claims it ran** — the
-  installed skills always submit this way. Claims that don't reproduce get
-  corrected, on the record. Every verdict says
+- With `--run-checks`, SpecGate **reruns non-skipped checks that have commands**.
+  The installed delivery skill uses this path. Claims that don't reproduce get
+  corrected, on the record; checks without execution remain reported evidence. Every verdict says
   whether a human-visible result was *observed* or merely *reported*.
 - Citing a test that doesn't exist gets flagged. (Yes, agents do this. With
   citations. It's very convincing.)
@@ -108,21 +108,23 @@ written by the agent itself. That account is the thing SpecGate verifies.
 
 ## Limits, before you find them yourself
 
-- **Names are recorded, not proven.** SpecGate has no login. The chain proves
-  the record was not edited after the fact; it does not prove who was at the
-  keyboard, because the name on a decision is whatever the caller supplied, and
-  the service trusts anyone who can reach it. Run it on a trusted network. One
-  coding agent cannot peer-review its own completion, and whoever filed the
-  completion cannot approve it either — both are enforced by name — but a
-  determined impersonator only has to type a different name.
+- **Local names are cooperative attribution.** Local user selection records
+  a name without authenticating the person at the keyboard. Same-agent review
+  and acceptance guards do not isolate a hostile agent running as your OS user.
+  Full mode can require gateway credentials and record the authenticated caller;
+  without credentials it trusts its network. See
+  [Trust and security](trust-and-security.md) for the exact boundary.
 - **The Local trail has no chain.** One laptop, one SQLite file: the trail
   replays, but `--verify` has nothing to recompute and says so rather than
   answering.
-- **Staleness detection needs a Git remote.** A repo that has never been
-  pushed gets no "this evidence is older than your code" warning — and
-  SpecGate tells you so instead of pretending.
-- **Local mode is one machine.** Sharing state means exporting into Full
-  mode; Local stores don't sync between laptops, however nicely you ask.
+- **Freshness has a checkout boundary.** A Git remote is not required to
+  compare a receipt with the same Local checkout. Missing Git metadata or a
+  different originless checkout is unverified. These endpoint observations do
+  not prove the files stayed unchanged throughout a test run.
+- **Local mode is one machine.** Local stores do not sync between laptops.
+  Portable transfer to Full refuses enhanced pins, checkpoints, lineage, and
+  acceptance bases that its v1 format cannot preserve. Keep a Local backup;
+  see [Operate SpecGate](../guides/operate-specgate.md#operate-local-cli).
 
 ## Who should close this tab
 

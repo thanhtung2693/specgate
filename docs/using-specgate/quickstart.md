@@ -179,6 +179,9 @@ Read scope and non-goals before editing. The agent should stop if it cannot
 retrieve that approved context. Before the first completion report, you may
 optionally [pin the check commands](reference/cli.md#local-resume-and-verification-contracts)
 for `@check` criteria. Without a pin, verification setup remains `unconfigured`.
+After this first workflow, try the optional
+[selected-test walkthrough](guides/observe-selected-tests.md) to observe a
+missing test, checkpoint delta, and exact acceptance basis in a scratch repo.
 
 ## 6. Let the agent implement and submit evidence
 

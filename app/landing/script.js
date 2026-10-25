@@ -171,32 +171,32 @@ if (spyTargets.length) {
         { k: "out", t: "  Scope: healthcheck endpoint and automated test" },
         { k: "out", t: "  Non-goal: deployment or monitoring changes" },
         { k: "pass", t: "  Implementation contract loaded" },
+        { k: "cmd", t: "$ specgate --yes work checkpoint <work-ref> --note handoff --json" },
+        { k: "dim", t: "  Keep the returned checkpoint ID for an explicit later comparison." },
       ],
     },
     {
       title: "specgate / delivery review",
-      cap: { t: "Verify what shipped.", d: "Re-run reported checks, record independent peer evidence, then leave the delivery decision to a human." },
+      cap: { t: "Find the missing evidence.", d: "A green command can omit the agreed testcase. Inspect the observed gap, rerun, then review the exact acceptance basis." },
       lines: [
+        { k: "dim", t: "# report-enabled Local pin configured; follow the linked walkthrough" },
         { k: "cmd", t: "$ specgate delivery report <work-ref> --init --json" },
         { k: "dim", t: "  Use the returned data.path as <completion-path>; fill in the evidence." },
-        { k: "cmd", t: "$ specgate delivery submit <work-ref> --file <completion-path> --run-checks --yes" },
-        { k: "out", t: "  1/4  Completion report recorded" },
-        { k: "out", t: "  2/4  Quality gates triggered" },
-        { k: "out", t: "  3/4  Delivery review triggered" },
-        { k: "out", t: "  4/4  Delivery status fetched" },
-        { k: "ok", t: "  Verdict: needs_human_review" },
-        { k: "cmd", t: "$ specgate delivery peer-review <work-ref> --init --json" },
-        { k: "dim", t: "  An independent reviewer fills the returned <peer-review-path>." },
-        { k: "cmd", t: "$ specgate delivery peer-review <work-ref> --file <peer-review-path>" },
-        { k: "out", t: "  Peer review recorded; delivery review rerun." },
-        { k: "cmd", t: "$ specgate delivery status <work-ref> --detail" },
-        { k: "pass", t: "  Verdict: pass" },
-        { k: "ok", t: "  Peer review: passed" },
-        { k: "dim", t: "  Human approval remains required." },
-        { k: "dim", t: "  Human reviewer records the final delivery decision." },
-        { k: "cmd", t: "$ specgate change status <work-ref> --json" },
-        { k: "dim", t: "  Use the review_id from the evidence you just reviewed." },
-        { k: "cmd", t: "$ specgate --yes change accept <work-ref> --review-id <review-id>" },
+        { k: "cmd", t: "$ specgate change submit <work-ref> --file <completion-path> --run-checks --yes" },
+        { k: "out", t: "  State: implementation" },
+        { k: "out", t: "  Evidence: Evidence gaps found" },
+        { k: "warn", t: "  [unmet] Unhealthy requests return 503" },
+        { k: "warn", t: "  selected testcase is missing" },
+        { k: "dim", t: "# Add the missing test and update the completion draft; keep the reviewed pin." },
+        { k: "cmd", t: "$ specgate change submit <work-ref> --file <completion-path> --run-checks --yes" },
+        { k: "out", t: "  State: awaiting_acceptance" },
+        { k: "cmd", t: "$ specgate change status <work-ref> --checkpoint <checkpoint-id> --detail" },
+        { k: "pass", t: "  selected test: test/unhealthy returns 503 passed" },
+        { k: "warn", t: "  stale risk: watched input health.test.mjs changed" },
+        { k: "out", t: "  Next actor: human_reviewer" },
+        { k: "dim", t: "  Human approval remains required. Inspect the changed test before deciding." },
+        { k: "dim", t: "# Only the human may choose the exact next command from reviewed status:" },
+        { k: "cmd", t: "$ specgate --yes change accept <work-ref> --review-id <review-id> --basis-digest <basis-digest> --checkpoint <checkpoint-id>" },
       ],
     },
     {
@@ -334,7 +334,7 @@ if (spyTargets.length) {
     (entries, observer) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
-          play(0);
+          if (runId === 0) play(0);
           observer.disconnect();
         }
       });

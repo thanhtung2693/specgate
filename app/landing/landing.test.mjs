@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { runInNewContext } from "node:vm";
 
 const here = new URL(".", import.meta.url);
 const html = readFileSync(new URL("index.html", here), "utf8");
@@ -11,6 +12,44 @@ const css = [...cssEntry.matchAll(/@import url\("([^"]+)"\);/g)]
 const js = readFileSync(new URL("script.js", here), "utf8");
 const sitemap = readFileSync(new URL("sitemap.xml", here), "utf8");
 const readme = readFileSync(new URL("../../README.md", here), "utf8");
+
+test("a delayed viewport observer preserves a manually selected demo tab", () => {
+  for (const input of ["click", "keyboard"]) {
+    const element = () => ({
+      attributes: {}, listeners: {}, dataset: {}, style: {}, classList: { add() {} },
+      setAttribute(name, value) { this.attributes[name] = value; },
+      addEventListener(name, callback) { this.listeners[name] = callback; },
+      appendChild() {}, replaceChildren() {}, focus() {},
+    });
+    const tabs = Array.from({ length: 4 }, (_, i) => ({ ...element(), id: `tab-${i}` }));
+    const title = element(), panel = element(), caption = element();
+    const root = {
+      querySelectorAll: () => tabs,
+      querySelector: (selector) => ({ "[data-cast-title]": title, "[data-cast-body]": panel, "[data-cast-caption]": caption })[selector],
+    };
+    const observers = [];
+    runInNewContext(js, {
+      document: {
+        documentElement: { dataset: {} },
+        querySelector: (selector) => selector === "[data-carousel]" ? root : null,
+        querySelectorAll: () => [],
+        createElement: element, createTextNode: (text) => ({ textContent: text }),
+      },
+      matchMedia: () => ({ matches: false }),
+      setTimeout: () => 1, clearTimeout() {},
+      IntersectionObserver: class {
+        constructor(callback) { this.callback = callback; observers.push(this); }
+        observe() {} disconnect() {}
+      },
+    });
+    if (input === "click") tabs[2].listeners.click();
+    else tabs[3].listeners.keydown({ key: "ArrowLeft", preventDefault() {} });
+    assert.equal(tabs[2].attributes["aria-selected"], "true");
+    observers.at(-1).callback([{ isIntersecting: true }], observers.at(-1));
+    assert.equal(tabs[2].attributes["aria-selected"], "true", `${input} selection was replaced by viewport startup`);
+    assert.equal(panel.attributes["aria-labelledby"], "tab-2");
+  }
+});
 
 function cssBlock(selector) {
   return css.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{(?<body>[\\s\\S]*?)\\n\\}`))?.groups?.body ?? "";
@@ -311,11 +350,12 @@ test("terminal presents the current four-part value path", () => {
   assert.match(js, /specgate work list --phase ready/);
   assert.match(js, /specgate work context <work-ref>/);
   assert.match(js, /specgate delivery report <work-ref> --init/);
-  assert.match(js, /specgate delivery submit <work-ref> --file <completion-path> --run-checks --yes/);
+  assert.match(js, /specgate change submit <work-ref> --file <completion-path> --run-checks --yes/);
   assert.match(js, /returned data\.path/);
   assert.match(js, /specgate work resume <work-ref> --json/);
-  assert.match(js, /specgate delivery peer-review <work-ref> --init/);
-  assert.match(js, /specgate delivery status <work-ref> --detail/);
+  assert.match(js, /selected testcase is missing/);
+  assert.match(js, /watched input health\.test\.mjs changed/);
+  assert.match(js, /specgate change status <work-ref> --checkpoint <checkpoint-id> --detail/);
   assert.match(js, /specgate --yes change accept <work-ref> --review-id <review-id>/);
   assert.match(js, /Human approval remains required/);
   assert.doesNotMatch(js, /Delivery verdict: PASS/);

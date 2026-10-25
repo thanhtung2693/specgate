@@ -124,6 +124,10 @@ SpecGate can observe a fresh report from the reviewed command. It records what
 the runner reported, not proof that the tests cover behavior. Use
 `specgate --yes work checkpoint <work-ref> --note "handoff"` only when a human
 wants an explicit Local pickup point; resume never chooses it for acceptance.
+For a complete Node.js example, follow
+[Observe selected tests](observe-selected-tests.md): configure the exact pin,
+see an exit-zero run fail for a missing case, add the case, and inspect the
+new evidence and acceptance basis.
 
 ### 3. Check the next action
 

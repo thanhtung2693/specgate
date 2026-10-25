@@ -38,15 +38,25 @@ func acceptanceRisks(status changeStatusResult) []acceptanceRiskCategory {
 		if row.Claim == "missing" {
 			add("missing", row.ID, row.ID+": no recorded claim")
 		}
+		failedSelected := map[string]bool{}
+		for _, selected := range row.Selected {
+			if selected.Outcome == "failed" {
+				failedSelected["selected test "+selected.ClassName+"/"+selected.Name+": failed"] = true
+			}
+		}
 		for _, gap := range row.Gaps {
-			lower := strings.ToLower(gap)
 			category := "missing"
+			// Names and paths are data, not evidence of a failed or stale outcome.
 			switch {
-			case strings.Contains(lower, "fail"):
+			case failedSelected[gap]:
 				category = "failed"
-			case strings.Contains(lower, "changed") || strings.Contains(lower, "stale"):
+			case row.CheckStatus == "fail" && gap == "bound check "+row.CheckName+": fail":
+				category = "failed"
+			case row.RunFreshness == "changed" && gap == "verification run freshness: changed":
 				category = "stale"
-			case strings.Contains(lower, "unavailable") || strings.Contains(lower, "unverified"):
+			case row.RunFreshness != "" && row.RunFreshness != "matching_endpoints" && gap == "verification run freshness: "+row.RunFreshness:
+				category = "unknown"
+			case row.GroundingStatus == "unverified" && gap == "citation: unverified":
 				category = "unknown"
 			}
 			add(category, row.ID, row.ID+": "+gap)

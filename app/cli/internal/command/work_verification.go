@@ -105,7 +105,7 @@ func newWorkVerificationCmd(deps *Deps) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&file, "file", "", "JSON containing context_digest, shell (sh), and checks [{name,command,cwd}]")
+	cmd.Flags().StringVar(&file, "file", "", "JSON containing context_digest, shell (sh), checks [{name,command,cwd, optional test_report}], and optional watched_paths")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview the contract without pinning it")
 	return cmd
 }
