@@ -378,7 +378,7 @@ func TestLocalChangeStatusShowsAcceptanceMaterial(t *testing.T) {
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "change", "status", work.Key, "--detail"); code != 0 {
 		t.Fatalf("status detail %d: %s", code, out.String())
 	}
-	for _, want := range []string{base.ID, work.ContextDigest, "Completion:", "Source coverage:", "Criterion evidence:"} {
+	for _, want := range []string{base.ID, work.ContextDigest, "Completion:", "Source coverage:", "Criteria:", "provenance:"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("status detail missing %q: %s", want, out.String())
 		}

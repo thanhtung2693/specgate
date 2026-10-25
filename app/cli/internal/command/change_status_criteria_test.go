@@ -78,11 +78,16 @@ func TestChangeStatusHumanOutputListsCriteriaVerdicts(t *testing.T) {
 	}
 	out.Reset()
 
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "change", "status", work.Key)
-	if code != output.ExitOK {
-		t.Fatalf("status exit = %d, output = %s", code, out.String())
-	}
-	if !strings.Contains(out.String(), "Criteria:") {
-		t.Fatalf("human receipt omits the per-criterion block:\n%s", out.String())
+	for _, args := range [][]string{{"change", "status", work.Key}, {"work", "resume", work.Key}} {
+		out.Reset()
+		code := command.ExecuteForCode(command.NewRootCommand(deps), append([]string{"--plain"}, args...)...)
+		if code != output.ExitOK {
+			t.Fatalf("%v exit = %d, output = %s", args, code, out.String())
+		}
+		for _, want := range []string{"Criteria:", "provenance: unknown", "Next actor:", "Next:"} {
+			if !strings.Contains(out.String(), want) {
+				t.Fatalf("%v receipt omits %q:\n%s", args, want, out.String())
+			}
+		}
 	}
 }

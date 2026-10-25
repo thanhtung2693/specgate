@@ -426,6 +426,9 @@ html[data-theme="light"] .tool-marks img:hover {
   color: var(--ok);
   font-weight: 600;
 }
+.tl[data-k="warn"] {
+  color: color-mix(in srgb, var(--warn) 80%, var(--ink) 20%);
+}
 .tl.cur::after {
   content: "";
   display: inline-block;

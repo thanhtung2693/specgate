@@ -42,6 +42,8 @@ outside that boundary.
 ## Get something done
 
 - [Use the SpecGate CLI](guides/cli-workflow.md)
+- [Run a delivery evidence gap and repair it](guides/try-delivery-proof.md)
+- [Observe selected tests in Local mode](guides/observe-selected-tests.md)
 - [Use SpecGate with a coding agent](guides/coding-agent-workflow.md)
 - [Install SpecGate in your coding IDE](guides/install-ide-plugins.md)
 - [Configure models](guides/configure-models.md)

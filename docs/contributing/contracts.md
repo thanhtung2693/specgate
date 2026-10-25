@@ -81,6 +81,9 @@ immutability or correctness.
 Compact Local risk counts classify unavailable or noncomparable current
 freshness as unknown using that normalized basis state, not its rendered prose.
 Historical passing test results stay passing; unknown provenance is separate.
+Criterion gap categories use their structured check, selected-case, grounding,
+and freshness outcomes. User-chosen names and paths are opaque data and never
+classify a gap by containing words such as `fail`, `changed`, or `unavailable`.
 For legacy records without a normalized basis state, the CLI uses the actual
 checkout-comparison outcome; an unchecked comparison is an unknown risk.
 

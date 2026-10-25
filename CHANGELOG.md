@@ -5,10 +5,18 @@ versioning.
 
 ## Unreleased
 
-## [0.2.6] - 2026-10-10
+## [0.2.6] - 2026-10-25
+
+Reissued with delivery-evidence clarity and launch-readiness fixes. This
+replaces the assets originally published as v0.2.6 on 2026-10-10.
 
 ### Added
 
+- A runnable Local delivery-proof demo shows an explicitly skipped criterion,
+  then repairs code, tests and the completion report using the same Context
+  Pack. It retains isolated state and stops before human acceptance.
+- A selected-JUnit Local walkthrough covers missing-test evidence, reruns,
+  checkpoint resume, watched-input drift and exact-basis human review.
 - Local checkpoints can compare exact dirty-file content across work sessions;
   unavailable checkout snapshots are rejected instead of stored as baselines.
 - Optional Local verification pins bind `@check` criteria to reviewed commands.
@@ -23,6 +31,11 @@ versioning.
 
 ### Improved
 
+- Default Local status and resume display criterion claims, provenance,
+  citation grounding and gaps beside the existing verdict and reason. Detail
+  adds paths and selected cases without duplicating the criterion list.
+- Public copy and landing examples clarify Local freshness limits and the
+  distinction between failed evidence and human risk acceptance.
 - Local resume shows newer artifact versions without changing approved scope,
   distinguishes missing or unavailable evidence, and keeps large path deltas
   compact unless detail is requested.
@@ -34,6 +47,12 @@ versioning.
 
 ### Fixed
 
+- Landing demo tabs retain manual selections when initial viewport observation
+  arrives late.
+- Local risk categories use structured outcomes; words in check names,
+  testcase names and paths cannot create false failed or stale observations.
+- The delivery-proof demo validates completion input before changing repair
+  files and quotes paths containing spaces or apostrophes in its repair command.
 - Selected JUnit failures retain the CLI-observed reason through delivery
   submission, persisted evidence, and status readback, including missing tests.
 - Local doctor diagnoses a logged-out identity without selecting one and
@@ -53,6 +72,8 @@ versioning.
 
 ### Upgrade notes
 
+- This reissue keeps version v0.2.6. Verify the installed build commit when
+  replacing an existing v0.2.6 installation.
 - The first enhanced Local write backs up and upgrades the entire Local store.
   Older CLIs cannot write that store; portable and handoff v1 exports refuse
   enhanced records instead of silently losing them. Back up before upgrading.

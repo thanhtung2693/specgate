@@ -91,3 +91,35 @@ func TestAcceptanceRisksExposeNormalizedCurrentFreshness(t *testing.T) {
 		})
 	}
 }
+
+func TestAcceptanceRisksUseOutcomesNotCheckOrTestNames(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		row      local.AcceptanceCriterionEvidence
+		category string
+	}{
+		{"skipped check named unchanged", local.AcceptanceCriterionEvidence{CheckName: "unchanged_behavior", CheckStatus: "skipped", Gaps: []string{"bound check unchanged_behavior: skipped"}}, "missing"},
+		{"skipped check named failover", local.AcceptanceCriterionEvidence{CheckName: "failover", CheckStatus: "skipped", Gaps: []string{"bound check failover: skipped"}}, "missing"},
+		{"failed check named unchanged", local.AcceptanceCriterionEvidence{CheckName: "unchanged_behavior", CheckStatus: "fail", Gaps: []string{"bound check unchanged_behavior: fail"}}, "failed"},
+		{"skipped test with failure in name", local.AcceptanceCriterionEvidence{Selected: []local.JUnitCaseObservation{{ClassName: "failover", Name: "unchanged_behavior", Outcome: "skipped"}}, Gaps: []string{"selected test failover/unchanged_behavior: skipped"}}, "missing"},
+		{"failed test", local.AcceptanceCriterionEvidence{Selected: []local.JUnitCaseObservation{{ClassName: "suite", Name: "unchanged_behavior", Outcome: "failed"}}, Gaps: []string{"selected test suite/unchanged_behavior: failed"}}, "failed"},
+		{"missing test with unavailable in name", local.AcceptanceCriterionEvidence{Gaps: []string{"selected test suite/unavailable_fallback: missing"}}, "missing"},
+		{"changed run", local.AcceptanceCriterionEvidence{RunFreshness: "changed", Gaps: []string{"verification run freshness: changed"}}, "stale"},
+		{"unavailable run", local.AcceptanceCriterionEvidence{RunFreshness: "unavailable", Gaps: []string{"verification run freshness: unavailable"}}, "unknown"},
+		{"unverified citation", local.AcceptanceCriterionEvidence{GroundingStatus: "unverified", Gaps: []string{"citation: unverified"}}, "unknown"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			test.row.ID, test.row.Claim = "local-1", "satisfied"
+			status := changeStatusResult{CompletionID: "completion-1", PeerState: "passed", AcceptanceBasis: &local.AcceptanceBasis{Freshness: "matching_endpoints"}, CriterionEvidence: []local.AcceptanceCriterionEvidence{test.row}}
+			for _, risk := range acceptanceRisks(status) {
+				want := 0
+				if risk.Category == test.category {
+					want = 1
+				}
+				if risk.Count != want {
+					t.Fatalf("%s: got %s=%d, want %d", test.name, risk.Category, risk.Count, want)
+				}
+			}
+		})
+	}
+}

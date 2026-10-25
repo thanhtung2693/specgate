@@ -182,6 +182,8 @@ ignored `SPECGATE_TEST_REPORT` path, reads at most 16 MiB / 100,000 cases, and
 stores normalized selected-case outcomes rather than XML or command output.
 It does not infer tests, install a runner, or prove a runner did not fabricate
 the report. Changed watched bytes are a visible review warning, not a pass.
+For a runnable configuration and a missing-test/rerun example, follow
+[Observe selected tests](../guides/observe-selected-tests.md).
 
 Any failure/error in the supported report fails the check, including unselected
 cases. Selected skipped, missing or duplicate cases cannot pass. Unsupported
@@ -499,9 +501,16 @@ review, and delivery-status payloads.
 
 `change status` gives the next safe action. Human output names the same concepts
 as the JSON fields below; JSON emits the standard success envelope with this
-object in `data`. In Local mode, `change status <ref> --detail` expands every
-criterion's recorded claim, check provenance, selected-test outcome, citation,
-and gap. The default remains compact but names scope, report/review, and risks.
+object in `data`. Default Local output keeps each criterion's verdict and Why
+beside its claim, bound check status, check provenance, citation grounding, and
+recorded gaps. `agent_attested` means agent-reported; `command_only` means the
+CLI observed the command without selected testcase observations;
+`selected_test_observed` means the CLI observed the pinned selected testcases.
+Missing legacy provenance stays `unknown`. `change status <ref> --detail` adds
+evidence paths, citation anchors, selected-test outcomes, and comparison details
+to the same criterion block. `work resume` uses the same default status display.
+Checkout freshness and human decisions remain separate from historical check
+outcomes; acceptance does not erase recorded gaps.
 
 | JSON field | Meaning |
 |---|---|
@@ -534,6 +543,10 @@ and gap. The default remains compact but names scope, report/review, and risks.
 | `basis_digest` | Present only when enhanced Local verification or a checkpoint requires the human decision to bind the exact status material. Pass it unchanged as `--basis-digest`; legacy review-ID-only decisions remain supported. |
 | `acceptance_basis` | Current enhanced review material, including watched-input observations and explicit comparison selections. A changed material digest requires another review before deciding. |
 | `recorded_acceptance_basis` | Immutable basis stored with the human decision, including actor, note and observation time; omitted for legacy decisions. This historical record is distinct from the current checkout observation. |
+
+Criterion risk categories use the recorded check, selected-case, grounding,
+and freshness outcomes. Words inside a check name, testcase name, or evidence
+path cannot turn missing evidence into a failed or stale observation.
 
 `evidence`, `assurance`, `decision`, and `receipt` are separate summary labels:
 evidence says what was reported or reviewed, assurance says how it was assessed,
