@@ -2,7 +2,7 @@ module github.com/specgate/doc-registry
 
 go 1.26.4
 
-toolchain go1.27.1
+toolchain go1.27.3
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.47.1

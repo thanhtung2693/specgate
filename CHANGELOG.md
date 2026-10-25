@@ -62,6 +62,11 @@ replaces the assets originally published as v0.2.6 on 2026-10-10.
 
 ### Security
 
+- Go compiler and image builds use 1.27.3 for patched standard-library security
+  fixes; the minimum Go language/dependency version remains 1.26.4.
+  CI uses Staticcheck 0.8.2 to support the updated compiler export format.
+- Agents images use certifi 2026.10.23, removing compromised emSign CA trust
+  covered by GHSA-6q48-6c7w-9gw2.
 - Appliance supervisor state is root-owned, restart counters are validated
   before arithmetic, and diagnostic temporary files are created exclusively.
   Unsafe existing state links are rejected without deleting operator data.

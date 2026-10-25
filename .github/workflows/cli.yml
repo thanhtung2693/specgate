@@ -21,7 +21,7 @@ jobs:
         with:
           go-version-file: app/cli/go.mod
           cache-dependency-path: app/cli/go.sum
-      - run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
+      - run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
       - run: make test
       - name: Verify legacy Local compatibility and recovery
         working-directory: .
