@@ -39,13 +39,16 @@ Use the manual workflow trigger to redeploy unchanged landing-page files.
 
 The terminal carousel demonstrates four current CLI value paths: publish an
 artifact after an explicit preview, resume Local work and read pinned documents, submit
-delivery evidence with locally re-run checks and independent peer review before
-the human delivery decision, and inspect observed governance signals. Keep
+delivery evidence with an explicit missing selected-test result before rerun
+and exact-basis human review, and inspect observed governance signals. Keep
 command shapes aligned with `specgate --help` and the user documentation. Use
 returned scaffold paths and the exact review ID for Local acceptance. Demo
 outputs are abbreviated illustrations, not captured CLI transcripts. The
 initial Publish frame is present in HTML for no-JavaScript use; `script.js`
 enhances it with accessible tabs and plain-text playback.
+The [selected-test walkthrough](../../docs/using-specgate/guides/observe-selected-tests.md)
+provides a runnable counterpart. It retains watched-input drift after adding
+the missing test; human acceptance remains separate from the test outcome.
 
 The page keeps the public story compact: hero, compatibility, governed loop,
 CLI demo, where-it-fits comparison, six-question FAQ, and CTA. The governed

@@ -5,6 +5,14 @@ versioning.
 
 ## Unreleased
 
+- Fixed landing demo tabs resetting after a manual selection when viewport
+  startup arrived late.
+- Fixed Local risk categories interpreting words in check and testcase names
+  as failure, staleness, or unavailable evidence.
+- Added a selected-JUnit Local walkthrough with missing-test evidence,
+  checkpoint resume, watched-input drift, and exact-basis review; clarified
+  Local freshness and human acceptance limits in public copy.
+
 ## [0.2.6] - 2026-10-10
 
 ### Added
