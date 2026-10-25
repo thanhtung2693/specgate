@@ -499,9 +499,16 @@ review, and delivery-status payloads.
 
 `change status` gives the next safe action. Human output names the same concepts
 as the JSON fields below; JSON emits the standard success envelope with this
-object in `data`. In Local mode, `change status <ref> --detail` expands every
-criterion's recorded claim, check provenance, selected-test outcome, citation,
-and gap. The default remains compact but names scope, report/review, and risks.
+object in `data`. Default Local output keeps each criterion's verdict and Why
+beside its claim, bound check status, check provenance, citation grounding, and
+recorded gaps. `agent_attested` means agent-reported; `command_only` means the
+CLI observed the command without selected testcase observations;
+`selected_test_observed` means the CLI observed the pinned selected testcases.
+Missing legacy provenance stays `unknown`. `change status <ref> --detail` adds
+evidence paths, citation anchors, selected-test outcomes, and comparison details
+to the same criterion block. `work resume` uses the same default status display.
+Checkout freshness and human decisions remain separate from historical check
+outcomes; acceptance does not erase recorded gaps.
 
 | JSON field | Meaning |
 |---|---|

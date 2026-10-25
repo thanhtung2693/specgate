@@ -129,6 +129,17 @@ refused later by a Full appliance.
 
 ## Bound criteria
 
+Default Local `change status` and `work resume` show every reviewed criterion's
+verdict and Why together with its check status, provenance, citation grounding,
+and recorded gaps. `agent_attested` is an agent-reported result;
+`command_only` is a CLI-observed command result without observations of selected
+testcases; `selected_test_observed` records CLI-observed selected testcases.
+Missing legacy provenance remains unknown. Failed, skipped, missing checks and
+unresolved citations remain visible even after a human accepts limitations.
+Use `change status --detail` for paths, citation anchors, and selected cases in
+the same criterion block. These observations do not establish semantic
+correctness beyond the declared checks.
+
 Local acceptance bases retain current-checkout `freshness` and `peer_review`
 state alongside criterion results, identities, and gaps. `matching_endpoints`
 means the observed endpoints match, not continuous immutability. `stale`,

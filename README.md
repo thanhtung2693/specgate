@@ -24,6 +24,7 @@
 
 <p align="center">
   <a href="https://thanhtung2693.github.io/specgate/#delivery-proof"><strong>Watch 15s video</strong></a>
+  · <a href="docs/using-specgate/guides/try-delivery-proof.md"><strong>Run the delivery proof locally</strong></a>
 </p>
 
 SpecGate is a local-first governance layer for AI-assisted software delivery.

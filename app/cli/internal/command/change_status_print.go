@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/config"
+	"github.com/specgate/specgate/app/cli/internal/local"
 )
 
 func printChangeStatus(deps *Deps, result changeStatusResult, detailed ...bool) {
@@ -67,16 +69,6 @@ func printChangeStatus(deps *Deps, result changeStatusResult, detailed ...bool) 
 			fmt.Fprintln(deps.Stdout)
 		}
 		if len(detailed) > 0 && detailed[0] {
-			fmt.Fprintln(deps.Stdout, "Criterion evidence:")
-			for _, row := range result.CriterionEvidence {
-				fmt.Fprintf(deps.Stdout, "  %s: %s; claim=%s; check=%s (%s, %s); evidence=%s %s %s\n", row.ID, row.Text, row.Claim, row.CheckName, row.CheckStatus, row.CheckSource, row.EvidenceKind, row.EvidencePath, row.Citation)
-				for _, selected := range row.Selected {
-					fmt.Fprintf(deps.Stdout, "    selected test: %s/%s %s\n", selected.ClassName, selected.Name, selected.Outcome)
-				}
-				for _, gap := range row.Gaps {
-					fmt.Fprintf(deps.Stdout, "    gap: %s\n", gap)
-				}
-			}
 			for _, risk := range result.Risks {
 				for _, detail := range risk.Details {
 					fmt.Fprintf(deps.Stdout, "  %s risk: %s\n", risk.Category, detail)
@@ -97,10 +89,60 @@ func printChangeStatus(deps *Deps, result changeStatusResult, detailed ...bool) 
 	}
 	// Same shape as `verify`: the criterion text and the reason, so a human can
 	// see which one is weak without opening the completion file.
+	if result.Mode == config.ModeLocal && len(result.Criteria) == 0 {
+		for _, row := range result.CriterionEvidence {
+			result.Criteria = append(result.Criteria, client.CriterionReview{CriterionID: row.ID, Text: row.Text, Verdict: "not reviewed"})
+		}
+	}
 	if len(result.Criteria) > 0 {
+		evidence := make(map[string]local.AcceptanceCriterionEvidence, len(result.CriterionEvidence))
+		for _, row := range result.CriterionEvidence {
+			evidence[row.ID] = row
+		}
 		fmt.Fprintln(deps.Stdout, "Criteria:")
 		for _, criterion := range result.Criteria {
 			fmt.Fprintf(deps.Stdout, "  [%s] %s — %s\n", criterion.Verdict, criterion.Text, criterion.Why)
+			if result.Mode != config.ModeLocal {
+				continue
+			}
+			row, ok := evidence[criterion.CriterionID]
+			if !ok {
+				fmt.Fprintln(deps.Stdout, "    gap: criterion evidence missing")
+				continue
+			}
+			provenance := row.CheckProvenance
+			switch provenance {
+			case "agent_attested":
+				provenance += " (agent-reported)"
+			case "command_only":
+				provenance += " (CLI observed command; no selected testcase observation)"
+			case "selected_test_observed":
+				provenance += " (CLI observed selected testcases)"
+			case "":
+				provenance = "unknown"
+			}
+			status, grounding := row.CheckStatus, row.GroundingStatus
+			if status == "" {
+				status = "missing"
+			}
+			if grounding == "" {
+				grounding = "unknown"
+			}
+			if row.CheckName == "" {
+				fmt.Fprintf(deps.Stdout, "    Check: none bound; provenance: %s\n", provenance)
+			} else {
+				fmt.Fprintf(deps.Stdout, "    Check: %s (%s); provenance: %s\n", row.CheckName, status, provenance)
+			}
+			fmt.Fprintf(deps.Stdout, "    Claim: %s; citation grounding: %s\n", row.Claim, grounding)
+			for _, gap := range row.Gaps {
+				fmt.Fprintf(deps.Stdout, "    gap: %s\n", gap)
+			}
+			if len(detailed) > 0 && detailed[0] {
+				fmt.Fprintf(deps.Stdout, "    Evidence: %s %s %s\n", row.EvidenceKind, row.EvidencePath, row.Citation)
+				for _, selected := range row.Selected {
+					fmt.Fprintf(deps.Stdout, "    selected test: %s/%s %s\n", selected.ClassName, selected.Name, selected.Outcome)
+				}
+			}
 		}
 	}
 	fmt.Fprintf(deps.Stdout, "Next actor: %s\n", result.NextActor)

@@ -150,6 +150,7 @@ test("governed loop copy does not overpromise format parsing", () => {
 
 test("product proof uses the published GitHub Pages media without autoplay", () => {
   const proof = html.match(/<section class="band proof" id="delivery-proof">(?<body>[\s\S]*?)<\/section>/)?.groups?.body ?? "";
+  assert.match(proof, /<a class="accent" href="https:\/\/github\.com\/thanhtung2693\/specgate\/blob\/main\/docs\/using-specgate\/guides\/try-delivery-proof\.md">Run the delivery proof locally<\/a>/);
 
   assert.match(proof, /When "done" is not delivered/);
   assert.match(proof, /<video[^>]+controls[^>]+muted[^>]+playsinline[^>]+preload="metadata"/);
