@@ -2,7 +2,7 @@ module github.com/specgate/specgate/app/cli
 
 go 1.26.4
 
-toolchain go1.27.1
+toolchain go1.27.3
 
 require (
 	github.com/charmbracelet/huh v1.0.0

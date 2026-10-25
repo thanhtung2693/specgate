@@ -17,9 +17,9 @@ broaden only when the change crosses module or contract boundaries.
 Layer 1 runs in CI. Live smoke and evals are opt-in because they need network
 access, provider credentials, or LangSmith credentials.
 
-Both Go modules select Go 1.27.1 through `toolchain` while retaining the Go
-1.26.4 language/dependency floor. Use Staticcheck v0.8.1 with this toolchain;
-v0.7.0 cannot read Go 1.27 export data. Compiler upgrades require both full Go
+Both Go modules select Go 1.27.3 through `toolchain` while retaining the Go
+1.26.4 language/dependency floor. Use Staticcheck v0.8.2 with this toolchain;
+earlier releases cannot read the updated Go 1.27.2+ export data. Compiler upgrades require both full Go
 suites, Local data/legacy-writer dogfood, and rebuilt release image stages, not
 only successful compilation.
 
@@ -70,7 +70,7 @@ checks component write denial, malicious counters and symlinks, healthy resets,
 and planned shutdown. The test uses no host data volume and removes its container.
 Without an explicit image the test is skipped; that is not release evidence.
 
-The appliance builds gosu 1.19 with Go 1.27.1, `golang.org/x/sys` v0.48.0
+The appliance builds gosu 1.19 with Go 1.27.3, `golang.org/x/sys` v0.48.0
 and `github.com/moby/sys/user` v0.4.1
 in an isolated build module rather than shipping upstream's older compiled
 binary. Verify its installed build metadata and non-root execution, then run
@@ -95,7 +95,7 @@ upgrade. Fresh-database startup alone does not establish upgrade compatibility.
 cd app/cli
 make test
 make lint
-go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
+go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
 ```
 
 The CLI suite covers command behavior, JSON envelopes, exit codes, local
@@ -209,7 +209,7 @@ approval triggers auto-archive. It restores model and archive settings on exit.
 cd app/doc-registry
 make test
 make lint
-go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
+go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
 ```
 
 The Doc Registry suite covers API handlers, database behavior, artifact state,
