@@ -1,6 +1,13 @@
 .navbar > aside { border-top: 1px solid var(--line); background: var(--accent-soft); color: var(--ink); }
 .demo-banner { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 10px; padding-block: 6px; font-size: 13px; }
 .demo-banner .button { min-height: 30px; font-size: 13px; }
+.demo-banner-actions, .tour-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.demo-tour { display: flex; align-items: center; justify-content: space-between; gap: 10px 18px; flex-wrap: wrap; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--line); border-inline-start: 3px solid var(--accent); border-radius: 12px; background: var(--surface); }
+.demo-tour > div:first-child { flex: 1 1 300px; }
+.demo-tour h2 { font-size: 15px; margin-block: 2px; }
+.demo-tour p:not(.eyebrow) { color: var(--muted); font-size: 13px; }
+.tour-actions { margin-inline-start: auto; }
+.tour-actions .button { min-height: 32px; font-size: 13px; }
 .demo-note { margin-bottom: 8px; color: var(--muted); font-size: 13px; }
 .demo-fixture { padding-block: 5px; }
 .demo-tabs .button { min-width: 0; padding-inline: 12px; }
@@ -16,5 +23,5 @@
   .demo-criterion .criterion-observation { text-align: start; }
 }
 @media (pointer: coarse) {
-  .demo-banner .button { min-height: 44px; }
+  .demo-banner .button, .tour-actions .button { min-height: 44px; }
 }

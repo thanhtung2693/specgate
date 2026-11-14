@@ -42,7 +42,9 @@ consistent with the
 [selected-test walkthrough](../../docs/using-specgate/guides/observe-selected-tests.md).
 
 The public demo at `demo/` uses the Local review presentation with sample
-data. You can inspect evidence and try a decision or reset inside the demo.
+data. Its guided tour opens the 503 evidence, shows the cited code diff, and
+leads to the Decision tab. Skip or restart the tour at any time. Restarting the
+tour keeps the current sample and any draft. **Reset demo** starts a fresh review.
 It runs in the browser without using a real repository, Local store, or
 account. The original `#delivery-proof` anchor opens the browser-review FAQ,
 which links to both the demo and the guide for real work.
@@ -62,6 +64,8 @@ Open `http://127.0.0.1:4177` and follow **Try the UI demo**. Check desktop
 and narrow layouts in both languages, with light and dark themes. Test the
 landing player and demo using the keyboard, then check reduced motion. With
 JavaScript disabled, the landing shows the final review and CLI setup links.
+In the demo, check the tour's Next, Back, Skip and Restart controls, including
+after opening the revised sample. Walk through a decision separately.
 
 ## GitHub Pages
 
