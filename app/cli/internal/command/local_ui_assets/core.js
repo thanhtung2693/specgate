@@ -124,8 +124,8 @@
       ...(matchingBasis?.digest ? { basis_digest: matchingBasis.digest } : {}),
     };
   }
-  function appearanceControls(state, labels, themeIcon, adjacentControls = "") {
-    return `<div class="language" role="group" aria-label="${escape(labels.language)}">${["en", "vi"].map((lang) => `<button type="button" data-language="${lang}" aria-pressed="${state.lang === lang}"><span>${lang.toUpperCase()}</span></button>`).join("")}</div>${adjacentControls}<button class="icon-button theme-button" data-action="theme" aria-label="${escape(state.theme === "dark" ? labels.light : labels.dark)}" aria-pressed="${state.theme === "dark"}">${themeIcon}</button>`;
+  function appearanceControls(state, labels, themeIcon, notifications = "", settings = "") {
+    return `<div class="language seg" role="group" aria-label="${escape(labels.language)}">${["en", "vi"].map((lang) => `<button type="button" data-language="${lang}" aria-pressed="${state.lang === lang}"><span>${lang.toUpperCase()}</span></button>`).join("")}</div>${notifications}<button class="icon-button theme-button" data-action="theme" aria-label="${escape(state.theme === "dark" ? labels.light : labels.dark)}" aria-pressed="${state.theme === "dark"}">${themeIcon}</button>${settings}`;
   }
   function setAppearance(state, kind, value, persist) {
     if (kind === "language" && ["en", "vi"].includes(value)) state.lang = value;

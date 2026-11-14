@@ -292,8 +292,22 @@ func TestLocalUIRejectsChangedReviewAndBasis(t *testing.T) {
 			t.Fatalf("stale pin %d %s", w.Code, w.Body.String())
 		}
 	}
-	if _, err := s.store.SubmitDelivery(t.Context(), s.selection.Workspace.ID, work.Key, body); err != nil {
+	latest, err := s.store.SubmitDelivery(t.Context(), s.selection.Workspace.ID, work.Key, body)
+	if err != nil {
 		t.Fatal(err)
+	}
+	queue := localUIRequest(s, "GET", "/api/works", "", true, false)
+	var listed struct {
+		Data struct {
+			Items []changeStatusResult `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(queue.Body.Bytes(), &listed); err != nil || queue.Code != 200 {
+		t.Fatalf("work list %d: %s (%v)", queue.Code, queue.Body.String(), err)
+	}
+	items := listed.Data.Items
+	if len(items) != 1 || items[0].Ref != work.Key || items[0].ReviewID != latest.ID || items[0].CompletionID != latest.ReportID {
+		t.Fatalf("work list does not identify the latest delivery: %s", queue.Body.String())
 	}
 	payload := map[string]any{"ref": work.Key, "decision": "reject", "review_id": old.ID, "completion_id": old.ReportID, "note": "Requires changes"}
 	encoded, _ := json.Marshal(payload)

@@ -1,87 +1,66 @@
 # SpecGate Landing Page
 
-Standalone static landing page for SpecGate Local. It introduces approved
-agent handoff, per-criterion delivery evidence, and developer acceptance for
-solo developers and small teams.
+This static page introduces SpecGate Local for solo developers and small
+teams. The hero draws the gate from the SpecGate logo around three sheets:
+approved scope, the agent's code, and results per criterion. A single agent
+claim splits into those results. The evidence sheet turns toward the reader
+while the scope and code remain in depth behind it. The last step reveals the
+decision actions. The example shows a successful suite with the selected 503 test
+result missing. The developer makes the delivery decision.
 
-Design language: "the governed pipeline." The page keeps a dark control-room
-canvas, indigo brand accent, semantic verdict colors, and one governance rail in
-the How it works section. Reticle corners are reserved for the delivery-review
-console and CLI terminal. Other sections use whitespace and sparse dividers so
-the pipeline metaphor stays recognizable without repeating on every block.
-Dark and light themes share the token set in `styles.css`; `landing.test.mjs`
-is the executable gate for copy, accessibility, and structure.
+The hero plays once. Its story tabs support arrow keys, Home and End. The
+play control pauses the phase timer and in-progress transitions, and replay
+starts from the first phase. Reduced motion and JavaScript-disabled visits
+start with the complete review. Keep the install command and documentation
+links usable when scripting is unavailable.
 
-## Preview
+The page uses Host Grotesk for English display text, Geist for body and
+Vietnamese display text, and Commit Mono for code and evidence. The fonts,
+including the Geist Vietnamese subset, and their OFL licenses are in
+`fonts/`. The warm light and graphite dark themes share color tokens. The
+hero and closing band use the dark palette in both themes.
 
-From the repository root:
+## Content
+
+Keep commands aligned with the [Quickstart](../../docs/using-specgate/quickstart.md)
+and [IDE setup guide](../../docs/using-specgate/guides/install-ide-plugins.md).
+The CLI owns Local scope, evidence, and decisions. The
+[Local review guide](../../docs/using-specgate/guides/local-review.md) explains
+the optional browser opened by `specgate ui`. The public hero is an
+illustration and its CTAs lead to setup instructions and the review guide.
+
+The four-step workflow below the tool lane links to project rubrics, work
+resume, selected-test verification, and optional whole-store Local transfer.
+The links stay readable as the connectors draw in sequence when the strip
+first enters view. The icons respond to hover and keyboard focus. Reduced
+motion shows the full strip immediately.
+Spec authors keep their tools and source documents. Coding agents implement
+in the repository. SpecGate records the approved scope and evidence so the
+developer can accept or request changes. Keep the selected-test example
+consistent with the
+[selected-test walkthrough](../../docs/using-specgate/guides/observe-selected-tests.md).
+
+The repository README's `#delivery-proof` link opens the product tour inside
+the browser-review FAQ. Refresh the MP4 and poster by following the
+[HyperFrames render guide](../../media/specgate-promo/README.md).
+
+## Preview and check
+
+Run from the repository root:
 
 ```bash
 python3 -m http.server 4177 --directory app/landing
-```
-
-Open `http://127.0.0.1:4177`.
-
-## GitHub Pages
-
-The repository publishes this static landing page from `app/landing` with the
-`pages` GitHub Actions workflow. Pull requests that change the landing page,
-promo sources, or workflow validate the dependency-free page. Matching `main`
-pushes upload `app/landing` and deploy it to the `github-pages` environment.
-Use the manual workflow trigger to redeploy unchanged landing-page files.
-
-## Files
-
-- `index.html` - page structure and product copy
-- `styles.css` - stylesheet entry point for the focused files under `styles/`
-- `script.js` - theme toggle, delivery review console, terminal carousel, and scroll interactions
-- `logo.svg` - the branded header mark used in the top-left nav
-- `fonts/` - self-hosted Host Grotesk and Commit Mono assets plus their OFL licenses
-
-The terminal carousel shows local artifact publication after preview, resuming
-with approved Context Pack documents, observing a missing selected-test
-result, and reading an eligible bounded Git handoff. Keep commands aligned
-with `specgate --help` and the user documentation. Use the returned scaffold
-path and the exact review ID for Local acceptance. The examples are abbreviated
-illustrations. The initial Publish frame is available without JavaScript.
-
-The hero and tour illustrate a unit-test suite that exits zero while omitting
-the agreed 503 case. The [selected-test walkthrough](../../docs/using-specgate/guides/observe-selected-tests.md)
-uses the same health-status function and retains watched-input drift after the
-agent adds the case. The
-[delivery proof](../../docs/using-specgate/guides/try-delivery-proof.md) uses a
-small name-normalization example and observes command results. Both leave the
-acceptance decision with the developer. Refresh the landing MP4 and poster by
-following the [HyperFrames render guide](../../media/specgate-promo/README.md).
-
-The page covers the entry path, tool compatibility, Local workflow, product
-tour, CLI examples, and FAQ. Preserve the authoring and execution boundaries.
-In the versioned artifact route, OpenSpec, Spec Kit, Superpowers,
-Markdown, and custom documents remain in their authoring systems; users map
-their roles explicitly; SpecGate records approval for one immutable version and
-hands it off as a pinned Context Pack. Avoid copy that implies SpecGate authors
-the source spec, detects its framework, or replaces the IDE, tracker, or
-repository.
-
-The compatibility section explains IDE handoff and optional Local browser
-review. A teammate can use a bounded Git handoff to read the request beside the
-diff. The originating Local store records the human decision.
-
-Keep Lighthouse fixes grounded in the public page instead of browser extension
-noise. Accessibility-critical controls should keep visible labels aligned with
-accessible names, carousel tabs should preserve valid tablist roles, and muted
-microcopy colors should maintain at least 4.5:1 contrast in both themes. The
-Host Grotesk carries display and body text. Commit Mono is reserved for the CLI,
-evidence, and compact metadata. Both are self-hosted and preloaded from `fonts/`.
-
-## Checks
-
-From the repository root:
-
-```bash
-node --test docs/release-readiness.test.mjs
-node --test app/landing/landing.test.mjs
+node --test app/landing/landing.test.mjs docs/release-readiness.test.mjs
 node -c app/landing/script.js
 ```
 
-The page is intentionally dependency-free so GitHub Pages can host it directly.
+Open `http://127.0.0.1:4177`. Check desktop and narrow layouts in both
+languages, with light and dark themes. Test the player using the keyboard,
+then check reduced motion and a reload with JavaScript disabled.
+
+## GitHub Pages
+
+The `pages` GitHub Actions workflow validates landing changes on pull
+requests. Matching `main` pushes upload `app/landing` to the
+`github-pages` environment. The manual workflow trigger redeploys the
+current landing files. The site has no build dependencies.

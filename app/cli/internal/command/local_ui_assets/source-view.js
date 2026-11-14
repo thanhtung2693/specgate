@@ -162,12 +162,12 @@
     }
     return { clear, load };
   }
-  function renderSource(data, { view = "code", lang = "en" } = {}) {
+  function renderSourceContent(data, view, lang) {
     const c = copy(lang),
       source = data.source || {},
       diff = data.diff || {},
       showDiff = view === "diff" && diff.available === true;
-    const codeLines = (source.lines || [])
+    const codeLines = (showDiff ? [] : source.lines || [])
       .map((line) => {
         const cited =
           Number.isInteger(line.number) &&
@@ -178,8 +178,7 @@
         return `<div class="source-line${cited ? " cited" : ""}" data-line="${e(line.number)}"><span class="line-number" aria-hidden="true">${e(line.number)}</span><code>${e(line.text)}</code></div>`;
       })
       .join("");
-    const diffLines = String(diff.text || "")
-      .split("\n")
+    const diffLines = (showDiff && diff.text ? String(diff.text).split("\n") : [])
       .map((line) => {
         const kind =
           line.startsWith("+") && !line.startsWith("+++")
@@ -200,15 +199,21 @@
       : source.available
         ? `<div class="source-code" tabindex="0" role="region" aria-label="${e(c.code)}">${codeLines}</div>`
         : `<p class="source-unavailable">${e(c.unavailable)}${source.reason ? ` · ${e(reasonText(source.reason, lang))}` : ""}</p>`;
+    return `${body}${(showDiff ? diff.truncated : source.truncated) ? `<p class="source-truncated">${e(c.truncated)}</p>` : ""}`;
+  }
+  function renderSource(data, { view = "code", lang = "en" } = {}) {
+    const c = copy(lang), source = data.source || {}, diff = data.diff || {};
+    const showDiff = view === "diff" && diff.available === true;
     const short = data.head_revision
       ? `HEAD <code>${e(data.head_revision.slice(0, 8))}</code>`
       : e(c.headUnavailable);
-    return `<div class="source-view-toolbar"><div class="source-view-controls"><button type="button" data-source-view="code" aria-pressed="${!showDiff}">${e(c.code)}</button><button type="button" data-source-view="diff" aria-pressed="${showDiff}" ${diff.available ? "" : "disabled"}${!diff.available && diff.reason ? ` title="${e(reasonText(diff.reason, lang))}"` : ""}>${e(c.diff)}</button></div><div class="source-version"><span>${short}</span><details><summary>${e(c.details)}</summary><code>${e(data.head_revision || "—")}</code>${source.reason ? `<p><code>${e(source.reason)}</code></p>` : ""}${diff.reason ? `<p><code>${e(diff.reason)}</code></p>` : ""}<p>${e(data.origin || "current_checkout")}</p></details></div></div>${body}${(showDiff ? diff.truncated : source.truncated) ? `<p class="source-truncated">${e(c.truncated)}</p>` : ""}<p class="source-checkout-note">${e(c.note)}</p>`;
+    return `<div class="source-view-toolbar"><div class="source-view-controls"><button type="button" data-source-view="code" aria-pressed="${!showDiff}">${e(c.code)}</button><button type="button" data-source-view="diff" aria-pressed="${showDiff}" ${diff.available ? "" : "disabled"}${!diff.available && diff.reason ? ` title="${e(reasonText(diff.reason, lang))}"` : ""}>${e(c.diff)}</button></div><div class="source-version"><span>${short}</span><details><summary>${e(c.details)}</summary><code>${e(data.head_revision || "—")}</code>${source.reason ? `<p><code>${e(source.reason)}</code></p>` : ""}${diff.reason ? `<p><code>${e(diff.reason)}</code></p>` : ""}<p>${e(data.origin || "current_checkout")}</p></details></div></div><div data-source-content>${renderSourceContent(data, view, lang)}</div><p class="source-checkout-note">${e(c.note)}</p>`;
   }
   function mount(root, readWork, api, readLang) {
     const loader = createSourceLoader(api),
       opened = new Set(),
-      views = new Map();
+      views = new Map(),
+      displayed = new WeakMap();
     async function show(details) {
       const status = readWork()?.status,
         criterion = details.dataset.criterion,
@@ -226,6 +231,7 @@
       )
         return;
       slot.setAttribute("aria-busy", "false");
+      if (result.data) displayed.set(slot, { data: result.data, inspected });
       slot.innerHTML = result.changed
         ? `<p class="source-unavailable" role="alert">${e(copy(readLang()).changed)}</p>`
         : result.error
@@ -255,13 +261,15 @@
       const button = event.target.closest("[data-source-view]");
       if (!button || button.disabled) return;
       const details = button.closest("details.criterion");
-      if (!details) return;
-      views.set(details.dataset.criterion, button.dataset.sourceView);
-      show(details).then(() =>
-        details
-          .querySelector(`[data-source-view="${button.dataset.sourceView}"]`)
-          ?.focus({ preventScroll: true }),
-      );
+      const slot = details?.querySelector("[data-source-slot]");
+      const snapshot = displayed.get(slot);
+      if (!snapshot || snapshot.inspected !== scope(readWork()?.status)) return;
+      const view = button.dataset.sourceView;
+      if (button.getAttribute("aria-pressed") === "true") return;
+      views.set(details.dataset.criterion, view);
+      slot.querySelector('[data-source-view="code"]').setAttribute("aria-pressed", String(view === "code"));
+      slot.querySelector('[data-source-view="diff"]').setAttribute("aria-pressed", String(view === "diff"));
+      slot.querySelector("[data-source-content]").innerHTML = renderSourceContent(snapshot.data, view, readLang());
     });
     return {
       clear() {

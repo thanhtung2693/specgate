@@ -7,14 +7,13 @@
     maintenanceLocation,
     setAppearance,
     criteria,
-    recordedDecision,
     decisionPins,
     requestGate,
     needsHuman,
     workAction,
     staleNotice,
   } = SpecGateUI;
-  const { icon, stateBadge, evidenceReview } = SpecGatePresentation;
+  const { icon, statusPresentation, evidenceReview, technicalView, decisionView, contextView, toolsView, updateLabel, kv } = SpecGatePresentation;
   const app = document.getElementById("app");
   const dialog = document.getElementById("dialog");
   const settings = document.getElementById("settings-dialog");
@@ -27,7 +26,7 @@
     contextGate = requestGate(),
     routeGate = requestGate(),
     dialogGate = requestGate();
-  let updateTimer;
+  let updateTimer, loadedRef;
   const saved = (key) => {
     try {
       return localStorage.getItem(key);
@@ -53,6 +52,7 @@
     error: "",
     queueError: "",
     loading: true,
+    newDelivery: false,
     filter: "human",
     search: "",
     note: "",
@@ -95,8 +95,6 @@
         value ||
         "None",
     );
-  const kv = (values) =>
-    `<dl class="kv">${values.map(([name, value]) => `<div><dt>${e(t(name))}</dt><dd>${e(value || "—")}</dd></div>`).join("")}</dl>`;
   function applyTheme() {
     const theme =
       state.theme === "system"
@@ -127,8 +125,6 @@
       target.setAttribute("aria-label", notificationsText());
       target.innerHTML = bell();
     }
-    const mobile = settings.querySelector('[data-action="notifications"]');
-    if (mobile) mobile.innerHTML = icon("bell") + e(notificationsText());
     const content = dialog.querySelector("#attention-content");
     if (dialog.open && content) {
       const html = notificationsView();
@@ -140,7 +136,7 @@
     }
   }
   const updateAvailable = () => state.update?.status === "available";
-  const settingsLabel = () => t("Local tools") + (updateAvailable() ? ` · ${t("Update available")}` : "");
+  const settingsLabel = () => t("Settings") + (updateAvailable() ? ` · ${t("Update available")}` : "");
   const gear = () => icon("gear") + (updateAvailable() ? `<span class="update-dot" aria-hidden="true"></span>` : "");
   function updateSettingsIndicator() {
     const target = app.querySelector(".settings-button");
@@ -153,29 +149,61 @@
     applyTheme();
     const r = route();
     const theme = document.documentElement.dataset.theme;
-    const adjacentControls = `<button class="icon-button notification desktop-notification" data-action="notifications" aria-label="${e(notificationsText())}">${bell()}</button><button class="icon-button settings-button" data-action="settings" aria-label="${e(settingsLabel())}" aria-haspopup="dialog" aria-controls="settings-dialog">${gear()}</button>`;
-    app.innerHTML = `<header class="navbar"><div class="navbar-inner"><a class="brand" href="/" data-nav><img src="/assets/logo.svg" alt="" width="32" height="32">SpecGate <span class="version" title="${e(t("Running version"))}">${e(state.meta?.version || "…")}</span></a><div class="nav-controls">${appearanceControls({ lang: state.lang, theme }, { language: t("Language"), dark: t("Switch to dark theme"), light: t("Switch to light theme") }, icon(theme === "dark" ? "sun" : "moon"), adjacentControls)}</div></div></header><div class="workspace-line">${icon("lock")}<strong>${e(state.meta?.workspace?.name || t("Local workspace"))}</strong><span>· Local</span></div><main id="main" tabindex="-1">${state.error ? errorView(state.error) : state.loading ? `<p class="busy" role="status">${e(t("Connecting to SpecGate…"))}</p>` : r.ref ? workView(r) : queueView()}<footer class="footer"><span>${e(t("Claims, test observations and human acceptance remain distinct."))}</span><span>${e(state.meta?.workspace?.slug || "")}</span></footer></main>`;
+    const notifications = `<button type="button" class="icon-button notification" data-action="notifications" aria-label="${e(notificationsText())}" aria-haspopup="dialog">${bell()}</button>`;
+    const settingsControl = `<button type="button" class="icon-button settings-button" data-action="settings" aria-label="${e(settingsLabel())}" aria-haspopup="dialog" aria-controls="settings-dialog">${gear()}</button>`;
+    app.innerHTML = `<header class="navbar"><div class="navbar-inner wrap"><a class="brand" href="/" data-nav><img src="/assets/logo.svg" alt="" width="26" height="26">SpecGate <span class="version" title="${e(t("Running version"))}">${e(state.meta?.version || "…")}</span></a><div class="nav-controls">${appearanceControls({ lang: state.lang, theme }, { language: t("Language"), dark: t("Switch to dark theme"), light: t("Switch to light theme") }, icon(theme === "dark" ? "sun" : "moon"), notifications, settingsControl)}</div></div></header><main id="main" class="wrap" tabindex="-1"><div class="view">${state.error ? errorView(state.error) : state.loading ? `<p class="busy" role="status">${e(t("Connecting to SpecGate…"))}</p>` : r.ref ? workView(r) : queueView()}</div></main>`;
+    updateDeliveryNotice();
     sourceReader.restore();
   }
-
+  function updateDeliveryNotice() {
+    const target = document.getElementById("delivery-notice");
+    if (!target || Boolean(target.firstElementChild) === state.newDelivery) return;
+    target.innerHTML = state.newDelivery
+      ? `<div class="banner"><span>${icon("bell")}<span><strong>${e(t("New delivery available"))}</strong> ${e(t("Your draft and current evidence stay in place."))}</span></span><button class="button accent" type="button" data-action="view-latest">${e(t("View latest"))}</button></div>`
+      : "";
+    if (state.newDelivery && !matchMedia("(prefers-reduced-motion: reduce)").matches)
+      app.querySelector('[data-action="notifications"] .icon')?.animate?.(
+        [{ rotate: "0deg" }, { rotate: "16deg" }, { rotate: "-13deg" }, { rotate: "8deg" }, { rotate: "0deg" }],
+        { duration: 650 },
+      );
+  }
+  function transition(change, ref) {
+    if (!document.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      change();
+      return;
+    }
+    const highlight = () => {
+      const node = ref && [...app.querySelectorAll("[data-title-ref]")].find((title) => title.dataset.titleRef === ref);
+      if (node) node.style.viewTransitionName = "work-title";
+      return node;
+    };
+    const oldTitle = highlight();
+    document.startViewTransition(() => {
+      if (oldTitle) oldTitle.style.viewTransitionName = "";
+      change();
+      highlight();
+    });
+  }
   function errorView(message) {
     return `<section class="error" role="alert"><h1>${e(t("The Local session is unavailable."))}</h1><p>${e(message)}</p><p>${e(t("Refresh to read the workspace again. Decisions require current workspace data."))}</p>${button("refresh", "Retry connection")}</section>`;
   }
   const queueErrorView = (message) =>
     `<p class="warning" role="alert">${e(t("Work list unavailable"))} · ${e(message)}</p>`;
+  const queueTitle = () => t({
+    human: "Waiting on you",
+    agent: "Agent’s next step",
+    all: "All work",
+  }[state.filter]);
+  const workspace = () => `<span class="workspace-name">${icon("folder")}<span>${e(state.meta?.workspace?.name || t("Local workspace"))} · Local</span></span>`;
+  const queueHeading = () => e(queueTitle()) + (state.filter === "human" ? `<span class="queue-number">${queueCount("human")}</span>` : "");
   function queueView() {
-    return `<header class="queue-head"><div class="between"><h1>${e(t(notificationsCount() ? "Needs your attention" : "Your work"))}</h1>${refreshButton()}</div></header><div class="queue-tools"><div class="filters">${[
+    return `<header class="queue-head"><h1>${queueHeading()}</h1><div class="queue-tools"><div class="filters seg" role="group" aria-label="${e(t("Filter work"))}">${[
       ["human", "Waiting on you"],
       ["agent", "Agent’s next step"],
       ["all", "All work"],
-    ]
-      .map(
-        ([key, label]) =>
-          `<button data-filter="${key}" class="${state.filter === key ? "active" : ""}" aria-pressed="${state.filter === key}">${e(t(label))}<span>${queueCount(key)}</span></button>`,
-      )
-      .join(
-        "",
-      )}</div><label class="search">${icon("search")}<span class="visually-hidden">${e(t("Search work or reference"))}</span><input id="search" type="search" value="${e(state.search)}" placeholder="${e(t("Search work or reference"))}"></label></div><div id="queue-results">${queueResults()}</div>`;
+    ].map(([key, label]) =>
+      `<button type="button" data-filter="${key}" aria-pressed="${state.filter === key}">${e(t(label))}<span>${queueCount(key)}</span></button>`,
+    ).join("")}</div><input class="search" id="search" type="search" value="${e(state.search)}" aria-label="${e(t("Search work or reference"))}" placeholder="${e(t("Search work or reference"))}"></div></header><div class="queue-meta">${workspace()}${refreshButton()}</div><div id="queue-results">${queueResults()}</div>`;
   }
   function queueCount(filter) {
     if (state.queueError) return "—";
@@ -195,9 +223,14 @@
           .toLocaleLowerCase()
           .includes(state.search.toLocaleLowerCase()),
     );
+    const count = `<p class="list-count">${e(t("Showing {shown} of {total} work items").replace("{shown}", items.length).replace("{total}", state.items.length))}</p>`;
     return items.length
-      ? `<div class="queue"><div class="work-row queue-labels"><span>${e(t("Work"))}</span><span>${e(t("State"))}</span><span>${e(t("Next action"))}</span></div>${items.map((item) => `<article class="work-row"><div class="work-cell"><code class="work-ref">${e(item.ref)}</code><div class="work-info"><h3><a href="${e(href(item.ref))}" data-nav>${e(item.title)}</a></h3><p>${e(t(item.decision))}${item.stale ? ` · ${e(staleNotice(item, t("Review freshness")))}` : ""}</p></div></div><div>${stateBadge(item, t)}</div><a class="button quiet" href="${e(href(item.ref))}" data-nav>${e(t(workAction(item)))}${icon("arrow")}</a></article>`).join("")}</div><p class="list-count">${e(t("Showing {shown} of {total} work items").replace("{shown}", items.length).replace("{total}", state.items.length))}</p>`
-      : `<section class="empty"><h2>${e(t(!state.items.length || (state.filter === "human" && !state.search) ? "No decisions waiting." : "No work matches this view."))}</h2><p>${e(t(!state.items.length ? "Work preparation and approval start with your agent or CLI." : "Try another filter or search."))}</p></section>`;
+      ? `<ul class="queue">${items.map((item) => {
+          const status = statusPresentation(item);
+          const why = item.stale ? staleNotice(item, t("Review freshness")) : t(workAction(item));
+          return `<li><a class="work-row ${item.completion_id ? "delivered" : ""}" href="${e(href(item.ref))}" data-nav><span class="tile ${status.tone}">${icon(status.icon)}</span><span><strong class="work-title" data-title-ref="${e(item.ref)}">${e(item.title)}</strong><span class="work-reason">${e(why)} · <code>${e(item.ref)}</code></span></span><span class="work-state">${e(t(status.label))}</span>${icon("arrow", "row-arrow")}</a></li>`;
+        }).join("")}</ul>${count}`
+      : `<section class="empty">${icon("inbox")}<h2>${e(t(!state.search && state.filter === "human" ? "No decisions waiting." : "No work matches this view."))}</h2><p>${e(t(!state.items.length ? "Work preparation and approval start with your agent or CLI." : "Try another filter or search."))}</p></section>${count}`;
   }
   const refreshButton = () =>
     `<button data-action="refresh" class="button quiet">${icon("refresh")}${e(t("Refresh"))}</button>`;
@@ -207,103 +240,25 @@
       return `<p class="busy" role="status">${e(t("Connecting to SpecGate…"))}</p>`;
     const s = d.status,
       rows = criteria(s, d.work.acceptance_criteria);
-    return `<div class="work-crumb"><a href="/" data-nav>${icon("back")}${e(t("Back to decisions"))}</a><span class="crumb-divider"></span><strong>${e(s.ref)}</strong><span class="muted">· ${e(t("Current delivery"))}</span></div><header class="page-head"><div class="between"><h1>${e(d.work.title)}</h1>${stateBadge(s, t)}</div><p>${e(t("Inspect evidence, compare approved requirements, then decide."))}</p></header><nav class="tabs" aria-label="${e(t("Review details"))}">${[
-      ["evidence", "Evidence"],
-      ["context", "Approved context"],
-      ["decision", "Your decision"],
-    ]
-      .map(
-        ([tab, label]) =>
-          `<a href="${e(href(s.ref, tab))}" data-nav class="${r.tab === tab ? "active" : ""}" ${r.tab === tab ? 'aria-current="page"' : ""}>${e(t(label))}</a>`,
-      )
-      .join(
-        "",
-      )}</nav>${s.historical_verification ? `<p class="warning">${e(t("Recorded verification comes from another Local store generation."))}</p>` : ""}${s.stale ? `<p class="warning">${e(staleNotice(s, t("Review freshness")))}</p>` : ""}${r.tab === "context" ? contextView() : r.tab === "decision" ? decisionView() : evidenceView(rows)}`;
+    const status = statusPresentation(s);
+    const gaps = rows.filter((row) => row.gaps?.length);
+    const shortDate = d.review?.created_at && new Date(d.review.created_at).toLocaleDateString(state.lang, { dateStyle: "medium" });
+    const action = needsHuman(s) && gaps.length
+      ? t("Review the evidence gaps before deciding.")
+      : state.work.can_decide
+        ? t("Inspect evidence, compare approved requirements, then decide.")
+        : t(workAction(s));
+    return `<a class="back" href="/" data-nav>${icon("back")}${e(t("Back to decisions"))}</a><header class="page-head"><span class="tile ${status.tone}">${icon(status.icon)}</span><div><h1 data-title-ref="${e(s.ref)}">${e(d.work.title)}</h1><div class="work-meta"><code>${e(s.ref)}</code><span>${e(t(status.label))}${shortDate ? ` · ${e(shortDate)}` : ""}${d.completion?.agent?.name ? ` · ${e(d.completion.agent.name)}` : ""}</span>${technicalView(s, t)}</div></div><p class="work-need">${e(action)}</p></header><div id="delivery-notice" role="status" aria-live="polite"></div><nav class="tabs" aria-label="${e(t("Review details"))}">${[
+      ["evidence", "Evidence", "evidence"],
+      ["context", "Scope", "file"],
+      ["decision", "Decision", "person"],
+    ].map(([tab, label, glyph]) =>
+      `<a href="${e(href(s.ref, tab))}" data-nav ${r.tab === tab ? 'aria-current="page"' : ""}>${icon(glyph)}${e(t(label))}</a>`,
+    ).join("")}</nav><div class="tab-content">${s.historical_verification ? `<p class="warning">${e(t("Recorded verification comes from another Local store generation."))}</p>` : ""}${s.stale ? `<p class="warning">${e(staleNotice(s, t("Review freshness")))}</p>` : ""}${r.tab === "context" ? contextView(d, state.context, t, SpecGateMarkdown.renderContext, button) : r.tab === "decision" ? decisionView(d, state.note, actor, t, rows, state.lang) : evidenceView(rows)}</div>`;
   }
   function evidenceView(rows) {
-    return `${evidenceReview(rows, state.work, state.lang, t)}<div class="review-version">${icon("pin")}<span>${e(t("Decision binds to this delivery."))}</span>${technicalView()}</div>${decisionFooter()}`;
-  }
-  function technicalView() {
-    const s = state.work.status;
-    return `<details class="version-details"><summary>${icon("chevron", "chevron")}${e(t("Version details"))}</summary>${kv(
-      [
-        ["State", s.state],
-        ["Evidence readiness", s.evidence],
-        ["Assurance", s.assurance],
-        ["Decision", s.decision],
-        ["Receipt", s.receipt],
-        ["Changes since verification", s.freshness],
-        ["Next actor", s.next_actor],
-        ["Context digest", s.context_digest],
-        ["Review ID", s.review_id],
-        ["Completion ID", s.completion_id],
-        ["Current evidence basis", s.basis_digest],
-        ["Evidence gaps", (s.missing || []).join("\n")],
-        ["Guidance", s.guidance],
-      ],
-    )}${s.next_command ? `<p>${e(t("Continue in your terminal"))}</p><pre>${e(s.next_command)}</pre>` : ""}</details>`;
-  }
-  function decisionFooter() {
     const d = state.work;
-    return decisionPins(d)
-      ? `<footer class="decision-footer"><div><h3>${e(t("You decide this delivery."))}</h3><p>${e(t("Your decision is recorded for the agent’s next step."))}</p></div><div class="actions"><button data-action="go-decision" data-intent="reject">${e(t("Ask for changes"))}</button><button class="primary" data-action="go-decision" data-intent="approve">${icon("check")}${e(t("Accept delivery"))}</button></div></footer>`
-      : `<p class="next-actor">${e(actor(d.status.next_actor))}</p>`;
-  }
-  function contextView() {
-    const d = state.work,
-      docs = d.documents || [],
-      doc = state.context;
-    let body = `<p class="busy" role="status">${e(t("Loading approved context…"))}</p>`;
-    if (doc?.error)
-      body = `<p role="alert" class="warning">${e(doc.error)}</p>`;
-    else if (doc?.content !== undefined) {
-      let content = `<pre class="context-raw"><code>${e(doc.content)}</code></pre>`;
-      if (!doc.showSource) {
-        const rendered = SpecGateMarkdown.renderContext(doc.content, {
-          generatedQuick:
-            doc.selected < 0 &&
-            !d.work.artifact_id &&
-            doc.path === "context.md" &&
-            doc.role === "context",
-          workRef: d.status.ref,
-        });
-        content = `<div class="markdown-body">${rendered.html}</div><details class="technical-context"><summary>${icon("chevron", "chevron")}${e(t("Technical details"))}<span>${e(t("Policy and version identifiers"))}</span></summary>${rendered.technicalHTML ? `<div class="markdown-body">${rendered.technicalHTML}</div>` : ""}<code>${e(doc.digest)}</code></details>`;
-      }
-      body = `<article class="context-reader"><div class="document-meta">${icon("file")}<strong>${e(doc.path)}</strong>${doc.selected >= 0 ? `<span>${e(t("Role"))}: ${e(doc.role)}</span>` : ""}<span>· ${e(t("Original content is shown without translation."))}</span></div><div id="context-content">${content}</div></article>`;
-    }
-    return `<div class="document-toolbar"><div class="document-list"><button data-document="-1" class="${(doc?.selected ?? -1) < 0 ? "active" : ""}">${icon("file")}${e(t("Context Pack"))}</button>${docs.map((item, i) => `<button data-document="${i}" class="${doc?.selected === i ? "active" : ""}">${icon("file")}${e(item.path)} · ${e(item.role)}</button>`).join("")}</div>${doc?.content !== undefined ? button("context-source", doc.showSource ? "Formatted view" : "Original source", false, 'aria-controls="context-content"') : ""}</div>${body}<div class="context-footer">${icon("pin")}<span>${e(t("Approved context"))}</span><a class="button" href="${e(href(d.status.ref))}" data-nav>${e(t("Back to evidence"))}</a></div>`;
-  }
-  function decisionView() {
-    const d = state.work,
-      s = d.status,
-      pins = decisionPins(d),
-      recorded = recordedDecision(d);
-    if (recorded)
-      return `<section class="decision-form"><div class="recorded-notice ${recorded.decision === "approve" ? "success" : "warning"}">${icon("check")}<div><h2>${e(t("Recorded decision"))}</h2><p>${e(t(recorded.decision === "approve" ? "Accepted" : "Rejected"))} · ${e(actor(s.next_actor))}</p></div></div>${recorded.note ? `<h3>${e(t("Your note"))}</h3><blockquote class="recorded-note">${e(recorded.note)}</blockquote>` : ""}${technicalView()}${kv(
-        [
-          ["Actor", recorded.actor],
-          ["Decision recorded at", recorded.observed_at],
-        ].filter(([, value]) => value),
-      )}</section>`;
-    if (!pins)
-      return `<section class="decision-form"><h2>${e(t("Decision unavailable for this work."))}</h2><p>${e(t(s.decision))}</p><p class="muted">${e(t("This work is not currently actionable in the browser."))}</p></section>`;
-    return `<section class="decision-form"><h2>${e(t("Your delivery decision"))}</h2><p class="muted">${icon("pin")}${e(t("Acceptance applies to the exact review and evidence you inspected."))}</p><div class="decision-snapshot"><strong>${e(t("Current delivery"))}</strong>${technicalView()}</div><label for="decision-note">${e(t("Your note"))}</label><p class="field-hint">${e(t("Required when requesting changes."))}</p><textarea id="decision-note" maxlength="20000" placeholder="${e(t("What should change, or why are you accepting this delivery?"))}">${e(state.note)}</textarea><p class="field-hint">${e(t("The agent reads your decision and note through SpecGate."))}</p><p id="note-error" class="dialog-error" role="alert"></p><div class="decision-actions"><button data-action="request-changes">${e(t("Ask for changes"))}</button><button class="primary" data-action="accept">${icon("check")}${e(t("Accept delivery"))}</button></div><p class="field-hint">${e(t("You will confirm before saving the decision."))}</p></section>`;
-  }
-  function updateLabel() {
-    return t(
-      {
-        unchecked: "Not checked",
-        available: "Update available",
-        current: "Up to date",
-        disabled: "Self-update unavailable",
-        updated: "Update installed",
-        failed: "Update failed",
-        running: "Update running",
-      }[state.update?.status] || "Not checked",
-    );
-  }
-  function toolsView() {
-    return `<p class="settings-description">${e(t("For this machine’s Local installation only."))}</p>${state.maintenanceError ? `<p role="alert" class="warning">${e(state.maintenanceError)}</p>` : ""}<section class="settings-section"><h3>${icon("download")}${e(t("Version"))}<span class="badge neutral">${e(updateLabel())}</span></h3><div class="installed-version"><span>${e(t("Running version"))}</span><code>${e(state.meta?.version)}</code>${state.update?.latest_version ? `<span>${e(t("Available version"))} <strong>${e(state.update.latest_version)}</strong></span>` : ""}</div>${state.update?.reason ? `<p class="muted">${e(t(state.update.reason))}</p>` : ""}${state.update?.restart_required ? `<p class="warning">${e(t("Restart the Local UI to use the installed version."))}</p>` : ""}<div class="settings-action-row"><p>${e(t("Check the official release before updating."))}</p><div class="actions">${updateAvailable() ? button("update-preview", settingsBusy === "update-preview" ? "Working…" : "Review update", true, settingsBusy === "update-preview" ? "disabled" : "") : ""}${button("update-check", settingsBusy === "update-check" ? "Working…" : state.update?.latest_version ? "Check again" : "Check for updates", false, state.update?.status === "running" || settingsBusy === "update-check" ? "disabled" : "")}</div></div></section><section class="settings-section"><h3>${icon("cache")}${e(t("Cache & temporary files"))}</h3><div class="settings-action-row"><div><p>${e(t("Only SpecGate-owned update-check cache is eligible."))}</p><p class="muted">${e(t("Work, specs, evidence, acceptance records and backups are kept."))}</p></div>${button("cache-preview", settingsBusy === "cache-preview" ? "Working…" : "Preview cleanup", false, settingsBusy === "cache-preview" ? "disabled" : "")}</div><p class="settings-safety">${icon("lock")}${e(t("Review the scope and confirm before changes."))}</p></section><footer class="settings-footer"><button data-action="close-settings">${e(t("Close"))}</button></footer>`;
+    return `${evidenceReview(rows, d, state.lang, t)}${decisionPins(d) ? `<div class="evidence-footer"><a class="button primary" href="${e(href(d.status.ref, "decision"))}" data-nav>${e(t("Review decision"))}${icon("arrow")}</a></div>` : ""}`;
   }
   async function api(path, body) {
     const response = await fetch(path, {
@@ -330,10 +285,12 @@
           (response.status === 401
             ? t("Session expired. Restart or reopen the Local UI.")
             : t("Request failed.")),
+        { cause: response.status },
       );
     return result.data;
   }
-  async function load() {
+  async function load({ keepNote = false, motionRef = "" } = {}) {
+    const r = route();
     sourceReader.clear();
     const ticket = gate.start();
     const queueTicket = queueGate.start();
@@ -342,8 +299,10 @@
     state.error = "";
     state.work = null;
     state.context = null;
-    state.note = "";
-    render();
+    state.newDelivery = false;
+    if (!keepNote || loadedRef !== r.ref) state.note = "";
+    loadedRef = r.ref;
+    if (!motionRef) render();
     try {
       if (!state.csrf) state.csrf = (await api("/api/session")).csrf_token;
       const [meta, list] = await Promise.all([
@@ -356,16 +315,21 @@
         state.items = list.items || [];
         state.queueError = "";
       }
-      const r = route();
       if (r.ref) {
         const d = await api("/api/work?" + new URLSearchParams({ ref: r.ref }));
         if (!gate.current(ticket)) return;
         state.work = d;
       }
       state.loading = false;
-      render();
-      updateAttentionControls();
-      if (r.tab === "context" && r.ref) loadContext(-1);
+      const updatePage = () => {
+        if (!gate.current(ticket)) return;
+        render();
+        updateAttentionControls();
+        if (r.tab === "context" && r.ref) loadContext(-1);
+        if (motionRef || keepNote) document.getElementById("main")?.focus({ preventScroll: true });
+      };
+      if (motionRef) transition(updatePage, motionRef);
+      else updatePage();
       loadUpdate(false);
     } catch (error) {
       if (!gate.current(ticket)) return;
@@ -410,7 +374,7 @@
       settings.querySelector("[data-close-settings]") ===
       document.activeElement;
     const scroll = settings.scrollTop;
-    settings.innerHTML = `<header><h2 id="settings-title">${e(t("Local tools"))}</h2><button class="icon-button" data-close-settings aria-label="${e(t("Close dialog"))}">${icon("close")}</button></header><button class="button settings-notifications" data-action="notifications">${icon("bell")}${e(notificationsText())}</button>${toolsView()}`;
+    settings.innerHTML = `<header><h2 id="settings-title">${icon("gear")}${e(t("Settings"))}</h2><button class="icon-button" data-close-settings aria-label="${e(t("Close dialog"))}">${icon("close")}</button></header>${toolsView(state, settingsBusy, t, button)}`;
     settings.querySelector("[data-close-settings]").onclick = () =>
       settings.close();
     settings.scrollTop = scroll;
@@ -436,16 +400,20 @@
   dialog.addEventListener("close", renderSettings);
   async function loadUpdate(check) {
     try {
-      state.update = await api(
+      const update = await api(
         check ? "/api/update/check" : "/api/update",
         check ? {} : undefined,
       );
+      const changed = state.maintenanceError || JSON.stringify(state.update) !== JSON.stringify(update);
+      state.update = update;
       state.maintenanceError = "";
-      updateSettingsIndicator();
-      renderSettings();
+      if (changed) {
+        updateSettingsIndicator();
+        renderSettings();
+      }
       if (state.update.status === "running") watchUpdate();
     } catch (error) {
-      if (check || settings.open) {
+      if ((check || settings.open) && state.maintenanceError !== error.message) {
         state.maintenanceError = error.message;
         renderSettings();
       }
@@ -463,7 +431,7 @@
           toast(
             state.update.status === "updated"
               ? t("Restart the Local UI to use the installed version.")
-              : state.update.reason || updateLabel(),
+              : state.update.reason || updateLabel(state.update, t),
           );
       } catch (error) {
         state.maintenanceError = error.message;
@@ -476,17 +444,30 @@
     routeGate.start();
     const before = route();
     history.pushState(null, "", url);
-    const after = route();
-    if (!reload && before.ref === after.ref && state.work) {
-      render();
-      if (after.tab === "context" && !state.context) loadContext(-1);
-    } else load();
-    document.getElementById("main")?.focus({ preventScroll: true });
+    navigate(before.ref, { reload, animate: true });
     window.scrollTo(0, 0);
   }
-  function showDialog(title, content, onConfirm) {
+  function navigate(beforeRef, { reload = false, animate = false } = {}) {
+    const after = route();
+    if (!reload && beforeRef === after.ref && state.work) {
+      const updateTab = () => {
+        render();
+        if (after.tab === "context" && !state.context) loadContext(-1);
+        document.getElementById("main")?.focus({ preventScroll: true });
+      };
+      if (animate) transition(updateTab);
+      else updateTab();
+      return;
+    }
+    const motionRef = animate && (!beforeRef || !after.ref) ? beforeRef || after.ref : "";
+    load({ keepNote: beforeRef === after.ref, motionRef });
+    if (!motionRef) document.getElementById("main")?.focus({ preventScroll: true });
+  }
+  function showDialog(title, content, onConfirm, pendingLabel = "Working…", onConflict) {
     const ticket = dialogGate.start(), active = () => dialog.open && dialogGate.current(ticket);
-    dialog.innerHTML = `<header><h2 id="dialog-title">${e(t(title))}</h2><button class="icon-button" data-close aria-label="${e(t("Close dialog"))}">${icon("close")}</button></header>${content}<p class="dialog-error" role="alert" id="dialog-error"></p>${onConfirm ? `<div class="decision-actions">${button("dialog-cancel", "Cancel")}<button class="button primary" id="dialog-confirm">${e(t(title === "Review the update" ? "Confirm update" : title === "Preview cache cleanup" ? "Remove this cache" : "Confirm"))}</button></div>` : ""}`;
+    const confirmLabel = title === "Review the update" ? "Confirm update" : title === "Preview cache cleanup" ? "Remove this cache" : title === "Confirm acceptance" ? "Accept delivery" : title === "Confirm request for changes" ? "Ask for changes" : "Confirm";
+    dialog.className = title === "Needs your attention" ? "attention-dialog" : "";
+    dialog.innerHTML = `<header><h2 id="dialog-title">${icon(title === "Needs your attention" ? "bell" : title === "Preview cache cleanup" ? "folder" : title === "Review the update" ? "download" : "person")}${e(t(title === "Needs your attention" ? "Notifications" : title))}</h2><button class="icon-button" data-close aria-label="${e(t("Close dialog"))}">${icon("close")}</button></header>${content}<p class="dialog-error" role="alert" id="dialog-error"></p>${onConfirm ? `<p id="confirm-status" class="field-hint" role="status"></p><div class="decision-actions">${button("dialog-cancel", "Cancel")}<button class="button primary" id="dialog-confirm">${e(t(confirmLabel))}</button></div>` : ""}`;
     dialog.querySelector("[data-close]").onclick = () => dialog.close();
     dialog
       .querySelector('[data-action="dialog-cancel"]')
@@ -495,7 +476,9 @@
       dialog.querySelector("#dialog-confirm").onclick = async () => {
         const buttons = [...dialog.querySelectorAll("button")];
         buttons.forEach((b) => (b.disabled = true));
-        dialog.querySelector("#dialog-confirm").textContent = t("Working…");
+        const pending = dialog.querySelector("#confirm-status");
+        dialog.querySelector("#dialog-error").textContent = "";
+        pending.textContent = t(pendingLabel);
         try {
           await onConfirm(active);
           if (active()) dialog.close();
@@ -503,7 +486,13 @@
           if (!active()) return;
           dialog.querySelector("#dialog-error").textContent = error.message;
           buttons.forEach((b) => (b.disabled = false));
-          dialog.querySelector("#dialog-confirm").textContent = t("Confirm");
+          pending.textContent = "";
+          if (error.cause === 409 && onConflict) {
+            const confirm = dialog.querySelector("#dialog-confirm");
+            confirm.textContent = t("Refresh review");
+            confirm.onclick = () => { dialog.close(); return onConflict(); };
+            confirm.focus();
+          }
         }
       };
     dialog.showModal();
@@ -511,12 +500,20 @@
   function confirmDecision(decision) {
     const pins = decisionPins(state.work);
     if (!pins) return;
+    if (state.newDelivery) {
+      showDialog("New delivery available", `<p>${e(t("Inspect the new evidence before confirming a decision."))}</p><div class="decision-actions">${button("view-latest", "View latest", true)}</div>`);
+      return;
+    }
     const note = state.note.trim();
     if (decision === "reject" && !note) {
       document.getElementById("note-error").textContent = t(
         "A note is required when requesting changes.",
       );
-      document.getElementById("decision-note").focus();
+      const field = document.getElementById("decision-note");
+      field.setAttribute("aria-invalid", "true");
+      field.focus();
+      if (!matchMedia("(prefers-reduced-motion: reduce)").matches)
+        field.animate?.([{ translate: "-5px" }, { translate: "4px" }, { translate: "0" }], 230);
       return;
     }
     const ticket = routeGate.start(), inspected = state.work;
@@ -531,7 +528,7 @@
           ["Completion ID", pins.completion_id],
           ["Current evidence basis", pins.basis_digest],
           ["Your note", note],
-        ],
+        ], t,
       )}<p>${e(t("If the review or evidence changed, SpecGate will refuse this decision. Refresh and inspect it again."))}</p>`,
       async (active) => {
         const result = await api("/api/decision", { ...pins, decision, note });
@@ -539,14 +536,17 @@
           contextGate.start();
           sourceReader.clear();
           state.work = result;
+          state.newDelivery = false;
           state.items = state.items.map((item) => item.ref === result.status.ref ? { ...item, ...result.status } : item);
           state.note = "";
           state.context = null;
           render();
-          toast(t("Decision recorded."));
+          toast(t("Decision recorded."), "success");
         }
         refreshQueue();
       },
+      "Saving decision…",
+      () => state.work === inspected && routeGate.current(ticket) && load({ keepNote: true }),
     );
   }
   async function updatePreview() {
@@ -556,7 +556,7 @@
       updateSettingsIndicator();
       renderSettings();
       if (preview.status !== "available" || !preview.confirmation_token) {
-        toast(preview.reason || updateLabel());
+        toast(preview.reason || updateLabel(state.update, t));
         return;
       }
       showDialog(
@@ -565,7 +565,7 @@
           ["Running version", state.meta.version],
           ["Available version", preview.latest_version],
           ["Install target", preview.target],
-        ])}<ul>${(preview.scope || []).map((line) => `<li>${e(t(line))}</li>`).join("")}</ul><p>${e(t("The running UI keeps its current version until restarted. Finish any open decision before updating."))}</p>`,
+        ], t)}<ul>${(preview.scope || []).map((line) => `<li>${e(t(line))}</li>`).join("")}</ul><p>${e(t("The running UI keeps its current version until restarted. Finish any open decision before updating."))}</p>`,
         async () => {
           state.update = await api("/api/update", {
             version: preview.latest_version,
@@ -616,6 +616,8 @@
       : `<p>${e(t("Nothing needs your attention."))}</p>`;
   }
   dialog.addEventListener("click", (event) => {
+    if (event.target === dialog && dialog.className === "attention-dialog") dialog.close();
+    if (event.target.closest('[data-action="view-latest"]')) return handleClick(event);
     const link = event.target.closest("[data-dialog-nav]");
     if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
       return;
@@ -624,9 +626,9 @@
     if (settings.open) settings.close();
     go(link.getAttribute("href"), true);
   });
-  function toast(message) {
+  function toast(message, tone) {
     const notice = document.getElementById("notice");
-    notice.textContent = message;
+    notice.innerHTML = `${tone === "success" ? icon("check-circle") : ""}${e(message)}`;
     notice.style.display = "block";
     clearTimeout(toast.timer);
     toast.timer = setTimeout(() => (notice.style.display = "none"), 6000);
@@ -634,11 +636,21 @@
   async function refreshQueue() {
     if (!state.csrf || document.hidden) return;
     const ticket = queueGate.start();
+    const inspected = state.work;
+    const ref = route().ref;
     try {
       const list = await api("/api/works");
       if (!queueGate.current(ticket)) return;
       state.items = list.items || [];
       state.queueError = "";
+      if (inspected && state.work === inspected && route().ref === ref) {
+        const status = inspected.status;
+        const latest = state.items.find((item) => item.ref === status.ref);
+        state.newDelivery = !!(
+          (latest?.review_id && latest.review_id !== status.review_id) ||
+          (latest?.completion_id && latest.completion_id !== status.completion_id)
+        );
+      }
     } catch (error) {
       if (!queueGate.current(ticket)) return;
       state.queueError = error.message || t("Request failed.");
@@ -648,9 +660,7 @@
     if (results && !dialog.open && !settings.open && !app.contains(activeElement)) {
       render();
     } else if (results) {
-      app.querySelector(".queue-head h1").textContent = t(
-        notificationsCount() ? "Needs your attention" : "Your work",
-      );
+      app.querySelector(".queue-head h1").innerHTML = queueHeading();
       app.querySelectorAll("[data-filter] span").forEach((count) => {
         count.textContent = queueCount(count.parentElement.dataset.filter);
       });
@@ -662,6 +672,7 @@
       }
     }
     updateAttentionControls();
+    updateDeliveryNotice();
   }
   async function handleClick(event) {
     const language = event.target.closest("[data-language]");
@@ -689,6 +700,7 @@
     if (filter) {
       state.filter = filter.dataset.filter;
       render();
+      app.querySelector(`[data-filter="${state.filter}"]`)?.focus({ preventScroll: true });
       return;
     }
     const doc = event.target.closest("[data-document]");
@@ -710,22 +722,10 @@
       app.querySelector(".theme-button")?.focus({ preventScroll: true });
       return;
     }
-    if (action === "close-settings") {
-      settings.close();
-      return;
-    }
     if (action === "context-source") {
       state.context.showSource = !state.context.showSource;
       render();
       app.querySelector('[data-action="context-source"]')?.focus({ preventScroll: true });
-      return;
-    }
-    if (action === "go-decision") {
-      go(href(state.work.status.ref, "decision"));
-      if (target.dataset.intent === "reject")
-        document
-          .getElementById("decision-note")
-          ?.focus({ preventScroll: true });
       return;
     }
     if (action === "settings") {
@@ -733,22 +733,16 @@
       return;
     }
     if (action === "refresh") {
-      await load();
+      await load({ keepNote: Boolean(state.error) });
+      return;
+    }
+    if (action === "view-latest" && state.newDelivery) {
+      if (dialog.open) dialog.close();
+      await load({ keepNote: true });
       return;
     }
     if (action === "notifications") {
       showDialog("Needs your attention", `<div id="attention-content">${notificationsView()}</div>`);
-      return;
-    }
-    if (action === "copy-link") {
-      try {
-        await navigator.clipboard.writeText(
-          location.origin + href(state.work.status.ref, route().tab),
-        );
-        toast(t("Link copied."));
-      } catch {
-        toast(t("Clipboard unavailable. Copy the address from your browser."));
-      }
       return;
     }
     if (action === "accept" || action === "request-changes") {
@@ -776,11 +770,18 @@
       state.search = event.target.value;
       document.getElementById("queue-results").innerHTML = queueResults();
     }
-    if (event.target.id === "decision-note") state.note = event.target.value;
+    if (event.target.id === "decision-note") {
+      state.note = event.target.value;
+      if (state.note.trim()) {
+        event.target.removeAttribute?.("aria-invalid");
+        const error = document.getElementById("note-error");
+        if (error) error.textContent = "";
+      }
+    }
   });
   window.addEventListener("popstate", () => {
     routeGate.start();
-    load();
+    navigate(loadedRef);
   });
   matchMedia("(prefers-color-scheme: dark)").addEventListener(
     "change",

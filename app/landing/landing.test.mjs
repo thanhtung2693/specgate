@@ -1,398 +1,320 @@
+import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
-import assert from "node:assert/strict";
 import { runInNewContext } from "node:vm";
 
 const here = new URL(".", import.meta.url);
-const html = readFileSync(new URL("index.html", here), "utf8");
-const cssEntry = readFileSync(new URL("styles.css", here), "utf8");
-const css = [...cssEntry.matchAll(/@import url\("([^"]+)"\);/g)]
-  .map(([, path]) => readFileSync(new URL(path, here), "utf8"))
-  .join("\n");
-const js = readFileSync(new URL("script.js", here), "utf8");
-const sitemap = readFileSync(new URL("sitemap.xml", here), "utf8");
-const readme = readFileSync(new URL("../../README.md", here), "utf8");
+const read = (path) => readFileSync(new URL(path, here), "utf8");
+const html = read("index.html");
+const css = read("styles.css");
+const js = read("script.js");
 
-test("a delayed viewport observer preserves a manually selected demo tab", () => {
-  for (const input of ["click", "keyboard"]) {
-    const element = () => ({
-      attributes: {}, listeners: {}, dataset: {}, style: {}, classList: { add() {} },
-      setAttribute(name, value) { this.attributes[name] = value; },
-      addEventListener(name, callback) { this.listeners[name] = callback; },
-      appendChild() {}, replaceChildren() {}, focus() {},
-    });
-    const tabs = Array.from({ length: 4 }, (_, i) => ({ ...element(), id: `tab-${i}` }));
-    const title = element(), panel = element(), caption = element();
-    const root = {
-      querySelectorAll: () => tabs,
-      querySelector: (selector) => ({ "[data-cast-title]": title, "[data-cast-body]": panel, "[data-cast-caption]": caption })[selector],
-    };
-    const observers = [];
-    runInNewContext(js, {
-      document: {
-        documentElement: { dataset: {} },
-        querySelector: (selector) => selector === "[data-carousel]" ? root : null,
-        querySelectorAll: () => [],
-        createElement: element, createTextNode: (text) => ({ textContent: text }),
-      },
-      matchMedia: () => ({ matches: false }),
-      setTimeout: () => 1, clearTimeout() {},
-      IntersectionObserver: class {
-        constructor(callback) { this.callback = callback; observers.push(this); }
-        observe() {} disconnect() {}
-      },
-    });
-    if (input === "click") tabs[2].listeners.click();
-    else tabs[3].listeners.keydown({ key: "ArrowLeft", preventDefault() {} });
-    assert.equal(tabs[2].attributes["aria-selected"], "true");
-    observers.at(-1).callback([{ isIntersecting: true }], observers.at(-1));
-    assert.equal(tabs[2].attributes["aria-selected"], "true", `${input} selection was replaced by viewport startup`);
-    assert.equal(panel.attributes["aria-labelledby"], "tab-2");
+test("the published stage stands alone with three sheets and a readable review", () => {
+  assert.equal([...html.matchAll(/class="layer\b/g)].length, 3);
+  assert.equal([...html.matchAll(/class="shard\b/g)].length, 3);
+  assert.match(html, /id="scene" data-phase="2"/);
+  assert.match(html, /DB down → 503[\s\S]*?Test result missing/);
+  assert.match(html, /href="#main"[^>]*>Skip to content/);
+  assert.match(html, /<main id="main" tabindex="-1">/);
+  assert.match(html, /class="ctl-bar" hidden/);
+  assert.match(html, /class="reveal"/);
+  assert.match(css, /\.motion \.reveal:not\(\.in\)/);
+  assert.match(css, /prefers-reduced-motion: reduce/);
+  assert.doesNotMatch(html, /<iframe\b|ui\.html|ui-fixtures\.js|127\.0\.0\.1/);
+  assert.doesNotMatch(css, /body\s*\{[^}]*overflow-x:/);
+  const steps = [...html.matchAll(/<button class="step"[^>]*>/g)];
+  assert.equal(steps.length, 3);
+  for (const [i, [step]] of steps.entries()) {
+    assert.match(step, new RegExp(`role="tab" id="step-${i}" aria-label="[^"]+" data-i18n-attr="aria-label:st\\.${i}" aria-controls="scene"`));
   }
 });
 
-function cssBlock(selector) {
-  return css.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{(?<body>[\\s\\S]*?)\\n\\}`))?.groups?.body ?? "";
-}
-
-function cssVar(block, name) {
-  return block.match(new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})`))?.[1] ?? "";
-}
-
-function relativeLuminance(hex) {
-  const [r, g, b] = hex.match(/\w\w/g).map((part) => {
-    const channel = Number.parseInt(part, 16) / 255;
-    return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-function contrastRatio(foreground, background) {
-  const lighter = Math.max(relativeLuminance(foreground), relativeLuminance(background));
-  const darker = Math.min(relativeLuminance(foreground), relativeLuminance(background));
-  return (lighter + 0.05) / (darker + 0.05);
-}
-
-test("a passing suite leaves the missing required testcase visible after replay", () => {
-  const replay = { addEventListener(name, callback) { this[name] = callback; } };
-  const element = () => ({
-    attributes: {},
-    setAttribute(name, value) { this.attributes[name] = value; },
-  });
-  const chip = element();
-  const probe = element();
-  const outcomes = [...html.matchAll(/<li data-status="([^"]+)" data-result="([^"]+)"/g)];
-  const checks = outcomes.map(([, status, result]) => ({
-    ...element(), attributes: { "data-status": status }, dataset: { result },
-  }));
-  assert.deepEqual(checks.map((check) => check.attributes["data-status"]), ["met", "missing"]);
-  const pending = new Map();
-  runInNewContext(js, {
-    document: {
-      documentElement: { dataset: {} },
-      querySelector: (selector) => ({ "#verdict-chip": chip, "#console-replay": replay })[selector],
-      querySelectorAll: (selector) => ({
-        "#check-list li": checks, "#console-checks .chk": [probe],
-      })[selector] ?? [],
-    },
-    matchMedia: () => ({ matches: false }),
-    setTimeout: (callback, delay) => pending.set(delay, callback).size,
-    clearTimeout: () => pending.clear(),
-    IntersectionObserver: class {},
-  });
-  replay.click();
-  assert.equal(chip.attributes["data-state"], "run");
-  for (const callback of pending.values()) callback();
-  assert.equal(probe.attributes["data-on"], "1");
-  assert.deepEqual(checks.map((check) => check.attributes["data-status"]), ["met", "missing"]);
-  assert.equal(chip.attributes["data-state"], "gap");
-});
-
-test("navigation order matches the visible section order", () => {
-  const navHtml = html.match(/<nav class="nav-links"[\s\S]*?<\/nav>/)?.[0] ?? "";
-  const navOrder = [...navHtml.matchAll(/<a href="#([^"]+)">/g)]
-    .map((match) => match[1])
-    .filter((id) => ["how", "run", "compare", "faq"].includes(id));
-  const sectionOrder = [...html.matchAll(/<section[^>]+id="([^"]+)"/g)]
-    .map((match) => match[1])
-    .filter((id) => navOrder.includes(id));
-
-  assert.deepEqual(navOrder, sectionOrder);
-});
-
-test("Spec Kit naming is consistent across metadata and body copy", () => {
-  assert.equal(html.includes("GitHub Spec Kit"), false);
-});
-
-test("terminal output lines have muted styling", () => {
-  assert.match(css, /\.tl\[data-k="out"\]\s*\{\s*color:\s*var\(--ink-muted\);/s);
-});
-
-test("interactive landing controls keep accessible names and roles valid", () => {
-  assert.match(html, /<button class="theme-toggle" type="button" aria-label="Light theme" aria-pressed="false">/);
-  assert.match(html, /<pre class="term-body mono" id="cast-panel" data-cast-body role="tabpanel"/);
-  assert.match(js, /themeToggle\.setAttribute\("aria-label", `\$\{nextLabel\} theme`\)/);
-  assert.equal([...html.matchAll(/role="tab"/g)].length, 4);
-  assert.match(js, /body\.setAttribute\("aria-labelledby", segs\[idx\]\.id\)/);
-  assert.match(js, /ArrowRight/);
-  assert.match(js, /ArrowLeft/);
-  assert.equal([...html.matchAll(/id="console-replay"/g)].length, 1);
-});
-
-test("muted text, warning, and success labels meet contrast requirements in both themes", () => {
-  const root = cssBlock(":root");
-  const light = cssBlock('html[data-theme="light"]');
-  const darkCanvas = cssVar(root, "--canvas");
-  const darkSurface = "#090a0b";
-  const lightCanvas = cssVar(light, "--canvas");
-
-  assert.ok(contrastRatio(cssVar(root, "--ink-faint"), darkCanvas) >= 4.5);
-  assert.ok(contrastRatio(cssVar(root, "--ink-faint"), darkSurface) >= 4.5);
-  assert.ok(contrastRatio(cssVar(light, "--ink-faint"), lightCanvas) >= 4.5);
-  for (const theme of [root, light]) {
-    for (const surface of ["--surface-1", "--surface-2"]) {
-      assert.ok(contrastRatio(cssVar(theme, "--warn"), cssVar(theme, surface)) >= 4.5);
-      assert.ok(contrastRatio(cssVar(theme, "--ok"), cssVar(theme, surface)) >= 4.5);
-    }
+test("install panels match the documented Local and Claude Code setup", () => {
+  const guide = read("../../docs/using-specgate/quickstart.md");
+  const ide = read("../../docs/using-specgate/guides/install-ide-plugins.md");
+  for (const [id, doc] of [["cli", guide], ["claude", ide]]) {
+    const block = html.match(new RegExp(`id="code-${id}"[^>]*>(.*?)</pre>`, "s"))?.[1];
+    assert.ok(block);
+    for (const line of block.split("\n")) assert.ok(doc.includes(line), line);
+    assert.match(html, new RegExp(`data-copy="code-${id}"`));
   }
-  assert.doesNotMatch(css, /\.wm-group-muted\s*\{[^}]*opacity:/s);
-});
-
-test("navbar GitHub action includes a recognizable icon", () => {
-  const navActions = html.match(/<div class="nav-actions">(?<body>[\s\S]*?)<\/div>/)?.groups?.body ?? "";
-  assert.match(html, /<symbol id="i-github"/);
-  assert.match(navActions, /<use href="#i-github"/);
-});
-
-test("terminal demo lines are plain text because the carousel types with textContent", () => {
-  assert.doesNotMatch(js, /<b>.*<\/b>/);
-  assert.doesNotMatch(js, /<strong>.*<\/strong>/);
-  assert.doesNotMatch(html, /<b>.*<\/b>/);
-  assert.doesNotMatch(html, /<strong>.*<\/strong>/);
-});
-
-test("public examples advertise only Local CLI and bounded Git handoff", () => {
-  assert.doesNotMatch(html + js, /specgate stats|Full mode|Add the appliance|Linear|GitLab confirm|Configure one only/i);
-  assert.match(html, /specgate ui/);
-  assert.match(html, /unsigned review request/);
-  assert.match(js, /specgate delivery handoff show --file/);
-});
-
-test("landing copy stays aligned with current installation", () => {
-  assert.doesNotMatch(html, /production-ready/i);
-  assert.doesNotMatch(html, /Jira/);
-  assert.match(html, /CLI and IDE handoff/);
-  assert.match(html, /Install through the CLI/);
-  assert.match(html, /Codex and Claude Code plugin managers/i);
-  assert.match(html, /GitHub/);
-  assert.doesNotMatch(html, /\bexperimental\s+(?:connectors?|integrations?|trackers?)\b/i);
-  assert.doesNotMatch(html, /\b(?:connectors?|integrations?)\b[^.\n]{0,80}\bmirror(?:s|ed|ing)?\b[^.\n]{0,80}\btracker\b/i);
-  assert.doesNotMatch(html, /official (?:Codex|Claude|plugin) marketplace/i);
-  assert.doesNotMatch(html, /approved (?:by|for) (?:OpenAI|Anthropic|Codex|Claude)/i);
-});
-
-test("tool compatibility is compact and explains the direct and team routes", () => {
-  const tools = html.match(/<section class="wordmarks"[^>]*>(?<body>[\s\S]*?)<\/section>/)?.groups?.body ?? "";
-
-  assert.match(tools, /Your tools stay in the loop/);
-  assert.equal([...tools.matchAll(/class="tool-route"/g)].length, 2);
-  assert.match(tools, /Code where you already work/);
-  assert.match(tools, /Review in a browser or through Git/);
-  assert.match(tools, /unsigned review request/);
-  assert.doesNotMatch(tools, /class="wm-group/);
-  assert.doesNotMatch(tools, /supported v0\.1 path is CLI-first/);
-});
-
-test("landing polish avoids repeated labels and decorative separators", () => {
-  const eyebrowCount = [...html.matchAll(/class="eyebrow/g)].length;
-
-  assert.ok(eyebrowCount <= 1);
-  assert.doesNotMatch(html, /[·—–]/);
-  assert.doesNotMatch(js, /[·—–]/);
-});
-
-test("governed loop copy does not overpromise format parsing", () => {
-  const loop = html.match(/<section class="band band-rail loop" id="how">(?<body>[\s\S]*?)<\/section>/)?.groups?.body ?? "";
-
-  for (const framework of ["OpenSpec", "Spec Kit", "Superpowers", "Markdown"]) {
-    assert.ok(loop.includes(framework));
+  for (const href of html.matchAll(/href="#([^"]+)"/g)) {
+    if (href[1].startsWith("i-")) continue;
+    assert.ok(html.includes(`id="${href[1]}"`), href[0]);
   }
-  assert.doesNotMatch(loop, /can.t misread|auto(?:matically)? detect|detects any format/i);
+  assert.equal([...html.matchAll(/class="btn lg primary[^"]*" href="#install"/g)].length, 2);
+  assert.match(html, /guides\/local-review\.md/);
+  assert.match(html, /guides\/install-ide-plugins\.md/);
+  assert.match(html, /quickstart\.md/);
+  assert.doesNotMatch(html + js, /specgate stats|full mode|production-ready|trusted by|guarantee|automatically detects|official (?:Codex|Claude|plugin) marketplace|approved (?:by|for) (?:OpenAI|Anthropic|Codex|Claude)/i);
 });
 
-test("product proof uses the published GitHub Pages media without autoplay", () => {
-  const proof = html.match(/<section class="band proof" id="delivery-proof">(?<body>[\s\S]*?)<\/section>/)?.groups?.body ?? "";
-  assert.match(proof, /<a class="accent" href="https:\/\/github\.com\/thanhtung2693\/specgate\/blob\/main\/docs\/using-specgate\/guides\/try-delivery-proof\.md">Run the delivery proof locally<\/a>/);
-
-  assert.match(proof, /<video[^>]+controls[^>]+muted[^>]+playsinline[^>]+preload="metadata"/);
-  assert.match(proof, /poster="\.\/media\/specgate-promo-poster\.jpg"/);
-  assert.match(proof, /<source src="\.\/media\/specgate-promo\.mp4" type="video\/mp4"/);
-  assert.doesNotMatch(proof, /\bautoplay\b/);
-  assert.ok(existsSync(new URL("media/specgate-promo.mp4", here)));
-  assert.ok(existsSync(new URL("media/specgate-promo-poster.jpg", here)));
-  assert.match(readme, /href="https:\/\/thanhtung2693\.github\.io\/specgate\/#delivery-proof"/);
-  assert.match(readme, /src="app\/landing\/media\/specgate-promo-poster\.jpg"/);
-  assert.doesNotMatch(readme, /docs\/assets\/readme\/specgate-promo\.(?:mp4|jpg)/);
+test("every localizable label has a Vietnamese translation", () => {
+  const strings = runInNewContext(js.slice(0, js.indexOf("const root =")) + "strings");
+  for (const [, key] of html.matchAll(/data-i18n(?:-attr)?="(?:[\w-]+:)?([\w.]+)"/g)) {
+    assert.ok(strings.vi[key], key);
+  }
+  for (const key of Object.keys(strings.en)) assert.ok(strings.vi[key], key);
 });
 
-test("landing positions existing tools around the governed handoff", () => {
-  assert.match(html, /SPEC TOOLS/);
-  assert.match(html, /SPECGATE/);
-  assert.match(html, /TRACKER \+ IDE/);
-  assert.match(html, /review request.*alongside the (?:Git )?diff/i);
-  assert.doesNotMatch(html, /Own the contract/);
-  assert.doesNotMatch(html, /Manual checklist steps only/);
-  assert.doesNotMatch(html, /SpecGate sits/);
+test("the README tour remains playable at its Pages anchor", () => {
+  const rootReadme = read("../../README.md");
+  assert.match(rootReadme, /href="https:\/\/thanhtung2693\.github\.io\/specgate\/#delivery-proof"/);
+  assert.match(rootReadme, /src="app\/landing\/media\/specgate-promo-poster\.jpg"/);
+  const details = html.match(/<details id="delivery-proof">([\s\S]*?)<\/details>/)?.[1];
+  assert.ok(details);
+  assert.match(details, /try-delivery-proof\.md/);
+  assert.match(details, /<video\b[^>]*controls[^>]*muted[^>]*playsinline[^>]*preload="none"/);
+  assert.doesNotMatch(details, /\bautoplay\b/);
+  for (const file of ["media/specgate-promo-poster.jpg", "media/specgate-promo.mp4"]) assert.ok(existsSync(new URL(file, here)));
 });
 
-test("landing keeps the public story compact", () => {
-  assert.doesNotMatch(html, /class="cap-table"/);
-  assert.doesNotMatch(html, /data-flow/);
-  assert.doesNotMatch(html, /href="#verify"/);
-});
-
-test("social metadata uses the shipped logo asset", () => {
-  assert.match(html, /property="og:image" content="https:\/\/thanhtung2693\.github\.io\/specgate\/logo\.svg"/);
-  assert.match(html, /name="twitter:image" content="https:\/\/thanhtung2693\.github\.io\/specgate\/logo\.svg"/);
-  assert.match(html, /property="og:image:alt" content="SpecGate logo"/);
-  assert.match(html, /name="twitter:image:alt" content="SpecGate logo"/);
-  assert.doesNotMatch(html, /\/images\/specgate-black\.svg/);
-  assert.doesNotMatch(html, /specgate\.io/);
-});
-
-test("SEO metadata is canonical, crawlable, and structured", () => {
+test("metadata keeps the deployed canonical URL and structured public copy", () => {
   assert.match(html, /<meta name="robots" content="index, follow, max-image-preview:large"/);
   assert.match(html, /<link rel="canonical" href="https:\/\/thanhtung2693\.github\.io\/specgate\/"/);
-  assert.match(html, /<link rel="sitemap" type="application\/xml" href="https:\/\/thanhtung2693\.github\.io\/specgate\/sitemap\.xml"/);
-  assert.match(html, /<main id="top" aria-labelledby="page-title" tabindex="-1">/);
-  assert.match(html, /<h1 id="page-title"/);
-  assert.match(css, /\.skip-link:focus/);
-  assert.match(sitemap, /<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/);
-
-  const jsonLd = html.match(/<script type="application\/ld\+json">\s*(?<json>[\s\S]*?)\s*<\/script>/)?.groups?.json;
-  assert.ok(jsonLd);
-  const graph = JSON.parse(jsonLd)["@graph"];
-  const types = graph.map((item) => item["@type"]);
-  assert.ok(types.includes("Organization"));
-  assert.ok(types.includes("WebSite"));
-  assert.ok(types.includes("WebPage"));
-  assert.ok(types.includes("SoftwareApplication"));
-  assert.ok(types.includes("FAQPage"));
-  assert.equal(graph.find((item) => item["@type"] === "WebPage").about["@id"], "https://thanhtung2693.github.io/specgate/#software");
+  assert.match(html, /property="og:image" content="https:\/\/thanhtung2693\.github\.io\/specgate\/logo\.svg"/);
+  assert.match(html, /name="twitter:image" content="https:\/\/thanhtung2693\.github\.io\/specgate\/logo\.svg"/);
+  assert.match(read("sitemap.xml"), /<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/);
+  const graph = JSON.parse(html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1])["@graph"];
+  for (const type of ["Organization", "WebSite", "WebPage", "SoftwareApplication", "FAQPage"]) assert.ok(graph.some((item) => item["@type"] === type));
+  const faq = graph.find((item) => item["@type"] === "FAQPage").mainEntity;
+  const section = html.slice(html.indexOf('id="faq"'), html.indexOf('<section class="final'));
+  assert.equal((section.match(/<details\b/g) ?? []).length, 3);
+  assert.equal(faq.length, 3);
+  for (const question of faq) {
+    assert.ok(section.includes(question.name));
+    assert.ok(section.replace(/<\/?code>/g, "").includes(question.acceptedAnswer.text));
+  }
 });
 
-test("hero keeps a concise lede and exposes both entry actions", () => {
-  const hero = html.match(/<section class="hero">(?<body>[\s\S]*?)<\/section>/)?.groups?.body ?? "";
-  const lede = hero.match(/<p class="lede[^\"]*"[^>]*>(?<body>[\s\S]*?)<\/p>/)?.groups?.body ?? "";
-  const desktopHeadlineCap = Number(css.match(/\.hero-copy h1\s*\{[\s\S]*?font-size:\s*clamp\([^,]+,[^,]+,\s*(?<max>[\d.]+)rem\)/)?.groups?.max);
-
-  assert.match(hero, />Run locally/);
-  assert.match(hero, />View GitHub/);
-  assert.ok(lede.trim().split(/\s+/).length <= 20);
-  assert.ok(desktopHeadlineCap <= 3.7, `desktop headline cap ${desktopHeadlineCap}rem is too large for the fixed-width hero`);
-  assert.doesNotMatch(hero, /Run the local demo|Watch the CLI/);
+test("fonts, media and icons are bundled with no runtime network dependency", () => {
+  assert.doesNotMatch(html, /<(script|img|video|source|iframe)\b[^>]*src="https?:/);
+  assert.doesNotMatch(css + js, /@import|url\(\s*["']?https?:|\bfetch\(|XMLHttpRequest|WebSocket|sendBeacon/);
+  for (const [, ref] of html.matchAll(/(?:href|src|poster)="([^"#][^"]*)"/g)) {
+    if (!ref.startsWith("https:")) assert.ok(existsSync(new URL(ref, here)), ref);
+  }
+  for (const [, ref] of css.matchAll(/url\("([^"]+)"\)/g)) assert.ok(existsSync(new URL(ref, here)), ref);
+  for (const [, icon] of (html + js).matchAll(/#(i-[\w-]+)/g)) assert.ok(html.includes(`<symbol id="${icon}"`), icon);
+  for (const font of ["host-grotesk-latin", "geist", "geist-vietnamese", "commit-mono"]) assert.match(css, new RegExp(`fonts/${font}\\.woff2`));
 });
 
-test("primary CTA explains the Local CLI path", () => {
-  const cta = html.match(/<section class="cta" id="cta">(?<body>[\s\S]*?)<\/section>/)?.groups?.body ?? "";
+test("muted, warning and success text meet contrast requirements in both themes", () => {
+  const luminance = (hex) => hex.match(/\w\w/g).map((v) => {
+    const channel = parseInt(v, 16) / 255;
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  }).reduce((sum, channel, i) => sum + channel * [0.2126, 0.7152, 0.0722][i], 0);
 
-  assert.match(cta, /Local CLI/);
-  assert.match(cta, /no Docker or server/);
-  assert.doesNotMatch(cta, /one container/);
+  for (const theme of [":root {", ':root[data-theme="dark"], .ink {']) {
+    const block = css.slice(css.indexOf(theme)).split("}", 1)[0];
+    const color = (name) => luminance(block.match(new RegExp(`--${name}: #([\\da-f]{6})`))[1]);
+    for (const [text, surface] of [["muted", "bg"], ["muted", "surface"], ["ok", "surface"], ["gap", "gap-soft"], ["accent", "accent-ink"]]) {
+      const values = [color(text), color(surface)].sort((a, b) => a - b);
+      assert.ok((values[1] + 0.05) / (values[0] + 0.05) >= 4.5, `${theme}: ${text} on ${surface}`);
+    }
+  }
 });
 
-test("FAQ has six questions and JSON-LD matches the visible content", () => {
-  const faq = html.match(/<section class="band faq" id="faq">(?<body>[\s\S]*?)<\/section>/)?.groups?.body ?? "";
-  const visibleQuestions = [...faq.matchAll(/<summary><span>(?<question>[^<]+)<\/span><\/summary>/g)]
-    .map((match) => match.groups.question);
-  const jsonLd = html.match(/<script type="application\/ld\+json">\s*(?<json>[\s\S]*?)\s*<\/script>/)?.groups?.json;
-  const faqPage = JSON.parse(jsonLd)["@graph"].find((item) => item["@type"] === "FAQPage");
-  const visibleAnswers = [...faq.matchAll(/<details[^>]+>[^]*?<p>(?<answer>[^]*?)<\/p>[^]*?<\/details>/g)]
-    .map((match) => match.groups.answer.replace(/<[^>]+>/g, ""));
+function playerHarness({ reduce = false, lang = null, hash = "", watchWorkflow = false } = {}) {
+  const listeners = new Map();
+  const attributes = new Map();
+  const classes = new Set();
+  let active;
+  function node(id, dataset = {}) {
+    return {
+      id, dataset, hidden: true,
+      addEventListener(event, fn) { listeners.set(`${id}:${event}`, fn); },
+      setAttribute(name, value) { attributes.set(`${id}:${name}`, value); },
+      getAttribute(name) { return attributes.get(`${id}:${name}`); },
+      focus() { active = id; },
+      classList: { add: (...names) => names.forEach((name) => classes.add(name)), remove: (name) => classes.delete(name), toggle: () => {} },
+    };
+  }
 
-  assert.equal(visibleQuestions.length, 6);
-  assert.deepEqual(faqPage.mainEntity.map((item) => item.name), visibleQuestions);
-  assert.deepEqual(faqPage.mainEntity.map((item) => item.acceptedAnswer.text), visibleAnswers);
+  const root = node("root");
+  const scene = node("scene", { phase: "2" });
+  const animation = {
+    playState: "running",
+    pause() { this.playState = "paused"; },
+    play() { this.playState = "running"; },
+    finish() { this.playState = "finished"; },
+  };
+  scene.getAnimations = () => [animation];
+  const steps = [0, 1, 2].map((i) => node(`step-${i}`, { step: String(i) }));
+  const selectors = {
+    "#scene": scene, "#steps": node("steps"), "#cap": node("cap"), "#pp": node("pp"),
+    "#pp use": node("pp-icon"), "#replay": node("replay"), ".ctl-bar": node("controls"),
+    "#ins-tabs": node("install"), '[data-action="theme"]': node("theme"),
+    '[data-i18n-attr="aria-label:lang.aria"]': node("language"),
+    "#delivery-proof": node("delivery-proof"),
+    "#copy-status": node("copy-status"),
+    ".workflow-block": node("workflow"),
+  };
+  const installOptions = ["cli", "claude", "prompt"].map((ins) => node(ins, { ins }));
+  const installPanels = installOptions.map(({ id }) => node(`panel-${id}`, { panel: id }));
+  const claudeNote = node("claude-note", { installNote: "claude" });
+  const copyLabel = node("copy-label");
+  const copy = { ...node("copy", { copy: "code-cli" }), querySelector: () => copyLabel };
+  let copied;
+  const timers = new Map();
+  let now = 0;
+  let nextTimer = 0;
+  const observed = new Set();
+  let intersection;
+  const viewportObserver = class {
+    constructor(fn) { intersection = fn; }
+    observe(target) { observed.add(target); }
+    unobserve(target) { observed.delete(target); }
+  };
+  runInNewContext(js, {
+    ...(watchWorkflow ? { IntersectionObserver: viewportObserver } : {}),
+    document: {
+      documentElement: root,
+      querySelector: (selector) => selectors[selector],
+      querySelectorAll: (selector) => ({
+        "[data-step]": steps, "[data-ins]": installOptions, "[data-panel]": installPanels,
+        "[data-install-note]": [claudeNote], "[data-copy]": [copy],
+        ".reveal, .workflow-block": [selectors[".workflow-block"]],
+      })[selector] ?? [],
+      getElementById: (id) => ({ textContent: id === "code-cli" ? "  specgate doctor  " : "" }),
+    },
+    window: { ...node("window"), ...(watchWorkflow ? { IntersectionObserver: viewportObserver } : {}) },
+    matchMedia: () => ({ ...node("media"), matches: reduce }),
+    localStorage: { getItem: () => lang },
+    location: { hash },
+    navigator: { clipboard: { writeText: async (text) => { copied = text; } } },
+    performance: { now: () => now },
+    setTimeout(fn, delay) { timers.set(++nextTimer, { fn, due: now + delay }); return nextTimer; },
+    clearTimeout: (id) => timers.delete(id),
+  });
+  return {
+    scene, steps, animation, selectors, installOptions, installPanels, claudeNote, copyLabel,
+    get copied() { return copied; },
+    observed,
+    intersect(target, isIntersecting) { intersection([{ target, isIntersecting }]); },
+    get active() { return active; },
+    fire: (id, event, value) => listeners.get(`${id}:${event}`)(value),
+    advance(duration) {
+      const until = now + duration;
+      for (const [id, timer] of timers) {
+        if (timer.due > until) continue;
+        now = timer.due;
+        timers.delete(id);
+        timer.fn();
+      }
+      now = until;
+    },
+  };
+}
+
+test("pause freezes the stage and resumes its timer, replay restarts the story", () => {
+  const { scene, animation, selectors, fire, advance } = playerHarness();
+  assert.equal(scene.dataset.phase, "0");
+  advance(1000);
+  fire("pp", "click");
+  assert.equal(animation.playState, "paused");
+  assert.equal(selectors["#pp"].getAttribute("aria-label"), "Play");
+  advance(4000);
+  assert.equal(scene.dataset.phase, "0");
+  fire("pp", "click");
+  assert.equal(animation.playState, "running");
+  advance(2599);
+  assert.equal(scene.dataset.phase, "0");
+  advance(1);
+  assert.equal(scene.dataset.phase, "1");
+  assert.match(selectors["#cap"].textContent, /suite passed.*503 case still has no result/i);
+  advance(4400);
+  assert.equal(scene.dataset.phase, "2");
+  assert.equal(scene.getAttribute("aria-labelledby"), "step-2");
+  advance(1600);
+  assert.equal(selectors["#pp"].getAttribute("aria-label"), "Play");
+  fire("replay", "click");
+  assert.equal(scene.dataset.phase, "0");
 });
 
-test("final CTA reuses approved intents without decorative steps", () => {
-  const cta = html.match(/<section class="cta" id="cta">(?<body>[\s\S]*?)<\/section>/)?.groups?.body ?? "";
-
-  assert.match(cta, />Run locally/);
-  assert.match(cta, />View GitHub/);
-  assert.doesNotMatch(cta, /cta-badge|cta-steps|VERIFIED/);
+test("reduced motion stays on the review until explicit navigation, including keyboard", () => {
+  const harness = playerHarness({ reduce: true, lang: "vi", hash: "#delivery-proof" });
+  const { scene, steps, selectors, fire, advance } = harness;
+  advance(10000);
+  assert.equal(scene.dataset.phase, "2");
+  assert.equal(selectors["#pp"].getAttribute("aria-label"), "Chạy");
+  assert.equal(selectors["#delivery-proof"].open, true);
+  let prevented = false;
+  fire("steps", "keydown", { key: "ArrowLeft", preventDefault: () => { prevented = true; } });
+  assert.ok(prevented);
+  assert.equal(scene.dataset.phase, "1");
+  assert.equal(harness.active, "step-1");
+  assert.equal(steps[0].tabIndex, -1);
+  assert.equal(steps[1].tabIndex, 0);
+  assert.equal(steps[1].getAttribute("aria-selected"), "true");
+  assert.equal(steps[2].getAttribute("aria-selected"), "false");
+  assert.equal(scene.getAttribute("aria-labelledby"), "step-1");
+  advance(10000);
+  assert.equal(scene.dataset.phase, "1");
 });
 
-test("only How it works carries the governance rail", () => {
-  assert.match(html, /<section class="band band-rail loop" id="how">/);
-  assert.doesNotMatch(html, /<section class="band band-rail (?:run|fit|faq)"/);
-  assert.equal([...html.matchAll(/class="gate-node"/g)].length, 1);
-  assert.doesNotMatch(html, /class="scanlines"|class="beam"/);
+test("install options switch the panel and the copy button reports the copied command", async () => {
+  const harness = playerHarness({ reduce: true });
+  const { installOptions, installPanels, claudeNote, selectors, copyLabel, fire, advance } = harness;
+  fire("install", "click", { target: { closest: () => installOptions[1] } });
+  assert.deepEqual(installPanels.map(({ hidden }) => hidden), [true, false, true]);
+  assert.equal(installOptions[1].getAttribute("aria-pressed"), "true");
+  assert.equal(claudeNote.hidden, false);
+  fire("install", "click", { target: { closest: () => installOptions[0] } });
+  assert.equal(claudeNote.hidden, true);
+  await fire("copy", "click");
+  assert.equal(harness.copied, "specgate doctor");
+  assert.equal(selectors["#copy-status"].textContent, "Copied");
+  advance(1500);
+  assert.equal(copyLabel.textContent, "Copy");
 });
 
-test("landing fonts are self-hosted and preloaded without a remote stylesheet", () => {
-  assert.ok(existsSync(new URL("fonts/host-grotesk-latin.woff2", here)));
-  assert.ok(existsSync(new URL("fonts/commit-mono.woff2", here)));
-  assert.ok(existsSync(new URL("fonts/OFL-host-grotesk.txt", here)));
-  assert.ok(existsSync(new URL("fonts/OFL-commit-mono.txt", here)));
-  assert.match(css, /@font-face[\s\S]*url\("\.\.\/fonts\/host-grotesk-latin\.woff2"\)/);
-  assert.match(css, /@font-face[\s\S]*url\("\.\.\/fonts\/commit-mono\.woff2"\)/);
-  assert.match(css, /--font-display:\s*"Host Grotesk"/);
-  assert.match(css, /--font-body:\s*"Host Grotesk"/);
-  assert.match(css, /--font-mono:\s*"Commit Mono"/);
-  assert.doesNotMatch(css, /Bricolage Grotesque|Geist/);
-  assert.doesNotMatch(html, /fonts\.googleapis\.com|fonts\.gstatic\.com/);
+test("inspect turns the full-size evidence toward the reader before the separate decision view", () => {
+  assert.match(css, /\.stack \{[^}]*rotateX\(57deg\) rotateZ\(-41deg\)/);
+  assert.match(css, /\.scene3d\[data-phase="1"\] \.stack \{[^}]*transform: scale\(var\(--inspect\)\)/);
+  assert.match(css, /\.scene3d\[data-phase="1"\] \.layer:not\(\.top\) \{[^}]*translate3d\([^}]*rotateZ/);
+  assert.match(css, /\.layer\.top \.lr \.mono \{[^}]*font-size: 16px; white-space: normal/);
+  assert.match(css, /\.layer\.top \.lr \.lab \{[^}]*font-size: 16px/);
+  assert.match(css, /\.scene3d\[data-phase="2"\] \.lact \{[^}]*opacity: 1/);
+  const sheet = html.slice(html.indexOf('class="layer top"'), html.indexOf('class="scanp"'));
+  for (const label of ["Evidence by criterion", "Test passed", "Test result missing", "No test attached"]) {
+    assert.ok(sheet.includes(label), label);
+  }
 });
 
-test("visual system keeps only approved atmospheric layers", () => {
-  assert.match(html, /class="grid-bg"/);
-  assert.doesNotMatch(html, /class="scanlines"|class="beam"/);
-  assert.doesNotMatch(css, /\.scanlines\s*\{|\.beam\s*\{|\.cta::before\s*\{/);
-  assert.doesNotMatch(css, /\.hero::before|\.hero::after/);
+test("the public workflow offers four ordered steps with documented Local continuations", () => {
+  const flow = html.match(/<ol class="workflow"[^>]*>([\s\S]*?)<\/ol>/)?.[1];
+  assert.ok(flow);
+  const titles = [...flow.matchAll(/<h4[^>]*>(.*?)<\/h4>/g)].map(([, title]) => title);
+  assert.deepEqual(titles, ["Agree on scope", "Let your agent work", "Review the evidence", "Decide and hand off"]);
+  assert.match(flow, /spec version you approved.*project rubrics for four readiness gates.*Context Pack/s);
+  assert.match(flow, /Context Pack to .*resume the same work.*agreed scope/s);
+  assert.match(flow, /exact delivery you reviewed.*move the entire Local store/is);
+  const links = [...flow.matchAll(/href="https:\/\/github\.com\/thanhtung2693\/specgate\/blob\/main\/(docs\/using-specgate\/[^"#]+)#([^"]+)"/g)];
+  assert.equal(links.length, 4);
+  for (const [, file, anchor] of links) {
+    const headings = [...read("../../" + file).matchAll(/^#+ (.+)$/gm)]
+      .map(([, heading]) => heading.toLowerCase().replace(/[^\w\s-]/g, "").replaceAll(" ", "-"));
+    assert.ok(headings.includes(anchor), file + "#" + anchor);
+  }
 });
 
-test("mobile layout explicitly collapses terminal tabs and asymmetric sections", () => {
-  assert.match(css, /@media \(max-width: 768px\)[\s\S]*\.cast-tabs[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(css, /@media \(max-width: 900px\)[\s\S]*\.hero[\s\S]*grid-template-columns:\s*1fr/);
-  assert.match(css, /@media \(max-width: 860px\)[\s\S]*\.fit-grid[\s\S]*grid-template-columns:\s*1fr/);
+test("phone player keeps the story steps on one line with named touch targets", () => {
+  assert.match(css, /#steps \{[^}]*display: flex/);
+  assert.match(css, /@media \(max-width: 420px\) \{\s*\.step\[aria-selected="true"\] \.txt \{ display: none; \}/);
+  assert.match(css, /@media \(pointer: coarse\) \{ \.step \{ min-width: 44px; min-height: 44px/);
+  assert.match(html, /id="step-2" aria-label="You decide"/);
 });
 
-test("terminal presents the current four-part value path", () => {
-  const tabs = [...html.matchAll(/<button[^>]+data-cast-tab[^>]*>(?<label>[^<]+)<\/button>/g)]
-    .map((match) => match.groups.label.trim());
-
-  assert.deepEqual(tabs, ["Publish", "Context", "Verify", "Handoff"]);
-  assert.match(js, /specgate artifact publish --file artifact\.json --preview/);
-  assert.match(js, /specgate artifact publish --file artifact\.json/);
-  assert.match(js, /specgate gates check <artifact-id>/);
-  assert.match(js, /specgate --yes artifact approve <artifact-id>/);
-  assert.match(js, /specgate --yes artifact promote <artifact-id>/);
-  assert.match(js, /specgate work create --feature local-healthcheck/);
-  assert.match(js, /specgate work list --phase ready/);
-  assert.match(js, /specgate work context <work-ref>/);
-  assert.match(js, /specgate delivery report <work-ref> --init/);
-  assert.match(js, /specgate change submit <work-ref> --file <completion-path> --run-checks --yes/);
-  assert.match(js, /returned data\.path/);
-  assert.match(js, /specgate work resume <work-ref> --json/);
-  assert.match(js, /selected testcase is missing/);
-  assert.match(js, /watched input health\.test\.mjs changed/);
-  assert.match(js, /specgate change status <work-ref> --checkpoint <checkpoint-id> --detail/);
-  assert.match(js, /specgate --yes change accept <work-ref> --review-id <review-id>/);
-  assert.match(js, /Human approval remains required/);
-  assert.doesNotMatch(js, /Delivery verdict: PASS/);
-  assert.match(js, /specgate delivery handoff export <work-ref> --file/);
-  assert.doesNotMatch(js, /work create-quick|gates history|governance profile|Custom gates/);
-});
-
-test("terminal has useful no-JavaScript content and accessible tab ownership", () => {
-  const terminal = html.match(/<div class="cast-carousel[^>]*>(?<body>[\s\S]*?)<\/div>\s*<\/section>/)?.groups?.body ?? "";
-
-  assert.match(terminal, /role="tablist"/);
-  assert.match(terminal, /role="tabpanel"/);
-  assert.match(terminal, /specgate artifact publish --file artifact\.json --preview/);
-  assert.match(terminal, /id="cast-tab-publish"/);
-  assert.match(terminal, /aria-controls="cast-panel"/);
-  assert.match(terminal, /aria-labelledby="cast-tab-publish"/);
-  assert.match(js, /ArrowRight/);
-  assert.match(js, /ArrowLeft/);
+test("workflow motion starts once on entry and leaves the copy accessible", () => {
+  const page = playerHarness({ watchWorkflow: true });
+  const workflow = page.selectors[".workflow-block"];
+  assert.ok(page.observed.has(workflow));
+  page.intersect(workflow, false);
+  assert.ok(page.observed.has(workflow));
+  page.intersect(workflow, true);
+  assert.ok(!page.observed.has(workflow));
+  assert.equal(playerHarness({ reduce: true, watchWorkflow: true }).observed.size, 0);
+  assert.match(html, /<div class="workflow-block">/);
+  assert.match(css, /\.motion \.workflow-block:not\(\.in\):not\(:focus-within\) \.workflow li::after/);
+  assert.match(css, /prefers-reduced-motion: reduce[\s\S]*?\.workflow li::after[^}]*transform: none/);
 });
