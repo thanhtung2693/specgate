@@ -9,136 +9,48 @@ agents. It keeps product scope, artifact versions, Context Packs, delivery
 evidence, and review verdicts in one place while users keep their existing IDE,
 tracker, and git workflow.
 
-## Runtime shapes
-
-SpecGate has two product modes. Local mode is a CLI-only workflow:
+## Runtime
 
 ```text
-Developer / IDE agent
-  -> specgate CLI
-     -> user-private SQLite store
-     -> immutable artifact documents in that store
+Developer / IDE agent -> specgate CLI -> private SQLite store
+Optional browser -> loopback listener inside specgate ui -> same Local owners
 ```
 
-Local mode has no server, browser UI, external model, Redis, Postgres, or blob
-service. IDE agents execute the semantic gate tasks that a configured model may
-execute in Full mode.
+The CLI stores artifact snapshots, work, checks, evidence, and review
+decisions in the selected Local SQLite store. IDE agents call the CLI through
+embedded skills and execute frozen semantic-readiness tasks. The optional
+embedded browser UI fixes the store, workspace and repository at startup.
+The static landing page and IDE package source own no product state.
 
-Full mode uses the service boundaries below:
-
-```text
-Developer / IDE agent
-  -> specgate CLI
-     -> Doc Registry REST API
-        -> Postgres
-        -> local blob storage or S3/MinIO
-        -> optional Redis queue
-
-Browser UI
-  -> Doc Registry REST API
-  -> Agents service for governance chat and model-backed workflows
-
-Agents service
-  -> Doc Registry REST
-  -> configured model provider
-```
-
-The single-container local appliance packages Full mode for easy installation:
-
-```text
-localhost:<SPECGATE_PORT>
-  -> gateway
-     -> /                     UI
-     -> /api/doc-registry/   Doc Registry
-     -> /api/agents/         Agents
-     -> /integrations/oauth-callback
-     -> /integrations/{integration}/resources/{resource}/{provider}/webhook
-                              provider-only Doc Registry callbacks
-
-specgate container
-  -> Postgres
-  -> Doc Registry
-  -> Agents
-  -> gateway + static UI
-  -> specgate-data:/data
-```
-
-It publishes one port and uses one named volume. Postgres and internal APIs bind
-inside the container.
-
-Supervisor component state, restart counters, and `/data/diagnostics` are
-root-owned and not writable by application component users. Startup rejects
-symlinks and special files in these state trees without removing operator data,
-then migrates regular legacy state ownership and permissions. Finish handlers
-validate bounded decimal counters before arithmetic and create diagnostic
-temporary files exclusively. The loopback-only health adapter runs as root to
-clear successful components' protected restart counters; it accepts only its
-two fixed health routes and does not accept caller-selected paths or commands.
-
-The gateway is the appliance's authentication boundary. When any member holds a
-credential it verifies every request through `auth_request` against Doc
-Registry's `/internal/auth`, then sets `X-SpecGate-User` from the verifier's
-answer on every proxying route — so a caller can never assert its own identity,
-and the verified username becomes the actor on recorded decisions. Health probes,
-the provider redirect, and the integration webhooks skip verification because a
-probe carries no governance data, a redirect cannot present a credential, and a
-webhook authenticates by payload signature. With no credentials configured the
-gateway passes everything through, which keeps a default loopback install and
-Local mode unchanged. See
-[the gateway identity ADR](adr/2026-07-29-gateway-asserted-identity.md). Redis and MinIO are not part of the local appliance.
-Repository-level local development uses this same appliance and
-`deploy/local/compose.yml`; it does not layer module-specific Compose files.
-
-Self-hosted and cloud deployments may run the same Full-mode services as
-separate containers. `specgate init` is the explicit mode boundary: `local`
-creates the private SQLite workflow, while `full` installs or connects to the
-service-backed workflow.
-
-## Modules
-
-| Module | Stack | Responsibility |
-| --- | --- | --- |
-| `app/cli` | Go / Cobra | install, setup, local config, workspace binding, work/artifact/delivery commands, IDE plugin install |
-| `app/doc-registry` | Go / Huma / Postgres | durable state, artifacts, workboard, Knowledge, settings, integrations, REST |
-| `app/agents` | Python / LangGraph | model-backed governance operations: readiness, delivery review, quick-work acceptance criteria, governance chat |
-| `app/ui` | Vite / React | human review, artifact inspection, work queues, settings, team/workspace views, governance chat |
-| `plugins` / `agentpackages` | Markdown + manifests | IDE skills, hooks, and installable plugin package assets |
-
-## Source of Truth
-
-In Full mode, Doc Registry is the durable source of truth. It owns:
-
-- artifact lifecycle and file metadata;
-- work items and acceptance criteria;
-- gate runs and delivery review;
-- Knowledge metadata and retrieval;
-- integration signals;
-- settings and encrypted secrets.
-
-In Local mode, the private SQLite store owns artifacts, work, gates, evidence,
-and attribution for that installation.
-
-The agents service may judge, classify, summarize, or propose, but writes
-through Doc Registry APIs. The UI renders and reviews state; it does not keep
-hidden sample data or alternate workflow state.
+At artifact preview and publication, the command reads bounded project rubric
+files under the selected Git root. Effective rubric text and the relative
+source are immutable snapshot data. Task dispatch reads this frozen policy.
+Structural checks and human decision authority stay with the CLI.
 
 ## Trust Boundaries
 
-SpecGate v0.1 assumes a trusted local or private network.
+Local identity is cooperative attribution. IDE-agent output is evidence.
+The store records human decisions separately.
 
-- Doc Registry has no public HTTP auth layer.
-- Local users and workspaces are attribution and filtering, not RBAC.
-- Settings secrets are encrypted at rest with `SETTINGS_ENCRYPTION_KEY`.
-- IDE-agent output is evidence, not approval.
-- Human approval and deterministic checks outrank model judgment.
+The optional Local UI listens only on loopback. Exact Host validation, a private
+browser session cookie, same-origin checks and a CSRF header protect its small
+API allowlist against hostile browser origins. Session credentials do not
+appear in review URLs. The listener trusts all local accounts and processes
+that can reach loopback; it does not authenticate the OS user. Local identity
+remains cooperative attribution. The browser
+cannot select an arbitrary store, workspace, filesystem path, shell command or
+update source. Immutable documents are read through their pinned index.
+Discovery descriptors contain only a public session identity and loopback URL,
+never browser credentials. Unix checks private directory/file modes; Windows
+uses inherited per-user directory ACLs with the same bounded path, file and
+live-session validation. These permissions protect discovery metadata, not HTTP
+access. A Windows cross-build does not verify native ACL behavior.
 
-Full-mode browser opening treats server-advertised metadata as URL data, not
-host commands. The CLI validates absolute HTTP(S) URLs before deep-link
-resolution, printing or opening. Windows uses native ShellExecute with the
-validated URL as its document and no command parameters, with thread-bound COM
-initialization; macOS/Linux retain direct browser-launcher arguments. Do not
-route URLs through a command interpreter or accept local executable paths and
-arbitrary protocol handlers as web UI destinations.
+Local review projects existing status and acceptance inspection. HTTP decisions
+carry the displayed review, completion and acceptance basis; concurrent changes
+require a fresh inspection instead of applying a decision to newer evidence.
+Authoring specifications, creating work and running coding agents stay in the
+CLI/IDE.
 
 Enhanced Local assurance records stay inside the same SQLite trust boundary.
 The CLI captures an opted-in JUnit report and watched inputs, parses a bounded
@@ -147,14 +59,11 @@ review. It never treats a report as runner attestation. Checkpoint manifests
 and acceptance bases are stored locally and projected compactly; the basis is
 re-read transactionally before a human decision. The first enhanced write makes
 a disclosed backup and installs an old-writer guard, so older CLIs cannot
-silently mutate upgraded state. Frozen portable and handoff exports refuse data
-they cannot preserve.
+silently mutate upgraded state. The bounded handoff format refuses work
+carrying enhanced records it cannot preserve.
 
-Portable workspace export, impact and acceptance projections share
-transaction-scoped readers; export includes compatibility checks in its read
-snapshot rather than checking eligibility before opening that snapshot. Avoid
-parallel store-only implementations that can assemble evidence from different
-SQLite snapshots. Read historical acceptance records through the same inspection
+Use transaction-scoped readers for impact and acceptance projections so the
+review and its evidence come from the same SQLite snapshot. Read historical acceptance records through the same inspection
 as the displayed review, rather than independently resolving the latest review
 again. Default checkpoint lookup is checkout-scoped; explicit checkpoint IDs
 use work/workspace-scoped reads. Do not reintroduce an unqualified latest
@@ -163,52 +72,49 @@ not just changed-path membership. Keep v1 serialization and old-writer guards
 while older records and released CLIs remain supported; those are compatibility
 and data-safety boundaries, not disposable development scaffolding.
 
+The Local store owns checkout generation. A private staged receive commits a
+new random generation and its write-compatibility guard in one transaction.
+The existing enhanced format remains readable and writable by supporting
+CLIs. A received store uses enhanced format v2, which older enhanced binaries
+reject before mutating the database. Its guarded tables also require the
+generation-aware writer capability. Historical rows and their original
+identities are carried forward. New checkout identities combine the canonical
+checkout path with the current generation. Stores that have never been
+received keep their path-only identities.
+
+Local snapshot transfer reuses SQLite's consistent snapshot operation.
+Only a bounded manifest and database travel. The CLI stages and validates
+them before publication to a new name and validates the received SQLite
+file read-only before changing compatibility in private staging. Transfer
+trust assumes control of the local account and a trusted source archive.
+Checksums establish consistency, and normalized Git provenance constrains
+project binding. A receipt records original inventory and the actual
+receiving generation. No account or shared trust service issues it.
+
+Activation reaches only the selected Local config file. It checks the
+effective store and workspace, re-reads config immediately before atomic
+replacement, then verifies the saved binding. Cooperating local users
+must stop other writers during a switch. A config re-read is not a
+compare-and-swap against unrelated processes, and checkout generation never
+locks a source store or detects writes it makes offline.
 See [Trust and security](../using-specgate/concepts/trust-and-security.md).
 
 ## Workflow
 
 ```text
-create or import work
--> shape artifact package
--> run readiness gates
--> approve artifact
--> assemble Context Pack
--> coding agent implements
--> submit delivery evidence
--> delivery review records verdict
--> human approves/rejects when needed
+artifact-backed: publish -> readiness -> approve exact version -> create linked work
+quick: enter explicit criteria -> create quick work
+
+both routes: Context Pack -> implementation -> submit evidence
+             -> delivery review -> human decision
 ```
 
-Quick work can skip the full artifact package when the change is small and
-acceptance criteria are enough for a Context Pack. Local quick work stores the
-same artifact-free immutable handoff in SQLite and requires explicit criteria;
-Full mode may draft criteria through the platform model. Full work keeps the
-artifact-package loop.
+Quick work has no lead artifact and requires explicit acceptance criteria.
+Artifact-backed work pins one fully approved artifact version.
 
-## Storage and Queues
-
-Full mode requires Postgres. It stores metadata, workboard state, Knowledge
-chunks, gate history, settings, and integrations. Local mode uses SQLite and
-does not start Postgres.
-
-Blob storage stores document contents and uploads. The appliance uses the
-`specgate-data` Docker volume; its deployment environment can point storage at
-an S3-compatible service when needed.
-
-Redis is optional. It backs async Knowledge ingest and webhook processing when
-enabled; otherwise local/sync processing is used.
-
-## Interfaces
-
-- In Full mode, the CLI connects through `/api/doc-registry`, then uses
-  `/api/v1/*`. In Local mode, it opens only its selected SQLite store.
-- UI uses Doc Registry's app routes and the agents service.
-- Agents use Doc Registry REST.
-- IDE plugins install focused skills/hooks/rules and call the CLI.
-- In Full mode, GitHub/GitLab selected resources provide managed-webhook
-  repository observation, while an optional selected Linear team receives an
-  explicit work handoff. Repository observation compares the submitted PR/MR
-  head with the latest completion receipt; Linear never decides delivery.
+Public delivery surfaces are the CLI and its embedded Local review UI. Previous
+remote configurations and deployments remain user data. The current CLI does
+not connect to them. Use [operation and recovery guidance](../using-specgate/guides/operate-specgate.md#previous-installations).
 
 ## Related
 

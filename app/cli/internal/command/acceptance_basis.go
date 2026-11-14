@@ -15,27 +15,19 @@ func acceptanceSelectionFlags(cmd *cobra.Command) {
 	cmd.Flags().String("impact-target", "", "Exact Local impact target artifact (requires --impact-base)")
 }
 
-func rejectFullAcceptanceSelections(cmd *cobra.Command, deps *Deps, op string) error {
-	if deps.Topology == config.ModeLocal {
-		return nil
-	}
-	for _, name := range []string{"checkpoint", "impact-base", "impact-target"} {
-		if cmd.Flags().Changed(name) {
-			return incompatibleCommand(deps, op, "--"+name+" is Local-only")
-		}
-	}
-	return nil
-}
-
 func acceptanceOptions(cmd *cobra.Command, deps *Deps, store *local.Store, workspaceID, ref string) (local.AcceptanceOptions, *checkpointDelta, error) {
+	generation, err := store.CheckoutGeneration(cmd.Context())
+	if err != nil {
+		return local.AcceptanceOptions{}, nil, err
+	}
 	root, _ := config.FindProjectRoot(deps.WorkingDir)
-	receipt := collectGitReceipt(cmd.Context(), deps.DeployRunner, deliveryWorkingDir(deps), nil)
-	opts := local.AcceptanceOptions{RepoRoot: root, CheckoutID: receipt.CheckoutID, CheckoutRepository: receipt.Repository, CheckoutFingerprint: receipt.Availability + ":" + receipt.HeadRevision + ":" + receipt.DiffDigest}
+	receipt := collectGitReceipt(cmd.Context(), deps.CommandRunner, deliveryWorkingDir(deps), nil, generation)
+	opts := local.AcceptanceOptions{RepoRoot: root, CheckoutID: receipt.CheckoutID, CheckoutGeneration: generation, CheckoutRepository: receipt.Repository, CheckoutDirty: receipt.Dirty, CheckoutBranch: receipt.Branch, CheckoutBaseRevision: receipt.BaseRevision, CheckoutFingerprint: receipt.Availability + ":" + receipt.HeadRevision + ":" + receipt.DiffDigest}
 	// Use the completion selected by the basis transaction, not a separate
 	// latest-report read, when preserving its delivered commit range.
-	opts.ObserveCheckout = func(priorBase string) (string, string, string) {
-		current := collectGitReceiptWithPriorBase(cmd.Context(), deps.DeployRunner, deliveryWorkingDir(deps), nil, priorBase)
-		return current.CheckoutID, current.Repository, current.Availability + ":" + current.HeadRevision + ":" + current.DiffDigest
+	opts.ObserveCheckout = func(priorBase string) (string, string, string, string, string, bool) {
+		current := collectGitReceiptWithPriorBase(cmd.Context(), deps.CommandRunner, deliveryWorkingDir(deps), nil, priorBase, generation)
+		return current.CheckoutID, current.Repository, current.Availability + ":" + current.HeadRevision + ":" + current.DiffDigest, current.Branch, current.BaseRevision, current.Dirty
 	}
 	opts.CheckpointID, _ = cmd.Flags().GetString("checkpoint")
 	opts.ImpactBase, _ = cmd.Flags().GetString("impact-base")
@@ -47,7 +39,7 @@ func acceptanceOptions(cmd *cobra.Command, deps *Deps, store *local.Store, works
 	if err != nil {
 		return opts, nil, err
 	}
-	current := captureCheckout(cmd.Context(), deps)
+	current := captureCheckout(cmd.Context(), deps, generation)
 	if current.State == "available" {
 		opts.CheckoutID = current.CheckoutID
 		opts.CheckoutFingerprint = "available:" + current.Head + ":" + current.Fingerprint
@@ -92,7 +84,7 @@ func augmentAcceptanceStatus(cmd *cobra.Command, deps *Deps, store *local.Store,
 		result.SourceCoverage, _ = coverage["source_coverage"].(string)
 		result.SourceRequirements, _ = coverage["source_requirements"].([]sourceRequirementCoverage)
 	}
-	result = applyCheckoutFreshness(cmd.Context(), deps, result, mapGitReceipt(inspection.Report.Body))
+	result = applyCheckoutFreshness(cmd.Context(), deps, result, mapGitReceipt(inspection.Report.Body), opts.CheckoutGeneration)
 	result.RecordedBasis = inspection.Recorded
 	if inspection.Basis == nil {
 		return result, nil

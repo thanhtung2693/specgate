@@ -12,12 +12,12 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/unicode/norm"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
+	"github.com/specgate/specgate/app/cli/internal/workflow"
 )
 
 // Older inventories may omit served_files; their declared skills still require
 // SKILL.md. Supplemental files come only from the validated package inventory.
-func pluginSkillFiles(pkg *client.PluginPackage) []string {
+func pluginSkillFiles(pkg *workflow.PluginPackage) []string {
 	files := map[string]bool{}
 	for _, skill := range pluginSkillsFromPackage(pkg) {
 		prefix := "skills/" + skill + "/"
@@ -42,7 +42,7 @@ func isPluginSkillEntry(file string) bool {
 	return strings.Count(file, "/") == 2 && strings.HasSuffix(file, "/SKILL.md")
 }
 
-func validatePluginFileInventory(pkg *client.PluginPackage, skills map[string]bool) error {
+func validatePluginFileInventory(pkg *workflow.PluginPackage, skills map[string]bool) error {
 	seen := map[string]bool{}
 	for _, file := range pkg.ServedFiles {
 		if !portablePluginPath(file) {

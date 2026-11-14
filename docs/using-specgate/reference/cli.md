@@ -4,6 +4,21 @@ The `specgate` CLI is the stable command surface for users, automation, and
 coding IDE agents. It governs the handoff from source specs to reviewed,
 verifiable delivery.
 
+`specgate init` sets up Local mode by default. Run `specgate doctor` after setup,
+then use `specgate change` for the governed delivery workflow.
+`specgate ui` provides optional Local inspection
+and human review. The CLI and coding agent cover the complete Local workflow
+without a browser, menu bar, or OS notifications. Local needs no Docker,
+model API key, or server.
+Local `artifact publish --preview` resolves optional project instructions from
+the selected Git root's `.specgate/rubrics/`. Its `policy.rubrics[].source`
+and `digest` identify each effective rubric; custom previews also display them
+in plain output. Publication uses the same resolution and freezes the resulting
+text in its immutable policy. Missing files preserve the default output and
+digest; invalid active files return validation exit `2` before publication.
+See
+[Local project rubrics](../guides/customize-governance.md#add-local-project-instructions).
+
 For exact flags in your installed version:
 
 ```bash
@@ -26,11 +41,29 @@ missing evidence and next command). A reference is mandatory; no branch-name or
 most-recent-work inference occurs. Different work items on one spec remain
 separate. Receipt freshness is checked when a receipt exists.
 
+### Advanced Local
+
+Add these controls when the work needs stronger verification or an explicit
+comparison. The ordinary workflow can leave the verification contract
+`unconfigured`.
+
+- A verification pin fixes the reviewed command and working directory for
+  each bound check. Preview and confirm it before the first report.
+- A pinned check can observe specific JUnit cases and changes at watched
+  inputs when the CLI reruns the check.
+- A checkpoint saves a baseline to compare when resuming or reviewing work.
+- Source lineage records how named requirements changed between two exact
+  artifact versions. Use `artifact impact` to inspect that declared pair.
+
+See [compatibility limits](feature-status.md#established-paths) before the first
+enhanced write. The CLI discloses the store compatibility upgrade and backup
+before applying it.
+
 `work checkpoint <ref>` records an explicit, append-only Local pickup baseline;
 in unattended use, run `specgate --yes work checkpoint <ref> --note "..."`.
-`work resume <ref> --since <checkpoint-id>`
-shows that exact baseline and a file-content delta without changing scope, the
-checkout, or the stored work item. Checkpoints record HEAD/tree and bounded
+`work resume <ref> --since <checkpoint-id>` shows the exact baseline and its
+pickup note. It reports a file-content delta when the checkout is comparable,
+without changing scope, the checkout, or the stored work item. Checkpoints record HEAD/tree and bounded
 dirty-file hashes; a file becoming clean is not treated as deleted. Each
 checkpoint also retains the exact latest completion/review IDs when present;
 later submissions do not rewrite those historical IDs. A different
@@ -40,7 +73,9 @@ without storing an unusable baseline. A dirty file replaced by a directory is
 recorded as a removal plus additions for its untracked children. An unknown or
 foreign explicit checkpoint is a conflict, never a silent fallback.
 Omitting `--since` selects only the newest checkpoint for that work in the
-current checkout. Without one, it can use a comparable shared-repository
+current checkout and Local store generation. On a received store, use
+`--since` to read a source checkpoint and its pickup note. Its delta is
+`noncomparable` even when the checkout path and Git HEAD still match. Without one, it can use a comparable shared-repository
 completion receipt to list committed Git-tree changes, explicitly marked as
 limited because it has no historical dirty-file manifest; otherwise it reports
 `no_baseline`. It never silently uses a checkpoint from another worktree; only
@@ -130,7 +165,7 @@ has its stored `id`, `text`, and `source_path`; a `state` of `unassigned`,
 linked work items. `deferred` takes precedence even if work is linked. Linked
 work is matched only through exact `@source:<id>` tokens on that artifact
 version. `source_next_action`, when present, names the read-only artifact command
-to inspect before proposing missing work. Full-mode output does not add these
+to inspect before proposing missing work.
 Local-only rows.
 
 Plain `coverage` lists unassigned and deferred entries immediately. Plain
@@ -198,7 +233,10 @@ and unreadable inputs remain visible instead of being reported unchanged.
 
 Report-enabled executions store a versioned run receipt bound to the work,
 context, pin, check and completion. It records exit status and before/after
-checkout and watched-input observations. Changed endpoints fail the check;
+checkout and watched-input observations. Changes to Git or watched-file
+states/digests between endpoints fail the check, including Git-ignored watched
+files. Equal watched endpoints that already differ from the pin retain a
+separate drift warning;
 unavailable observations are not proof of freshness. Endpoint observations
 cannot detect edits reverted between observations or authenticate the runner.
 
@@ -209,12 +247,11 @@ Unselected comparisons are `not_requested`, not implicitly the newest record.
 An acceptance impact pair must include the work's lead artifact. Quick work
 has no lead artifact and rejects impact selections; inspect unrelated pairs
 separately with `artifact impact`.
-These flags are Local-only; Full mode rejects them before network calls.
 Selected checkpoints include a current-versus-checkpoint path comparison in
 `selected_checkpoint_comparison` and the acceptance basis. Status reports
 counts by default; `--detail` includes every compared path. Acceptance selections
-require a checkpoint from the same work, workspace, and comparable checkout;
-unavailable or foreign-checkout selections fail instead of generating a basis.
+require a checkpoint from the same work, workspace, checkout and Local store
+generation. Unavailable comparisons fail before a basis can include them.
 Use `work resume --since <id>` to inspect an unavailable comparison without
 making it an acceptance input.
 
@@ -240,17 +277,10 @@ the upgraded store. Unattended first upgrades require `--yes`; JSON receipts
 (and verification dry-run output) include `store_upgrade`. Restoring the backup
 returns to pre-upgrade data only; it does not preserve later changes. Keep using
 a supporting CLI for the live upgraded store.
-Portable and delivery-handoff export destinations cannot overwrite this backup,
-including through symlink or hard-link aliases from another workspace.
-Portable export reads one database snapshot. Any report, review, or peer-review
-iteration error aborts export rather than writing a bundle with partial evidence.
-Portable bundles preserve each document's path and role: the same path may carry
-distinct roles, but repeating the same path/role pair is invalid.
-
-Portable/v1 and delivery-handoff/v1 deliberately refuse any workspace or work
-that carries Local verification pins, checkpoints, lineage, or acceptance
-bases. They do not drop those records; use the disclosed database backup for
-recovery or continued Local use.
+Delivery-handoff export destinations cannot overwrite this backup, including
+through symlink or hard-link aliases from another workspace. Handoff/v1
+refuses work carrying Local verification pins, checkpoints, lineage, or
+acceptance bases. A complete Local backup preserves those records.
 
 `delivery report <ref> --init` copies pinned commands/cwd and
 `verification_contract_digest`. Submit rejects changed, duplicate, extra, or
@@ -266,10 +296,43 @@ through the CLI, not weak test design or tampering by someone who controls the
 Local database. Local user names are cooperative attribution, not proof that a
 human operated the CLI.
 
-Contracts and source-criterion inventory are Local-only. Portable/v1 export
-refuses a workspace containing pinned contracts or source criteria because Full
-import cannot preserve their enforcement or proof. Use a Local database backup
-instead; existing unpinned, source-criterion-free portable exports are unchanged.
+## Local snapshot transfer
+
+These advanced Local commands support sequential machine handoff for one
+person. The archive contains the **entire selected Local store** with private
+history and committed WAL data.
+
+| Command | Effect |
+| --- | --- |
+| `specgate transfer prepare --work <ref> --file <archive> [--checkpoint <id>] [--note <text>]` | Stage once, show its inventory and pickup, and publish the confirmed snapshot to a new file. Current project/workspace rules apply. Use `--yes` without prompts. |
+| `specgate transfer inspect --file <archive>` | Verify the ZIP, manifest, checksum and SQLite snapshot with no active store or workspace. Works even when unrelated config is malformed. |
+| `specgate transfer receive --file <archive> --into <new-directory> [--expect-snapshot <sha>]` | Restore only to a new directory under an existing parent and assign a fresh checkout generation. Interactive use confirms the verified scope and hash. Unattended use requires the exact archive SHA via `--expect-snapshot`. |
+| `specgate transfer activate --from <received-directory> --repo <local-git-root>` | Preview and change the binding of one Git root after Git provenance and bookmark checks. Use `--yes` without prompts. Follow the returned scoped `work resume` command. |
+
+Prepare and inspect return `snapshot_sha256` and `manifest` in `--json`.
+Receive also returns `receiving_generation`, `directory` and
+`activated: false`. Activation reports `old_binding`, `new_binding` and
+`resume_command`, including `--since` if you selected a checkpoint. Use the
+returned `command_shell` (PowerShell on Windows or a POSIX shell elsewhere). A
+post-save verification error includes `activation_committed: true`,
+`verified: false`, both paths and a scoped recovery command in
+`error.details`. Inspect those details before attempting another change.
+
+The v1 ZIP has only `manifest.json` (1 MiB maximum) and `state.db`
+(512 MiB maximum), with an overall archive limit of 520 MiB. The archive
+SHA covers both entries and the payload SHA checks the SQLite bytes. Keep
+the archive private. The checks provide consistency, not authentication.
+Existing destinations or SHA/binding conflicts exit 4, and unsupported
+formats or store versions exit 6. Receive requires a destination filesystem
+that supports an exclusive directory rename. Surrounding whitespace in
+`--into` or `--from` is a usage error.
+
+Activation requires a matching normalized Git origin when the source has
+one. Use the same origin transport and path on both checkouts. A source
+without a usable origin requires its exact commit and tree in the target
+checkout. This establishes repository identity for the binding.
+Current code and validation still have their own freshness checks. Stop
+source writers before switching. See [moving a Local store](../guides/operate-specgate.md#move-a-local-store-to-another-checkout).
 
 ## Local setup diagnostics
 
@@ -278,31 +341,6 @@ plugin files, even from a subdirectory. Diagnostics name each detected scope
 and return matching verification commands; they do not prove IDE session
 loading. A stale repository binding returns an explicit `workspace bind <slug>`
 for the durable Local selection, so recovery does not reuse the broken binding.
-
-## Full-mode server selection
-
-Local CLI mode does not create an HTTP client or use a server. The precedence
-below applies to Full appliance and remote-server workflows.
-
-Highest precedence first:
-
-1. `--server <url>`
-2. `SPECGATE_SERVER`
-3. the repo's committed `.specgate/config` server
-4. saved user configuration
-5. `http://localhost:3000/api/doc-registry`
-
-`model set` ignores a repo-configured server because it may transmit a provider
-API key. Use `--server`, `SPECGATE_SERVER`, or saved user configuration to choose
-that command's trusted destination. Its optional OpenRouter model search times
-out after 30 seconds and rejects catalog responses larger than 4 MiB; if search
-is unavailable, interactive setup falls back to manual model-ID entry.
-
-Set the saved URL:
-
-```bash
-specgate config server http://localhost:3000/api/doc-registry
-```
 
 ## Output modes
 
@@ -331,8 +369,7 @@ Other global flags:
 - `--workspace <slug-or-id>` — use a workspace for this command only;
 - `--yes` — accept confirmations;
 - `--no-input` — fail instead of prompting;
-- `--timeout <duration>` — request timeout (default 3 minutes in both modes,
-  including explicit Local-mode update requests; non-positive values use the
+- `--timeout <duration>` — request timeout for release downloads (default 3 minutes; non-positive values use the
   default);
 - `--json-progress` — with `--json`, emit progress events before final JSON
   output.
@@ -398,36 +435,36 @@ accepted.
 | `3` | resource not found |
 | `4` | conflict or stale state |
 | `5` | service unavailable |
-| `6` | client/server incompatibility |
+| `6` | incompatible configuration, store, or operation |
 
 ## Command lanes
 
-The root help groups commands by audience. Start with `change` for a normal
-post-handoff delivery path, then use the core workflow lane when you need the
-underlying detail.
+Run `specgate --help` for the command groups. **Start here** lists setup and
+the normal delivery loop. **Optional browser review** lists `ui` and `open`.
+Use **Advanced and maintenance commands** for evidence inspection,
+preparation, and maintenance. Every listed family has direct help with
+`specgate <command> --help`.
 
 ### Start here
 
 | Family | Purpose |
 |---|---|
-| `change` | The normal approval and post-handoff facade in Local and Full mode. Use the dedicated [Change facade](#change-facade) reference for exact syntax, output fields, and confirmation behavior. |
+| `init`, `doctor`, `plugins` | Set up the CLI and agent and check the selected installation. See [Setup and identity](#setup-and-identity). |
+| `change` | The normal approval and post-handoff facade. Use the dedicated [Change facade](#change-facade) reference for exact syntax, output fields, and confirmation behavior. |
+| `status` | Show selected-workspace board counts, attention count, and next action. |
+| `work` | List the attention queue or ready work in the selected workspace with `work list --phase ready`. Inspect one item with `work show <ref>`; use `work resume <ref>` for an agent pickup packet. Quick work requires one or more explicit `--ac` values. |
 
-### Core workflow
+### Advanced workflow and diagnostics
 
 | Family | Purpose |
 |---|---|
-| `status` | Show selected-workspace board counts, attention count, and next action; `--all-workspaces` makes a cross-workspace read explicit |
-| `stats` | Show a governance-value readout: reviewed items, first-pass yield, pre/post-build governance signals, rework, and cycle time in both modes, plus blocked-ambiguity reports and a recent signal ledger in Full mode. Local mode also prints all-time workspace totals (work items, delivered, delivery reviews) above the windowed signals. These counts are projections from recorded gate, review, and blocked-ambiguity events; they are signals for human interpretation, not adjudicated proof that SpecGate prevented a defect or saved ambiguity. Derived ratios appear only once at least one delivery has been reviewed, so an empty workspace never reports 0% or 100%. A gate signal is a `fail` or `needs_human_review` result — `warn` is not counted — and repeated runs of the same gate against one work item count once. The window selects which work items are active; first-pass yield always reads each item's own first review, so an older failure is never reported as a clean first pass. `--days N` sets the window; `--all-workspaces` makes a cross-workspace read explicit and is unavailable in Local mode |
-| `capabilities` | Print the stable Local/Full capability manifest. Each capability is `available`, `unavailable`, or `configuration_required`; Full-mode governance chat reflects its own live health/configuration rather than merely the presence of the Agents service. `--json` is suitable for IDE agents and automation |
+| `capabilities` | Print the machine-readable Local capability manifest. |
 | `coverage` | Classify every canonical specification in the selected workspace as `uncovered`, `unfinished`, `stale`, or `delivered`, including the governing artifact, related work refs, and a next command for every non-delivered state |
-| `portable` | `portable export --file <path>` writes the selected Local workspace to a private, checksummed `specgate.portable/v1` bundle. Export and import both enforce a 64 MiB bundle limit; an oversized export does not replace an existing destination, and export refuses the active Local SQLite database or journal paths. In Full mode, `portable import --file <path> --dry-run` reports every destination conflict without writing; re-run with `--yes` only after reviewing an empty conflict list. A retry reuses only exact prior imports proven by source workspace, record IDs, and digests |
 | `verify` | Produce one read-only closeout verdict for a work ref: artifact-backed work includes the exact artifact version and digest, while artifact-free work sets `quick_route=true`; both include criterion evidence, checks, authoritative delivery verdict, cleanup eligibility, and the next command. A non-closeable result exits `1` |
-| `work` | List the attention queue (`work list --all-workspaces` is an explicit aggregate status read), or enumerate ready work in the selected workspace with `work list --phase ready`. Every phase-list row includes additive `change_state`, `next_actor`, and `next_command`; agents choose only `next_actor=implementing_agent`, because Ready also includes work awaiting human acceptance. Ready includes approved artifact-backed work and quick-route bug fixes with no lead artifact. The aggregate and phase flags cannot be combined. `work show <ref>` prints one item's detail. Both modes can create feature-backed or quick work and read its immutable Context Pack; Local quick work requires at least one explicit `--ac`. `work policy`, archive, and server-backed resolution are Full-only |
-| `audit` | `audit <ref>` prints the full governance trail for a work item — the "git log for governance". It resolves a change-request id or key (e.g. `CR-1234`) and renders one line per event (date, actor+kind, action, verdict, trust tier, detail) sorted oldest-first, merging artifact status events, delivery reviews, and workboard lifecycle events. Full mode also merges readiness and quality gate runs; Local records events against a work item, so a readiness run against an artifact that was never approved has no work item to attach to — read those with `gates results <artifact-id>`. Read-only; `--json` prints the raw `AuditTrail`; `--verify` recomputes the tamper-evidence event chain and reports `intact` or `tampered` (naming the first bad event); it is Full-mode only, because Local stores the trail without a hash-linked chain and refuses `--verify` (exit `5`) rather than answering. Unresolvable ref → clean error |
-| `feature` | List and inspect governed features in either mode so a new artifact can reuse the exact key instead of creating a duplicate. `feature show <key-or-id>` prints one feature. In Full mode, `feature list` hides archived features unless `--all` is set, and `feature archive <key-or-id>` retires a feature with confirmation while keeping its record and history |
-| `knowledge` | Full mode only: list, inspect, add, and search workspace-scoped Governance Knowledge documents. `knowledge add-text --title <title> --file <path>` uploads a text/Markdown source into the selected workspace; `knowledge search <query>` retrieves cited chunks using the configured embedding model |
-| `artifact` | A document's identity is its `path` and `role` together, so one source may be mapped under several roles when policy requires a role it already covers. Preview (`artifact publish --preview`), optionally compare that preview with one explicit base artifact (`--compare <artifact-id>`), publish complete immutable versions, inspect metadata with `artifact show`, and read selected bodies in Full mode with `artifact files <id> <path...> --content`; Local work reads pinned bodies with `work context <ref> --document <path> --role <role>`. `artifact coverage <artifact-id>` is a read-only exact-version delivery view; decide as a human reviewer with `artifact approve` in either mode or `artifact request-changes` in Full mode (optional `--note`); `artifact show` accepts a unique id prefix from `artifact list` |
-| `gates` | Artifact readiness checks (`check`), stored artifact results (`results`), and IDE-agent artifact gate tasks (`tasks`) work in both modes. Local IDE gate tasks and Full model-less IDE gate tasks use the same `check` → `tasks list/show/submit-result` → `results` loop. Each frozen task is submitted separately so its immutable digest and result remain independently attributable; a batch command would need a server-side atomic contract. Compact `gates check --summary` output preserves each result's executor origin so agent-attested evidence is not presented as platform evaluation. Human `gates check` output names every gate with its state, trust origin, and hint beneath the aggregate, because an aggregate alone cannot distinguish one soft hint from four gates still awaiting a result. `gates check` dispatches tasks as part of the readiness run; `gates tasks dispatch <artifact-id>` redispatches them alone when the artifact is unchanged. `tasks list` already returns each task's `skill_content` and both digests, so `tasks show` is only needed for a task id obtained some other way. A rejected `submit-result` names the field that did not match the dispatched task — `gate`, `gate_digest`, `input_digest`, `evaluator.executor`, or `state` — with the value the task expects. A task rejected as stale means the artifact or its policy was republished after the task was frozen; re-dispatch with `gates check` and judge the fresh task rather than resubmitting. Work-item model gates are Full-only: `gates run <ref>` triggers them, `gates status <ref>` shows the current state, and `gates history <ref>` lists past runs |
+| `audit` | Read a work item’s chronological governance history. Read readiness results for artifacts with no work item via `gates results <artifact-id>`. |
+| `feature` | `feature list` lists governed features. Use `feature show <key-or-id>` to check the exact feature key before publishing a new version. |
+| `artifact` | Preview and publish immutable artifact versions. Use `artifact list` and `artifact show <id>` to inspect a version before approval or promotion. `artifact coverage <artifact-id>` reports exact-version delivery. Read pinned contents with `work context <ref> --document <path> --role <role>`. |
+| `gates` | Artifact readiness checks (`check`), stored artifact results (`results`), and IDE-agent artifact gate tasks (`tasks`) use the `check` → `tasks list/show/submit-result` → `results` loop. Each frozen task is submitted separately so its immutable digest and result remain independently attributable; results retain independent digests. Compact `gates check --summary` output preserves each result's executor origin so agent-attested evidence is not presented as platform evaluation. Human `gates check` output names every gate with its state, trust origin, and hint beneath the aggregate, because an aggregate alone cannot distinguish one soft hint from four gates still awaiting a result. `gates check` dispatches tasks as part of the readiness run; `gates tasks dispatch <artifact-id>` redispatches them alone when the artifact is unchanged. `tasks list` already returns each task's `skill_content` and both digests, so `tasks show` is only needed for a task id obtained some other way. A rejected `submit-result` names the field that did not match the dispatched task — `gate`, `gate_digest`, `input_digest`, `evaluator.executor`, or `state` — with the value the task expects. A task rejected as stale means the artifact or its policy was republished after the task was frozen; re-dispatch with `gates check` and judge the fresh task rather than resubmitting. |
 | `delivery` | Report implementation, review that evidence, and decide delivery as a human reviewer. See [Delivery commands](#delivery-commands) for every subcommand, the completion scaffold contract, the assurance rules, and Git receipt freshness |
 
 ## Change facade
@@ -444,20 +481,16 @@ specgate change submit <ref> [--file <completion.json>] [--run-checks] [--skip-e
 specgate --yes change accept <ref> --review-id <review-id> [--note <note>]
 specgate --yes change request-changes <ref> --review-id <review-id> [--note <note>]
 
-# Full: interactive terminals confirm; non-interactive callers may run these directly.
-specgate change accept <ref> [--note <note>]
-specgate change request-changes <ref> [--note <note>]
 ```
 
 Local decisions require `--review-id` from the status you reviewed, including
 the expert `delivery approve|reject` commands. Status prints a complete command.
 If a newer report arrived, the decision exits `4` (conflict); inspect the new
-evidence before deciding again. Full mode does not accept this Local-only flag.
+evidence before deciding again.
 
-`work list --phase` accepts comma-separated phases in both modes, ignoring case
-and surrounding whitespace. `work list --all-workspaces` is a Full-only
-aggregate; Local refuses it instead of silently listing only the selected
-workspace. Select each Local workspace explicitly when inspecting its work.
+`work list --phase` accepts comma-separated phases, ignoring case and
+surrounding whitespace. Select each Local workspace explicitly when inspecting
+its work.
 Feature-backed Local work keeps its `feature_key` in list/show and
 summary/resume JSON after creation; quick work has no feature association.
 These reads retain the exact pinned artifact and Context Pack digest.
@@ -469,10 +502,6 @@ the ref is unsafe or the completion file is intentionally elsewhere:
 
 ```bash
 specgate change submit CR-123
-# Full mode, when this stored issue URL resolves to the work item:
-specgate delivery report https://github.com/acme/shop/issues/42 --init --json
-COMPLETION_PATH="<exact data.path from the preceding response>"
-specgate change submit https://github.com/acme/shop/issues/42 --file "$COMPLETION_PATH"
 ```
 
 `--run-checks` re-executes non-skipped checks through `sh -c` after previewing
@@ -482,9 +511,11 @@ callers must also pass `--yes`. Use
 non-interactive POSIX shell commands. `--skip-evidence-check` bypasses
 local citation validation and should be reserved for recovery when the cited
 paths cannot exist in the current checkout.
+Check names and statuses ignore surrounding whitespace consistently; a padded
+`skipped` status still skips execution. Read projections preserve the original
+historical report.
 
-`change approve` is the normal feature-backed preparation decision in both
-modes. It records approval of the exact artifact snapshot, promotes that
+`change approve` is the normal feature-backed preparation decision in Local. It records approval of the exact artifact snapshot, promotes that
 version to the feature canonical, creates or reuses its artifact-bound work
 item, and verifies the derived Context Pack in one resumable transition. The
 title and every repeated `--ac` must come from the human-reviewed preparation;
@@ -495,9 +526,9 @@ already delivered, the receipt reports `already_delivered` and routes to
 `change status` instead of presenting it as new implementation. The expert
 `artifact approve`, `artifact promote`, and `work create` commands remain
 available separately.
-`change submit --json` returns the compact actionable Change status; use
-`delivery submit --json` when troubleshooting requires the full report, gate,
-review, and delivery-status payloads.
+`change submit --json` returns the compact actionable Change status.
+`delivery submit --json` returns the delivery review; use `change status --detail`
+to inspect criterion evidence and the current next action.
 
 `change status` gives the next safe action. Human output names the same concepts
 as the JSON fields below; JSON emits the standard success envelope with this
@@ -514,7 +545,7 @@ outcomes; acceptance does not erase recorded gaps.
 
 | JSON field | Meaning |
 |---|---|
-| `mode` | `local` or `full`, the mode used to derive the status and command. |
+| `mode` | `local`, the mode used to derive the status and command. |
 | `ref` | Resolved work reference used by follow-up commands. |
 | `title` | Existing work item's title. |
 | `state` | One of the action states described below. |
@@ -523,7 +554,7 @@ outcomes; acceptance does not erase recorded gaps.
 | `decision` | Recorded human delivery decision, if any. |
 | `receipt` | Recorded Git receipt summary, if any. |
 | `freshness` | Whether the stored evidence was checked against the current checkout. |
-| `verification_contract` | Local verification setup: `pinned` means the exact criterion-bound commands and directories were fixed before reporting; `unconfigured` means checks remain self-selected. Omitted in Full mode. A pin does not itself prove a check passed. |
+| `verification_contract` | Local verification setup: `pinned` means the exact criterion-bound commands and directories were fixed before reporting; `unconfigured` means checks remain self-selected. A pin does not itself prove a check passed. |
 | `verification_version`, `verification_digest` | Version and digest of the exact Local verification contract, when pinned. |
 | `artifact_id`, `artifact_version`, `artifact_digest` | Exact approved Local artifact snapshot for this work; absent on the quick route. A newer artifact is informational and never replaces this scope automatically. |
 | `context_digest` | Exact Local Context Pack digest for this work. |
@@ -540,7 +571,8 @@ outcomes; acceptance does not erase recorded gaps.
 | `stale_reason` | Optional; omitted unless `stale` is true. |
 | `next_command` | Exact next CLI command for the returned state and mode. |
 | `review_id` | Local delivery review shown by this payload; pass it as `--review-id` when accepting or requesting changes. Omitted before a report exists. |
-| `basis_digest` | Present only when enhanced Local verification or a checkpoint requires the human decision to bind the exact status material. Pass it unchanged as `--basis-digest`; legacy review-ID-only decisions remain supported. |
+| `basis_digest` | Present when the decision requires an exact acceptance basis, including reviews in a received Local store. Pass the current value as `--basis-digest`. |
+| `historical_verification` | The recorded completion comes from another Local store generation. Its check outcomes and provenance remain available as history. |
 | `acceptance_basis` | Current enhanced review material, including watched-input observations and explicit comparison selections. A changed material digest requires another review before deciding. |
 | `recorded_acceptance_basis` | Immutable basis stored with the human decision, including actor, note and observation time; omitted for legacy decisions. This historical record is distinct from the current checkout observation. |
 
@@ -554,18 +586,12 @@ decision says what the human recorded, and receipt identifies the stored Git
 provenance. Do not treat one as authority for another.
 The expert `delivery status --json` readback likewise keeps authoritative
 `verdict` separate from optional `evidence_verdict` on a human decision.
-Optional `assurance_sources` reports `repository_observed` only when a merged
-PR/MR event's normalized `head_sha` matches the latest completion receipt's
-normalized `git_receipt.head_revision`; that signal does not mean a human
-accepted the delivery. CI results do not automatically become
-SpecGate-produced assurance.
-
 | `state` | Action semantics |
 |---|---|
 | `implementation` | An implementing agent must add or repair delivery evidence. With no report, `next_command` creates the scaffold; after a failed review, it resubmits the existing completion with locally reproduced checks. |
 | `awaiting_review` | Evidence needs human interpretation; `next_actor` is the human reviewer and `next_command` opens the detailed criterion review, which ends with the exact accept and request-changes commands. |
 | `review_pending` | A newer completion has not received its own delivery review; the implementing agent runs the returned review command before any human decision. |
-| `awaiting_acceptance` | Evidence passed but a human must decide. Local emits `specgate --yes change accept <ref> --review-id <review-id>`; Full emits `specgate change accept <ref>`. |
+| `awaiting_acceptance` | Evidence passed but a human must decide. The next command is `specgate --yes change accept <ref> --review-id <review-id>`. |
 | `accepted` | A human accepted the current reviewed completion. The evidence label still discloses an advisory or false-negative assessment; no actor is pending and the next command is the audit trail. |
 | `rework_requested` | A human requested rework. Follow `guidance`, revise the existing completion, then run `next_command` to submit it for a new review cycle. |
 | `blocked` | A maintainer must restore delivery policy; the next command opens detailed delivery status. |
@@ -573,16 +599,12 @@ SpecGate-produced assurance.
 `stale` does not replace the delivery decision: it flags stale peer-review
 evidence and explains why in optional `stale_reason`. Follow `next_command`,
 and use `missing` and `next_actor` to decide whether to implement, review, or
-escalate. Local acceptance or rework always requires `--yes`; Full confirms in
-an interactive terminal and otherwise accepts the explicit command.
+escalate. Acceptance and rework require `--yes`.
 
 For detailed preparation or troubleshooting, keep using the expert `delivery`,
 `work`, `gates`, `artifact`, `audit`, and `verify` families. `change prepare` is
 not available: agents still prepare and preview the explicit artifact and work
 contract before the human runs `change approve`.
-
-`specgate model off` deliberately enables model-less operation while preserving
-the selected provider/model/key. `specgate model on` enables it again.
 
 `work create --feature <key-or-id> --title <t>` creates a feature-backed work
 item bound to the feature's approved canonical artifact (the lead artifact is
@@ -590,7 +612,6 @@ set automatically; the feature must have a promoted canonical). The IDE agent
 reads every explicitly mapped source spec document and submits each confirmed
 criterion with a repeated `--ac`. SpecGate requires a non-empty explicit list
 and does not infer criteria from headings, numbering, filenames, or keywords.
-This works in both Local and Full mode.
 
 `artifact coverage <artifact-id>` reports work linked to that exact immutable
 artifact version—not merely the same feature. Its state is `uncovered`,
@@ -611,15 +632,19 @@ specgate cleanup --work --dry-run
 `coverage` never infers links or creates work. `verify` resolves the work only
 inside the active workspace (or the exact `--workspace` override), never
 approves delivery, and never removes files. Cleanup eligibility is true only
-after the work has an explicit human delivery approval in either mode. An
+after the work has an explicit human delivery approval in the Local store. An
 advisory or false-negative evidence verdict remains visible but does not erase
 that human authority.
+When a review exists but closeout is unresolved, `verify` directs you to
+`specgate change status <work-ref> --json` for the current actor and exact
+decision command, including any required review ID and acceptance basis.
+An explicit `--workspace` override is retained in that follow-up command.
 
 ### Hand a review to a teammate through the repository
 
-A delivery handoff is a committable review request. The author exports one file
-after the review runs; a reviewer renders it beside the diff without a server,
-a workspace, or any Local state of their own:
+A delivery handoff is an unsigned, committable review request. The author
+exports one file after the review runs. A reviewer renders it beside the diff
+without a workspace or Local state:
 
 ```bash
 # Author, after `change submit`:
@@ -638,9 +663,9 @@ it. SpecGate refreshes its exact generated `.specgate/.gitignore` from older
 releases so handoffs remain committable; a user-edited ignore file is preserved.
 
 The bundle carries the work item, its review, the bound completion, and
-peer-review status. It drops each evidence grounding excerpt — a cited file can
-live outside the repository and the handoff is committed — while keeping the
-grounding status and digest that prove the citation was verified. The active
+peer-review status. The export drops grounding excerpts and keeps the recorded
+status and digest. The reader can inspect that record. The bundle does not
+independently verify the cited source. The active
 Local SQLite file and its journal files are refused as destinations, including
 symlink and hardlink aliases and the default output path. Export refuses a
 symlink or non-regular destination file and a symlinked default handoff
@@ -648,84 +673,18 @@ directory. It atomically replaces a regular destination with a private
 mode-`0600` bundle; replacing an existing file does not modify its other
 hardlinks.
 
-`show` is read-only and records nothing. It works in any mode and needs no
-workspace. It rejects a bundle whose checksum no longer matches its contents,
+`show` is read-only and needs no workspace. It rejects a bundle whose checksum no longer matches its contents,
 re-derives the verdict from the evidence the bundle carries rather than trusting
 the recorded one, and reports a disagreement between the two — which is how a
 bundle exported by an older CLI, under weaker binding enforcement, is caught. It
 exits `1` when the re-derived verdict is not `passed` or the two disagree.
 
-Reviewer decisions do not travel back in the file. The author still records the
-outcome with `change accept` or `change request-changes`, so human decisions
-keep one owner and one audit trail.
+Reviewer decisions do not travel back in the file. The author opens
+`specgate change status <work-ref> --json` in the owning Local store and follows
+its current next action. Displayed verification observations come from the
+source report.
 
-### Move Local data into Full mode
-
-Portable bundles are an explicit one-way move, not synchronization:
-
-```bash
-# While Local mode is selected:
-specgate portable export --file ~/specgate-local.json
-
-# Initialize Full mode, then select the exact destination workspace.
-# This changes the active CLI topology; it does not delete Local SQLite state.
-specgate init --mode full
-specgate workspace select <destination-workspace-slug>
-
-# Preview first. This writes nothing:
-specgate portable import --file ~/specgate-local.json --dry-run
-specgate portable import --file ~/specgate-local.json --yes
-```
-
-Local export reads its compatibility checks and all workspace records from one
-SQLite snapshot, so a concurrent CLI writer cannot mix committed states inside
-the bundle. Export is a point-in-time copy, not synchronization with later writes.
-Delivery export selects the latest review and peer review using timestamp and
-record ID, matching Local status when timestamps tie. The review's completion
-body comes from its exact bound report, not a separately selected latest report;
-an unresolved nonempty report binding refuses export. Legacy unbound reviews
-retain their review metadata without claiming a completion body.
-Selected completion and peer-review bodies replace older bodies; fields from
-historical records are not merged into the selected evidence.
-
-The versioned bundle contains governed artifact documents, their content
-digests, feature/work relationships including each feature's exact canonical
-artifact, criteria, IDE gate evidence, delivery evidence, and source-workspace
-metadata. Request types use the canonical API enum; work, gate, and delivery
-records retain exact persisted relationships. It contains no settings, provider
-keys, credentials, tokens, or integration secrets and is created with
-user-only file permissions. Import validates the bundle checksum and
-relationships before contacting the server. It refuses ambiguous or absent
-workspace/user mapping,
-reports all existing feature and prior-import conflicts before mutation, and
-never matches by keyword or similarity and never merges or resolves conflicts
-automatically. Unpromoted Local artifacts remain drafts and do not become
-canonical during import. If a destination canonical changed after a partial
-import, or the resumed feature gained a destination-only artifact version, the
-next dry-run reports a conflict instead of overwriting or publishing past that
-destination change.
-Exact partial imports are resumable: a retry reuses artifacts only when their
-recorded source workspace, artifact ID, and digest match, and work only when its
-source-workspace-qualified structured reference, lead artifact, title, and
-ordered criteria match. Archived imported work remains eligible for exact retry
-matching, and an identical persisted human decision is not recorded twice.
-Source gate evidence remains in the export as history, but import never submits
-those verdicts against destination policy. Every imported artifact dispatches
-fresh destination gate tasks for the IDE agent to evaluate after restoring its
-approved/draft state, so approval-only gates are not skipped.
-Acceptance-criterion IDs map through the exact ordered contract
-that the destination returns after creating the same criteria. The success
-receipt maps Local artifact/work IDs to their created or exactly reused Full IDs.
-Imported completion and peer-review evidence is translated to those destination
-IDs, then reviewed against the destination policy before an imported human
-decision is replayed.
-
-Import performs a sequence of immutable API writes, not one database
-transaction. If it fails after writes begin, inspect the destination before
-retrying; the next dry-run reuses exact prior writes and reports changed or
-ambiguous records as conflicts.
-
-For Local IDE gate tasks and Full model-less IDE gate tasks, run:
+For IDE gate tasks, run:
 
 ```bash
 specgate gates check <artifact-id> --json --summary
@@ -739,7 +698,7 @@ specgate gates results <artifact-id> --json
 A successful invocation may return `aggregate=not_run` until every required
 semantic result is submitted. That is a pending readiness state, never a pass.
 `dispatched_to_ide_agent.pending_task_ids` is the authoritative unfinished-task
-receipt in both modes; `created_task_ids` only records what that invocation
+receipt; `created_task_ids` only records what that invocation
 created and may be empty on an idempotent repeat.
 
 In Local mode, explicit `gates tasks dispatch` refreshes a completed
@@ -751,11 +710,8 @@ must examine the current repository when completing the task.
 
 `work create-quick <title>` uses the title as the description when
 `--description` is omitted, so the shortest quickstart form still satisfies the
-server contract. Repeat `--ac` on `work create-quick` or feature-backed
+contract. Repeat `--ac` on `work create-quick` or feature-backed
 `work create` to supply human-authored acceptance criteria.
-For Full quick-work JSON, criterion objects contain `text` and optional
-`verification_binding`; omit `source`, which the service records from the
-supplied or model-drafted path.
 In Local JSON input, every `acceptance_criteria` row must be a string or an
 object with string `text` and an optional string `verification_binding`.
 Malformed rows reject the entire request with validation exit `2` before any
@@ -769,8 +725,7 @@ delivery reviewer treats that criterion deterministically from the submitted
 check result. Do not invent bindings on behalf of the human.
 
 Every command that establishes acceptance criteria reports how many of them a
-check will decide: `work create-quick`, `work create`, and `change approve`, in
-both modes. The human output carries a line such as `Enforcement: 1 of 2
+check will decide: `work create-quick`, `work create`, and `change approve`. The human output carries a line such as `Enforcement: 1 of 2
 criteria are bound to a check; the rest are graded on the agent's claim.`, and
 `change approve` states the same counts in its confirmation prompt, while the
 list can still change. `work create-quick` and `change approve` also return
@@ -778,18 +733,16 @@ list can still change. `work create-quick` and `change approve` also return
 
 The count is of resolvable bindings, not a judgement about criterion wording; an
 ambiguous binding counts as unbound, because review falls back to the agent's
-claim for it. Full mode counts the criteria the server persisted rather than the
-ones the request sent. Quick work never runs the artifact route's
+claim for it. Quick work never runs the artifact route's
 `acceptance_criteria_verifiable` gate, so for quick work this count is the only
 enforcement signal available at creation time.
 
-Both modes take a bound criterion's verdict from its named check, and the stored
+The reader takes a bound criterion's verdict from its named check, and the stored
 acceptance criterion is the authority for the binding: omitting
 `verification_binding` from the completion body does not remove enforcement. A
 bound check that failed, was skipped, or is absent from `checks[]` never passes
-on the strength of a prose claim. Full mode routes the undecidable cases to
-`needs_human_review`; Local mode has only `passed` and `failed`, so it fails the
-review and names the criterion and check. Enforcement covers a missing or
+on the strength of a prose claim. Local review fails and names the criterion
+and check. Enforcement covers a missing or
 skipped check, not a falsely claimed `pass` — `checks[].status` remains
 agent-reported unless the submission ran with `--run-checks`.
 
@@ -797,42 +750,17 @@ agent-reported unless the submission ran with `--run-checks`.
 `1`, including Local approval while readiness gates remain unresolved or fail.
 Local `specgate artifact promote` also returns `1` when the artifact is not yet
 approved, rather than reporting the store as unavailable.
-Complete the required gate reviews before retrying; this refusal is not a server
-outage. Artifact approval always requires an explicitly asserted human actor.
-This is audit attribution inside the trusted deployment, not identity-secure
-authorization.
-
-Full-mode Knowledge commands require an active workspace from `--workspace`,
-`SPECGATE_WORKSPACE`, a project binding, or the global workspace. Typical use:
-
-```bash
-specgate knowledge add-text --title "Checkout policy" --file docs/checkout.md --type policy_doc --authority high
-specgate knowledge list
-specgate knowledge search "checkout refund rules" --context section --limit 5
-specgate knowledge link doc_123 --request CR-456
-specgate knowledge unlink doc_123 --request
-specgate knowledge show doc_123
-```
-
-Use `--json` for full document/search DTOs. Search results include
-`specgate://knowledge/...` citation URLs so agents and reviewers can trace the
-retrieved context back to the indexed document version. Link/unlink commands
-create a new Knowledge version with updated feature/work-item links; they do not
-mutate the previous version's curation metadata. `knowledge list` returns a
-page; when more documents match than the page contains, the human output tells
-you the next `--offset` to use. JSON output keeps the full `total` match count
-alongside the page items.
+Complete the required gate reviews before retrying. Artifact approval
+requires an explicit human decision and records cooperative attribution.
 
 ## Delivery commands
 
 `delivery` records what a coding agent did, reviews that evidence, and captures
-the human decision. Every rule below is the same in Local and Full mode unless
-the text says otherwise.
+the human decision.
 
 | Command | Purpose |
 |---|---|
 | `delivery report [ref] --init` | Scaffold a conservative completion report at `.specgate/completion-<ref>.json` |
-| `delivery report [ref] --file <path>` | Full-mode coding-agent feedback ingestion; Local completion uses `change submit` |
 | `delivery peer-review [ref] --init` | Scaffold an independent agent review bound to the latest completion event and its exact Git receipt |
 | `delivery peer-review [ref] --file <path>` | Record that review and rerun the delivery review |
 | `delivery submit [ref]` | Run the whole tail: report → gates → review → status |
@@ -845,7 +773,7 @@ the text says otherwise.
 
 Noninteractive callers must add `--yes` to the commands that record a decision.
 Local `delivery approve` and `delivery reject` also require `--review-id` from
-the status being reviewed; Full mode does not accept that flag. Use the exact
+the status being reviewed. Use the exact
 next command printed by status.
 
 ### Completion scaffold
@@ -873,7 +801,7 @@ without runnable commands — all before any network call.
 `delivery peer-review --init` binds the review to the latest completion event
 and its exact Git receipt. The reviewer must cover every canonical criterion
 exactly once, and the peer must differ from the completion agent. The CLI
-preserves the receipt in the bound scaffold so the server verifies the same
+preserves the receipt in the bound scaffold so the CLI verifies the same
 completion. For a check-bound Local criterion, the peer review uses the check
 result from that bound completion instead of asking the reviewer to duplicate
 the completion's `checks[]`. An exact retry of the latest Local peer-review
@@ -927,6 +855,15 @@ When that local checkout is clean, SpecGate does not claim committed
 Mismatches are explicit stale warnings, and unavailable non-Git metadata never
 claims freshness.
 
+A received Local store starts a fresh checkout generation. Local-checkout
+receipts from a previous generation are historical. Shared-repository receipts
+may still compare the repository, observed base, branch and HEAD. When only
+those endpoints match, a dirty receiving checkout or a missing or different
+working-tree digest leaves working-tree comparability unverified. Previously recorded tests
+retain their source provenance. Pending reviews need the receiving
+`basis_digest` from current CLI or browser status before a decision. Existing
+decisions stay recorded, and inspecting status runs no tests.
+
 `change status` also returns `criteria` — each acceptance criterion with its
 verdict, the reason, and any `verification_binding` — so a human deciding
 acceptance sees which criterion is weak and which check decided it without
@@ -949,38 +886,62 @@ feature.
 
 | Family | Purpose |
 |---|---|
-| `doctor` | Check the selected Local store or Full server setup and print the exact recovery command when setup is incomplete |
-| `config` | Save CLI configuration. `config server <url>` records the Full-mode server URL in the user configuration file, written atomically with owner-only permissions; a `--server` flag or `SPECGATE_SERVER` still overrides it for a single command. This is the value `install-cli.sh --server` sets for you. `config credential <username>` stores the gateway credential an appliance issued you, reading the secret from a prompt or from stdin — never from a flag, which would land in shell history. Credentials are kept per server, so switching servers never sends one appliance's secret to another host; `--clear` removes only the selected server's. The secret is never printed and never appears in `--json`, which reports `credential_set` only. An appliance with no gateway members needs no credential |
+| `doctor` | Check the Local store, identity, workspace, and setup. The command reports recovery guidance when setup is incomplete. |
 | `version` | Print the installed CLI version; equivalent to `specgate --version` |
-| `model` | Configure Full-mode governance and embedding models plus provider keys. `model set` writes the provider, model, and API key; `model show` reports the saved configuration with the API key as set/not set; `model test` checks the settings without a live model call; `model on` and `model off` switch between the saved server-side model and the IDE-agent model-less workflows |
 | `user` | Create or select the local user with `user login` and clear it with `user logout`. `user list` enumerates local users and `user current` shows the selected one |
-| `workspace` | `workspace list` enumerates local workspaces and `workspace create <name>` adds one in Local mode. `workspace members` reports each member's gateway credential state and who last changed it, on an appliance where credentials are configured, and lists members, `workspace current` and `workspace select` show and change the active workspace, and `workspace bind` / `workspace unbind` attach or detach the current Git project. `workspace credential <username>` issues, rotates, or revokes that member's gateway credential on a shared appliance: the appliance generates the secret and prints it once, stores only a bcrypt hash, and re-running rotates so the previous secret stops working; `--revoke` removes it. Issuing the first credential makes the gateway require authentication from every caller including the browser, and revoking the last returns the appliance to trusting its network. Full mode only|
-| `plugins` | Install and verify Codex, Claude Code, and Cursor IDE plugin files. A project-local Claude install also writes `.claude/specgate-hooks/` and merges two entries into `.claude/settings.json`: `Bash(specgate:*)`, because the installed skills drive the CLI and an unpermitted first command stalls the work, and a `SessionStart` hook, which routes implementation work in a SpecGate-governed repository to a lifecycle phase without the user naming the tool. A Git repository is governed when its root contains `.specgate/`, which `specgate init` and `workspace bind` create; an unrelated ancestor such as `~/.specgate` does not govern it. An existing settings file is merged, never replaced, and keeps its file mode. Local mode reads the complete matching package embedded in the CLI; Full mode reads it from the configured appliance |
-| `skill` | Inspect user-defined Skills: `skill list` enumerates them and `skill show <id-or-name>` prints one |
-| `open`, `update`, `uninstall` | Open the web UI — `open` alone opens the base URL; `open <work-ref>`, `open reviews\|artifacts\|work`, and `open --artifact <id>` deep-link to the matching page; add `--print` to return the server-advertised canonical URL without launching a browser. Opening and printing require an absolute HTTP(S) URL without control characters; invalid URLs return exit 5 — refresh setup, or remove user-local setup |
+| `workspace` | Enumerate Local workspaces with `workspace list`, add one with `workspace create <name>`, and select or bind the workspace. |
+| `plugins` | Install and verify Codex, Claude Code, and Cursor IDE plugin files. A project-local Claude install also writes `.claude/specgate-hooks/` and merges two entries into `.claude/settings.json`: `Bash(specgate:*)`, because the installed skills drive the CLI and an unpermitted first command stalls the work, and a `SessionStart` hook, which routes implementation work in a SpecGate-governed repository to a lifecycle phase without the user naming the tool. A Git repository is governed when its root contains `.specgate/`, which `specgate init` and `workspace bind` create; an unrelated ancestor such as `~/.specgate` does not govern it. An existing settings file is merged, never replaced, and keeps its file mode. The CLI reads its embedded plugin package. |
+| `ui` | Start the embedded Local review UI in the foreground on loopback; see [Local review UI](#local-review-ui) |
+| `open`, `update`, `uninstall` | Open the live Local review URL, refresh the CLI, or remove user-local setup. |
+
+## Local review UI
+
+`specgate ui [work-ref]` starts an embedded browser review surface for the
+selected Local workspace and current repository. It listens on `127.0.0.1`;
+`--port 0` (the default) asks the OS for an available port. `--no-open` skips
+launching the browser. `--json` emits a startup envelope with the actual URL;
+the process remains in the foreground until interrupted.
+
+While it runs, `specgate open <work-ref> --print --json` returns the current
+session's URL for that work in the bound workspace. Bare `specgate open`,
+`specgate open work`, and `specgate open reviews` all target the Local work
+queue. `--print --json` prints the URL without opening a
+browser. URLs require a live matching session, carry no session credentials,
+and work on the machine serving the UI.
+
+The UI shows real Local work, immutable approved context, criterion evidence
+and the current completion's reported checks and summary. Its inline evidence
+comparison uses the latest earlier human-decided review for the same work and
+identifies both review and completion pairs. Unavailable comparison history
+does not prevent inspection of the current delivery.
+Human accept/request-changes actions require the exact displayed review,
+completion and applicable acceptance basis. Requesting changes requires a
+note containing at least one non-whitespace character. Concurrent changes return a
+conflict and require a new inspection. The next actor is not inferred from
+freshness or test results. Original content remains untranslated when changing
+the EN/VI interface.
+
+Maintenance actions preview the exact updater scope/version or eligible owned
+cache entry, then revalidate before mutation. Cache cleanup preserves Local
+history, work/spec/evidence/acceptance data, backups and unrelated files.
+The Windows preview reports that cache cleanup is unavailable.
+See [Local review](../guides/local-review.md) for the human workflow.
+The optional [notification pilot](../guides/local-notification-pilot.md) is a
+foreground script in the source checkout. It requires Node.js 26 or later and
+works with the Local CLI while the browser UI is closed.
 
 The selected local user and workspace are stored in CLI config. Use
 `specgate user login --workspace <name> --display-name <name> --username <name>`
-to create or reuse the local user/workspace pair when connecting to an existing
-server.
-`specgate user logout` clears the local user, global workspace, and
-project-bound workspace selections without deleting server data. They are used
-for attribution and default workspace filtering, not authentication: Full-mode quick work
-items receive `created_by` and `workspace_id`, artifact publish sends the
-selected username as `created_by` when the body does not already include it,
-archive actions use the selected username as the actor. `status`, `stats`, and
-the default `work list` attention view may make an explicit aggregate read with
-`--all-workspaces`; `work list --phase` always requires the selected workspace.
-Product commands, including gate-task operations, require a selected
-workspace; there is no unscoped compatibility path.
+to create or reuse a Local user/workspace pair. `specgate user logout`
+clears the selected user and workspace bindings while preserving stored Local
+users, workspaces, and history. Identity names are cooperative attribution.
 
 `specgate init` automatically binds the Git checkout where initialization
 runs. For another project, run `specgate workspace bind` inside its checkout to
 bind that checkout to the currently selected workspace. Use
 `specgate workspace bind <slug>` to bind a named workspace directly. The CLI
 records that workspace in the user config under the checkout's Git root path.
-Binding a named workspace does not change the global workspace selection in
-either mode; use `workspace select` when the global default should change.
+Binding a named workspace does not change the global workspace selection; use `workspace select` when the global default should change.
 Future commands run from that checkout or its subdirectories use the project
 workspace instead of the global workspace.
 
@@ -996,17 +957,8 @@ before opening the store. Quick-work body validation also requires a title.
 Supply each criterion explicitly with a repeated `--ac` flag; feature-backed
 work additionally checks each `@source:<id>` against its pinned artifact.
 
-In Full mode, interactive `workspace select` offers **This project** or
-**Global default** at the save-scope prompt. The global choice removes the
-current checkout's project binding when one exists, but preserves bindings for
-other checkouts. Plain, JSON, and no-input `workspace select <slug>` do not
-prompt: they save the global workspace and clear the current checkout's
-binding. Use `workspace bind` when automation or an IDE agent should bind the
-current project.
-
 Workspace-scoped commands refuse to run from a Git checkout that has only a
-global workspace fallback. The error shows `specgate workspace bind`; no Local
-store or Full API operation runs first. An explicit `--workspace`,
+global workspace fallback. The error shows `specgate workspace bind`; the command stops before work-state access. An explicit `--workspace`,
 `SPECGATE_WORKSPACE`, project binding, or repo `.specgate/config` default
 satisfies the boundary. Outside Git checkouts, the global workspace remains
 available for administrative commands.
@@ -1014,14 +966,8 @@ available for administrative commands.
 Use `specgate workspace current` to see the active workspace and whether it
 came from an override, project binding, repo default, or global selection. When
 the current checkout is using the global workspace, `workspace current` shows
-the Git root as unbound and prints the matching `workspace bind` command. In
-Full mode, use `specgate workspace members` to list the effective workspace's member rows,
-including a `(you)` marker when the selected local user matches
-`workspace_members`. The command is read-only: it does not create users,
-workspaces, or memberships, and it is audit/team visibility, not authorization.
-Local mode refuses `workspace members` with incompatible exit `6`; use
-`user list` and `workspace list` to inspect local identities and workspaces.
-Use `specgate workspace unbind` inside a Git checkout in either mode to remove
+the Git root as unbound and prints the matching `workspace bind` command.
+Use `specgate workspace unbind` inside a Git checkout to remove
 only that project's workspace binding. This config-only operation keeps the
 selected user, global workspace, Local database, and other project bindings;
 it does not contact a server. Effective workspace precedence is:
@@ -1033,66 +979,33 @@ it does not contact a server. Effective workspace precedence is:
 5. global workspace;
 6. no workspace.
 
-## Full appliance
+## Local cleanup
 
-| Family | Purpose |
-|---|---|
-| `init --mode full`, `up`, `down`, `local-status` | Manage a Full appliance deployment |
-| `demo remove` | Delete the demo data created by `specgate init` seeding in the selected workspace (idempotent) |
-| `cleanup` | Without flags, Full-mode housekeeping cleanup with confirmation: immediate retention sweep, demo seed removal, and archived work-item purge. `cleanup --work` is local and mode-independent: it selects transient entries under the current project's `.specgate/work` plus generated `.specgate/completion-*.json` and `.specgate/peer-review-*.json` scaffolds. `cleanup --backups` selects only `specgate-before-*.tar.gz` recovery archives under the saved deployment directory; use `--dir` to choose another managed deployment. Both file modes support `--dry-run`, repeatable `--item`, interactive selection, and noninteractive `--yes`. Noninteractive work cleanup requires explicit `--item` values; bare `--yes` never removes every work entry. They never remove `.specgate/local-stack`, project configuration, active appliance data, or unrelated files. Approved artifacts and active work are never touched |
-
-`specgate init --mode full` creates the deployment's `specgate.env` with mode `0600` and
-repairs that mode when reusing an existing deployment. Keep this file local:
-it contains the encryption key for stored settings. Use `--dir` with the local
-stack commands when managing a non-default deployment directory.
-Published Full initialization pulls the bundle's pinned appliance image before
-startup so a same-tag image left in Docker's cache cannot be reused. The
-contributor-only `dev` bundle continues to use its locally built image.
-
-Full appliance `specgate init` accepts optional local-identity flags:
-`--workspace-name`, `--display-name`, `--username`, and optional `--email`.
-When `workspace-name`, `display-name`, and `username` are supplied together,
-`init` bootstraps and saves that local identity after the appliance starts; if
-`--seed` is also set, the demo seed uses the resulting workspace/user IDs for
-attribution. If `--email` is also supplied, `init` forwards it to the same
-bootstrap call. In `--no-input` mode, seeded installs must supply
-`workspace-name`, `display-name`, and `username` up front or `init` fails
-before deployment with an actionable required-flags error. Any partial
-combination of those identity flags also fails validation before deployment.
-Plain `specgate init --mode full --no-input` without identity flags remains a
-stack-only install and skips local identity setup.
-
-Mode-specific setup flags are strict. Local mode accepts `--local-dir` and
-rejects the Full-only `--dir`, `--seed`, `--no-seed`, and `--bundle-version`
-flags before creating state. Full mode accepts those appliance flags and
-rejects `--local-dir`.
-
-When `--install-plugins` is included, Local setup installs the selected Codex,
-Claude Code, or Cursor package embedded in the CLI; use `--plugin-agent` in
-non-interactive commands. Full setup downloads the selected plugin package from
-that same Full appliance, including when `SPECGATE_PORT` uses a non-default
-port.
-
-Delivery `--init` scaffolds under the project `.specgate/` working directory;
-the CLI creates a missing managed directory with mode `0700`, preserves an
-existing directory's permissions, and writes transient
-completion and peer-review JSON files with mode `0600`. It refuses symlinked
-working directories or scaffold paths, including with `--force`, so generating
-a report cannot overwrite a file outside the selected project.
+`specgate cleanup --work` selects transient entries under the current project's
+`.specgate/work` and generated completion and peer-review scaffolds. Use
+`specgate cleanup --work --dry-run` to preview. Noninteractive deletion requires
+explicit `--item` values and `--yes`. Approved specs, active data, and unrelated
+files remain in place.
 
 ## Local CLI uninstall
 
 In Local CLI mode, `specgate uninstall` removes CLI configuration and globally
 installed managed plugin files while keeping the configured SQLite store.
 Project-local plugin files in repositories are preserved and remain under
-normal repository file ownership. `--purge-data --yes` prints a warning, then
-deletes only SpecGate's `state.db` and SQLite journal files in that store;
+normal repository file ownership. Purging requires a default-No terminal
+confirmation naming the store, or explicit `--purge-data --yes` in automation.
+Redirected input without `--yes` is refused before removing files.
+Purge refuses conflicting nonempty environment, current-project and global
+store selections, even with `--yes`; resolve that conflict before retrying.
+The target must already be stored in project or global configuration;
+`SPECGATE_LOCAL_DIR` alone never authorizes deletion. For an unambiguous
+configured store, it deletes only SpecGate's `state.db`
+and SQLite journal files in that store;
 other files in the selected real directory are preserved. Symlinked state
 directories and database files are refused, non-regular database paths are
-refused, and an existing database is restricted to mode `0600`. `--dir` is a
-Full-only uninstall flag and is rejected in Local mode; Local uninstall always
-uses the configured SQLite state directory. An empty `.specgate/` parent is removed; one containing
-receipts or any other files is preserved. It does not invoke Docker. The interactive prompt
+refused. An emptied store directory and `.specgate/` parent may be removed only
+after managed SQLite files were purged; directories with no managed files or
+with other files are preserved. It does not invoke Docker. The interactive prompt
 offers only IDE plugin files and Local SQLite state.
 
 Unknown files added inside a managed plugin directory survive uninstall, but
@@ -1102,112 +1015,32 @@ an unowned leftover rather than overwriting it. Inspect the reported
 want to keep its notes, then retry installation. Do not delete those files or
 restore ownership markers merely to bypass the refusal.
 
-## Full appliance uninstall
-
-In Full appliance mode, `specgate uninstall` removes user-local SpecGate setup.
-In an interactive terminal it shows a checkbox list:
-
-| Choice | Effect |
-|---|---|
-| IDE plugin files | Remove SpecGate files from Cursor, Codex, and Claude Code user plugin locations |
-| Local data | Remove Docker volumes and the deployment directory |
-
-By default, the command removes CLI config and IDE plugin files, stops a
-CLI-managed Full appliance when present, and keeps artifact/spec data. Artifact
-metadata, work items, evidence, settings, gate history, and artifact/spec file
-contents share the `specgate-data` volume.
-
-The public CLI installer and `specgate update` verify the selected release
-archive against its published SHA-256 entry. Installation stops if neither
-`sha256sum` nor `shasum` is available; verification is never skipped.
-
-SpecGate writes ownership markers into appliance and IDE-plugin paths it creates.
-Install/update refuses to overwrite an unmarked conflicting plugin path, and
-Codex plugin installation also refuses a same-name marketplace entry that does
-not point to SpecGate's managed plugin directory. Uninstall keeps unowned
-same-name marketplace entries and removes only known managed files from marked
-plugin paths. A native Codex or Claude Code installation makes CLI install stop
-with exit code `4` before writing. Update and uninstall touch only marked CLI
-files. Unknown files inside CLI-managed directories are preserved and listed as
-`preserved_paths` in JSON output. A shared configuration SpecGate only removed
-its own entries from — a Codex `config.toml` that also holds your settings — is
-reported under `modified_paths`, not `removed_paths`, because the file is kept.
-A native plugin configuration SpecGate cannot parse is a `validation` error with
-`owner: "unknown"`: ownership was never established, so it is not reported as a
-native install to uninstall.
-Symlinked deployment, cleanup,
-plugin-target, and plugin-config paths are refused instead of followed. Full
-data purge additionally requires the exact deployment marker and refuses
-filesystem root, the user home, and a Git repository root.
-
-For automation, pass `--purge-data --yes` only after backing up data you want to
-keep. Plain/human output prints the exact deployment directory and destructive
-scope before mutation:
-
-```bash
-specgate uninstall
-specgate uninstall --purge-data --yes
-```
-
-`--purge-data --yes` removes:
-
-- SpecGate-managed containers;
-- SpecGate-managed Docker volumes;
-- SpecGate-managed Docker networks;
-- the deployment directory.
-
-Release containers, volumes, and networks are labelled with
-`org.specgate.managed=true` and `org.specgate.project=<project>`. Uninstall uses
-both labels for cleanup so purging one Full appliance does not remove another.
-The deployment directory must also contain SpecGate's exact private ownership
-marker; matching filenames or Compose labels alone never authorize mutation.
-Container images remain in Docker's cache for Docker or the user to prune.
-
-## Advanced governance
-
-| Family | Purpose |
-|---|---|
-| `policy` | List built-in governance levels |
-
-For work-item policy, use `specgate work policy <ref>`.
-
 ## Interaction
 
 When a work reference is optional, the CLI may show work needing attention and
-ask you to choose. Full-mode confirmation prompts appear only in interactive
-terminal sessions. Plain/JSON/no-input runs and piped stdin proceed without
-prompting, so `--yes` is optional there. This applies to `gates run`, `delivery
-review`, `delivery approve`, `delivery reject`, and `work archive`. Local mode
-treats artifact approval, artifact promotion, and delivery approval or rejection
-as explicit human decisions and requires explicit `--yes` in every output mode.
+ask you to choose. Artifact approval, artifact promotion, and delivery approval
+or rejection require explicit `--yes` in every output mode.
 
 Automation should pass all required values and use `--json --no-input`.
 
 ## Token-conscious output
 
 `specgate work context` returns the full Context Pack because coding agents need
-the complete implementation contract. For full-route work it includes approved
-artifact context; for quick work it is derived from the persisted title, intent,
-and acceptance criteria. Other potentially large commands default to references
-or summaries:
+the complete implementation contract. Artifact-backed work includes approved
+artifact context. Quick work uses the persisted title, intent, and acceptance
+criteria. Other potentially large commands default to references or summaries:
 
-- In Full mode, `specgate artifact files <id> <path...>` returns file path, size, and URL when
-  available. Add `--content` only when the file body is needed; it resolves the
-  temporary file reference internally and emits content rather than a signed URL.
-  Local mode instead reads a work's pinned document with
-  `specgate work context <ref> --document <path> --role <role> --json`;
-  `artifact files` returns incompatible (exit `6`) there.
+- Read a work's pinned document with
+  `specgate work context <ref> --document <path> --role <role> --json`.
 - `specgate gates check <artifact-id> --json --summary` runs readiness but omits
-  evidence bodies, model metadata, and timestamps. It keeps the aggregate, gate
+  evidence bodies and timestamps. It keeps the aggregate, gate
   states, hints, and dispatched IDE-agent task IDs. Use
   `specgate gates results <artifact-id> --json` to read the stored detailed
   evidence without running readiness again.
 - `specgate artifact publish --file artifact.json --preview` expands local
   document sources and shows exact paths, roles, target, base version, and
   non-goals plus the governance policy, required roles, evidence, gates, and
-  frozen rubric sources. Local mode stays entirely on the machine. Full mode
-  makes one read-only policy-resolution request in the selected workspace.
-  Neither mode publishes or persists preview state. After human confirmation,
+  frozen rubric sources. Preview publishes nothing and persists no preview state. After human confirmation,
   run the same command without `--preview`. Add `--compare <artifact-id>` only when a
   read-only comparison with one explicit published version is needed. That
   lookup is constrained to the package's explicit workspace or the selected
@@ -1217,25 +1050,17 @@ or summaries:
   publication. `--compare` requires `--preview`. The publish command accepts
   Git-root-relative `repo_file`, manifest-relative `source_file`, or absolute
   local `file_url` entries in `documents[]`; every document must set exactly one
-  of `content`, `repo_file`, `source_file`, or `file_url`. The CLI reads
-  those files and sends raw UTF-8 content, not base64, to avoid bloating IDE
-  prompts. Unknown package or document fields are rejected instead of being
+  of `content`, `repo_file`, `source_file`, or `file_url`. The CLI reads those files as raw UTF-8 content. Unknown package or document fields are rejected instead of being
   silently ignored. A `repo_file` must stay inside the nearest Git root and a
   `source_file` must stay inside the package directory after symlink
   resolution. Sources must be regular UTF-8 files, cannot themselves be
   symlinks, cannot change between validation and opening, and are limited to
-  1 MiB. Preview output shows the resolved absolute `source_path`; that local
-  path is never sent to the server. Publish files use `request_type` for the
+  1 MiB. Preview output shows the resolved absolute `source_path`. Publish files use `request_type` for the
   work kind; omitted values default conservatively to the structured `unknown`
-  value, without inferring intent from document prose. `version` is
-  server-assigned; use
-  `base_version` only when publishing an update from an existing version. Local
-  mode requires it to match the latest stored version on publication, not only
-  during preview comparison, so a stale agent cannot create a new version.
+  value, without inferring intent from document prose. The store assigns `version`; use
+  `base_version` only when publishing an update from an existing version. Publication requires it to match the latest stored version.
   A stale or mismatched Local base is `conflict` (exit 4), not an unavailable
   service: inspect the latest artifact and revise the package before retrying.
-- `specgate skill list --json` omits full prompts; add `--include-prompt` only
-  when an agent needs the rubric body.
 - `specgate delivery submit <ref> --file completion.json` replaces the
   report → gates → review → status command tail with one call and one combined
   `{report, gates, review, status}` envelope, so agents spend one round-trip
@@ -1274,65 +1099,13 @@ diagnostic envelope with identity and workspace marked `missing` and a
 not ready. The diagnostic does not restore a selection, change configuration,
 or delete stored users/workspaces. Failure to open or read the store still
 returns an error. Plugin files do not
-prove a running IDE loaded them—restart it and verify from a new session. In
-Full mode it checks server and capability compatibility, then
-prints setup state for identity, workspace source, model settings, Knowledge
-embeddings, workspace membership, and IDE plugin follow-up.
+prove a running IDE loaded them. Restart the IDE and verify from a new session.
 
-For an unreachable Full server, run `specgate doctor` first. If an IDE agent is
-sandboxed and cannot reach `localhost`, rerun that agent with local-network
-access. Starting or repairing Docker services is an explicit user action; it is
-not an automatic recovery step. Local mode never needs that recovery path.
-
-```bash
-specgate doctor --json
-```
-
-Agents use the successful JSON envelope's `data.mode` as the authoritative
-topology signal: `local` is Local CLI and `full` is a Full appliance or
-remote server. Do not infer it from a Docker process, a browser, or a configured
-server URL. Only Full mode may use a returned `specgate open --print` URL; Local
-mode hands off a stable ID and exact CLI command.
-
-An exit code of `6` means the CLI and server disagree on a required contract.
-Update the CLI or deployment before continuing.
-
-`specgate doctor` reports Knowledge embeddings separately from chat/gate models.
-If the embedding provider, model, or that provider's API key is missing, the
-Embeddings line reports `missing` — Knowledge upload/search is unavailable and no
-lexical fallback is presented as semantic search. Run `specgate model set` to
-configure the embedding model.
-
-When a workspace is selected, `doctor` also checks whether the current local user
-is listed in that workspace's members. A `not_member` result means the claimed
-local identity is not in `workspace_members`; it is a cooperative audit warning,
-not an RBAC denial.
-
-In human/plain output, `doctor` also shows a "Full appliance" section with the
-running appliance service when a CLI-managed deployment exists. `local-status`
-is the script-facing command for the same data. `specgate model test` verifies
-that governance model provider/model/API-key settings are present; it is
-settings-only and does not contact the model provider in the v0.1 CLI.
-
-In Full mode, use `--fix` to repair common CLI-managed appliance failures:
-
-```bash
-specgate doctor --fix
-```
-
-In an interactive terminal, `doctor --fix` shows a checkbox list before changing
-the local machine. The first repair action starts or repairs the CLI-managed
-Docker appliance and then reruns the same doctor checks. For automation, combine
-it with `--yes`:
-
-```bash
-specgate doctor --fix --yes
-```
-
-Local mode has no appliance to repair; use plain `specgate doctor` there.
-
-For human/plain output, server-backed commands also warn when the connected
-server recommends a different CLI version. Use the built-in updater:
+A configuration that selects the retired remote setup returns incompatibility
+exit `6`. Preserve that configuration and use a prior compatible CLI if you
+still need to operate the deployment. Follow [independent Local setup](../guides/operate-specgate.md#previous-installations) for the separate configuration, legacy
+environment override, and repository binding steps.
+`specgate init --mode local` remains a compatibility spelling for Local setup.
 
 ```bash
 specgate update
@@ -1342,29 +1115,20 @@ The updater installs the latest stable GitHub release, falling back to the
 newest prerelease only when no stable release exists. An explicit `--version`
 may select either. It refreshes only already-installed global Codex, Claude
 Code, and Cursor plugins carrying SpecGate CLI ownership markers. Other plugin
-installations stay untouched. In Local mode the updater then skips the appliance
-step because no appliance belongs to that mode. In Full mode it
-updates the Full appliance bundle and image when a CLI-managed deployment is
-present. It does not create files for
-an IDE the user did not select; refresh project-local installs with `specgate
-plugins install --project-local`. Before appliance replacement it creates a
-mode-`0600` recovery archive. Recovery archives remain until you remove them
-explicitly with `specgate cleanup --backups`. A failed
-target is rolled back automatically only when its release metadata says the
-previous image remains compatible with any migrations already applied;
-otherwise the command reports the recovery archive and does not restart the old
-image.
+installations stay untouched. Refresh a project-local install with the matching
+`specgate plugins install --project-local` command.
 
 On POSIX systems, the updater derives the install directory from the current
 executable, resolving symlinks when possible. The directory is passed to the
-installer as one argument, including paths with spaces.
+installer as one argument, including paths with spaces. A directory at the
+binary destination is refused. In `--json` and `--json-progress` mode,
+installer progress goes to stderr so stdout contains only JSON output.
 
 On native Windows, `specgate update` downloads the matching release ZIP and
 published checksum, verifies SHA-256, and replaces the current executable
 without requiring `sh`.
 
-If the connected server does not recommend a newer CLI, released CLI builds also
-check GitHub releases in human/plain output and warn when a newer public release
+Released CLI builds check GitHub releases in human/plain output and warn when a newer public release
 exists. The GitHub check prefers the latest stable release and considers the
 newest prerelease only before any stable release exists. It caches the result for 24 hours
 under the user cache directory, never affects the command exit code, and is
@@ -1378,14 +1142,8 @@ specgate plugins install
 specgate plugins doctor
 ```
 
-Before initialization, `plugins install` and `plugins doctor` use the package
-embedded in the CLI so a clean IDE bootstrap does not require an appliance.
-After Full initialization, `plugins doctor` compares installed files against
-the configured SpecGate agent-package registry (the connected deployment by
-default; pass `--registry` for another source). An explicit `--registry`,
-`--server`, or `SPECGATE_SERVER` also selects the remote source before init.
-Repository `.specgate/config` server values are never used for plugin packages
-or hooks; this prevents a checkout from redirecting a global IDE install.
+`plugins install` and `plugins doctor` use the package embedded in the CLI,
+including before initialization.
 Before writing, install validates at most 16 safe skill names and preloads no
 more than 32 MiB of required package files. Project-local Claude installation
 also validates `.claude/settings.json` before any plugin file is written.
@@ -1417,17 +1175,9 @@ detected. Interactive `plugins install` also asks whether to write global user
 files or project-local files. Scripts can still pass `--agent all`,
 `--agent codex`, or a comma-separated subset.
 
-Full appliance `specgate init` offers the same plugin install interactively,
-including the IDE target checkbox list. Local automation can install any
-embedded IDE target after init without a registry; for example:
+Local automation can install an embedded IDE target with
 `specgate plugins install --agent codex --project-local --no-input`.
-
-Use `--project-local` on those commands only when the current repository should
-vendor its IDE plugin files.
-
-When multiple Full appliances exist, confirm or set the server URL first:
-`specgate doctor`, `specgate local-status`, then
-`specgate config server http://localhost:<port>/api/doc-registry` if needed.
+Use `--project-local` when the current repository should vendor its IDE files.
 
 ## Related guides
 

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,8 +11,6 @@ import (
 	"github.com/specgate/specgate/app/cli/internal/fsutil"
 )
 
-const DefaultServerURL = "http://localhost:3000/api/doc-registry"
-
 type Mode string
 
 const (
@@ -19,8 +18,7 @@ const (
 	ModeFull  Mode = "full"
 )
 
-// LocalStore identifies a Local CLI SQLite store without conflating it with a
-// Full appliance deployment.
+// LocalStore identifies a Local CLI SQLite store.
 type LocalStore struct {
 	Path string `json:"path,omitempty"`
 	ID   string `json:"id,omitempty"`
@@ -28,40 +26,22 @@ type LocalStore struct {
 
 // Config holds user-persisted CLI settings.
 type Config struct {
-	Mode          Mode                     `json:"mode,omitempty"`
-	Local         LocalStore               `json:"local,omitempty"`
-	Server        string                   `json:"server,omitempty"`
-	DeploymentDir string                   `json:"deployment_dir,omitempty"`
-	CurrentUser   CurrentUser              `json:"current_user,omitempty"`
-	Workspace     CurrentWorkspace         `json:"workspace,omitempty"`
-	Projects      map[string]ProjectConfig `json:"projects,omitempty"`
-	// Credentials holds one gateway credential per server URL. Keyed by server so
-	// switching servers can never send a credential to a host it was not issued
-	// for; the whole file is written at mode 0600.
-	Credentials map[string]ServerCredential `json:"credentials,omitempty"`
+	Mode        Mode                     `json:"mode,omitempty"`
+	Local       LocalStore               `json:"local,omitempty"`
+	CurrentUser CurrentUser              `json:"current_user,omitempty"`
+	Workspace   CurrentWorkspace         `json:"workspace,omitempty"`
+	Projects    map[string]ProjectConfig `json:"projects,omitempty"`
+	// Preserve these legacy fields whenever an explicitly Local config is saved.
+	Server        string                      `json:"server,omitempty"`
+	DeploymentDir string                      `json:"deployment_dir,omitempty"`
+	Credentials   map[string]ServerCredential `json:"credentials,omitempty"`
 }
 
-// ServerCredential is one appliance's gateway credential. The secret lives here
-// because the gateway verifies it per request; status output reports only whether
-// it is set, and no command prints the secret.
+// ServerCredential is part of the legacy configuration format. It is never
+// used for requests or included in command output.
 type ServerCredential struct {
 	Username string `json:"username"`
 	Secret   string `json:"secret"`
-}
-
-// NormalizeServerURL is the credential map key: a trimmed, lowercased URL with no
-// trailing slash, so the same appliance written three ways resolves to one entry.
-func NormalizeServerURL(raw string) string {
-	return strings.TrimRight(strings.ToLower(strings.TrimSpace(raw)), "/")
-}
-
-// CredentialFor returns the credential stored for a server URL.
-func (c Config) CredentialFor(serverURL string) (ServerCredential, bool) {
-	credential, ok := c.Credentials[NormalizeServerURL(serverURL)]
-	if !ok || credential.Username == "" || credential.Secret == "" {
-		return ServerCredential{}, false
-	}
-	return credential, true
 }
 
 // CurrentUser stores the CLI-selected local user.
@@ -112,38 +92,26 @@ type ResolvedWorkspace struct {
 	ProjectRoot string
 }
 
-// ResolveServer returns the effective server URL using the precedence chain:
-// flag > SPECGATE_SERVER env > repo .specgate/config > global config file >
-// the local appliance gateway.
-func ResolveServer(flag string, repo RepoConfig, cfg Config) string {
-	if flag != "" {
-		return flag
+// LegacyFull detects old remote configuration without inspecting any store.
+func (c Config) LegacyFull() bool {
+	if c.Mode != "" {
+		return c.Mode == ModeFull
 	}
-	if env := os.Getenv("SPECGATE_SERVER"); env != "" {
-		return env
+	if strings.TrimSpace(c.Server) != "" || strings.TrimSpace(c.DeploymentDir) != "" || len(c.Credentials) != 0 {
+		return true
 	}
-	if repo.Server != "" {
-		return repo.Server
+	if c.Local.Path != "" && c.Local.ID != "" {
+		return false
 	}
-	if cfg.Server != "" {
-		return cfg.Server
+	if c.CurrentUser != (CurrentUser{}) || c.Workspace != (CurrentWorkspace{}) {
+		return true
 	}
-	return DefaultServerURL
-}
-
-// ResolvePluginRegistry excludes repository configuration because plugin
-// packages can install executable IDE hooks into a user's global environment.
-func ResolvePluginRegistry(flag string, cfg Config) string {
-	return ResolveServer(flag, RepoConfig{}, cfg)
-}
-
-// ResolveMode defaults commands to Full until setup persists a mode.
-// `specgate init` owns the Local-first choice for a fresh installation.
-func ResolveMode(cfg Config) Mode {
-	if cfg.Mode == ModeLocal || cfg.Mode == ModeFull {
-		return cfg.Mode
+	for _, project := range c.Projects {
+		if project.Workspace != (CurrentWorkspace{}) && (project.Local.Path == "" || project.Local.ID == "") {
+			return true
+		}
 	}
-	return ModeFull
+	return false
 }
 
 // ResolveLocalDir uses command flag > environment > project binding > selected
@@ -249,12 +217,23 @@ func LoadFrom(path string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	return Parse(data)
+}
+
+// Parse validates an optional config file's bytes. Nil represents no file.
+func Parse(data []byte) (Config, error) {
+	if data == nil {
+		return Config{}, nil
+	}
+	if !bytes.HasPrefix(bytes.TrimSpace(data), []byte{'{'}) {
+		return Config{}, fmt.Errorf("expected a SpecGate config JSON object")
+	}
 	var c Config
 	if err := json.Unmarshal(data, &c); err != nil {
 		return Config{}, err
 	}
 	if c.Mode != "" && c.Mode != ModeLocal && c.Mode != ModeFull {
-		return Config{}, fmt.Errorf("invalid SpecGate mode %q; expected local or full", c.Mode)
+		return Config{}, fmt.Errorf("invalid SpecGate mode %q; expected local", c.Mode)
 	}
 	return c, nil
 }

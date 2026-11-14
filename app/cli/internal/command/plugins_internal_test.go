@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	clientpkg "github.com/specgate/specgate/app/cli/internal/client"
+	"github.com/specgate/specgate/app/cli/internal/workflow"
 )
 
 func TestCodexMarketplaceHasPluginParsesJSON(t *testing.T) {
@@ -386,14 +386,14 @@ func TestValidatePluginOwnerMarkerRejectsSymlink(t *testing.T) {
 }
 
 func TestValidatePluginPackageRejectsUnsafeVersionAndExcessiveSkills(t *testing.T) {
-	if err := validatePluginPackage(&clientpkg.PluginPackage{
+	if err := validatePluginPackage(&workflow.PluginPackage{
 		Version: "1.0.0",
 		Skills:  []string{"specgate", "specgate-project-setup"},
 	}); err != nil {
 		t.Fatalf("product-named root skill was rejected: %v", err)
 	}
 	for _, version := range []string{"", "../escape", "nested/version", `nested\version`} {
-		pkg := &clientpkg.PluginPackage{Version: version, Skills: []string{"specgate"}}
+		pkg := &workflow.PluginPackage{Version: version, Skills: []string{"specgate"}}
 		if err := validatePluginPackage(pkg); err == nil {
 			t.Fatalf("unsafe version %q was accepted", version)
 		}
@@ -402,16 +402,16 @@ func TestValidatePluginPackageRejectsUnsafeVersionAndExcessiveSkills(t *testing.
 	for index := range skills {
 		skills[index] = "skill-" + strings.Repeat("x", index+1)
 	}
-	if err := validatePluginPackage(&clientpkg.PluginPackage{Version: "0.1.0", Skills: skills}); err == nil {
+	if err := validatePluginPackage(&workflow.PluginPackage{Version: "0.1.0", Skills: skills}); err == nil {
 		t.Fatal("excessive plugin skill inventory was accepted")
 	}
-	if err := validatePluginPackage(&clientpkg.PluginPackage{Version: "1.0.0"}); err == nil {
+	if err := validatePluginPackage(&workflow.PluginPackage{Version: "1.0.0"}); err == nil {
 		t.Fatal("empty skill list was accepted")
 	}
-	if err := validatePluginPackage(&clientpkg.PluginPackage{Version: "1.0.0", Skills: []string{"delivery"}}); err == nil {
+	if err := validatePluginPackage(&workflow.PluginPackage{Version: "1.0.0", Skills: []string{"delivery"}}); err == nil {
 		t.Fatal("unnamespaced skill was accepted")
 	}
-	if err := validatePluginPackage(&clientpkg.PluginPackage{Version: "1.0.0", Skills: []string{"specgate", "specgate"}}); err == nil {
+	if err := validatePluginPackage(&workflow.PluginPackage{Version: "1.0.0", Skills: []string{"specgate", "specgate"}}); err == nil {
 		t.Fatal("duplicate skill was accepted")
 	}
 }
@@ -425,7 +425,7 @@ func TestPluginInstallerPreloadsWithinAggregateLimitBeforeWriting(t *testing.T) 
 	}
 	installer := &pluginInstaller{
 		ctx: context.Background(), client: client,
-		pkg:  &clientpkg.PluginPackage{Version: "0.1.0", Skills: []string{"specgate"}},
+		pkg:  &workflow.PluginPackage{Version: "0.1.0", Skills: []string{"specgate"}},
 		opts: pluginInstallOptions{ProjectLocal: true},
 	}
 
@@ -459,7 +459,7 @@ func TestInstallFocusedSkillsRemovesOnlyObsoleteOwnedSkills(t *testing.T) {
 	installer := &pluginInstaller{
 		home:  home,
 		deps:  &Deps{Stdout: io.Discard},
-		pkg:   &clientpkg.PluginPackage{Skills: []string{current}},
+		pkg:   &workflow.PluginPackage{Skills: []string{current}},
 		files: map[string][]byte{"skills/" + current + "/SKILL.md": []byte("current skill")},
 	}
 	if err := installer.installFocusedSkills(skillsDir); err != nil {
@@ -499,7 +499,7 @@ func TestInstallFocusedSkillsKeepsObsoleteOwnedSkillsWhenReplacementFails(t *tes
 	installer := &pluginInstaller{
 		home: home,
 		deps: &Deps{Stdout: io.Discard},
-		pkg:  &clientpkg.PluginPackage{Skills: []string{"specgate-work-delivery"}},
+		pkg:  &workflow.PluginPackage{Skills: []string{"specgate-work-delivery"}},
 	}
 	if err := installer.installFocusedSkills(skillsDir); err == nil {
 		t.Fatal("replacement install unexpectedly succeeded")
@@ -522,7 +522,7 @@ func TestInstallCodexKeepsObsoleteCacheWhenReplacementFails(t *testing.T) {
 	installer := &pluginInstaller{
 		home: home,
 		deps: &Deps{Stdout: io.Discard},
-		pkg:  &clientpkg.PluginPackage{Version: "0.2.0"},
+		pkg:  &workflow.PluginPackage{Version: "0.2.0"},
 	}
 	if err := installer.installCodex(); err == nil {
 		t.Fatal("replacement install unexpectedly succeeded")
@@ -600,7 +600,7 @@ type fakePluginPackageClient struct {
 	files map[string][]byte
 }
 
-func (f *fakePluginPackageClient) PluginPackage(context.Context) (*clientpkg.PluginPackage, error) {
+func (f *fakePluginPackageClient) PluginPackage(context.Context) (*workflow.PluginPackage, error) {
 	return nil, nil
 }
 

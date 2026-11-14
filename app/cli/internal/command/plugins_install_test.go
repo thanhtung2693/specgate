@@ -3,9 +3,6 @@ package command_test
 import (
 	"bytes"
 	"encoding/json"
-	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +14,7 @@ import (
 )
 
 func TestPluginsInstallProjectLocalAndDoctor(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	workDir := t.TempDir()
 	t.Chdir(workDir)
 	homeDir := t.TempDir()
@@ -39,8 +36,7 @@ func TestPluginsInstallProjectLocalAndDoctor(t *testing.T) {
 	writeTestFile(t, existingCodexConfig, string(existingCodexConfigBody))
 	deps, out := newPluginDeps(homeDir)
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--plain", "--server", srv.URL,
-		"plugins", "install",
+		"--plain", "plugins", "install",
 		"--project-local",
 		"--agent", "cursor, codex, claude",
 	)
@@ -78,8 +74,7 @@ func TestPluginsInstallProjectLocalAndDoctor(t *testing.T) {
 
 	deps, out = newPluginDeps(homeDir)
 	code = command.ExecuteForCode(command.NewRootCommand(deps),
-		"--plain", "--server", srv.URL,
-		"plugins", "doctor",
+		"--plain", "plugins", "doctor",
 		"--project-local",
 		"--agent", "all",
 	)
@@ -104,8 +99,7 @@ func TestPluginsInstallProjectLocalCodexIgnoresUnrelatedSymlinkedIDEPaths(t *tes
 
 			deps, out := newPluginDeps(t.TempDir())
 			code := command.ExecuteForCode(command.NewRootCommand(deps),
-				"--plain", "--server", newPluginRegistry(t).URL,
-				"plugins", "install", "--project-local", "--agent", "codex",
+				"--plain", "plugins", "install", "--project-local", "--agent", "codex",
 			)
 			if code != output.ExitOK {
 				t.Fatalf("install read unrelated %s path: %s", link, out.String())
@@ -118,7 +112,7 @@ func TestPluginsInstallProjectLocalCodexIgnoresUnrelatedSymlinkedIDEPaths(t *tes
 }
 
 func TestPluginsInstallGlobalRejectsProjectOnlyMarketplacePointer(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	homeDir := t.TempDir()
 	marketplace := filepath.Join(homeDir, ".agents", "plugins", "marketplace.json")
 	original := `{"name":"personal","plugins":[{"name":"specgate","source":{"source":"local","path":"./plugins"}}]}`
@@ -127,8 +121,7 @@ func TestPluginsInstallGlobalRejectsProjectOnlyMarketplacePointer(t *testing.T) 
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--plain", "--server", srv.URL,
-		"plugins", "install", "--agent", "codex",
+		"--plain", "plugins", "install", "--agent", "codex",
 	)
 	if code == output.ExitOK {
 		t.Fatalf("global install accepted project-only marketplace pointer: %s", out.String())
@@ -146,7 +139,7 @@ func TestPluginsInstallGlobalRejectsProjectOnlyMarketplacePointer(t *testing.T) 
 }
 
 func TestCodexMarketplaceRoundTripPreservesUserMetadata(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	home := t.TempDir()
 	marketplace := filepath.Join(home, ".agents", "plugins", "marketplace.json")
 	writeTestFile(t, marketplace, `{
@@ -161,9 +154,9 @@ func TestCodexMarketplaceRoundTripPreservesUserMetadata(t *testing.T) {
 	for _, action := range []string{"install", "install", "uninstall"} {
 		deps, out := newPluginDeps(home)
 		deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
-		args := []string{"--json", "--server", srv.URL, "plugins", "install", "--agent", "codex"}
+		args := []string{"--json", "plugins", "install", "--agent", "codex"}
 		if action == "uninstall" {
-			args = []string{"--json", "--no-input", "uninstall", "--dir", filepath.Join(t.TempDir(), "deploy")}
+			args = []string{"--json", "--no-input", "uninstall"}
 		}
 		if code := command.ExecuteForCode(command.NewRootCommand(deps), args...); code != output.ExitOK {
 			t.Fatalf("%s exit=%d output=%s", action, code, out.String())
@@ -229,7 +222,7 @@ func TestLocalPluginsInstallLeavesProjectInstructionsUntouched(t *testing.T) {
 }
 
 func TestPluginsInstallRefusesToOverwriteUnownedCursorSkill(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	home := t.TempDir()
 	foreign := filepath.Join(home, ".cursor", "skills", "specgate", "SKILL.md")
 	if err := os.MkdirAll(filepath.Dir(foreign), 0o755); err != nil {
@@ -243,7 +236,7 @@ func TestPluginsInstallRefusesToOverwriteUnownedCursorSkill(t *testing.T) {
 	var stderr bytes.Buffer
 	deps.Stderr = &stderr
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--plain", "--server", srv.URL, "plugins", "install", "--agent", "cursor",
+		"--plain", "plugins", "install", "--agent", "cursor",
 	)
 	if code == output.ExitOK {
 		t.Fatalf("install unexpectedly overwrote unowned skill: %s", out.String())
@@ -277,8 +270,7 @@ func TestPluginsInstallReportsProjectSkillsSHBootstrapConflictForEachIDE(t *test
 
 			deps, out := newPluginDeps(home)
 			code := command.ExecuteForCode(command.NewRootCommand(deps),
-				"--json", "--no-input", "--server", newPluginRegistry(t).URL,
-				"plugins", "install", "--agent", testCase.agent, "--project-local",
+				"--json", "--no-input", "plugins", "install", "--agent", testCase.agent, "--project-local",
 			)
 			if code != output.ExitConflict {
 				t.Fatalf("install exit = %d, want conflict; output=%s", code, out.String())
@@ -331,8 +323,7 @@ func TestPluginsInstallReportsGlobalSkillsSHBootstrapConflictBeforeWriting(t *te
 
 	deps, out := newPluginDeps(home)
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--json", "--no-input", "--server", newPluginRegistry(t).URL,
-		"plugins", "install", "--agent", "codex",
+		"--json", "--no-input", "plugins", "install", "--agent", "codex",
 	)
 	if code != output.ExitConflict {
 		t.Fatalf("install exit = %d, want conflict; output=%s", code, out.String())
@@ -361,8 +352,7 @@ func TestPluginsInstallReportsCrossScopeSkillsSHBootstrapConflict(t *testing.T) 
 	var stderr bytes.Buffer
 	deps.Stderr = &stderr
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--plain", "--server", newPluginRegistry(t).URL,
-		"plugins", "install", "--agent", "codex",
+		"--plain", "plugins", "install", "--agent", "codex",
 	)
 	if code != output.ExitConflict {
 		t.Fatalf("install exit = %d, want conflict; output=%s", code, out.String())
@@ -383,8 +373,7 @@ func TestPluginsInstallDoesNotTrustForeignSkillsSHLock(t *testing.T) {
 
 	deps, out := newPluginDeps(t.TempDir())
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--json", "--no-input", "--server", newPluginRegistry(t).URL,
-		"plugins", "install", "--agent", "codex", "--project-local",
+		"--json", "--no-input", "plugins", "install", "--agent", "codex", "--project-local",
 	)
 	if code != output.ExitUsage {
 		t.Fatalf("install exit = %d, want validation failure; output=%s", code, out.String())
@@ -411,8 +400,7 @@ func TestPluginsInstallSucceedsAfterSkillsSHBootstrapIsRemoved(t *testing.T) {
 
 	deps, out := newPluginDeps(home)
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--plain", "--server", newPluginRegistry(t).URL,
-		"plugins", "install", "--agent", "codex", "--project-local",
+		"--plain", "plugins", "install", "--agent", "codex", "--project-local",
 	)
 	if code != output.ExitOK {
 		t.Fatalf("install after bootstrap removal exit = %d; output=%s", code, out.String())
@@ -424,8 +412,7 @@ func TestPluginsInstallSucceedsAfterSkillsSHBootstrapIsRemoved(t *testing.T) {
 
 func TestPluginsInstallRefusesSymlinkedOwnedTarget(t *testing.T) {
 	t.Parallel()
-	srv := newPluginRegistry(t)
-	defer srv.Close()
+
 	home := t.TempDir()
 	external := t.TempDir()
 	writeTestFile(t, filepath.Join(external, ".specgate-owned"), "specgate-plugin-v1\n")
@@ -439,8 +426,8 @@ func TestPluginsInstallRefusesSymlinkedOwnedTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	deps, _, _, out := newFakeDeps(t)
-	deps.PluginRegistryURL = srv.URL
+	deps, out := newTestDeps(t)
+
 	deps.UserHomeDir = func() (string, error) { return home, nil }
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "plugins", "install", "--agent", "codex")
 	if code == output.ExitOK {
@@ -453,8 +440,7 @@ func TestPluginsInstallRefusesSymlinkedOwnedTarget(t *testing.T) {
 
 func TestPluginsInstallRefusesNestedSymlinkInOwnedTarget(t *testing.T) {
 	t.Parallel()
-	srv := newPluginRegistry(t)
-	defer srv.Close()
+
 	home := t.TempDir()
 	external := t.TempDir()
 	externalSkill := filepath.Join(external, "SKILL.md")
@@ -468,8 +454,8 @@ func TestPluginsInstallRefusesNestedSymlinkInOwnedTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	deps, _, _, out := newFakeDeps(t)
-	deps.PluginRegistryURL = srv.URL
+	deps, out := newTestDeps(t)
+
 	deps.UserHomeDir = func() (string, error) { return home, nil }
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "plugins", "install", "--agent", "codex")
 	if code == output.ExitOK {
@@ -482,8 +468,7 @@ func TestPluginsInstallRefusesNestedSymlinkInOwnedTarget(t *testing.T) {
 
 func TestPluginsInstallRefusesSymlinkedCodexConfig(t *testing.T) {
 	t.Parallel()
-	srv := newPluginRegistry(t)
-	defer srv.Close()
+
 	home := t.TempDir()
 	external := filepath.Join(t.TempDir(), "config.toml")
 	writeTestFile(t, external, "[tools]\nkeep = true\n")
@@ -496,8 +481,8 @@ func TestPluginsInstallRefusesSymlinkedCodexConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	deps, _, _, out := newFakeDeps(t)
-	deps.PluginRegistryURL = srv.URL
+	deps, out := newTestDeps(t)
+
 	deps.UserHomeDir = func() (string, error) { return home, nil }
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "plugins", "install", "--agent", "codex")
 	if code == output.ExitOK {
@@ -509,7 +494,7 @@ func TestPluginsInstallRefusesSymlinkedCodexConfig(t *testing.T) {
 }
 
 func TestPluginsInstallPreservesUnrelatedCodexTOMLCommentsAndOrder(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	home := t.TempDir()
 	configPath := filepath.Join(home, ".codex", "config.toml")
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
@@ -522,7 +507,7 @@ func TestPluginsInstallPreservesUnrelatedCodexTOMLCommentsAndOrder(t *testing.T)
 
 	deps, out := newPluginDeps(home)
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--plain", "--server", srv.URL, "plugins", "install", "--agent", "codex",
+		"--plain", "plugins", "install", "--agent", "codex",
 	)
 	if code != output.ExitOK {
 		t.Fatalf("install exit = %d, output = %s", code, out.String())
@@ -537,7 +522,7 @@ func TestPluginsInstallPreservesUnrelatedCodexTOMLCommentsAndOrder(t *testing.T)
 }
 
 func TestPluginsInstallPreservesExistingCodexConfigMode(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	home := t.TempDir()
 	configPath := filepath.Join(home, ".codex", "config.toml")
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
@@ -549,7 +534,7 @@ func TestPluginsInstallPreservesExistingCodexConfigMode(t *testing.T) {
 
 	deps, out := newPluginDeps(home)
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--plain", "--server", srv.URL, "plugins", "install", "--agent", "codex",
+		"--plain", "plugins", "install", "--agent", "codex",
 	)
 	if code != output.ExitOK {
 		t.Fatalf("install exit = %d, output = %s", code, out.String())
@@ -564,8 +549,7 @@ func TestPluginsInstallPreservesExistingCodexConfigMode(t *testing.T) {
 }
 
 func TestPluginsInstallRefusesUnownedSpecGateMarketplaceEntry(t *testing.T) {
-	srv := newPluginRegistry(t)
-	defer srv.Close()
+
 	home := t.TempDir()
 	marketplacePath := filepath.Join(home, ".agents", "plugins", "marketplace.json")
 	if err := os.MkdirAll(filepath.Dir(marketplacePath), 0o755); err != nil {
@@ -578,7 +562,7 @@ func TestPluginsInstallRefusesUnownedSpecGateMarketplaceEntry(t *testing.T) {
 
 	deps, out := newPluginDeps(home)
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--json", "--server", srv.URL, "plugins", "install", "--agent", "codex",
+		"--json", "plugins", "install", "--agent", "codex",
 	)
 	if code == output.ExitOK {
 		t.Fatalf("unowned marketplace entry was overwritten: %s", out.String())
@@ -599,7 +583,7 @@ func TestPluginsInstallRefusesUnownedSpecGateMarketplaceEntry(t *testing.T) {
 }
 
 func TestPluginsInstallRefusesInlineSpecGateCodexConfig(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	home := t.TempDir()
 	configPath := filepath.Join(home, ".codex", "config.toml")
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
@@ -612,7 +596,7 @@ func TestPluginsInstallRefusesInlineSpecGateCodexConfig(t *testing.T) {
 
 	deps, out := newPluginDeps(home)
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--plain", "--server", srv.URL, "plugins", "install", "--agent", "codex",
+		"--plain", "plugins", "install", "--agent", "codex",
 	)
 	if code == output.ExitOK {
 		t.Fatalf("inline config was rewritten: %s", out.String())
@@ -627,7 +611,7 @@ func TestPluginsInstallRefusesInlineSpecGateCodexConfig(t *testing.T) {
 }
 
 func TestPluginsInstallRemovesOnlyObsoleteOwnedCodexCacheVersions(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	home := t.TempDir()
 	cacheRoot := filepath.Join(home, ".codex", "plugins", "cache", "personal", "specgate")
 	obsolete := filepath.Join(cacheRoot, "0.0.9")
@@ -638,8 +622,7 @@ func TestPluginsInstallRemovesOnlyObsoleteOwnedCodexCacheVersions(t *testing.T) 
 
 	deps, out := newPluginDeps(home)
 	if code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--plain", "--server", srv.URL,
-		"plugins", "install", "--agent", "codex",
+		"--plain", "plugins", "install", "--agent", "codex",
 	); code != output.ExitOK {
 		t.Fatalf("install exit = %d, output = %s", code, out.String())
 	}
@@ -650,92 +633,19 @@ func TestPluginsInstallRemovesOnlyObsoleteOwnedCodexCacheVersions(t *testing.T) 
 	if body, err := os.ReadFile(unowned); err != nil || string(body) != "keep" {
 		t.Fatalf("unowned cache changed: body=%q err=%v", body, err)
 	}
-	if _, err := os.Stat(filepath.Join(cacheRoot, "0.1.0", ".codex-plugin", "plugin.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(cacheRoot, embeddedTestPluginPackage(t).Version, ".codex-plugin", "plugin.json")); err != nil {
 		t.Fatalf("current cache missing: %v", err)
 	}
 }
 
-func TestPluginsInstallUsesRegistryFlag(t *testing.T) {
-	srv := newPluginRegistry(t)
-	workDir := t.TempDir()
-	t.Chdir(workDir)
-	homeDir := t.TempDir()
-
-	deps, out := newPluginDeps(homeDir)
-	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--plain", "--server", "http://127.0.0.1:1",
-		"plugins", "install",
-		"--project-local",
-		"--agent", "claude",
-		"--registry", srv.URL,
-	)
-	if code != output.ExitOK {
-		t.Fatalf("install exit = %d, output = %s", code, out.String())
-	}
-	if _, err := os.Stat(filepath.Join(workDir, ".claude", "skills", "specgate", "SKILL.md")); err != nil {
-		t.Fatalf("Claude project skill missing after registry install: %v\n%s", err, out.String())
-	}
-}
-
-func TestPluginsInstallRejectsUnsafePackageSkillNames(t *testing.T) {
-	workDir := t.TempDir()
-	t.Chdir(workDir)
-	homeDir := t.TempDir()
-	outside := filepath.Join(workDir, "outside")
-	if err := os.MkdirAll(outside, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(outside, "keep.txt"), []byte("keep"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(r.URL.Path, "/plugins/")
-		switch path {
-		case "package.json":
-			_, _ = io.WriteString(w, `{
-  "schema": "specgate.plugin-package/v1",
-  "name": "specgate",
-  "display_name": "SpecGate",
-  "version": "0.1.0",
-  "description": "SpecGate plugin",
-  "skills": ["specgate", "../../outside"],
-  "served_files": []
-}`)
-		case "rules/using-specgate.mdc":
-			_, _ = io.WriteString(w, "use specgate\n")
-		default:
-			_, _ = io.WriteString(w, "malicious\n")
-		}
-	}))
-	t.Cleanup(srv.Close)
-
-	deps, out := newPluginDeps(homeDir)
-	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--json", "--server", srv.URL,
-		"plugins", "install",
-		"--project-local",
-		"--agent", "cursor",
-	)
-	if code != output.ExitUsage {
-		t.Fatalf("install exit = %d, want usage; output = %s", code, out.String())
-	}
-	if _, err := os.Stat(filepath.Join(outside, "keep.txt")); err != nil {
-		t.Fatalf("unsafe package skill removed outside directory: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(workDir, ".cursor", "rules", "using-specgate.mdc")); !os.IsNotExist(err) {
-		t.Fatalf("installer wrote files after unsafe package validation failed; stat err=%v", err)
-	}
-}
-
 func TestPluginsInstallPromptsForAgentSelection(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	home := t.TempDir()
 
 	deps, out := newPluginDeps(home)
 	prompter := &fakePrompter{multiValues: []string{"cursor", "codex"}}
 	deps.Prompter = prompter
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--server", srv.URL,
 		"plugins", "install",
 	)
 	if code != output.ExitOK {
@@ -747,8 +657,8 @@ func TestPluginsInstallPromptsForAgentSelection(t *testing.T) {
 	for _, path := range []string{
 		filepath.Join(home, ".cursor", "rules", "using-specgate.mdc"),
 		filepath.Join(home, ".codex", "plugins", "specgate", ".codex-plugin", "plugin.json"),
-		filepath.Join(home, ".codex", "plugins", "cache", "personal", "specgate", "0.1.0", ".codex-plugin", "plugin.json"),
-		filepath.Join(home, ".codex", "plugins", "cache", "personal", "specgate", "0.1.0", "skills", "specgate", "SKILL.md"),
+		filepath.Join(home, ".codex", "plugins", "cache", "personal", "specgate", embeddedTestPluginPackage(t).Version, ".codex-plugin", "plugin.json"),
+		filepath.Join(home, ".codex", "plugins", "cache", "personal", "specgate", embeddedTestPluginPackage(t).Version, "skills", "specgate", "SKILL.md"),
 	} {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("%s missing after prompted install: %v", path, err)
@@ -760,7 +670,7 @@ func TestPluginsInstallPromptsForAgentSelection(t *testing.T) {
 }
 
 func TestPluginsInstallUsesDetectedAgentDefaults(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	home := t.TempDir()
 
 	deps, out := newPluginDeps(home)
@@ -768,7 +678,6 @@ func TestPluginsInstallUsesDetectedAgentDefaults(t *testing.T) {
 	prompter := &fakePrompter{}
 	deps.Prompter = prompter
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--server", srv.URL,
 		"plugins", "install",
 	)
 	if code != output.ExitOK {
@@ -786,13 +695,13 @@ func TestPluginsInstallUsesDetectedAgentDefaults(t *testing.T) {
 }
 
 func TestPluginsInstallDoesNotPreselectSeveralDetectedIDEs(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	deps, out := newPluginDeps(t.TempDir())
 	deps.PluginAgentDefaults = func() []string { return []string{"cursor", "codex", "claude"} }
 	prompter := &fakePrompter{multiValues: []string{"codex"}}
 	deps.Prompter = prompter
 
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--server", srv.URL, "plugins", "install")
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "plugins", "install")
 	if code != output.ExitOK {
 		t.Fatalf("install exit = %d, output = %s", code, out.String())
 	}
@@ -806,15 +715,14 @@ func TestPluginsInstallDoesNotPreselectSeveralDetectedIDEs(t *testing.T) {
 }
 
 func TestPluginsInstallPlainModeDoesNotPromptForAgent(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	home := t.TempDir()
 
 	deps, out := newPluginDeps(home)
 	prompter := &fakePrompter{multiValues: []string{"codex"}}
 	deps.Prompter = prompter
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--plain", "--server", srv.URL,
-		"plugins", "install",
+		"--plain", "plugins", "install",
 	)
 	if code != output.ExitOK {
 		t.Fatalf("install exit = %d, output = %s", code, out.String())
@@ -834,7 +742,7 @@ func TestPluginsInstallPlainModeDoesNotPromptForAgent(t *testing.T) {
 }
 
 func TestPluginsInstallPromptsForScope(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	workDir := t.TempDir()
 	t.Chdir(workDir)
 	home := t.TempDir()
@@ -843,7 +751,6 @@ func TestPluginsInstallPromptsForScope(t *testing.T) {
 	prompter := &fakePrompter{multiValues: []string{"codex"}, selectedValue: "project"}
 	deps.Prompter = prompter
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--server", srv.URL,
 		"plugins", "install",
 	)
 	if code != output.ExitOK {

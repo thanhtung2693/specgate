@@ -49,7 +49,7 @@ func runLocalDoctor(ctx context.Context, deps *Deps) error {
 		"store":     map[string]any{"path": filepath.Dir(statePath), "id": selection.StoreID, "status": "ok"},
 		"identity":  identity,
 		"workspace": workspace,
-		"network":   map[string]any{"status": "not_required", "message": "Local mode uses no server or TCP service"},
+		"network":   map[string]any{"status": "not_required", "message": "Local mode needs no external service; optional browser inspection starts with `specgate ui`"},
 	}
 	diagnostics := buildLocalDoctorDiagnostics(ctx, deps, cfg, selectionErr, selection.Workspace.Slug)
 	for key, value := range diagnostics {

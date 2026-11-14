@@ -1,5 +1,8 @@
 # ADR: Minimal team integration boundary
 
+> Historical record for the retired Full distribution. See the
+> [current architecture](../architecture.md) for Local behavior.
+
 ## Status
 
 Accepted 2026-07-20.

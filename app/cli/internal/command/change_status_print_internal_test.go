@@ -5,7 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
+	"github.com/specgate/specgate/app/cli/internal/workflow"
+
 	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/local"
 )
@@ -28,7 +29,7 @@ func TestLocalCriterionOutputKeepsProvenanceAndGapsVisible(t *testing.T) {
 			var out bytes.Buffer
 			status := changeStatusResult{
 				Mode: config.ModeLocal, Decision: "Accepted by human", Freshness: "unavailable", Stale: true,
-				Criteria:          []client.CriterionReview{{CriterionID: "local-1", Text: "Works", Verdict: "unclear", Why: "required testcase is missing"}},
+				Criteria:          []workflow.CriterionReview{{CriterionID: "local-1", Text: "Works", Verdict: "unclear", Why: "required testcase is missing"}},
 				CriterionEvidence: []local.AcceptanceCriterionEvidence{{ID: "local-1", Claim: "satisfied", CheckName: "unit", CheckStatus: test.status, CheckSource: "specgate_cli", CheckProvenance: test.provenance, GroundingStatus: test.grounding, Gaps: test.gaps}},
 				NextActor:         "human_reviewer", NextCommand: "specgate change accept LOCAL-1",
 			}
@@ -48,7 +49,7 @@ func TestLocalCriterionOutputKeepsProvenanceAndGapsVisible(t *testing.T) {
 func TestLocalCriterionDetailJoinsByIDWithoutDuplicateTable(t *testing.T) {
 	status := changeStatusResult{
 		Mode: config.ModeLocal,
-		Criteria: []client.CriterionReview{
+		Criteria: []workflow.CriterionReview{
 			{CriterionID: "local-1", Text: "First", Verdict: "met", Why: "first reason"},
 			{CriterionID: "local-2", Text: "Second", Verdict: "unmet", Why: "second reason"},
 			{CriterionID: "local-3", Text: "Missing", Verdict: "unclear", Why: "no evidence"},
@@ -74,18 +75,6 @@ func TestLocalCriterionDetailJoinsByIDWithoutDuplicateTable(t *testing.T) {
 				t.Fatalf("detail=%t, unexpected presence of %q:\n%s", detail, value, body)
 			}
 		}
-	}
-}
-
-func TestFullCriterionOutputRemainsVerdictAndWhy(t *testing.T) {
-	var out bytes.Buffer
-	printChangeStatus(&Deps{Stdout: &out}, changeStatusResult{
-		Mode:              config.ModeFull,
-		Criteria:          []client.CriterionReview{{CriterionID: "ac-1", Text: "Works", Verdict: "met", Why: "observed"}},
-		CriterionEvidence: []local.AcceptanceCriterionEvidence{{ID: "ac-1", CheckProvenance: "command_only"}},
-	}, true)
-	if !strings.Contains(out.String(), "  [met] Works — observed\nNext actor:") || strings.Contains(out.String(), "provenance:") {
-		t.Fatalf("Full output changed:\n%s", out.String())
 	}
 }
 

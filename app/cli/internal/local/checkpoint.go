@@ -28,14 +28,15 @@ type Checkpoint struct {
 }
 
 type CheckoutSnapshot struct {
-	Version     int               `json:"version"`
-	State       string            `json:"state"`
-	Reason      string            `json:"reason,omitempty"`
-	CheckoutID  string            `json:"checkout_id"`
-	Head        string            `json:"head"`
-	Tree        string            `json:"tree"`
-	Fingerprint string            `json:"fingerprint"`
-	Files       map[string]string `json:"dirty_manifest,omitempty"`
+	Version            int               `json:"version"`
+	State              string            `json:"state"`
+	Reason             string            `json:"reason,omitempty"`
+	CheckoutID         string            `json:"checkout_id"`
+	CheckoutGeneration string            `json:"checkout_generation,omitempty"`
+	Head               string            `json:"head"`
+	Tree               string            `json:"tree"`
+	Fingerprint        string            `json:"fingerprint"`
+	Files              map[string]string `json:"dirty_manifest,omitempty"`
 }
 
 // CreateCheckpointWithFiles records a caller-observed, bounded checkout path
@@ -117,6 +118,10 @@ func (s *Store) LatestCheckpointForCheckout(ctx context.Context, workspaceID, re
 	if strings.TrimSpace(checkoutID) == "" {
 		return Checkpoint{}, sql.ErrNoRows
 	}
+	generation, err := s.CheckoutGeneration(ctx)
+	if err != nil {
+		return Checkpoint{}, err
+	}
 	work, err := s.GetWork(ctx, workspaceID, ref)
 	if err != nil {
 		return Checkpoint{}, err
@@ -138,7 +143,7 @@ func (s *Store) LatestCheckpointForCheckout(ctx context.Context, workspaceID, re
 		if err := validateCheckpointVersion(checkpoint); err != nil {
 			return Checkpoint{}, err
 		}
-		if checkpoint.Snapshot != nil && checkpoint.Snapshot.State == "available" && checkpoint.Snapshot.CheckoutID == checkoutID {
+		if checkpoint.Snapshot != nil && checkpoint.Snapshot.State == "available" && checkpoint.Snapshot.CheckoutID == checkoutID && checkpoint.Snapshot.CheckoutGeneration == generation {
 			return checkpoint, nil
 		}
 	}

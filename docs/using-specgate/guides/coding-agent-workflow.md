@@ -71,8 +71,7 @@ mutable. It is not a test run, a passing result, or proof that a test covers
 the criterion; the shell commands
 are unsandboxed. A pinned completion scaffold already contains those commands,
 and a failing pinned command cannot be replaced with an easier one. Revising a
-pin requires replacement work. A pin also blocks portable/v1 export to Full
-mode; Local database backup remains available. If preview reports a conflict,
+pin requires replacement work.
 preserve history and resolve the reported error before requesting confirmation.
 See the [contract input and limitations](../reference/cli.md#local-resume-and-verification-contracts).
 
@@ -122,13 +121,7 @@ row exists, or several need a human priority choice, the agent stops and asks.
 ### 1. Read the approved contract
 
 In Local mode, use the resume packet and indexed document reads described
-above. It already contains the work description and current status. In Full
-mode, the agent reads:
-
-```bash
-specgate work context <work-ref> --json
-specgate change status <work-ref> --json
-```
+above. It contains the work description and current status.
 
 The Context Pack contains the approved scope, acceptance criteria, non-goals,
 risks, and artifact references. It outranks chat history and stale tracker or
@@ -232,7 +225,7 @@ Review the implementation and receipt, then run exactly one human decision:
 For Local mode, copy `review_id` from the status you reviewed (the handoff's
 `next_command` already includes it). If that status includes `basis_digest`,
 copy the complete returned command including its digest and any selected
-comparison flags. Full mode uses the same verbs without `--review-id`.
+comparison flags.
 
 ```bash
 # Add --basis-digest only when the reviewed status returned it.
@@ -240,10 +233,13 @@ specgate --yes change accept <work-ref> --review-id <review-id>
 specgate --yes change request-changes <work-ref> --review-id <review-id> --note "<focused feedback>"
 ```
 
-In Local mode, the handoff uses the work title, stable ID, and exact CLI
-command. There is no browser UI. In Full mode, the agent may also show the URL
-returned by `specgate open <work-ref> --print --json`; it never constructs a
-URL itself.
+The handoff includes the work title, stable ID and exact CLI command. In Local
+mode, the agent looks up a browser link only when you choose browser review.
+For a live Local review session, the agent uses the URL
+returned by `specgate open <work-ref> --print --json`. If you requested Local
+browser review and there is no running session, open it with
+`specgate ui <work-ref>` or continue in the CLI. The
+`specgate-human-handoff` skill presents the decision for you to make.
 
 If you request changes, give one focused reason. The agent fixes that gap,
 reruns the affected verification, submits a new completion, and starts a new
@@ -260,19 +256,6 @@ specgate artifact coverage <artifact-id>
 
 Artifact coverage is exact-version evidence. Do not infer coverage from a
 filename, feature name, latest version, or chat history.
-
-## Local and Full behavior
-
-| Concern | Local mode | Full mode |
-| --- | --- | --- |
-| Contract and delivery evidence | Local SpecGate store | Selected server workspace |
-| IDE semantic readiness | Frozen tasks completed by the IDE agent | Same task loop when dispatched to the IDE |
-| Final handoff | Stable ID and CLI command | Stable ID, CLI command, and returned UI URL when available |
-| Human authority | Explicit CLI decision | CLI or UI decision |
-| Server-only policy and model operations | Unavailable | Available when configured |
-
-The agent determines the mode from `specgate doctor --json`; it does not infer
-it from Docker, URLs, or browser availability.
 
 ## Related
 

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
+	"github.com/specgate/specgate/app/cli/internal/local"
 )
 
 func TestBuildArtifactComparisonClassifiesExplicitDocuments(t *testing.T) {
@@ -18,18 +18,19 @@ func TestBuildArtifactComparisonClassifiesExplicitDocuments(t *testing.T) {
 		map[string]any{"path": "docs/new.md", "role": "research", "content": "new"},
 		map[string]any{"path": "docs/legacy.md", "role": "reference", "content": "legacy"},
 	}}
-	base := &client.Artifact{ID: "art-base", Version: "v0.2", SnapshotDigest: "sha256:package"}
-	baseFiles := []client.ArtifactFile{
-		{Path: "docs/spec.md", Role: "design", ContentSHA256: digestArtifactContent("old spec")},
-		{Path: "docs/plan.md", Role: "plan", ContentSHA256: digestArtifactContent("same plan")},
-		{Path: "docs/removed.md", Role: "verification", ContentSHA256: digestArtifactContent("gone")},
+	base := local.Artifact{ID: "art-base", Version: 2, SnapshotDigest: "sha256:package"}
+	baseFiles := []local.ArtifactDocument{
+		{Path: "docs/spec.md", Role: "design", Digest: digestArtifactContent("old spec")},
+		{Path: "docs/plan.md", Role: "plan", Digest: digestArtifactContent("same plan")},
+		{Path: "docs/removed.md", Role: "verification", Digest: digestArtifactContent("gone")},
 	}
 
-	got, err := buildArtifactComparison(body, base, baseFiles)
+	base.Documents = baseFiles
+	got, err := buildArtifactComparison(body, base)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.BaseArtifactID != "art-base" || got.BaseVersion != "v0.2" || got.BaseSnapshotDigest != "sha256:package" {
+	if got.BaseArtifactID != "art-base" || got.BaseVersion != "v2" || got.BaseSnapshotDigest != "sha256:package" {
 		t.Fatalf("base identity = %#v", got)
 	}
 	wantCounts := artifactComparisonCounts{Added: 3, Removed: 2, Unchanged: 1}
@@ -112,9 +113,7 @@ func TestBuildArtifactComparisonRejectsMissingBaseHash(t *testing.T) {
 	body := map[string]any{"documents": []any{
 		map[string]any{"path": "docs/spec.md", "role": "spec", "content": "spec"},
 	}}
-	_, err := buildArtifactComparison(body, &client.Artifact{ID: "base"}, []client.ArtifactFile{
-		{Path: "docs/spec.md", Role: "spec"},
-	})
+	_, err := buildArtifactComparison(body, local.Artifact{ID: "base", Documents: []local.ArtifactDocument{{Path: "docs/spec.md", Role: "spec"}}})
 	if err == nil || !strings.Contains(err.Error(), "missing content_sha256") {
 		t.Fatalf("err = %v, want missing content_sha256", err)
 	}
@@ -127,7 +126,7 @@ func TestBuildArtifactComparisonRejectsDuplicateNormalizedPaths(t *testing.T) {
 		map[string]any{"path": "docs/./spec.md", "role": "spec", "content": "one"},
 		map[string]any{"path": "docs/spec.md", "role": "spec", "content": "two"},
 	}}
-	_, err := buildArtifactComparison(body, &client.Artifact{ID: "base"}, nil)
+	_, err := buildArtifactComparison(body, local.Artifact{ID: "base"})
 	if err == nil || !strings.Contains(err.Error(), "mapped twice") || !strings.Contains(err.Error(), "spec") {
 		t.Fatalf("err = %v, want duplicate path-role error", err)
 	}
@@ -140,12 +139,12 @@ func TestBuildArtifactComparisonAllowsOnePathUnderSeveralRoles(t *testing.T) {
 		map[string]any{"path": "docs/spec.md", "role": "spec", "content": "updated"},
 		map[string]any{"path": "docs/spec.md", "role": "plan", "content": "updated"},
 	}}
-	baseFiles := []client.ArtifactFile{
-		{Path: "docs/spec.md", Role: "spec", ContentSHA256: digestArtifactContent("original")},
-		{Path: "docs/spec.md", Role: "plan", ContentSHA256: digestArtifactContent("original")},
+	baseFiles := []local.ArtifactDocument{
+		{Path: "docs/spec.md", Role: "spec", Digest: digestArtifactContent("original")},
+		{Path: "docs/spec.md", Role: "plan", Digest: digestArtifactContent("original")},
 	}
 
-	got, err := buildArtifactComparison(body, &client.Artifact{ID: "base"}, baseFiles)
+	got, err := buildArtifactComparison(body, local.Artifact{ID: "base", Documents: baseFiles})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,12 +160,12 @@ func TestBuildArtifactComparisonNormalizesRolesLikeServer(t *testing.T) {
 		map[string]any{"path": "spec.md", "role": " Spec ", "content": "same"},
 		map[string]any{"path": "notes.md", "role": "invented", "content": "same"},
 	}}
-	baseFiles := []client.ArtifactFile{
-		{Path: "spec.md", Role: "spec", ContentSHA256: digestArtifactContent("same")},
-		{Path: "notes.md", Role: "unspecified", ContentSHA256: digestArtifactContent("same")},
+	baseFiles := []local.ArtifactDocument{
+		{Path: "spec.md", Role: "spec", Digest: digestArtifactContent("same")},
+		{Path: "notes.md", Role: "unspecified", Digest: digestArtifactContent("same")},
 	}
 
-	got, err := buildArtifactComparison(body, &client.Artifact{ID: "base"}, baseFiles)
+	got, err := buildArtifactComparison(body, local.Artifact{ID: "base", Documents: baseFiles})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +187,7 @@ func TestBuildArtifactComparisonRejectsUnsafePaths(t *testing.T) {
 			body := map[string]any{"documents": []any{
 				map[string]any{"path": unsafe, "role": "spec", "content": "x"},
 			}}
-			_, err := buildArtifactComparison(body, &client.Artifact{ID: "base"}, nil)
+			_, err := buildArtifactComparison(body, local.Artifact{ID: "base"})
 			if err == nil || !strings.Contains(err.Error(), "unsafe") {
 				t.Fatalf("path %q err = %v, want unsafe path error", unsafe, err)
 			}

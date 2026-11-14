@@ -1,5 +1,8 @@
 # ADR: Governance Knowledge RAG foundation
 
+> Historical record for the retired Full distribution. See the
+> [current architecture](../architecture.md) for Local behavior.
+
 ## Status
 
 Accepted on 2026-07-07.

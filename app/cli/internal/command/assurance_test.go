@@ -7,7 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
+	"github.com/specgate/specgate/app/cli/internal/workflow"
+
 	"github.com/specgate/specgate/app/cli/internal/command"
 	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/local"
@@ -16,7 +17,7 @@ import (
 
 func TestCapabilitiesLocalJSONUsesStableManifest(t *testing.T) {
 	t.Parallel()
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir := t.TempDir()
 	store, err := local.Open(filepath.Join(stateDir, "state.db"))
 	if err != nil {
@@ -64,170 +65,14 @@ func TestCapabilitiesLocalJSONUsesStableManifest(t *testing.T) {
 	if states["governed_delivery"] != "available" {
 		t.Fatalf("governed_delivery = %q, want available; output = %s", states["governed_delivery"], out.String())
 	}
-	if states["web_ui"] != "unavailable" || states["platform_model"] != "unavailable" {
+	if states["web_ui"] != "available" || states["platform_model"] != "" || states["portable_transfer"] != "" {
 		t.Fatalf("optional capability states = %#v, output = %s", states, out.String())
-	}
-}
-
-func TestCapabilitiesFullJSONPreservesConfigurationRequired(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.metaResult = &client.Meta{
-		APIVersion: "specgate.api/v1",
-		WebURL:     "https://specgate.test",
-		CapabilityDetails: map[string]client.CapabilityDetail{
-			"agents": {State: "available"},
-			"governance_chat": {
-				State:  "configuration_required",
-				Reason: "configure the governance chat support model",
-			},
-			"platform_model": {
-				State:       "configuration_required",
-				Reason:      "choose a model provider and API key",
-				NextCommand: "specgate model set",
-			},
-			"web_ui": {State: "available"},
-		},
-	}
-
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "capabilities")
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
-	}
-
-	var env struct {
-		Data struct {
-			Mode         string `json:"mode"`
-			Capabilities []struct {
-				ID    string `json:"id"`
-				State string `json:"state"`
-			} `json:"capabilities"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
-		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
-	}
-	states := capabilityStates(env.Data.Capabilities)
-	if env.Data.Mode != "full" ||
-		states["governance_chat"] != "configuration_required" ||
-		states["platform_model"] != "configuration_required" {
-		t.Fatalf("unexpected manifest: mode=%q states=%#v", env.Data.Mode, states)
-	}
-}
-
-func TestVerifyFullJSONReportsArtifactCriteriaChecksAndCloseout(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.resolvedWork = &client.ResolvedWork{
-		ChangeRequestID:  "cr-1",
-		ChangeRequestKey: "CR-101",
-		Title:            "Close the loop",
-		Phase:            "Delivered",
-	}
-	fc.contextPack = &client.ContextPackResult{
-		State:      "assembled",
-		ArtifactID: "artifact-1",
-	}
-	fc.artifactResult = &client.Artifact{
-		ID:             "artifact-1",
-		Version:        "v3",
-		Status:         "approved",
-		SnapshotDigest: "sha256:abc",
-	}
-	fc.acceptanceCriteria = []client.AcceptanceCriterion{
-		{ID: "ac-1", Text: "Every criterion has evidence", Done: true},
-	}
-	fc.deliveryStatusResult = &client.DeliveryStatusResult{
-		ChangeRequestID: "cr-1",
-		Found:           true,
-		Verdict:         "pass",
-		Summary:         "All evidence is present.",
-		PerCriterion: []client.CriterionReview{
-			{CriterionID: "ac-1", Text: "Every criterion has evidence", Verdict: "pass", Why: "targeted test passed"},
-		},
-		Checks: []client.CheckResult{
-			{Name: "go test ./...", Status: "pass", Detail: "ok"},
-		},
-	}
-
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "verify", "CR-101")
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
-	}
-
-	var env struct {
-		Data struct {
-			Work struct {
-				Key   string `json:"key"`
-				Phase string `json:"phase"`
-			} `json:"work"`
-			Artifact struct {
-				ID             string `json:"id"`
-				Version        string `json:"version"`
-				SnapshotDigest string `json:"snapshot_digest"`
-			} `json:"artifact"`
-			Criteria        []client.CriterionReview `json:"criteria"`
-			Checks          []client.CheckResult     `json:"checks"`
-			DeliveryVerdict string                   `json:"delivery_verdict"`
-			CleanupEligible bool                     `json:"cleanup_eligible"`
-			NextCommand     string                   `json:"next_command"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
-		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
-	}
-	if env.Data.Work.Key != "CR-101" || env.Data.Artifact.ID != "artifact-1" || env.Data.Artifact.Version != "v3" {
-		t.Fatalf("wrong work/artifact identity: %+v", env.Data)
-	}
-	if len(env.Data.Criteria) != 1 || env.Data.Criteria[0].Verdict != "pass" {
-		t.Fatalf("criteria = %#v", env.Data.Criteria)
-	}
-	if len(env.Data.Checks) != 1 || env.Data.Checks[0].Status != "pass" {
-		t.Fatalf("checks = %#v", env.Data.Checks)
-	}
-	if env.Data.DeliveryVerdict != "pass" || !env.Data.CleanupEligible || env.Data.NextCommand == "" {
-		t.Fatalf("closeout = %+v", env.Data)
-	}
-}
-
-func TestVerifyFullAcceptedQuickWorkIsCleanupEligibleWithoutArtifact(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.resolvedWork = &client.ResolvedWork{
-		ChangeRequestID: "cr-quick", ChangeRequestKey: "CR-QUICK",
-		Title: "Quick fix", Phase: "Delivered",
-	}
-	fc.contextPack = &client.ContextPackResult{State: "assembled"}
-	fc.acceptanceCriteria = []client.AcceptanceCriterion{{ID: "ac-1", Text: "Fixed", Done: true}}
-	fc.deliveryStatusResult = &client.DeliveryStatusResult{
-		ChangeRequestID: "cr-quick", Found: true, Verdict: "pass",
-		PerCriterion: []client.CriterionReview{{CriterionID: "ac-1", Text: "Fixed", Verdict: "pass"}},
-	}
-
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "verify", "CR-QUICK")
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
-	}
-	var envelope struct {
-		Data struct {
-			Artifact        *struct{} `json:"artifact"`
-			QuickRoute      bool      `json:"quick_route"`
-			CleanupEligible bool      `json:"cleanup_eligible"`
-			NextCommand     string    `json:"next_command"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
-		t.Fatal(err)
-	}
-	if envelope.Data.Artifact != nil || !envelope.Data.QuickRoute ||
-		!envelope.Data.CleanupEligible || envelope.Data.NextCommand != "specgate cleanup --work --dry-run" {
-		t.Fatalf("accepted Full quick closeout is not actionable: %s", out.String())
 	}
 }
 
 func TestVerifyLocalRequiresAndReportsHumanApprovedDelivery(t *testing.T) {
 	t.Parallel()
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir := t.TempDir()
 	store, err := local.Open(filepath.Join(stateDir, "state.db"))
 	if err != nil {
@@ -323,12 +168,12 @@ func TestVerifyLocalRequiresAndReportsHumanApprovedDelivery(t *testing.T) {
 	}
 	var env struct {
 		Data struct {
-			Mode            string                   `json:"mode"`
-			Criteria        []client.CriterionReview `json:"criteria"`
-			Checks          []client.CheckResult     `json:"checks"`
-			DeliveryVerdict string                   `json:"delivery_verdict"`
-			CleanupEligible bool                     `json:"cleanup_eligible"`
-			NextCommand     string                   `json:"next_command"`
+			Mode            string                     `json:"mode"`
+			Criteria        []workflow.CriterionReview `json:"criteria"`
+			Checks          []workflow.CheckResult     `json:"checks"`
+			DeliveryVerdict string                     `json:"delivery_verdict"`
+			CleanupEligible bool                       `json:"cleanup_eligible"`
+			NextCommand     string                     `json:"next_command"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
@@ -346,7 +191,7 @@ func TestVerifyLocalRequiresAndReportsHumanApprovedDelivery(t *testing.T) {
 }
 
 func TestVerifyLocalSupportsAcceptedQuickWorkWithoutArtifact(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir := t.TempDir()
 	store, err := local.Open(filepath.Join(stateDir, "state.db"))
 	if err != nil {
@@ -391,11 +236,11 @@ func TestVerifyLocalSupportsAcceptedQuickWorkWithoutArtifact(t *testing.T) {
 	}
 	var envelope struct {
 		Data struct {
-			Artifact        *struct{}                `json:"artifact"`
-			QuickRoute      bool                     `json:"quick_route"`
-			Criteria        []client.CriterionReview `json:"criteria"`
-			CleanupEligible bool                     `json:"cleanup_eligible"`
-			NextCommand     string                   `json:"next_command"`
+			Artifact        *struct{}                  `json:"artifact"`
+			QuickRoute      bool                       `json:"quick_route"`
+			Criteria        []workflow.CriterionReview `json:"criteria"`
+			CleanupEligible bool                       `json:"cleanup_eligible"`
+			NextCommand     string                     `json:"next_command"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
@@ -412,10 +257,71 @@ func TestVerifyLocalSupportsAcceptedQuickWorkWithoutArtifact(t *testing.T) {
 	}
 }
 
+func TestVerifyLocalDirectsOpenWorkToReadOnlyChangeStatus(t *testing.T) {
+	for _, rejected := range []bool{false, true} {
+		name := "awaiting acceptance"
+		if rejected {
+			name = "changes requested"
+		}
+		t.Run(name, func(t *testing.T) {
+			deps, out := newTestDeps(t)
+			stateDir, store, selection, work := newLocalChangeWork(t, deps)
+			submitLocalChangeDelivery(t, store, selection.Workspace.ID, work, "builder", "receipt-1")
+			if rejected {
+				reviewID := localReviewID(t, store, selection.Workspace.ID, work.Key)
+				if err := store.DecideDeliveryWithBasis(t.Context(), selection.Workspace.ID, work.Key, "reject", "human", "rework", reviewID, ""); err != nil {
+					t.Fatal(err)
+				}
+			}
+			closeLocalChangeStore(t, deps, stateDir, store)
+
+			code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "verify", work.Key)
+			if code != output.ExitGovernanceFailed {
+				t.Fatalf("exit = %d, output = %s", code, out.String())
+			}
+			var envelope struct {
+				Data struct {
+					NextCommand string `json:"next_command"`
+				} `json:"data"`
+			}
+			if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
+				t.Fatal(err)
+			}
+			if want := "specgate change status " + work.Key + " --json"; envelope.Data.NextCommand != want {
+				t.Fatalf("next command = %q, want %q", envelope.Data.NextCommand, want)
+			}
+		})
+	}
+}
+
+func TestVerifyLocalKeepsExplicitWorkspaceInNextStatusCommand(t *testing.T) {
+	deps, out := newTestDeps(t)
+	stateDir, store, _, _ := newLocalChangeWork(t, deps)
+	other, err := store.CreateWorkspace(t.Context(), "Another workspace")
+	if err != nil {
+		t.Fatal(err)
+	}
+	work, err := store.CreateQuickWork(t.Context(), other.ID, local.QuickWorkInput{
+		Title: "Fix timeout", AcceptanceCriteria: []string{"Retries stop."},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	closeLocalChangeStore(t, deps, stateDir, store)
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--workspace", other.Slug, "verify", work.Key)
+	if code != output.ExitGovernanceFailed {
+		t.Fatalf("exit = %d, output = %s", code, out.String())
+	}
+	if want := "specgate --workspace '" + other.Slug + "' change status " + work.Key + " --json"; !strings.Contains(out.String(), want) {
+		t.Fatalf("next command loses workspace: %s", out.String())
+	}
+}
+
 // verify must not report a bound criterion as met while the stored delivery
 // verdict failed on that same binding.
 func TestVerifyLocalReportsBoundCriterionFromItsCheckNotItsClaim(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir := t.TempDir()
 	store, err := local.Open(filepath.Join(stateDir, "state.db"))
 	if err != nil {
@@ -461,7 +367,7 @@ func TestVerifyLocalReportsBoundCriterionFromItsCheckNotItsClaim(t *testing.T) {
 	}
 	var envelope struct {
 		Data struct {
-			Criteria []client.CriterionReview `json:"criteria"`
+			Criteria []workflow.CriterionReview `json:"criteria"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
@@ -481,7 +387,7 @@ func TestVerifyLocalReportsBoundCriterionFromItsCheckNotItsClaim(t *testing.T) {
 
 func TestVerifyLocalHumanOverrideIsCleanupEligibleWithoutHidingEvidenceGap(t *testing.T) {
 	t.Parallel()
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir, store, selection, work := newLocalChangeWork(t, deps)
 	review, err := store.SubmitDelivery(t.Context(), selection.Workspace.ID, work.Key, map[string]any{
 		"context_digest": work.ContextDigest,
@@ -548,7 +454,7 @@ func capabilityStates[T interface {
 // the reporter eligible to approve its own delivery.
 func TestSelfApprovalRefusalExitsGovernanceFailedNotUnavailable(t *testing.T) {
 	t.Parallel()
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir := t.TempDir()
 	store, err := local.Open(filepath.Join(stateDir, "state.db"))
 	if err != nil {
@@ -602,7 +508,7 @@ func TestSelfApprovalRefusalExitsGovernanceFailedNotUnavailable(t *testing.T) {
 // them. Local mapped several to it by default.
 func TestLocalGovernanceRefusalsUseGovernanceExitCodes(t *testing.T) {
 	t.Parallel()
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir := t.TempDir()
 	store, err := local.Open(filepath.Join(stateDir, "state.db"))
 	if err != nil {

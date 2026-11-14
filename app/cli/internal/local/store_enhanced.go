@@ -21,15 +21,17 @@ var (
 func registerEnhancedSQLiteDriver() error {
 	enhancedSQLiteDriverOnce.Do(func() {
 		driverInstance := &sqlite.Driver{}
-		enhancedSQLiteDriverErr = driverInstance.RegisterDeterministicScalarFunction(
-			"specgate_enhanced_writer",
-			0,
-			func(*sqlite.FunctionContext, []driver.Value) (driver.Value, error) {
-				return int64(1), nil
-			},
-		)
-		if enhancedSQLiteDriverErr != nil {
-			return
+		for _, function := range []string{enhancedWriterFunction, transferWriterFunction} {
+			enhancedSQLiteDriverErr = driverInstance.RegisterDeterministicScalarFunction(
+				function,
+				0,
+				func(*sqlite.FunctionContext, []driver.Value) (driver.Value, error) {
+					return int64(1), nil
+				},
+			)
+			if enhancedSQLiteDriverErr != nil {
+				return
+			}
 		}
 		sql.Register(enhancedSQLiteDriverName, driverInstance)
 	})
@@ -83,18 +85,8 @@ func (s *Store) WithEnhancedWrite(ctx context.Context, write func(*sql.Tx) error
 }
 
 func (s *Store) enhancedStoreEnabled(ctx context.Context) (bool, error) {
-	var version string
-	err := s.db.QueryRowContext(ctx, `SELECT value FROM metadata WHERE key = ?`, enhancedStoreMetadataKey).Scan(&version)
-	if err == sql.ErrNoRows {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if version != enhancedStoreVersion {
-		return false, fmt.Errorf("%w: enhanced Local store version %q", ErrStoreIncompatible, version)
-	}
-	return true, nil
+	version, _, err := enhancedStoreFormat(ctx, s.db)
+	return version != "", err
 }
 
 func (s *Store) enhancedStoreBackupPath() string { return s.path + ".pre-enhanced.bak" }
@@ -115,11 +107,8 @@ func (s *Store) createEnhancedStoreBackup(ctx context.Context) error {
 	}
 	defer os.RemoveAll(privateDir)
 	privateBackup := filepath.Join(privateDir, "state.db")
-	if _, err := s.db.ExecContext(ctx, `VACUUM INTO ?`, privateBackup); err != nil {
+	if err := s.vacuumSnapshot(ctx, privateBackup); err != nil {
 		return fmt.Errorf("create enhanced Local store backup: %w", err)
-	}
-	if err := os.Chmod(privateBackup, 0o600); err != nil {
-		return err
 	}
 	if err := os.Link(privateBackup, backup); err != nil {
 		return fmt.Errorf("publish enhanced Local store backup: %w", err)
@@ -131,18 +120,32 @@ func installEnhancedStoreBarrier(ctx context.Context, tx *sql.Tx) error {
 	if _, err := tx.ExecContext(ctx, `INSERT INTO metadata(key, value) VALUES (?, ?)`, enhancedStoreMetadataKey, enhancedStoreVersion); err != nil {
 		return err
 	}
+	return installStoreWriterGuard(ctx, tx, enhancedWriterFunction, false)
+}
+
+func installStoreWriterGuard(ctx context.Context, tx *sql.Tx, function string, replace bool) error {
 	for _, table := range enhancedStoreGuardedTables {
 		for _, operation := range []string{"INSERT", "UPDATE", "DELETE"} {
-			name := "specgate_enhanced_" + table + "_" + strings.ToLower(operation)
-			statement := fmt.Sprintf(`CREATE TRIGGER %s BEFORE %s ON %s BEGIN
-				SELECT CASE WHEN specgate_enhanced_writer() <> 1 THEN RAISE(ABORT, 'enhanced Local store requires a supporting SpecGate CLI') END;
-			END`, name, operation, table)
+			name, statement := storeWriterGuard(table, operation, function)
+			if replace {
+				if _, err := tx.ExecContext(ctx, "DROP TRIGGER IF EXISTS "+name); err != nil {
+					return err
+				}
+			}
 			if _, err := tx.ExecContext(ctx, statement); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+func storeWriterGuard(table, operation, function string) (name, statement string) {
+	name = "specgate_enhanced_" + table + "_" + strings.ToLower(operation)
+	statement = fmt.Sprintf(`CREATE TRIGGER %s BEFORE %s ON %s BEGIN
+				SELECT CASE WHEN %s() <> 1 THEN RAISE(ABORT, 'enhanced Local store requires a supporting SpecGate CLI') END;
+			END`, name, operation, table, function)
+	return name, statement
 }
 
 var enhancedStoreGuardedTables = []string{

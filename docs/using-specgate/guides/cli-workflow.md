@@ -31,8 +31,7 @@ from stdout; progress and warnings use stderr.
 
 ## Confirm your workspace
 
-Local mode creates a user and workspace during `specgate init`. Full mode can
-also connect to an existing SpecGate server.
+`specgate init` creates a Local user and workspace.
 
 Check the current identity and workspace:
 
@@ -59,15 +58,6 @@ one-command override to inspect another workspace:
 specgate --workspace platform status
 ```
 
-Use `--all-workspaces` only when you intentionally want a global view.
-
-For Full mode, save and verify the server:
-
-```bash
-specgate config server http://localhost:3000/api/doc-registry
-specgate doctor
-```
-
 ## Complete an existing change
 
 ### 1. Find work
@@ -78,8 +68,7 @@ specgate work list
 specgate work show <work-ref>
 ```
 
-`<work-ref>` can be a SpecGate key, change-request ID, supported tracker key,
-or supported issue URL.
+`<work-ref>` can be a stable SpecGate work key or ID.
 
 ### 2. Read the governing context
 
@@ -87,14 +76,6 @@ In Local mode, start with `specgate work resume <work-ref> --json`, then read
 the required pinned documents using the path and role from its index. The
 packet includes current status and the next action. See
 [Local resume](coding-agent-workflow.md#resume-local-work-without-losing-scope).
-
-In Full mode, read the policy, gate state, and Context Pack:
-
-```bash
-specgate work policy <work-ref>
-specgate gates status <work-ref>
-specgate work context <work-ref>
-```
 
 The Context Pack is the implementation contract for the selected work. It
 keeps the approved artifact version, acceptance criteria, applicable skills,
@@ -212,9 +193,6 @@ implementation:
 # Local
 # Add --basis-digest only when the reviewed status returned it.
 specgate --yes change accept <work-ref> --review-id <review-id> --note "Approved after review"
-
-# Full
-specgate change accept <work-ref> --note "Approved after review"
 ```
 
 If status is not ready for acceptance, request another implementation cycle:
@@ -223,17 +201,12 @@ If status is not ready for acceptance, request another implementation cycle:
 # Local
 specgate --yes change request-changes <work-ref> --review-id <review-id> \
   --note "Please address the failing check"
-
-# Full
-specgate change request-changes <work-ref> \
-  --note "Please address the failing check"
 ```
 
 Local mode requires `--yes` and the reviewed status's `review_id` for either
 decision. When status returns `basis_digest`, repeat it—and any checkpoint or
 impact-selection flags in its exact `next_command`; legacy work without an
-enhanced basis retains review-ID-only compatibility. Full mode confirms
-interactively when possible. Do not issue both decisions for the same
+enhanced basis retains review-ID-only compatibility. Issue one decision per
 completion.
 
 ### 7. Verify closeout
@@ -245,6 +218,10 @@ specgate verify <work-ref> --json
 This read-only command reports the governing artifact version, every acceptance
 criterion, checks, delivery verdict, cleanup eligibility, and next command. It
 exits with a nonzero status while the work is not closeable.
+When a review exists but closeout is unresolved, follow its read-only
+`specgate change status <work-ref> --json` command to obtain the current actor
+and exact next action. Cleanup eligibility requires explicit human approval;
+preview cleanup before removing any transient files.
 
 ## Create small, understood work
 
@@ -258,7 +235,7 @@ specgate work create-quick "Correct quickstart wording" \
 
 Local mode requires explicit acceptance criteria. An IDE agent using the
 SpecGate preparation skill can draft criteria, show them for confirmation, and
-then create the work item in either mode.
+then create the work item.
 
 Quick work still gets a Context Pack and the complete delivery-review loop.
 
@@ -291,9 +268,8 @@ criterion:
 ```
 
 Use this only when you want to review the inventory and its slice mappings. It
-does not prove the list contains every requirement in the source. Source
-inventory is Local-only, and any stored inventory in the workspace currently
-prevents portable/v1 export to Full mode; use a Local database backup instead.
+does not prove the list contains every requirement in the source. Use a Local database backup
+to preserve the inventory.
 
 ```bash
 specgate artifact publish --file artifact.json --preview --json
@@ -348,32 +324,6 @@ item. It says an entry in the reviewed inventory has no current work mapping.
 Do not create new work automatically; agree the next slice, then prepare and
 approve it through the normal workflow.
 
-Review governance signals after several work items:
-
-```bash
-specgate stats
-```
-
-These are workflow signals for human interpretation, not proof that SpecGate
-prevented a defect.
-
-## Move Local history into Full mode
-
-Export a Local workspace, initialize Full mode, select the destination
-workspace, and inspect the dry run before importing. Initializing Full mode
-changes the active CLI topology; it does not delete the Local SQLite state.
-
-```bash
-specgate portable export --file ~/specgate-local.json
-specgate init --mode full
-specgate workspace select <destination-workspace-slug>
-specgate portable import --file ~/specgate-local.json --dry-run
-specgate portable import --file ~/specgate-local.json --yes
-```
-
-Portable import is a one-way move, not synchronization. It does not transfer
-credentials or merge conflicting records.
-
 ## Diagnose and update
 
 ```bash
@@ -382,15 +332,13 @@ specgate doctor
 specgate update
 ```
 
-In Local mode, `doctor` checks the local store, identity, workspace, and IDE
-setup. In Full mode, it also checks server and appliance health.
+`doctor` checks the Local store, identity, workspace, and IDE setup.
 
 After Local `user logout`, `doctor` still inspects the initialized store and
 reports the missing user/workspace. Run `specgate user login` to select them
 again; diagnosis does not log you in or remove stored work.
 
-`update` refreshes the CLI, already-installed global IDE plugin files, and a
-CLI-managed Full appliance when present. Project-local plugin files are scoped
+`update` refreshes the CLI and its already-installed global IDE plugin files. Project-local files are scoped
 to each repository; refresh them there:
 
 ```bash

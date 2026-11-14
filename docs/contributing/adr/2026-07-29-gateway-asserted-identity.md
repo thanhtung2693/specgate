@@ -1,9 +1,12 @@
 # ADR: Gateway-asserted identity for the shared appliance
 
+> Historical record for the retired Full distribution. See the
+> [current architecture](../architecture.md) for Local behavior.
+
 ## Status
 
 Accepted and implemented — 2026-07-29. Supersedes nothing. Constrains
-[`app/doc-registry/AGENTS.md`](../../../app/doc-registry/AGENTS.md) §7 and
+[Registry contributor rules in a pre-retirement revision](https://github.com/thanhtung2693/specgate/blob/2aa5c463ef61c58edb3b741e5ea8a1b2aa53c102/app/doc-registry/AGENTS.md) §7 and
 [Trust and security](../../using-specgate/concepts/trust-and-security.md).
 
 ## Context
@@ -186,7 +189,7 @@ knowing it. The documentation keeps saying this plainly.
 - Docs to update on implementation: `trust-and-security.md` (recipe, transport,
   and the delegation limit), `operate-specgate.md` (sharing an appliance, adding
   and removing developers), the configuration reference, `docs/contributing/architecture.md`
-  and `app/doc-registry/AGENTS.md` §7 (the gateway is an enforcement point, the
+  and the historical Registry contributor rules linked above, §7 (the gateway is an enforcement point, the
   verifier endpoint is the permitted exception, and why there is still no
   middleware), and `docs/contributing/contracts.md` for the actor precedence.
 - Tests: gateway configuration assertions (identity header set from the verifier

@@ -9,23 +9,24 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/specgate/specgate/app/cli/internal/command"
 	"github.com/specgate/specgate/app/cli/internal/output"
+	"github.com/specgate/specgate/app/cli/internal/workflow"
 )
 
 func TestPluginsInstallDryRunSaysNoFilesWereWritten(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	workDir := t.TempDir()
 	t.Chdir(workDir)
 	home := t.TempDir()
 
 	deps, out := newPluginDeps(home)
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--plain", "--server", srv.URL,
-		"plugins", "install",
+		"--plain", "plugins", "install",
 		"--agent", "codex",
 		"--project-local",
 		"--dry-run",
@@ -50,14 +51,13 @@ func TestPluginsInstallDryRunSaysNoFilesWereWritten(t *testing.T) {
 }
 
 func TestPluginsInstallJSONDryRunReportsPlannedOperations(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	workDir := t.TempDir()
 	t.Chdir(workDir)
 
 	deps, out := newPluginDeps(t.TempDir())
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--json", "--server", srv.URL,
-		"plugins", "install",
+		"--json", "plugins", "install",
 		"--agent", "codex",
 		"--project-local",
 		"--dry-run",
@@ -93,7 +93,7 @@ func TestPluginsInstallJSONDryRunReportsPlannedOperations(t *testing.T) {
 func TestPluginsInstallProjectLocalLeavesUnrelatedMalformedCodexConfigUntouched(t *testing.T) {
 	for _, dryRun := range []bool{false, true} {
 		t.Run(fmt.Sprintf("dry_run_%t", dryRun), func(t *testing.T) {
-			srv := newPluginRegistry(t)
+
 			workDir := t.TempDir()
 			t.Chdir(workDir)
 			configPath := filepath.Join(workDir, ".codex", "config.toml")
@@ -101,8 +101,7 @@ func TestPluginsInstallProjectLocalLeavesUnrelatedMalformedCodexConfigUntouched(
 
 			deps, out := newPluginDeps(t.TempDir())
 			args := []string{
-				"--json", "--server", srv.URL,
-				"plugins", "install",
+				"--json", "plugins", "install",
 				"--agent", "codex",
 				"--project-local",
 			}
@@ -161,6 +160,20 @@ func writeSkillsSHBootstrap(t *testing.T, root, skillPath string, global bool, s
   }
 }`, source)
 	writeTestFile(t, lockPath, body)
+}
+
+func embeddedTestPluginPackage(t *testing.T) workflow.PluginPackage {
+	t.Helper()
+	_, source, _, _ := runtime.Caller(0)
+	body, err := os.ReadFile(filepath.Join(filepath.Dir(source), "local_plugin_assets", "package.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pkg workflow.PluginPackage
+	if err := json.Unmarshal(body, &pkg); err != nil {
+		t.Fatal(err)
+	}
+	return pkg
 }
 
 func newPluginRegistry(t *testing.T) *httptest.Server {

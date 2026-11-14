@@ -10,7 +10,7 @@ import (
 
 func TestDeliverySubmitRejectsUntouchedPendingCheckBeforeNetwork(t *testing.T) {
 	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	f := writeDeliveryJSON(t, map[string]any{
 		"event_type": "coding_agent.completed",
 		"summary":    "implemented",
@@ -28,9 +28,6 @@ func TestDeliverySubmitRejectsUntouchedPendingCheckBeforeNetwork(t *testing.T) {
 	)
 	if code != output.ExitUsage {
 		t.Fatalf("exit = %d, want usage; output = %s", code, out.String())
-	}
-	if fc.calls != 0 {
-		t.Fatalf("network calls = %d, want 0", fc.calls)
 	}
 	for _, want := range []string{"tests", "still pending", "pass, fail, or skipped"} {
 		if !strings.Contains(out.String(), want) {

@@ -3,77 +3,17 @@ package command_test
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/command"
 	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/output"
+	"github.com/specgate/specgate/app/cli/internal/workflow"
 )
-
-func TestModelSetIgnoresRepositoryServerForEnvironmentSecrets(t *testing.T) {
-	t.Setenv("SPECGATE_NO_UPDATE_CHECK", "1")
-	t.Setenv("SPECGATE_SERVER", "")
-	t.Setenv("GOOGLE_API_KEY", "environment-secret")
-
-	attackerCalled := false
-	attacker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		attackerCalled = true
-		http.Error(w, "unexpected request", http.StatusInternalServerError)
-	}))
-	defer attacker.Close()
-
-	var trustedSettings map[string]string
-	trusted := (&fakeServer{settingsHandler: func(w http.ResponseWriter, r *http.Request) {
-		var body struct {
-			Settings map[string]string `json:"settings"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Fatal(err)
-		}
-		trustedSettings = body.Settings
-		_ = json.NewEncoder(w).Encode(map[string]any{"settings": body.Settings})
-	}}).build(t)
-
-	repo := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(repo, ".specgate"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	repoConfig, err := json.Marshal(config.RepoConfig{Server: attacker.URL})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(repo, ".specgate", "config"), repoConfig, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	deps, out := newTestDeps(t)
-	deps.WorkingDir = repo
-	if err := (config.Config{Mode: config.ModeFull, Server: trusted.URL}).SaveTo(deps.ConfigPath); err != nil {
-		t.Fatal(err)
-	}
-
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--no-input",
-		"model", "set", "--provider", "google", "--model", "gemini-3.1-flash-lite")
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
-	}
-	if attackerCalled {
-		t.Fatal("model setup sent a request to the repository-configured server")
-	}
-	if trustedSettings["google.api_key"] != "environment-secret" {
-		t.Fatalf("trusted server settings = %#v", trustedSettings)
-	}
-}
 
 func TestLocalWorkspaceCreateSelectAndCurrentNeedNoHTTP(t *testing.T) {
 	deps, out := newTestDeps(t)
@@ -90,9 +30,7 @@ func TestLocalWorkspaceCreateSelectAndCurrentNeedNoHTTP(t *testing.T) {
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "workspace", "current"); code != output.ExitOK {
 		t.Fatalf("current exit = %d; output=%s", code, out.String())
 	}
-	if deps.Client != nil {
-		t.Fatal("Local workspace commands created an HTTP client")
-	}
+
 	if !strings.Contains(out.String(), "workspace: beta-workspace (Beta workspace)") {
 		t.Fatalf("output = %s", out.String())
 	}
@@ -110,9 +48,7 @@ func TestLocalUserLoginCreatesWorkspaceAndPersistsSelection(t *testing.T) {
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "user", "current"); code != output.ExitOK {
 		t.Fatalf("current exit = %d; output=%s", code, out.String())
 	}
-	if deps.Client != nil {
-		t.Fatal("Local user commands created an HTTP client")
-	}
+
 	if !strings.Contains(out.String(), "user: second-human (Second Human)") {
 		t.Fatalf("output = %s", out.String())
 	}
@@ -289,9 +225,7 @@ func TestLocalArtifactPublishListShowAndCoverageNeedNoHTTP(t *testing.T) {
 	if body, _ := os.ReadFile(specPath); string(body) != "immutable spec" {
 		t.Fatalf("framework source changed: %q", body)
 	}
-	if deps.Client != nil {
-		t.Fatal("Local artifact commands created an HTTP client")
-	}
+
 }
 
 func TestLocalArtifactPublishPreviewCompareNeedNoHTTP(t *testing.T) {
@@ -342,9 +276,7 @@ func TestLocalArtifactPublishPreviewCompareNeedNoHTTP(t *testing.T) {
 	if !strings.Contains(out.String(), "base_version") || !strings.Contains(out.String(), "latest version") {
 		t.Fatalf("stale direct publication error = %s", out.String())
 	}
-	if deps.Client != nil {
-		t.Fatal("Local compare preview created an HTTP client")
-	}
+
 }
 
 func TestLocalWorkspaceOverrideScopesArtifactWithoutChangingSelection(t *testing.T) {
@@ -382,9 +314,7 @@ func TestLocalWorkspaceOverrideScopesArtifactWithoutChangingSelection(t *testing
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "workspace", "current"); code != output.ExitOK || !strings.Contains(out.String(), `"slug":"alpha"`) {
 		t.Fatalf("override changed selection: exit=%d output=%s", code, out.String())
 	}
-	if deps.Client != nil {
-		t.Fatal("Local workspace override created an HTTP client")
-	}
+
 }
 
 func TestLocalArtifactPackageWorkspaceScopesPublishWithoutChangingSelection(t *testing.T) {
@@ -427,7 +357,7 @@ func TestLocalReadinessThenHumanApprovalNeedNoHTTP(t *testing.T) {
 	deps, out := newTestDeps(t)
 	repoDir := t.TempDir()
 	deps.WorkingDir = repoDir
-	deps.DeployRunner = deliveryGitRunner(repoDir, nil)
+	deps.CommandRunner = deliveryGitRunner(repoDir, nil)
 	stateDir := filepath.Join(t.TempDir(), "local")
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--no-input", "init", "--mode", "local", "--local-dir", stateDir, "--workspace-name", "Alpha", "--display-name", "Human", "--username", "human"); code != output.ExitOK {
 		t.Fatalf("init exit = %d; output=%s", code, out.String())
@@ -473,8 +403,8 @@ func TestLocalReadinessThenHumanApprovalNeedNoHTTP(t *testing.T) {
 	); code != output.ExitOK {
 		t.Fatalf("change approve exit = %d; output=%s", code, out.String())
 	}
-	if !strings.Contains(out.String(), `"state":"ready_for_implementation"`) || deps.Client != nil {
-		t.Fatalf("change approval output = %s client=%#v", out.String(), deps.Client)
+	if !strings.Contains(out.String(), `"state":"ready_for_implementation"`) {
+		t.Fatalf("change approval output = %s", out.String())
 	}
 	var work struct {
 		Data struct {
@@ -568,8 +498,8 @@ func TestLocalReadinessThenHumanApprovalNeedNoHTTP(t *testing.T) {
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "delivery", "peer-review", work.Data.Key, "--file", peerPath); code != output.ExitOK {
 		t.Fatalf("peer review exit = %d; output=%s", code, out.String())
 	}
-	if !strings.Contains(out.String(), `"agent_name":"reviewer"`) || deps.Client != nil {
-		t.Fatalf("peer review output = %s client=%#v", out.String(), deps.Client)
+	if !strings.Contains(out.String(), `"agent_name":"reviewer"`) {
+		t.Fatalf("peer review output = %s", out.String())
 	}
 	out.Reset()
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "delivery", "status", work.Data.Key, "--detail"); code != output.ExitOK {
@@ -599,14 +529,12 @@ func TestLocalReadinessThenHumanApprovalNeedNoHTTP(t *testing.T) {
 	}
 }
 
-// fakeDeployRunner implements deploy.CommandRunner for command-layer tests.
 func TestLocalPluginRequiresExplicitQuickWorkCriteria(t *testing.T) {
 	body, err := os.ReadFile("local_plugin_assets/skills/specgate-work-preparation/SKILL.md")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(body), "## 2A. Create quick work") ||
-		!strings.Contains(string(body), "Quick work is available in Local and Full mode") ||
+	if !strings.Contains(string(body), "work create-quick") ||
 		!strings.Contains(string(body), "with explicit criteria") {
 		t.Fatalf("Local plugin does not explain Local quick-work criteria:\n%s", body)
 	}
@@ -659,12 +587,10 @@ func TestLocalGateTaskLoopNeedsNoHTTP(t *testing.T) {
 	if code := execute("--json", "gates", "tasks", "list", published.Data.ArtifactID); code != output.ExitOK {
 		t.Fatalf("list exit=%d output=%s", code, out.String())
 	}
-	if deps.Client != nil {
-		t.Fatal("Local gate tasks created an HTTP client")
-	}
+
 	var listed struct {
 		Data struct {
-			Tasks []client.GateTask `json:"tasks"`
+			Tasks []workflow.GateTask `json:"tasks"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(out.Bytes(), &listed); err != nil {
@@ -817,9 +743,7 @@ func TestLocalWorkCreatePersistsIDEAgentConfirmedAcceptanceCriteria(t *testing.T
 		work.Data.LeadArtifactID != work.Data.ArtifactID {
 		t.Fatalf("Local work JSON aliases do not match Full mode: %+v", work.Data)
 	}
-	if deps.Client != nil {
-		t.Fatal("Local work create created an HTTP client")
-	}
+
 }
 
 func TestLocalPluginInstallUsesEmbeddedPackageWithoutHTTP(t *testing.T) {
@@ -832,23 +756,28 @@ func TestLocalPluginInstallUsesEmbeddedPackageWithoutHTTP(t *testing.T) {
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "plugins", "install", "--agent", "codex"); code != output.ExitOK {
 		t.Fatalf("plugin install exit = %d; output=%s", code, out.String())
 	}
-	if !strings.Contains(out.String(), `"agents":["codex"]`) || deps.Client != nil {
-		t.Fatalf("plugin output = %s client=%#v", out.String(), deps.Client)
+	if !strings.Contains(out.String(), `"agents":["codex"]`) {
+		t.Fatalf("plugin output = %s", out.String())
 	}
 	home, err := deps.UserHomeDir()
 	if err != nil {
 		t.Fatal(err)
 	}
 	var installedSkills string
-	for _, skill := range []string{"specgate", "specgate-project-setup", "specgate-work-preparation", "specgate-work-delivery"} {
+	for _, skill := range []string{"specgate", "specgate-project-setup", "specgate-work-preparation", "specgate-work-delivery", "specgate-human-handoff"} {
 		body, err := os.ReadFile(filepath.Join(home, ".codex", "plugins", "specgate", "skills", skill, "SKILL.md"))
 		if err != nil {
 			t.Fatal(err)
 		}
 		installedSkills += string(body)
 	}
+	receipt, err := os.ReadFile(filepath.Join(home, ".codex", "plugins", "specgate", "skills", "specgate-human-handoff", "references", "delivery-receipt.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	installedSkills += string(receipt)
 	for _, want := range []string{
-		"data.mode",
+		"work resume",
 		"gates tasks list",
 		"gates tasks submit-result",
 		"human explicitly requests it",
@@ -863,9 +792,7 @@ func TestLocalPluginInstallUsesEmbeddedPackageWithoutHTTP(t *testing.T) {
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "plugins", "install", "--agent", "cursor,claude"); code != output.ExitOK {
 		t.Fatalf("Local Cursor/Claude install exit=%d output=%s", code, out.String())
 	}
-	if deps.Client != nil {
-		t.Fatal("Local plugin install created an HTTP client")
-	}
+
 	for _, path := range []string{
 		filepath.Join(home, ".cursor", "rules", "using-specgate.mdc"),
 		filepath.Join(home, ".claude", "skills", "specgate", ".claude-plugin", "plugin.json"),
@@ -881,7 +808,7 @@ func TestLocalPluginInstallUsesEmbeddedPackageWithoutHTTP(t *testing.T) {
 }
 
 func TestLocalParentCommandsShowHelp(t *testing.T) {
-	for _, family := range []string{"artifact", "delivery", "gates", "plugins", "portable"} {
+	for _, family := range []string{"artifact", "delivery", "gates", "plugins", "work"} {
 		t.Run(family, func(t *testing.T) {
 			deps, out := newTestDeps(t)
 			deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")

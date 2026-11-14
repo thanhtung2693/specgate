@@ -49,39 +49,36 @@ paused for explicit installer approval or native Windows installation.
 specgate doctor --json
 ```
 
-Use the doctor's reported state and recovery action. In an existing topology,
-follow that recovery action instead of rerunning initialization or switching
-mode. Initialization is required only when doctor reports no initialized
-topology.
+Use the doctor's reported state and recovery action. Initialize only when doctor
+reports Local setup missing. For a retired remote configuration, preserve it and
+use the prior compatible CLI for that deployment. For a new Local workspace,
+set `SPECGATE_CONFIG_PATH` to a separate file, unset `SPECGATE_SERVER`, and
+run `specgate init` outside the legacy checkout. Then return and bind it.
 
 Completion criterion: every failing doctor check is recorded, or doctor
 confirms the current topology is healthy.
 
 ## 3. Initialize only when required
 
-The user chooses Local or Full mode; never infer that product decision from
-Docker, a URL, or installed software. In an interactive terminal, run exactly
-the chosen mode:
+In an interactive terminal:
 
 ```bash
-specgate init --mode local
-specgate init --mode full
+specgate init
 ```
 
 For noninteractive Local initialization, collect the user's identity values and
 run:
 
 ```bash
-specgate init --mode local --no-input \
+specgate init --no-input \
   --workspace-name "<workspace>" \
   --display-name "<display name>" \
   --username "<username>"
 ```
 
-Use `specgate init --help` for Full or non-default noninteractive deployment
-options. Do not purge, replace, or migrate existing data as part of setup.
+Use `specgate init --help` for other Local setup options. Preserve existing data.
 
-Completion criterion: the chosen mode is initialized, or the exact failed
+Completion criterion: Local setup is initialized, or the exact failed
 command and its recovery action are reported.
 
 ## 4. Select and bind the workspace

@@ -5,16 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/config"
-	"github.com/specgate/specgate/app/cli/internal/interactive"
 	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
+	"github.com/specgate/specgate/app/cli/internal/workflow"
 )
 
 func newArtifactPublishCmd(deps *Deps) *cobra.Command {
@@ -57,12 +55,6 @@ to compare explicit paths, roles, and hashes against one stored artifact.`,
 				code := deps.Printer.Error("artifact.publish", payload)
 				return &output.ExitError{Code: code, Err: err}
 			}
-			if _, hasSourceCriteria := body["source_criteria"]; hasSourceCriteria && deps.Topology != config.ModeLocal {
-				return incompatibleCommand(deps, "artifact.publish", "source_criteria is available only in Local mode")
-			}
-			if _, hasLineage := body["source_lineage"]; hasLineage && deps.Topology != config.ModeLocal {
-				return incompatibleCommand(deps, "artifact.publish", "source_lineage is available only in Local mode")
-			}
 			projectRoot, _ := config.FindProjectRoot(deps.WorkingDir)
 			documentSources, err := expandArtifactDocumentSources(body, filePath, projectRoot)
 			if err != nil {
@@ -70,80 +62,56 @@ to compare explicit paths, roles, and hashes against one stored artifact.`,
 				code := deps.Printer.Error("artifact.publish", payload)
 				return &output.ExitError{Code: code, Err: err}
 			}
-			var localInput local.ArtifactInput
-			if deps.Topology == config.ModeLocal {
-				localInput, err = localArtifactInput(body)
-				if err == nil {
-					err = local.ValidateArtifactInput(localInput)
-				}
-				if err != nil {
-					payload := output.ErrorPayload{Code: "validation", Message: err.Error()}
-					code := deps.Printer.Error("artifact.publish", payload)
-					return &output.ExitError{Code: code, Err: err}
-				}
+			localInput, err := localArtifactInput(body)
+			if err == nil {
+				localInput.ProjectRubrics, err = local.ResolveProjectRubrics(projectRoot)
+			}
+			if err == nil {
+				err = local.ValidateArtifactInput(localInput)
+			}
+			if err != nil {
+				payload := output.ErrorPayload{Code: "validation", Message: err.Error()}
+				code := deps.Printer.Error("artifact.publish", payload)
+				return &output.ExitError{Code: code, Err: err}
 			}
 			if previewOnly {
 				preview := artifactPublishPreview(body, documentSources)
-				policy, err := artifactPreviewPolicy(cmd.Context(), deps, body)
+				policy, err := artifactPreviewPolicy(localInput.ProjectRubrics...)
 				if err != nil {
-					if deps.Topology == config.ModeLocal {
-						return localExitError(deps, "artifact.publish.preview", err)
-					}
-					return apiExitError(deps, "artifact.publish.preview", err)
+					return localExitError(deps, "artifact.publish.preview", err)
 				}
 				preview["policy"] = policy
 				preview["missing_roles"] = missingArtifactRoles(body, policy.RequiredRoles)
-				if deps.Topology == config.ModeLocal {
-					delete(preview, "governance_hint")
-					preview["omitted"] = []string{}
-				}
 				var comparison *artifactComparison
 				var impact *local.ArtifactImpact
 				if compareArtifactID != "" {
-					var base *client.Artifact
-					var baseFiles []client.ArtifactFile
-					if deps.Topology == config.ModeLocal {
-						store, err := openLocalStore(deps)
-						if err != nil {
-							return localExitError(deps, "artifact.publish.preview", err)
-						}
-						defer store.Close()
-						selection, err := localArtifactSelection(cmd.Context(), deps, store, body)
-						if err != nil {
-							return localExitError(deps, "artifact.publish.preview", err)
-						}
-						localBase, err := store.GetArtifact(cmd.Context(), selection.Workspace.ID, compareArtifactID)
-						if err != nil {
-							return localExitError(deps, "artifact.publish.preview", err)
-						}
-						projected, err := store.PreviewArtifactImpact(cmd.Context(), selection.Workspace.ID, compareArtifactID, localInput)
-						if err != nil {
-							return localExitError(deps, "artifact.publish.preview", err)
-						}
-						impact = &projected
-						preview["impact"] = projected
-						base, baseFiles = localArtifactComparisonBase(localBase)
-					} else {
-						previewCtx, err := artifactPublishPreviewContext(cmd.Context(), deps, body)
-						if err != nil {
-							return apiExitError(deps, "artifact.publish.preview", err)
-						}
-						base, err = deps.Client.GetArtifact(previewCtx, compareArtifactID)
-						if err != nil {
-							return apiExitError(deps, "artifact.publish.preview", err)
-						}
-						baseFiles, err = deps.Client.ListArtifactFiles(previewCtx, compareArtifactID)
-						if err != nil {
-							return apiExitError(deps, "artifact.publish.preview", err)
-						}
+					store, err := openLocalStore(deps)
+					if err != nil {
+						return localExitError(deps, "artifact.publish.preview", err)
 					}
-					if requestedBase, _ := body["base_version"].(string); requestedBase != "" && requestedBase != base.Version {
-						err := fmt.Errorf("base_version %q does not match compared artifact version %q", requestedBase, base.Version)
+					defer store.Close()
+					selection, err := localArtifactSelection(cmd.Context(), deps, store, body)
+					if err != nil {
+						return localExitError(deps, "artifact.publish.preview", err)
+					}
+					localBase, err := store.GetArtifact(cmd.Context(), selection.Workspace.ID, compareArtifactID)
+					if err != nil {
+						return localExitError(deps, "artifact.publish.preview", err)
+					}
+					projected, err := store.PreviewArtifactImpact(cmd.Context(), selection.Workspace.ID, compareArtifactID, localInput)
+					if err != nil {
+						return localExitError(deps, "artifact.publish.preview", err)
+					}
+					impact = &projected
+					preview["impact"] = projected
+
+					if requestedBase, _ := body["base_version"].(string); requestedBase != "" && requestedBase != fmt.Sprintf("v%d", localBase.Version) {
+						err := fmt.Errorf("base_version %q does not match compared artifact version %q", requestedBase, fmt.Sprintf("v%d", localBase.Version))
 						payload := output.ErrorPayload{Code: "validation", Message: err.Error()}
 						code := deps.Printer.Error("artifact.publish.preview", payload)
 						return &output.ExitError{Code: code, Err: err}
 					}
-					built, err := buildArtifactComparison(body, base, baseFiles)
+					built, err := buildArtifactComparison(body, localBase)
 					if err != nil {
 						payload := output.ErrorPayload{Code: "validation", Message: err.Error()}
 						code := deps.Printer.Error("artifact.publish.preview", payload)
@@ -169,6 +137,12 @@ to compare explicit paths, roles, and hashes against one stored artifact.`,
 					fmt.Fprintln(deps.Stdout)
 				}
 				fmt.Fprintf(deps.Stdout, "Policy\t%s (%s)\n", policy.GovernanceLevel, strings.Join(policy.ReasonCodes, ", "))
+				if len(localInput.ProjectRubrics) > 0 {
+					fmt.Fprintf(deps.Stdout, "Policy digest\t%s\n", policy.PolicyDigest)
+					for _, rubric := range policy.Rubrics {
+						fmt.Fprintf(deps.Stdout, "Rubric\t%s\t%s\t%s\n", rubric.Gate, rubric.Source, rubric.Digest)
+					}
+				}
 				if missing := preview["missing_roles"].([]string); len(missing) > 0 {
 					fmt.Fprintf(deps.Stdout, "Missing roles\t%s\n", strings.Join(missing, ", "))
 				}
@@ -182,85 +156,41 @@ to compare explicit paths, roles, and hashes against one stored artifact.`,
 				fmt.Fprintln(deps.Stdout, notice(deps, output.StyleWarning, "No publication performed", "Human confirmation required before publishing."))
 				return nil
 			}
-			if deps.Topology == config.ModeLocal {
-				store, err := openLocalStore(deps)
-				if err != nil {
-					return localExitError(deps, "artifact.publish", err)
-				}
-				defer store.Close()
-				selection, err := localArtifactSelection(cmd.Context(), deps, store, body)
-				if err != nil {
-					return localExitError(deps, "artifact.publish", err)
-				}
-				var upgrade *local.StoreUpgrade
-				if localInput.SourceLineage != nil {
-					upgrade, err = store.PendingStoreUpgrade(cmd.Context())
-					if err != nil {
-						return localExitError(deps, "artifact.publish", err)
-					}
-					if upgrade != nil {
-						proceed, err := confirmStoreWrite(deps, "artifact.publish", "Publish this lineage artifact?", upgrade)
-						if err != nil || !proceed {
-							return err
-						}
-					}
-				}
-				artifact, err := store.PublishArtifact(cmd.Context(), selection.Workspace.ID, localInput)
-				if err != nil {
-					return localExitError(deps, "artifact.publish", err)
-				}
-				result := map[string]any{"artifact_id": artifact.ID, "version": artifact.Version, "status": artifact.Status, "snapshot_digest": artifact.SnapshotDigest}
-				if upgrade != nil {
-					result["store_upgrade"] = upgrade
-				}
-				if deps.Printer.Mode() == output.ModeJSON {
-					deps.Printer.Success("artifact.publish", result)
-					return nil
-				}
-				fmt.Fprintf(deps.Stdout, "%s %s (v%d)\n", styled(deps, output.StyleSuccess, "Published"), styled(deps, output.StyleBold, artifact.ID), artifact.Version)
-				return nil
-			}
-			if err := annotateBodyWithCurrentSelection(cmd.Context(), deps, body); err != nil {
-				return apiExitError(deps, "artifact.publish", err)
-			}
-			// Collect impact_declaration interactively when the session is a
-			// real TTY and the field is absent from the JSON file. Non-TTY
-			// sessions proceed without a declaration (same as --no-input)
-			// instead of blocking on a prompt nobody can answer.
-			if sessionInteractive(deps) {
-				if _, ok := body["impact_declaration"]; !ok {
-					answers, err := interactive.CollectImpactDeclaration(deps.Stdin, deps.Stdout, interactive.ImpactAnswers{})
-					if err != nil {
-						payload := output.ErrorPayload{Code: "usage", Message: fmt.Sprintf("impact declaration: %v", err)}
-						code := deps.Printer.Error("artifact.publish", payload)
-						return &output.ExitError{Code: code, Err: err}
-					}
-					body["impact_declaration"] = interactive.NormalizeImpactAnswers(answers)
-				}
-			}
-			result, err := deps.Client.PublishArtifact(requestContextForBody(cmd.Context(), body), body)
+			store, err := openLocalStore(deps)
 			if err != nil {
-				return apiExitError(deps, "artifact.publish", err)
+				return localExitError(deps, "artifact.publish", err)
+			}
+			defer store.Close()
+			selection, err := localArtifactSelection(cmd.Context(), deps, store, body)
+			if err != nil {
+				return localExitError(deps, "artifact.publish", err)
+			}
+			var upgrade *local.StoreUpgrade
+			if localInput.SourceLineage != nil {
+				upgrade, err = store.PendingStoreUpgrade(cmd.Context())
+				if err != nil {
+					return localExitError(deps, "artifact.publish", err)
+				}
+				if upgrade != nil {
+					proceed, err := confirmStoreWrite(deps, "artifact.publish", "Publish this lineage artifact?", upgrade)
+					if err != nil || !proceed {
+						return err
+					}
+				}
+			}
+			artifact, err := store.PublishArtifact(cmd.Context(), selection.Workspace.ID, localInput)
+			if err != nil {
+				return localExitError(deps, "artifact.publish", err)
+			}
+			result := map[string]any{"artifact_id": artifact.ID, "version": artifact.Version, "status": artifact.Status, "snapshot_digest": artifact.SnapshotDigest}
+			if upgrade != nil {
+				result["store_upgrade"] = upgrade
 			}
 			if deps.Printer.Mode() == output.ModeJSON {
 				deps.Printer.Success("artifact.publish", result)
 				return nil
 			}
-			if id, ok := result["artifact_id"].(string); ok {
-				fmt.Fprintf(deps.Stdout, "%s %s\n", styled(deps, output.StyleSuccess, "Published"), styled(deps, output.StyleBold, id))
-			} else {
-				fmt.Fprintln(deps.Stdout, styled(deps, output.StyleSuccess, "Published artifact"))
-			}
-			// Publish is deliberately non-blocking on required roles (spec-first
-			// drafts are legitimate), but a human in plain mode should see the
-			// gap now instead of discovering it at gate time.
-			if missing, ok := result["missing_roles"].([]any); ok && len(missing) > 0 {
-				hint, _ := result["readiness_hint"].(string)
-				if hint == "" {
-					hint = fmt.Sprintf("missing required roles: %v", missing)
-				}
-				fmt.Fprintf(deps.Stdout, "%s %s — add the missing documents and republish before readiness gates.\n", styled(deps, output.StyleWarning, "!"), hint)
-			}
+			fmt.Fprintf(deps.Stdout, "%s %s (v%d)\n", styled(deps, output.StyleSuccess, "Published"), styled(deps, output.StyleBold, artifact.ID), artifact.Version)
 			return nil
 		},
 	}
@@ -270,47 +200,30 @@ to compare explicit paths, roles, and hashes against one stored artifact.`,
 	return cmd
 }
 
-func artifactPreviewPolicy(ctx context.Context, deps *Deps, body map[string]any) (*client.PolicyProjection, error) {
-	if deps.Topology == config.ModeLocal {
-		policy, err := local.PreviewPolicy()
-		if err != nil {
-			return nil, err
-		}
-		rubrics := make([]client.PolicyRubricProjection, len(policy.Rubrics))
-		for i, rubric := range policy.Rubrics {
-			rubrics[i] = client.PolicyRubricProjection{
-				Gate: rubric.Gate, Skill: rubric.Skill, Digest: rubric.Digest, Source: rubric.Source,
-			}
-		}
-		return &client.PolicyProjection{
-			GovernanceLevel: policy.GovernanceLevel, ReasonCodes: policy.ReasonCodes,
-			RequiredRoles: policy.RequiredRoles, RequiredTopics: policy.RequiredTopics,
-			RequiredEvidence: policy.RequiredEvidence, EnabledGates: policy.EnabledGates,
-			ApprovalPolicy: policy.ApprovalPolicy, EvidencePolicy: policy.EvidencePolicy,
-			PolicyDigest: policy.PolicyDigest, Rubrics: rubrics,
-			Explanation: client.PolicyExplanation{
-				GovernanceLevel: "standard",
-				Title:           "Local Standard governance",
-				Summary:         "Human approval and test evidence are required.",
-				Reasons:         policy.ReasonCodes,
-			},
-		}, nil
-	}
-	previewCtx, err := artifactPublishPreviewContext(ctx, deps, body)
+func artifactPreviewPolicy(projectRubrics ...local.ProjectRubric) (*workflow.PolicyProjection, error) {
+	policy, err := local.PreviewPolicy(projectRubrics...)
 	if err != nil {
 		return nil, err
 	}
-	impactDeclaration, _ := body["impact_declaration"].(map[string]any)
-	impactLevel := artifactString(body, "impact_level")
-	if impactLevel == "" {
-		impactLevel = "medium"
+	rubrics := make([]workflow.PolicyRubricProjection, len(policy.Rubrics))
+	for i, rubric := range policy.Rubrics {
+		rubrics[i] = workflow.PolicyRubricProjection{
+			Gate: rubric.Gate, Skill: rubric.Skill, Digest: rubric.Digest, Source: rubric.Source,
+		}
 	}
-	return deps.Client.ResolveGovernancePolicy(previewCtx, client.ResolveGovernancePolicyInput{
-		RequestType:              artifactString(body, "request_type"),
-		ImpactLevel:              impactLevel,
-		RequestedGovernanceLevel: artifactString(body, "requested_governance_level"),
-		ImpactDeclaration:        impactDeclaration,
-	})
+	return &workflow.PolicyProjection{
+		GovernanceLevel: policy.GovernanceLevel, ReasonCodes: policy.ReasonCodes,
+		RequiredRoles: policy.RequiredRoles, RequiredTopics: policy.RequiredTopics,
+		RequiredEvidence: policy.RequiredEvidence, EnabledGates: policy.EnabledGates,
+		ApprovalPolicy: policy.ApprovalPolicy, EvidencePolicy: policy.EvidencePolicy,
+		PolicyDigest: policy.PolicyDigest, Rubrics: rubrics,
+		Explanation: workflow.PolicyExplanation{
+			GovernanceLevel: "standard",
+			Title:           "Local Standard governance",
+			Summary:         "Human approval and test evidence are required.",
+			Reasons:         policy.ReasonCodes,
+		},
+	}, nil
 }
 
 func artifactString(body map[string]any, field string) string {
@@ -448,28 +361,6 @@ func localArtifactInput(body map[string]any) (local.ArtifactInput, error) {
 	return input, nil
 }
 
-func localArtifactComparisonBase(artifact local.Artifact) (*client.Artifact, []client.ArtifactFile) {
-	base := &client.Artifact{
-		ID:             artifact.ID,
-		WorkspaceID:    artifact.WorkspaceID,
-		Version:        "v" + strconv.Itoa(artifact.Version),
-		Status:         artifact.Status,
-		RequestType:    artifact.RequestType,
-		SnapshotDigest: artifact.SnapshotDigest,
-		CreatedAt:      artifact.CreatedAt,
-	}
-	files := make([]client.ArtifactFile, 0, len(artifact.Documents))
-	for _, document := range artifact.Documents {
-		files = append(files, client.ArtifactFile{
-			Path:          document.Path,
-			Role:          document.Role,
-			SizeBytes:     int64(document.SizeBytes),
-			ContentSHA256: document.Digest,
-		})
-	}
-	return base, files
-}
-
 func localArtifactView(artifact local.Artifact) map[string]any {
 	return map[string]any{"id": artifact.ID, "workspace_id": artifact.WorkspaceID, "feature_key": artifact.FeatureKey, "request_type": artifact.RequestType, "version": artifact.Version, "status": artifact.Status, "snapshot_digest": artifact.SnapshotDigest, "source_criteria": artifact.SourceCriteria, "source_lineage": artifact.SourceLineage, "created_at": artifact.CreatedAt}
 }
@@ -497,24 +388,10 @@ func artifactPublishPreview(body map[string]any, sources []string) map[string]an
 	if target == nil {
 		target = body["feature_id"]
 	}
-	omitted := []string{}
-	if _, declared := body["impact_declaration"]; !declared {
-		omitted = append(omitted, "impact_declaration")
-	}
 	preview := map[string]any{
 		"source_kind": body["source_kind"], "source_id": body["source_id"], "source_revision": body["source_revision"],
 		"documents": documents, "target": target, "base_version": base, "new_artifact": base == "",
-		"source_criteria": previewSourceCriteria(body), "omitted": omitted, "ambiguous": []string{}, "human_confirmation_required": true,
-	}
-	if len(omitted) > 0 {
-		// Name the fields, not just the gap. An author cannot answer "supply an
-		// impact declaration", and an agent is right to refuse to invent a
-		// governance answer on the human's behalf.
-		preview["governance_hint"] = "Impact declaration missing; Full mode may select stricter governance. " +
-			"To declare it, add `impact_level` (low|medium|high) and an `impact_declaration` object answering " +
-			"`protected_domains_status`, `data_or_schema_change`, `external_contract_change`, " +
-			"`irreversible_or_complex_rollback`, and `broad_blast_radius` with yes, no, or unknown. " +
-			"Omitting it is allowed; unanswered questions resolve as unknown, which raises governance rather than lowering it."
+		"source_criteria": previewSourceCriteria(body), "omitted": []string{}, "ambiguous": []string{}, "human_confirmation_required": true,
 	}
 	return preview
 }
@@ -540,7 +417,7 @@ func previewSourceCriteria(body map[string]any) []map[string]any {
 
 func normalizeArtifactPublishBody(body map[string]any) error {
 	if _, ok := body["version"]; ok {
-		return fmt.Errorf("version is server-assigned; remove version from the publish file and use base_version only when publishing an update")
+		return fmt.Errorf("version is assigned by SpecGate; remove version from the publish file and use base_version only when publishing an update")
 	}
 	if _, hasRequestType := body["request_type"]; !hasRequestType {
 		body["request_type"] = "unknown"

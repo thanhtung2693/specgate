@@ -15,12 +15,11 @@ release branches yet.
 
 ## Scope
 
-SpecGate's Doc Registry is designed as an **internal/network-trusted** service.
-The Full appliance supports optional gateway credentials, but direct service
-access still requires a trusted boundary. Reports about the absence of HTTP authentication on Doc Registry are
-out of scope; reports about unintended exposure, credential leakage, injection, or
-privilege issues are in scope.
+The Local CLI and optional review UI assume a trusted machine. The listener
+binds only to loopback and trusts local processes and accounts that can reach
+it. Its browser session, exact origin, and CSRF checks protect interactions
+from other browser origins. Local user names are cooperative attribution.
 
-The v0.1 release also includes a web UI. Treat the UI, Doc Registry,
-agents service as local or trusted-network surfaces unless you
-place an authentication proxy and TLS boundary in front of them.
+Report unintended request access, data exposure, unsafe local file or process
+handling, release and installer integrity failures, and violations of those
+boundaries. See [Trust and security](docs/using-specgate/concepts/trust-and-security.md).

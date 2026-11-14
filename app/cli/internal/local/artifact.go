@@ -38,6 +38,7 @@ type ArtifactInput struct {
 	Documents      []ArtifactDocumentInput
 	SourceCriteria []SourceCriterion
 	SourceLineage  *SourceLineage
+	ProjectRubrics []ProjectRubric
 }
 
 // SourceLineage is an optional, reviewed declaration relating only an exact
@@ -177,7 +178,7 @@ func publishArtifactTx(ctx context.Context, tx *sql.Tx, workspaceID string, inpu
 		return Artifact{}, err
 	}
 	version := latestVersion + 1
-	policySnapshot, policyDigest, err := localPolicySnapshot()
+	policySnapshot, policyDigest, err := localPolicySnapshot(input.ProjectRubrics...)
 	if err != nil {
 		return Artifact{}, err
 	}
@@ -388,20 +389,26 @@ func getArtifact(ctx context.Context, q artifactQueryer, workspaceID, id string)
 			return Artifact{}, err
 		}
 	}
+	artifact.Documents, err = getArtifactDocuments(ctx, q, id)
+	return artifact, err
+}
+
+func getArtifactDocuments(ctx context.Context, q artifactQueryer, id string) ([]ArtifactDocument, error) {
 	rows, err := q.QueryContext(ctx, `SELECT path, role, content, digest FROM artifact_documents WHERE artifact_id = ? ORDER BY path`, id)
 	if err != nil {
-		return Artifact{}, err
+		return nil, err
 	}
 	defer rows.Close()
+	var documents []ArtifactDocument
 	for rows.Next() {
 		var document ArtifactDocument
 		if err := rows.Scan(&document.Path, &document.Role, &document.Content, &document.Digest); err != nil {
-			return Artifact{}, err
+			return nil, err
 		}
 		document.SizeBytes = len(document.Content)
-		artifact.Documents = append(artifact.Documents, document)
+		documents = append(documents, document)
 	}
-	return artifact, rows.Err()
+	return documents, rows.Err()
 }
 
 func validateLineageVersion(lineage *SourceLineage) error {
@@ -458,8 +465,8 @@ func validateArtifactDocuments(input []ArtifactDocumentInput) ([]ArtifactDocumen
 		role := normalizeArtifactDocumentRole(inputDocument.Role)
 		// A role is a routing label, so one source may carry several roles: a
 		// single spec often is both the spec and the plan. The identity is the
-		// path and role together, which is what the snapshot digest below hashes
-		// and what Full mode stores. Keying uniqueness on path alone rejected
+		// path and role together, which is what the snapshot digest below hashes.
+		// Keying uniqueness on path alone rejected
 		// manifests the preview had already accepted and left a single-document
 		// author with no way to satisfy a multi-role policy.
 		if seen[documentPath+"\x00"+role] {
@@ -472,7 +479,7 @@ func validateArtifactDocuments(input []ArtifactDocumentInput) ([]ArtifactDocumen
 		if total > maxPackageBytes {
 			return nil, "", fmt.Errorf("artifact package exceeds the 10 MiB Local limit")
 		}
-		content := append([]byte(nil), inputDocument.Content...)
+		content := append([]byte{}, inputDocument.Content...)
 		hash := sha256.Sum256(content)
 		seen[documentPath+"\x00"+role] = true
 		documents = append(documents, ArtifactDocument{Path: documentPath, Role: role, Content: content, Digest: "sha256:" + hex.EncodeToString(hash[:]), SizeBytes: len(content)})

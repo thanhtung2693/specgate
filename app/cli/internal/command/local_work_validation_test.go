@@ -12,7 +12,7 @@ import (
 func TestLocalWorkInvalidCriteriaIsValidationWithoutCreatingWork(t *testing.T) {
 	for _, criterion := range []string{"Works @source:foreign", " ", "Works @check:unit @check:integration"} {
 		t.Run(criterion, func(t *testing.T) {
-			deps, fake, _, out := newFakeDeps(t)
+			deps, out := newTestDeps(t)
 			stateDir, store, selection, original := newLocalChangeWork(t, deps)
 			closeLocalChangeStore(t, deps, stateDir, store)
 			code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "work", "create",
@@ -29,9 +29,6 @@ func TestLocalWorkInvalidCriteriaIsValidationWithoutCreatingWork(t *testing.T) {
 			}
 			if code != output.ExitUsage || envelope.OK || envelope.Error.Code != "validation" || envelope.Error.Transient {
 				t.Fatalf("exit=%d output=%s", code, out.String())
-			}
-			if fake.calls != 0 {
-				t.Fatal("Local validation called Full API")
 			}
 			store, err := local.Open(stateDir + "/state.db")
 			if err != nil {

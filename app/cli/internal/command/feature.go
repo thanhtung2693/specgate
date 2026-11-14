@@ -7,9 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
-	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/output"
+	"github.com/specgate/specgate/app/cli/internal/workflow"
 )
 
 func registerFeatureCommands(root *cobra.Command, deps *Deps) {
@@ -22,7 +21,6 @@ func registerFeatureCommands(root *cobra.Command, deps *Deps) {
 	}
 	ft.AddCommand(newFeatureListCmd(deps))
 	ft.AddCommand(newFeatureShowCmd(deps))
-	ft.AddCommand(newFeatureArchiveCmd(deps))
 	root.AddCommand(ft)
 }
 
@@ -34,20 +32,9 @@ func newFeatureListCmd(deps *Deps) *cobra.Command {
 		Use:   "list",
 		Short: "List features (their keys, status, and name)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if deps.Topology == config.ModeLocal {
-				features, err := listLocalFeatures(cmd.Context(), deps, search)
-				if err != nil {
-					return localExitError(deps, "feature.list", err)
-				}
-				return printFeatureList(deps, features, includeArchived)
-			}
-			workspaceID, err := currentWorkspaceID(cmd.Context(), deps)
+			features, err := listLocalFeatures(cmd.Context(), deps, search)
 			if err != nil {
-				return apiExitError(deps, "feature.list", err)
-			}
-			features, err := listFeaturesForWorkspace(cmd.Context(), deps, workspaceID, search)
-			if err != nil {
-				return apiExitError(deps, "feature.list", err)
+				return localExitError(deps, "feature.list", err)
 			}
 			return printFeatureList(deps, features, includeArchived)
 		},
@@ -57,43 +44,6 @@ func newFeatureListCmd(deps *Deps) *cobra.Command {
 	return cmd
 }
 
-// specgate feature archive <key-or-id>
-//
-// Archived is the curator-controlled end state: the feature disappears from
-// default lists and pickers, but its record, artifacts, and history remain.
-func newFeatureArchiveCmd(deps *Deps) *cobra.Command {
-	return &cobra.Command{
-		Use:   "archive <key-or-id>",
-		Short: "Archive a feature in Full mode (record and history remain)",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			workspaceID, err := currentWorkspaceID(cmd.Context(), deps)
-			if err != nil {
-				return apiExitError(deps, "feature.archive", err)
-			}
-			f, err := getFeatureForWorkspaceCLI(cmd.Context(), deps, workspaceID, args[0])
-			if err != nil {
-				code := deps.Printer.Error("feature.archive", output.ErrorPayload{Code: "not_found", Message: err.Error()})
-				return &output.ExitError{Code: code, Err: err}
-			}
-			proceed, err := requireConfirm(deps, fmt.Sprintf("Archive feature %s (%s)?", f.Key, f.Name))
-			if err != nil || !proceed {
-				return err
-			}
-			updated, err := updateFeatureStatusForWorkspace(cmd.Context(), deps, workspaceID, f.ID, "archived")
-			if err != nil {
-				return apiExitError(deps, "feature.archive", err)
-			}
-			if deps.Printer.Mode() == output.ModeJSON {
-				deps.Printer.Success("feature.archive", updated)
-				return nil
-			}
-			fmt.Fprintf(deps.Stdout, "%s %s\n", styled(deps, output.StyleSuccess, "Archived"), styled(deps, output.StyleBold, updated.Key))
-			return nil
-		},
-	}
-}
-
 // specgate feature show <key-or-id>
 func newFeatureShowCmd(deps *Deps) *cobra.Command {
 	return &cobra.Command{
@@ -101,30 +51,17 @@ func newFeatureShowCmd(deps *Deps) *cobra.Command {
 		Short: "Show a feature by its key or id",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if deps.Topology == config.ModeLocal {
-				features, err := listLocalFeatures(cmd.Context(), deps, "")
-				if err != nil {
-					return localExitError(deps, "feature.show", err)
-				}
-				f := findFeature(features, args[0])
-				if f == nil {
-					err := fmt.Errorf("feature %q not found", args[0])
-					code := deps.Printer.Error("feature.show", output.ErrorPayload{
-						Code:    "not_found",
-						Message: err.Error() + " in the selected Local workspace; run `specgate feature list --all`",
-					})
-					return &output.ExitError{Code: code, Err: err}
-				}
-				return printFeature(deps, f)
-			}
-			workspaceID, err := currentWorkspaceID(cmd.Context(), deps)
+			features, err := listLocalFeatures(cmd.Context(), deps, "")
 			if err != nil {
-				return apiExitError(deps, "feature.show", err)
+				return localExitError(deps, "feature.show", err)
 			}
-			f, err := getFeatureForWorkspaceCLI(cmd.Context(), deps, workspaceID, args[0])
-			if err != nil {
-				payload := output.ErrorPayload{Code: "not_found", Message: err.Error()}
-				code := deps.Printer.Error("feature.show", payload)
+			f := findFeature(features, args[0])
+			if f == nil {
+				err := fmt.Errorf("feature %q not found", args[0])
+				code := deps.Printer.Error("feature.show", output.ErrorPayload{
+					Code:    "not_found",
+					Message: err.Error() + " in the selected Local workspace; run `specgate feature list --all`",
+				})
 				return &output.ExitError{Code: code, Err: err}
 			}
 			return printFeature(deps, f)
@@ -132,7 +69,7 @@ func newFeatureShowCmd(deps *Deps) *cobra.Command {
 	}
 }
 
-func listLocalFeatures(ctx context.Context, deps *Deps, search string) ([]client.Feature, error) {
+func listLocalFeatures(ctx context.Context, deps *Deps, search string) ([]workflow.Feature, error) {
 	store, err := openLocalStore(deps)
 	if err != nil {
 		return nil, err
@@ -147,12 +84,12 @@ func listLocalFeatures(ctx context.Context, deps *Deps, search string) ([]client
 		return nil, err
 	}
 	needle := strings.ToLower(strings.TrimSpace(search))
-	features := make([]client.Feature, 0, len(items))
+	features := make([]workflow.Feature, 0, len(items))
 	for _, item := range items {
 		if needle != "" && !strings.Contains(strings.ToLower(item.Key), needle) {
 			continue
 		}
-		features = append(features, client.Feature{
+		features = append(features, workflow.Feature{
 			ID:                  item.ID,
 			WorkspaceID:         item.WorkspaceID,
 			Key:                 item.Key,
@@ -165,9 +102,9 @@ func listLocalFeatures(ctx context.Context, deps *Deps, search string) ([]client
 	return features, nil
 }
 
-func printFeatureList(deps *Deps, features []client.Feature, includeArchived bool) error {
+func printFeatureList(deps *Deps, features []workflow.Feature, includeArchived bool) error {
 	if !includeArchived {
-		current := make([]client.Feature, 0, len(features))
+		current := make([]workflow.Feature, 0, len(features))
 		for _, feature := range features {
 			if feature.Status != "archived" {
 				current = append(current, feature)
@@ -189,7 +126,7 @@ func printFeatureList(deps *Deps, features []client.Feature, includeArchived boo
 	return nil
 }
 
-func printFeature(deps *Deps, feature *client.Feature) error {
+func printFeature(deps *Deps, feature *workflow.Feature) error {
 	if deps.Printer.Mode() == output.ModeJSON {
 		deps.Printer.Success("feature.show", feature)
 		return nil
@@ -202,33 +139,7 @@ func printFeature(deps *Deps, feature *client.Feature) error {
 	return nil
 }
 
-func listFeaturesForWorkspace(ctx context.Context, deps *Deps, workspaceID, search string) ([]client.Feature, error) {
-	type scoped interface {
-		ListFeaturesInWorkspace(context.Context, string, string) ([]client.Feature, error)
-	}
-	if workspaceID != "" {
-		if c, ok := deps.Client.(scoped); ok {
-			return c.ListFeaturesInWorkspace(ctx, workspaceID, search)
-		}
-	}
-	return deps.Client.ListFeatures(ctx, search)
-}
-
-func getFeatureForWorkspaceCLI(ctx context.Context, deps *Deps, workspaceID, ref string) (*client.Feature, error) {
-	if workspaceID == "" {
-		return deps.Client.GetFeature(ctx, ref)
-	}
-	features, err := listFeaturesForWorkspace(ctx, deps, workspaceID, "")
-	if err != nil {
-		return nil, err
-	}
-	if feature := findFeature(features, ref); feature != nil {
-		return feature, nil
-	}
-	return nil, fmt.Errorf("feature %q not found", ref)
-}
-
-func findFeature(features []client.Feature, ref string) *client.Feature {
+func findFeature(features []workflow.Feature, ref string) *workflow.Feature {
 	needle := strings.ToLower(strings.TrimSpace(ref))
 	for index := range features {
 		if strings.ToLower(features[index].Key) == needle || strings.ToLower(features[index].ID) == needle {
@@ -236,16 +147,4 @@ func findFeature(features []client.Feature, ref string) *client.Feature {
 		}
 	}
 	return nil
-}
-
-func updateFeatureStatusForWorkspace(ctx context.Context, deps *Deps, workspaceID, id, status string) (*client.Feature, error) {
-	type scoped interface {
-		UpdateFeatureStatusInWorkspace(context.Context, string, string, string) (*client.Feature, error)
-	}
-	if workspaceID != "" {
-		if c, ok := deps.Client.(scoped); ok {
-			return c.UpdateFeatureStatusInWorkspace(ctx, workspaceID, id, status)
-		}
-	}
-	return deps.Client.UpdateFeatureStatus(ctx, id, status)
 }

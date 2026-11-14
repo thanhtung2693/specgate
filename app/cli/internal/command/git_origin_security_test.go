@@ -25,9 +25,9 @@ func TestRealGitReceiptCredentialRotationKeepsRepositoryAndDigest(t *testing.T) 
 	git("init", "--initial-branch=main", "--template=")
 	git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "fixture")
 	git("remote", "add", "origin", "https://user:synthetic-one@example.invalid/repo.git?token=synthetic-query")
-	first := collectGitReceipt(t.Context(), nil, dir, nil)
+	first := collectGitReceipt(t.Context(), nil, dir, nil, "")
 	git("remote", "set-url", "origin", "https://synthetic-two@example.invalid/repo.git#synthetic-fragment")
-	second := collectGitReceipt(t.Context(), nil, dir, nil)
+	second := collectGitReceipt(t.Context(), nil, dir, nil, "")
 	if first.Availability != "available" || first.Repository != "https://example.invalid/repo.git" || first.DiffDigest == "" || first.DiffDigest != second.DiffDigest || first.Repository != second.Repository {
 		t.Fatalf("credential rotation changed provenance: first=%+v second=%+v", first, second)
 	}
@@ -65,7 +65,7 @@ func TestGitReceiptDoesNotPublishOriginCredentials(t *testing.T) {
 				receiptCommand(dir, "rev-parse", "HEAD"):                 []byte("head"),
 				receiptCommand(dir, "merge-base", "HEAD", "origin/main"): []byte("head"),
 			}}
-			receipt := collectGitReceipt(t.Context(), runner, dir, nil)
+			receipt := collectGitReceipt(t.Context(), runner, dir, nil, "")
 			if receipt.Repository != tc.want {
 				t.Errorf("repository identity not credential-free: got=%q want=%q", receipt.Repository, tc.want)
 			}

@@ -1,35 +1,41 @@
 # Using SpecGate
 
-Use these docs to set up SpecGate, connect a coding agent, review delivery, and
-keep a local or team installation healthy. You do not need a source checkout
-unless a guide specifically asks for one.
+SpecGate is a Local CLI for handing approved work to your coding agent and
+reviewing its delivery. Solo developers and small teams keep their existing
+authoring tools, IDEs, Git, and CI. Each Local store records its own approved
+snapshots, criterion evidence, and human decisions.
 
 ## Start here
 
-New to SpecGate? Follow the [Quickstart](quickstart.md). It takes you from an
-empty machine to one reviewed work item.
+Follow the [Quickstart](quickstart.md) to set up the CLI and review one work item
+with your coding agent.
 
 The shortest setup path is:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/scripts/install-cli.sh | sh
-specgate init
+specgate init --mode local
 specgate doctor
 specgate status
 ```
 
-`init` starts with Local CLI by default: one local SQLite store and no Docker
-or server. Choose Full appliance during setup when you need the browser,
-governance chat, Knowledge, integrations, or shared workspaces.
+`init` binds your Git checkout to a Local workspace with SQLite. The CLI
+workflow needs no Docker, model API key, or background service.
 
-SpecGate assumes a trusted machine or private network. Read
-[Trust and security](concepts/trust-and-security.md) before exposing a service
-outside that boundary.
+For optional browser inspection and human review in English or Vietnamese, run
+`specgate ui` from the bound project. It starts a loopback listener on a trusted
+machine. See [Local review](guides/local-review.md) and
+[Trust and security](concepts/trust-and-security.md).
+
+These docs describe the current source. The installer downloads a published
+release. Check the [changelog](../../CHANGELOG.md) for changes awaiting
+release and [Operate SpecGate](guides/operate-specgate.md) for backup and
+legacy recovery.
 
 ## Understand the ideas
 
-- [Who SpecGate is for](concepts/who-specgate-is-for.md) maps solo-developer
-  and team pain points to the mechanism that answers each.
+- [Who SpecGate is for](concepts/who-specgate-is-for.md) shows how solo
+  developers and small teams review evidence gaps.
 - [How SpecGate works](concepts/how-specgate-works.md) explains the delivery
   loop and product boundaries.
 - [Artifacts and Context Packs](concepts/artifacts-and-context-packs.md)
@@ -45,11 +51,11 @@ outside that boundary.
 - [Run a delivery evidence gap and repair it](guides/try-delivery-proof.md)
 - [Observe selected tests in Local mode](guides/observe-selected-tests.md)
 - [Use SpecGate with a coding agent](guides/coding-agent-workflow.md)
+- [Try Local review notifications](guides/local-notification-pilot.md) from the
+  source checkout.
 - [Install SpecGate in your coding IDE](guides/install-ide-plugins.md)
-- [Configure models](guides/configure-models.md)
 - [Customize governance](guides/customize-governance.md)
 - [Respond to gate failures](guides/respond-to-gate-failures.md)
-- [Connect delivery integrations](guides/connect-integrations.md)
 - [Operate SpecGate](guides/operate-specgate.md)
 
 ## Look up exact behavior

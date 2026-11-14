@@ -23,7 +23,7 @@ New Git receipts use credential-free repository coordinates: URL userinfo,
 query and fragment data are removed; SSH usernames and scp-style coordinates
 remain supported, but SSH passwords are removed. Origins that cannot be safely
 projected, such as opaque remote helpers, retain only local-checkout provenance.
-Handoff and portable exports also redact repository credentials in legacy
+Handoff export also redacts repository credentials in legacy
 completion/peer receipt copies. Stored history and opaque `diff_digest` values
 are not rewritten. A pre-fix credential-bearing receipt can therefore become
 stale against a fresh checkout observation; submit fresh completion evidence
@@ -31,10 +31,7 @@ instead of treating that old receipt as newly verified.
 
 Peer-review scaffolding and submission refuse credential-bearing legacy
 completion bindings. Submit a fresh completion first; SpecGate does not rewrite
-the receipt that a peer review must match exactly. Portable import verifies the
-original bundle checksum before projecting both completion and peer receipt
-copies for the destination. The source bundle is not modified, and imported
-peer reviews retain their exact receipt binding to the imported completion.
+the receipt that a peer review must match exactly.
 
 ## Completion report
 
@@ -95,6 +92,11 @@ Typical shape:
 | `affected_files[]` | files changed by the implementation |
 | `severity` | signal severity for feedback events |
 
+Record which behavior the checks exercise, any mocks or stubs, and important
+coverage limits in the summary or cited evidence. Keep this context there when
+using `--run-checks`, which replaces the executed check's `detail` with the
+CLI observation. For a skipped check, use `detail` to explain the skip.
+
 `checks[].status` values are:
 
 - `pass`
@@ -124,8 +126,7 @@ content.
 
 Those field names are the whole contract: `kind`, `path`, `line`, `heading`,
 `url`, `file_key`, and the CLI-stamped `grounding`. Any other field is rejected
-before submission in both modes, so a completion accepted in Local mode is not
-refused later by a Full appliance.
+before submission.
 
 ## Bound criteria
 
@@ -146,18 +147,18 @@ means the observed endpoints match, not continuous immutability. `stale`,
 `noncomparable`, and `unavailable` stay inspectable in the historical basis
 even when a human accepts residual risk. The original test outcomes do not
 change with that decision.
+For a report-enabled run, matching endpoints require matching Git observations
+and matching watched-file states/digests, including Git-ignored watched files.
+A watched file already different from its pin at both matching endpoints keeps
+its separate drift warning.
 Compact Local acceptance risk counts show `unavailable` and `noncomparable`
 current freshness as unknown even when all historical selected tests passed
 and watched files remain unchanged.
 Legacy records without that basis state still report an unknown risk when the
 current checkout comparison cannot run or its local identity is noncomparable.
 
-Full-mode `delivery report` and `delivery submit` reject Local-only
-`test_report`, `test_observation`, and `test_run` check fields before network
-calls. Supply ordinary command-level completion evidence in Full mode.
-
 An acceptance criterion carrying `@check:<name>` is verified from the named
-`checks[]` row rather than from its prose claim, in both Local and Full mode.
+`checks[]` row using that check’s recorded result.
 The stored acceptance criterion is the authority for the binding, so a
 completion cannot escape enforcement by omitting `verification_binding`.
 
@@ -174,7 +175,7 @@ deterministic check while review judged it on the agent's own claim.
 |---|---|
 | `pass` | criterion met |
 | `fail` | criterion unmet |
-| `skipped` or absent from `checks[]` | not verifiable — Full mode returns `needs_human_review`, Local mode fails the review and names the criterion and check |
+| `skipped` or absent from `checks[]` | review fails and names the criterion and check |
 
 Enforcement covers a missing or skipped check. It does not detect a falsely
 claimed `pass`: `checks[].status` is agent-reported unless the submission ran

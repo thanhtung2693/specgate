@@ -10,10 +10,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
+	"github.com/specgate/specgate/app/cli/internal/workflow"
 )
 
 type changeStatusResult struct {
@@ -31,6 +31,7 @@ type changeStatusResult struct {
 	Receipt                 string                              `json:"receipt"`
 	Freshness               string                              `json:"freshness"`
 	FreshnessUnchecked      bool                                `json:"-"`
+	HistoricalVerification  bool                                `json:"historical_verification,omitempty"`
 	NextActor               string                              `json:"next_actor"`
 	Missing                 []string                            `json:"missing"`
 	Guidance                string                              `json:"guidance,omitempty"`
@@ -58,7 +59,7 @@ type changeStatusResult struct {
 	// including the check that decided a bound criterion. A human accepting or
 	// rejecting delivery decides from this payload and must not need the
 	// completion file to learn which criterion is weak.
-	Criteria []client.CriterionReview `json:"criteria,omitempty"`
+	Criteria []workflow.CriterionReview `json:"criteria,omitempty"`
 }
 
 func newChangeCmd(deps *Deps) *cobra.Command {
@@ -71,9 +72,9 @@ func newChangeCmd(deps *Deps) *cobra.Command {
 			"This facade reads and acts on the existing work and delivery records. For detailed\n" +
 			"diagnosis or preparation, use the delivery, work, gates, artifact, audit, and\n" +
 			"verify command families.",
-		Example: "  specgate change status CR-123\n" +
-			"  specgate change submit CR-123\n" +
-			"  specgate change submit CR-123 --file .specgate/completion-CR-123.json\n" +
+		Example: "  specgate change status LOCAL-123\n" +
+			"  specgate change submit LOCAL-123\n" +
+			"  specgate change submit LOCAL-123 --file .specgate/completion-LOCAL-123.json\n" +
 			"  specgate --yes change accept LOCAL-123 --review-id <review-id> --note \"Approved after review\"\n" +
 			"  specgate --yes change request-changes LOCAL-123 --review-id <review-id> --note \"Please address the failing check\"",
 	}
@@ -84,8 +85,8 @@ func newChangeCmd(deps *Deps) *cobra.Command {
 			"Default completion file: .specgate/completion-<ref>.json for a file-safe ref made of\n" +
 			"letters, digits, hyphens (-), and underscores (_).\n" +
 			"--file is required when the ref is not file-safe.",
-		Example: "  specgate change submit CR-123\n" +
-			"  specgate change submit CR-123 --file .specgate/completion-CR-123.json --json",
+		Example: "  specgate change submit LOCAL-123\n" +
+			"  specgate change submit LOCAL-123 --file .specgate/completion-LOCAL-123.json --json",
 		Operation:          "change.submit",
 		DefaultFileFromRef: true,
 		CompactJSON:        true,
@@ -98,28 +99,13 @@ func newChangeCmd(deps *Deps) *cobra.Command {
 		Short: "Show actionable change status",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := rejectFullAcceptanceSelections(cmd, deps, "change.status"); err != nil {
-				return err
-			}
 			var (
 				result changeStatusResult
 				err    error
 			)
-			if deps.Topology == config.ModeLocal {
-				result, err = changeStatusLocal(cmd, deps, args[0])
-				if err != nil {
-					return localExitError(deps, "change.status", err)
-				}
-			} else {
-				result, err = changeStatusFull(cmd, deps, args[0])
-				if err != nil {
-					var resolveErr *changeStatusResolveError
-					if errors.As(err, &resolveErr) {
-						code := deps.Printer.Error("change.status", mapWorkRefError(resolveErr.ref, resolveErr.err))
-						return &output.ExitError{Code: code, Err: resolveErr.err}
-					}
-					return apiExitError(deps, "change.status", err)
-				}
+			result, err = changeStatusLocal(cmd, deps, args[0])
+			if err != nil {
+				return localExitError(deps, "change.status", err)
 			}
 			if deps.Printer.Mode() == output.ModeJSON {
 				deps.Printer.Success("change.status", result)
@@ -167,7 +153,7 @@ func newChangeApproveCmd(deps *Deps) *cobra.Command {
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
-			if deps.Topology == config.ModeLocal && !deps.Yes {
+			if !deps.Yes {
 				payload := output.ErrorPayload{
 					Code:    "confirmation_required",
 					Message: "Local artifact approval requires an explicit human assertion; re-run with --yes.",
@@ -192,69 +178,35 @@ func newChangeApproveCmd(deps *Deps) *cobra.Command {
 				code := deps.Printer.Error("change.approve", output.ErrorPayload{Code: "usage", Message: err.Error()})
 				return &output.ExitError{Code: code, Err: err}
 			}
-			if deps.Topology == config.ModeLocal {
-				store, err := openLocalStore(deps)
-				if err != nil {
-					return localExitError(deps, "change.approve", err)
-				}
-				defer store.Close()
-				selection, err := localSelection(cmd.Context(), deps, store)
-				if err != nil {
-					return localExitError(deps, "change.approve", err)
-				}
-				artifact, err := store.GetArtifact(cmd.Context(), selection.Workspace.ID, id)
-				if err != nil {
-					return localExitError(deps, "change.approve", err)
-				}
-				if artifact.Status != "approved" {
-					if err := store.ApproveArtifact(cmd.Context(), selection.Workspace.ID, id, selection.User.Username, note); err != nil {
-						return localExitError(deps, "change.approve", err)
-					}
-				}
-				feature, err := store.PromoteArtifact(cmd.Context(), selection.Workspace.ID, id)
-				if err != nil {
-					return localExitError(deps, "change.approve", err)
-				}
-				handoff, err := ensureLocalApprovedWork(
-					cmd.Context(), store, selection.Workspace.ID, artifact.ID, feature.Key, title, description, criteria,
-				)
-				if err != nil {
-					return localExitError(deps, "change.approve", err)
-				}
-				return printChangeApproval(deps, id, "v"+strconv.Itoa(artifact.Version), artifact.SnapshotDigest, feature.Key, feature.Version, handoff, criteria)
-			}
-
-			artifact, err := deps.Client.GetArtifact(cmd.Context(), id)
+			store, err := openLocalStore(deps)
 			if err != nil {
-				return apiExitError(deps, "change.approve", err)
+				return localExitError(deps, "change.approve", err)
 			}
-			// This prompt is the moment the criteria list is still changeable, so it
-			// states how much of it review can enforce. The digest is in the JSON
-			// envelope; a human cannot act on it while answering yes or no.
-			prompt := fmt.Sprintf(
-				"Approve artifact %s %s and hand off %q? %s",
-				id, artifact.Version, title, approvalCriteriaPrompt(criteria),
-			)
-			proceed, err := requireConfirm(deps, prompt)
-			if err != nil || !proceed {
-				return err
+			defer store.Close()
+			selection, err := localSelection(cmd.Context(), deps, store)
+			if err != nil {
+				return localExitError(deps, "change.approve", err)
+			}
+			artifact, err := store.GetArtifact(cmd.Context(), selection.Workspace.ID, id)
+			if err != nil {
+				return localExitError(deps, "change.approve", err)
 			}
 			if artifact.Status != "approved" {
-				if _, err := deps.Client.UpdateArtifactStatus(cmd.Context(), id, client.UpdateArtifactStatusInput{
-					Status: "approved", ApprovedBy: currentActor(deps), ActorKind: "human", Note: note,
-				}); err != nil {
-					return apiExitError(deps, "change.approve", err)
+				if err := store.ApproveArtifact(cmd.Context(), selection.Workspace.ID, id, selection.User.Username, note); err != nil {
+					return localExitError(deps, "change.approve", err)
 				}
 			}
-			feature, err := deps.Client.PromoteArtifactCanonical(cmd.Context(), id, currentActor(deps))
+			feature, err := store.PromoteArtifact(cmd.Context(), selection.Workspace.ID, id)
 			if err != nil {
-				return apiExitError(deps, "change.approve", err)
+				return localExitError(deps, "change.approve", err)
 			}
-			handoff, err := ensureFullApprovedWork(cmd.Context(), deps, id, feature.Key, title, description, criteria)
+			handoff, err := ensureLocalApprovedWork(
+				cmd.Context(), store, selection.Workspace.ID, artifact.ID, feature.Key, title, description, criteria,
+			)
 			if err != nil {
-				return apiExitError(deps, "change.approve", err)
+				return localExitError(deps, "change.approve", err)
 			}
-			return printChangeApproval(deps, id, artifact.Version, artifact.SnapshotDigest, feature.Key, feature.Version, handoff, criteria)
+			return printChangeApproval(deps, id, "v"+strconv.Itoa(artifact.Version), artifact.SnapshotDigest, feature.Key, feature.Version, handoff, criteria)
 		},
 	}
 	cmd.Flags().StringVar(&note, "note", "", "Optional reviewer note recorded with the approval")
@@ -338,83 +290,6 @@ func ensureLocalApprovedWork(
 	}, nil
 }
 
-func ensureFullApprovedWork(
-	ctx context.Context,
-	deps *Deps,
-	artifactID, featureKey, title, description string,
-	criteria []string,
-) (changeApprovalHandoff, error) {
-	body := map[string]any{
-		"feature": featureKey, "title": title, "acceptance_criteria": criteria,
-	}
-	if strings.TrimSpace(description) != "" {
-		body["description"] = strings.TrimSpace(description)
-	}
-	if err := annotateBodyWithCurrentSelection(ctx, deps, body); err != nil {
-		return changeApprovalHandoff{}, err
-	}
-	workspaceID, _ := body["workspace_id"].(string)
-	requestCtx := requestContextForBody(ctx, body)
-	items, err := deps.Client.ListWorkItemsIncludingArchived(requestCtx, workspaceID)
-	if err != nil {
-		return changeApprovalHandoff{}, err
-	}
-	for _, item := range items {
-		if item.LeadArtifactID != artifactID {
-			continue
-		}
-		storedCriteria, err := deps.Client.ListAcceptanceCriteria(requestCtx, item.ID)
-		if err != nil {
-			return changeApprovalHandoff{}, err
-		}
-		if item.Title != title || strings.TrimSpace(item.IntentMD) != strings.TrimSpace(description) ||
-			!sameStrings(fullCriterionArguments(storedCriteria), criteria) {
-			return changeApprovalHandoff{}, fmt.Errorf(
-				"artifact %s already has work %s with a different work contract; use that work or create a separate expert work item",
-				artifactID, item.Key,
-			)
-		}
-		pack, err := deps.Client.ContextPack(requestCtx, item.ID)
-		if err != nil {
-			return changeApprovalHandoff{}, err
-		}
-		if pack.State != "assembled" {
-			return changeApprovalHandoff{}, fmt.Errorf("context pack for %s is %s, want assembled", item.Key, pack.State)
-		}
-		return changeApprovalHandoff{WorkID: item.ID, WorkRef: item.Key, ContextState: pack.State, WorkPhase: item.Phase}, nil
-	}
-	created, err := deps.Client.CreateWorkItem(requestCtx, body)
-	if err != nil {
-		return changeApprovalHandoff{}, err
-	}
-	workID, _ := created["change_request_id"].(string)
-	workRef, _ := created["change_request_key"].(string)
-	leadArtifactID, _ := created["lead_artifact_id"].(string)
-	if strings.TrimSpace(workID) == "" || strings.TrimSpace(workRef) == "" || leadArtifactID != artifactID {
-		return changeApprovalHandoff{}, fmt.Errorf("created work did not return the expected approved artifact binding")
-	}
-	pack, err := deps.Client.ContextPack(requestCtx, workID)
-	if err != nil {
-		return changeApprovalHandoff{}, err
-	}
-	if pack.State != "assembled" {
-		return changeApprovalHandoff{}, fmt.Errorf("context pack for %s is %s, want assembled", workRef, pack.State)
-	}
-	return changeApprovalHandoff{WorkID: workID, WorkRef: workRef, ContextState: pack.State, WorkPhase: "ready", Created: true}, nil
-}
-
-func fullCriterionArguments(criteria []client.AcceptanceCriterion) []string {
-	result := make([]string, 0, len(criteria))
-	for _, criterion := range criteria {
-		value := strings.TrimSpace(criterion.Text)
-		if binding := strings.TrimSpace(criterion.VerificationBinding); binding != "" {
-			value += " @check:" + binding
-		}
-		result = append(result, value)
-	}
-	return result
-}
-
 func sameStrings(left, right []string) bool {
 	if len(left) != len(right) {
 		return false
@@ -485,31 +360,6 @@ func newChangeDecisionCmd(deps *Deps, use, short, operation, decision, prompt st
 	return cmd
 }
 
-func changeStatusFull(cmd *cobra.Command, deps *Deps, ref string) (changeStatusResult, error) {
-	work, err := deps.Client.ResolveWorkRef(cmd.Context(), ref)
-	if err != nil {
-		return changeStatusResult{}, &changeStatusResolveError{ref: ref, err: err}
-	}
-	delivery, err := deps.Client.DeliveryStatus(cmd.Context(), work.ChangeRequestID, true)
-	if err != nil {
-		return changeStatusResult{}, err
-	}
-	result := deriveFullChangeStatus(work, delivery)
-	if delivery != nil {
-		result = applyCheckoutFreshness(cmd.Context(), deps, result, clientGitReceipt(delivery.GitReceipt))
-	}
-	return result, nil
-}
-
-type changeStatusResolveError struct {
-	ref string
-	err error
-}
-
-func (e *changeStatusResolveError) Error() string { return e.err.Error() }
-
-func (e *changeStatusResolveError) Unwrap() error { return e.err }
-
 func changeStatusLocal(cmd *cobra.Command, deps *Deps, ref string) (changeStatusResult, error) {
 	store, err := openLocalStore(deps)
 	if err != nil {
@@ -520,11 +370,15 @@ func changeStatusLocal(cmd *cobra.Command, deps *Deps, ref string) (changeStatus
 	if err != nil {
 		return changeStatusResult{}, err
 	}
-	work, err := store.GetWork(cmd.Context(), selection.Workspace.ID, ref)
+	return changeStatusLocalFromStore(cmd, deps, store, selection.Workspace.ID, ref)
+}
+
+func changeStatusLocalFromStore(cmd *cobra.Command, deps *Deps, store *local.Store, workspaceID, ref string) (changeStatusResult, error) {
+	work, err := store.GetWork(cmd.Context(), workspaceID, ref)
 	if err != nil {
 		return changeStatusResult{}, err
 	}
-	result, report, err := deriveLocalChangeStatusFromStore(cmd.Context(), store, selection.Workspace.ID, work)
+	result, report, err := deriveLocalChangeStatusFromStore(cmd.Context(), store, workspaceID, work)
 	if err != nil {
 		return changeStatusResult{}, err
 	}
@@ -537,7 +391,7 @@ func changeStatusLocal(cmd *cobra.Command, deps *Deps, ref string) (changeStatus
 		result.Risks = acceptanceRisks(result)
 		return result, nil
 	}
-	result, err = augmentAcceptanceStatus(cmd, deps, store, selection.Workspace.ID, ref, result)
+	result, err = augmentAcceptanceStatus(cmd, deps, store, workspaceID, ref, result)
 	if err != nil {
 		return result, err
 	}
@@ -605,54 +459,6 @@ func enrichLocalStatusScope(ctx context.Context, store *local.Store, workspaceID
 	return result, nil
 }
 
-func deriveFullChangeStatus(work *client.ResolvedWork, delivery *client.DeliveryStatusResult) changeStatusResult {
-	result := changeStatusResult{
-		Mode: config.ModeFull, Ref: work.ChangeRequestKey, Title: work.Title,
-		Missing: []string{},
-	}
-	if delivery == nil || !delivery.Found {
-		return implementationChangeStatus(result)
-	}
-	result.Evidence = deliveryEvidenceLabel(deliveryEvidenceVerdict(delivery), delivery.ReasonCode)
-	result.Assurance = deliveryAssuranceLabel(delivery)
-	result.Decision = deliveryDecisionLabel(delivery)
-	result.Receipt = deliveryReceiptLabel(delivery.GitReceipt)
-	result.Criteria = delivery.PerCriterion
-	hasReceipt := deliveryGitReceiptAvailable(delivery.GitReceipt)
-	result.Freshness, result.Stale, result.StaleReason = changeFreshness(hasReceipt, delivery.PeerReview.State)
-	if strings.TrimSpace(delivery.Executor) == "human" {
-		if passingStatus(delivery.Verdict) {
-			return acceptedChangeStatus(result)
-		}
-		result.Guidance = strings.TrimSpace(delivery.Note)
-		if result.Guidance == "" {
-			result.Guidance = strings.TrimSpace(delivery.Summary)
-		}
-		return reworkRequestedChangeStatus(result)
-	}
-	if strings.TrimSpace(delivery.ReasonCode) == "delivery_review_outdated" {
-		result.State = "review_pending"
-		result.NextActor = "implementing_agent"
-		result.Missing = []string{"Delivery review for the latest completion"}
-		result.NextCommand = "specgate delivery review " + result.Ref
-		return result
-	}
-	if strings.TrimSpace(delivery.ReasonCode) == "policy_unavailable" {
-		result.State = "blocked"
-		result.NextActor = "maintainer"
-		result.Missing = []string{"Delivery policy unavailable"}
-		result.NextCommand = "specgate delivery status " + result.Ref + " --detail"
-		return result
-	}
-	if strings.TrimSpace(delivery.Verdict) == "needs_human_review" && strings.TrimSpace(delivery.Executor) != "human" {
-		return humanReviewRequiredChangeStatus(result, delivery.Hint)
-	}
-	if passingStatus(delivery.Verdict) {
-		return awaitingAcceptanceChangeStatus(result)
-	}
-	return implementationRequiredChangeStatus(result)
-}
-
 func deriveLocalChangeStatus(work local.WorkItem, review *local.DeliveryReview, report *local.DeliveryReport, peer local.PeerReviewStatus) changeStatusResult {
 	result := changeStatusResult{
 		Mode: config.ModeLocal, Ref: work.Key, Title: work.Title, Missing: []string{},
@@ -703,11 +509,7 @@ func awaitingAcceptanceChangeStatus(result changeStatusResult) changeStatusResul
 	result.State = "awaiting_acceptance"
 	result.NextActor = "human_reviewer"
 	result.Missing = []string{"Human acceptance"}
-	if result.Mode == config.ModeLocal {
-		result.NextCommand = "specgate --yes change accept " + result.Ref + " --review-id " + result.ReviewID
-	} else {
-		result.NextCommand = "specgate change accept " + result.Ref
-	}
+	result.NextCommand = "specgate --yes change accept " + result.Ref + " --review-id " + result.ReviewID
 	return result
 }
 
@@ -753,14 +555,6 @@ func deliveryReportScaffold(ref string) string {
 
 func deliveryReportResubmit(ref string) string {
 	return "specgate --yes change submit " + ref + " --run-checks --json"
-}
-
-func deliveryGitReceiptAvailable(receipt *client.GitReceipt) bool {
-	if receipt == nil || strings.TrimSpace(receipt.HeadRevision) == "" {
-		return false
-	}
-	availability := strings.TrimSpace(receipt.Availability)
-	return availability == "" || availability == "available"
 }
 
 func localDeliveryReceiptAvailable(body map[string]any) bool {

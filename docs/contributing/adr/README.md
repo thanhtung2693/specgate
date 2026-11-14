@@ -5,11 +5,16 @@ the relevant ADR before changing the affected architecture or contract.
 
 - [Delivery-verdict trust model](2026-07-07-delivery-trust-model.md)
 - [Completion-bound delivery acceptance](2026-07-19-completion-bound-delivery-acceptance.md)
+## Historical Full distribution
+
+The following records describe service behavior when Full shipped. Refer to the
+[current architecture](../architecture.md) for the supported Local runtime.
+
 - [Minimal team integration boundary](2026-07-20-minimal-team-integrations.md)
 - [Governance Knowledge RAG foundation](2026-07-07-knowledge-rag-foundation.md)
 - [Server as governance truth](2026-07-08-server-as-governance-truth.md)
 - [Artifact encryption at rest](2026-07-10-artifact-encryption-at-rest.md)
-- [Gateway-asserted identity for the shared appliance](2026-07-29-gateway-asserted-identity.md) — accepted and implemented
+- [Gateway-asserted identity for the shared appliance](2026-07-29-gateway-asserted-identity.md)
 
 Add a new ADR when a decision changes system boundaries, trust assumptions,
 data ownership, or a cross-module contract. Do not rewrite an accepted decision

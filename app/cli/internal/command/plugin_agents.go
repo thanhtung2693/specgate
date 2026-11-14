@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
+	"github.com/specgate/specgate/app/cli/internal/workflow"
 )
 
 // pluginAgentAdapter is the single registration point for IDE-specific plugin
@@ -21,7 +21,7 @@ type pluginAgentAdapter struct {
 	install       func(*pluginInstaller) error
 	inspectNative func(string) nativePluginInspection
 	nativeRemoval func(string) string
-	health        func(string, bool, *client.PluginPackage, ...string) pluginAgentHealth
+	health        func(string, bool, *workflow.PluginPackage, ...string) pluginAgentHealth
 	installed     func(string) bool
 	remove        func(*pluginRemover) error
 }

@@ -10,10 +10,10 @@ operators run SpecGate and use it with a coding agent.
 
 Start here when you want to:
 
-- install the CLI and start a local deployment;
+- install the CLI and initialize a Local store;
 - connect Codex, Claude Code, or Cursor;
 - create governed work and review delivery evidence;
-- configure governance, models, integrations, or storage;
+- add Local rubric instructions or back up Local state;
 - troubleshoot gates or look up CLI behavior.
 
 New users should begin with the
@@ -35,8 +35,7 @@ Start here when you want to:
 New contributors should begin with
 [Contributor setup](contributing/setup.md).
 
-## Before you expose SpecGate on a network
+## Local trust boundary
 
-SpecGate is designed for trusted machines and private networks. Before making
-a deployment reachable from another machine, read
+The review UI listens on loopback and assumes a trusted machine. See
 [Trust and security](using-specgate/concepts/trust-and-security.md).

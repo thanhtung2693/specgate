@@ -28,21 +28,7 @@ specgate init
 specgate doctor
 ```
 
-Local uses the same focused IDE plugin as Full without contacting a registry,
-Docker, or server; the CLI embeds its files.
-
-For Full appliance or an existing server, first verify the configured server:
-
-```bash
-specgate doctor
-```
-
-If no server is configured, set one before installing Full-mode plugins:
-
-```bash
-specgate config server http://localhost:3000/api/doc-registry
-specgate doctor
-```
+The CLI embeds its IDE plugin files.
 
 ## Choose an installation method
 
@@ -150,13 +136,7 @@ Interactive install:
 specgate plugins install
 ```
 
-Plugin packages and executable hooks never use a repository's committed
-`.specgate/config` server. The installer uses an explicit `--registry`, then
-`--server`/`SPECGATE_SERVER`, then the user's saved server, so opening another
-repository cannot redirect a global IDE-plugin install.
-
-On a new setup, this command works before `specgate init`; you do not need to
-start Full mode first.
+This command uses the embedded package and works before `specgate init`.
 
 Choose one or more IDEs from the checkbox list. The default selection prefers
 IDE tools detected on your machine and falls back to all supported agents when
@@ -293,8 +273,8 @@ Or refresh everything with the CLI updater:
 specgate update
 ```
 
-In Local mode, `update` refreshes the CLI and IDE plugins installed by it, then
-skips the Full appliance. Update native plugins with their plugin manager.
+`update` refreshes the CLI and its managed global IDE plugins. Update native
+plugins with their plugin manager.
 
 Restart the IDE after refresh. Some IDEs cache plugin files until restart.
 
@@ -315,10 +295,8 @@ To delete Local SpecGate data too:
 specgate uninstall --purge-data --yes
 ```
 
-Cleanup warns first and removes only SpecGate-owned data. In Full mode, the
-same flag removes the managed appliance and its data while leaving Docker image
-cache intact. See the [CLI reference](../reference/cli.md) for exact scope and
-flags.
+Cleanup warns first. See [Local CLI uninstall](../reference/cli.md#local-cli-uninstall)
+for the exact scope and flags.
 
 ## Troubleshooting
 
@@ -362,21 +340,6 @@ restart:
 
 ```bash
 specgate plugins install --agent codex
-```
-
-### The installer targets the wrong server
-
-Set the server URL before installing:
-
-```bash
-specgate config server http://localhost:3000/api/doc-registry
-specgate plugins install
-```
-
-Or pass a SpecGate agent-package registry URL explicitly:
-
-```bash
-specgate plugins install --registry http://localhost:3000/api/doc-registry
 ```
 
 ## Related

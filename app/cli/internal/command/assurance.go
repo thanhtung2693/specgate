@@ -2,7 +2,6 @@ package command
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -10,10 +9,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
+	"github.com/specgate/specgate/app/cli/internal/workflow"
 )
 
 type capabilityRow struct {
@@ -30,11 +29,10 @@ type capabilityManifest struct {
 }
 
 type capabilityDefinition struct {
-	ID            string
-	Name          string
-	LocalState    string
-	LocalReason   string
-	FullDetailKey string
+	ID          string
+	Name        string
+	LocalState  string
+	LocalReason string
 }
 
 var capabilityCatalog = []capabilityDefinition{
@@ -42,20 +40,16 @@ var capabilityCatalog = []capabilityDefinition{
 	{ID: "artifact_versions", Name: "Immutable spec versions", LocalState: "available"},
 	{ID: "governed_delivery", Name: "Acceptance-criterion delivery evidence", LocalState: "available"},
 	{ID: "workspace_coverage", Name: "Workspace specification coverage", LocalState: "available"},
-	{ID: "portable_transfer", Name: "Portable Local-to-Full transfer", LocalState: "available"},
 	{ID: "ide_agent_gates", Name: "IDE-agent gate tasks", LocalState: "available"},
-	{ID: "web_ui", Name: "Browser UI", LocalState: "unavailable", LocalReason: "Local mode has no server or browser UI", FullDetailKey: "web_ui"},
-	{ID: "governance_chat", Name: "Governance chat", LocalState: "unavailable", LocalReason: "Local mode has no agents service", FullDetailKey: "governance_chat"},
-	{ID: "platform_model", Name: "Server-side governance model", LocalState: "unavailable", LocalReason: "Local mode delegates model work to the IDE agent", FullDetailKey: "platform_model"},
-	{ID: "integrations", Name: "Team integrations", LocalState: "unavailable", LocalReason: "Local mode has no integration service", FullDetailKey: "integrations"},
-	{ID: "knowledge", Name: "Workspace knowledge registry", LocalState: "unavailable", LocalReason: "Local mode stores governed specs, not a knowledge service", FullDetailKey: "knowledge"},
-	{ID: "semantic_search", Name: "Semantic knowledge search", LocalState: "unavailable", LocalReason: "Local mode has no embedding service", FullDetailKey: "semantic_search"},
+	{ID: "web_ui", Name: "Browser inspection and human review", LocalState: "available"},
 }
 
 // localCommandCapabilities is the command-to-capability portion of the same
 // manifest used by `specgate capabilities`.
 var localCommandCapabilities = map[string]string{
 	"version":                   "core",
+	"ui":                        "web_ui",
+	"open":                      "web_ui",
 	"user current":              "core",
 	"user list":                 "core",
 	"user login":                "core",
@@ -104,7 +98,6 @@ var localCommandCapabilities = map[string]string{
 	"change status":             "governed_delivery",
 	"change submit":             "governed_delivery",
 	"audit":                     "core",
-	"stats":                     "core",
 	"status":                    "core",
 	"doctor":                    "core",
 	"update":                    "core",
@@ -114,7 +107,6 @@ var localCommandCapabilities = map[string]string{
 	"verify":                    "governed_delivery",
 	"plugins doctor":            "core",
 	"plugins install":           "core",
-	"portable export":           "portable_transfer",
 }
 
 func newCapabilitiesCmd(deps *Deps) *cobra.Command {
@@ -123,22 +115,12 @@ func newCapabilitiesCmd(deps *Deps) *cobra.Command {
 		Short: "Show what this SpecGate mode can do now",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			manifest := localCapabilityManifest()
-			if deps.Topology == config.ModeFull {
-				meta, err := deps.Client.Meta(cmd.Context())
-				if err != nil {
-					return apiExitError(deps, "capabilities", err)
-				}
-				manifest = fullCapabilityManifest(meta)
-			}
+
 			if deps.Printer.Mode() == output.ModeJSON {
 				deps.Printer.Success("capabilities", manifest)
 				return nil
 			}
-			modeName := "Full"
-			if manifest.Mode == config.ModeLocal {
-				modeName = "Local"
-			}
-			fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Mode:"), modeName)
+			fmt.Fprintf(deps.Stdout, "%s Local\n", label(deps, "Mode:"))
 			for _, capability := range manifest.Capabilities {
 				line := fmt.Sprintf("%-22s %s", capability.ID, capability.State)
 				if capability.Reason != "" {
@@ -167,22 +149,6 @@ func localCapabilityManifest() capabilityManifest {
 	return capabilityManifest{Mode: config.ModeLocal, Capabilities: rows}
 }
 
-func fullCapabilityManifest(meta *client.Meta) capabilityManifest {
-	rows := make([]capabilityRow, 0, len(capabilityCatalog))
-	for _, definition := range capabilityCatalog {
-		row := capabilityRow{ID: definition.ID, Name: definition.Name, State: "available"}
-		if definition.FullDetailKey != "" {
-			if detail, ok := meta.CapabilityDetails[definition.FullDetailKey]; ok {
-				row.State = detail.State
-				row.Reason = detail.Reason
-				row.NextCommand = detail.NextCommand
-			}
-		}
-		rows = append(rows, row)
-	}
-	return capabilityManifest{Mode: config.ModeFull, Capabilities: rows}
-}
-
 type closeoutWork struct {
 	ID    string `json:"id"`
 	Key   string `json:"key"`
@@ -198,17 +164,17 @@ type closeoutArtifact struct {
 }
 
 type closeoutResult struct {
-	Mode            config.Mode              `json:"mode"`
-	Work            closeoutWork             `json:"work"`
-	Artifact        *closeoutArtifact        `json:"artifact,omitempty"`
-	QuickRoute      bool                     `json:"quick_route"`
-	Criteria        []client.CriterionReview `json:"criteria"`
-	Checks          []client.CheckResult     `json:"checks"`
-	DeliveryFound   bool                     `json:"delivery_found"`
-	DeliveryVerdict string                   `json:"delivery_verdict"`
-	DeliverySummary string                   `json:"delivery_summary,omitempty"`
-	CleanupEligible bool                     `json:"cleanup_eligible"`
-	NextCommand     string                   `json:"next_command"`
+	Mode            config.Mode                `json:"mode"`
+	Work            closeoutWork               `json:"work"`
+	Artifact        *closeoutArtifact          `json:"artifact,omitempty"`
+	QuickRoute      bool                       `json:"quick_route"`
+	Criteria        []workflow.CriterionReview `json:"criteria"`
+	Checks          []workflow.CheckResult     `json:"checks"`
+	DeliveryFound   bool                       `json:"delivery_found"`
+	DeliveryVerdict string                     `json:"delivery_verdict"`
+	DeliverySummary string                     `json:"delivery_summary,omitempty"`
+	CleanupEligible bool                       `json:"cleanup_eligible"`
+	NextCommand     string                     `json:"next_command"`
 }
 
 func newVerifyCmd(deps *Deps) *cobra.Command {
@@ -221,16 +187,9 @@ func newVerifyCmd(deps *Deps) *cobra.Command {
 				result closeoutResult
 				err    error
 			)
-			if deps.Topology == config.ModeLocal {
-				result, err = verifyLocal(cmd, deps, args[0])
-				if err != nil {
-					return localExitError(deps, "verify", err)
-				}
-			} else {
-				result, err = verifyFull(cmd, deps, args[0])
-				if err != nil {
-					return apiExitError(deps, "verify", err)
-				}
+			result, err = verifyLocal(cmd, deps, args[0])
+			if err != nil {
+				return localExitError(deps, "verify", err)
 			}
 			if deps.Printer.Mode() == output.ModeJSON {
 				deps.Printer.Success("verify", result)
@@ -243,58 +202,6 @@ func newVerifyCmd(deps *Deps) *cobra.Command {
 			return nil
 		},
 	}
-}
-
-func verifyFull(cmd *cobra.Command, deps *Deps, ref string) (closeoutResult, error) {
-	work, err := deps.Client.ResolveWorkRef(cmd.Context(), ref)
-	if err != nil {
-		return closeoutResult{}, closeoutReadError("resolve work", err)
-	}
-	result := closeoutResult{
-		Mode: config.ModeFull,
-		Work: closeoutWork{
-			ID: work.ChangeRequestID, Key: work.ChangeRequestKey, Title: work.Title, Phase: work.Phase,
-		},
-		Criteria:        []client.CriterionReview{},
-		Checks:          []client.CheckResult{},
-		DeliveryVerdict: "not_reviewed",
-	}
-	pack, err := deps.Client.ContextPack(cmd.Context(), work.ChangeRequestID)
-	if err != nil {
-		return closeoutResult{}, closeoutReadError("read context pack", err)
-	}
-	artifactID := strings.TrimSpace(pack.ArtifactID)
-	if artifactID == "" {
-		artifactID = strings.TrimSpace(pack.SourceArtifactID)
-	}
-	if artifactID != "" {
-		artifact, err := deps.Client.GetArtifact(cmd.Context(), artifactID)
-		if err != nil {
-			return closeoutResult{}, closeoutReadError("read governing artifact", err)
-		}
-		result.Artifact = &closeoutArtifact{
-			ID: artifact.ID, Version: artifact.Version, Status: artifact.Status, SnapshotDigest: artifact.SnapshotDigest,
-		}
-	}
-	result.QuickRoute = artifactID == ""
-	criteria, err := deps.Client.ListAcceptanceCriteria(cmd.Context(), work.ChangeRequestID)
-	if err != nil {
-		return closeoutResult{}, closeoutReadError("read acceptance criteria", err)
-	}
-	delivery, err := deps.Client.DeliveryStatus(cmd.Context(), work.ChangeRequestID, true)
-	if err != nil {
-		return closeoutResult{}, closeoutReadError("read delivery status", err)
-	}
-	result.DeliveryFound = delivery.Found
-	if delivery.Found {
-		result.DeliveryVerdict = delivery.Verdict
-		result.DeliverySummary = delivery.Summary
-		result.Checks = delivery.Checks
-	}
-	result.Criteria = mergeCriterionReviews(criteria, delivery.PerCriterion)
-	result.CleanupEligible = workPhaseDelivered(work.Phase) && delivery.Verdict == "pass"
-	result.NextCommand = closeoutNextCommand(result)
-	return result, nil
 }
 
 func verifyLocal(cmd *cobra.Command, deps *Deps, ref string) (closeoutResult, error) {
@@ -311,13 +218,18 @@ func verifyLocal(cmd *cobra.Command, deps *Deps, ref string) (closeoutResult, er
 	if err != nil {
 		return closeoutResult{}, err
 	}
+	commandPrefix := "specgate"
+	if cmd.Flags().Changed("workspace") && deps.WorkspaceOverride != "" {
+		commandPrefix += " --workspace " + shellQuote(deps.WorkspaceOverride)
+	}
 	result := closeoutResult{
 		Mode:            config.ModeLocal,
 		Work:            closeoutWork{ID: work.ID, Key: work.Key, Title: work.Title, Phase: work.Phase},
 		QuickRoute:      work.ArtifactID == "",
 		Criteria:        localPendingCriteria(work.AcceptanceCriteria),
-		Checks:          []client.CheckResult{},
+		Checks:          []workflow.CheckResult{},
 		DeliveryVerdict: "not_reviewed",
+		NextCommand:     commandPrefix + " change status " + work.Key + " --json",
 	}
 	if work.ArtifactID != "" {
 		artifact, err := store.GetArtifact(cmd.Context(), selection.Workspace.ID, work.ArtifactID)
@@ -336,55 +248,24 @@ func verifyLocal(cmd *cobra.Command, deps *Deps, ref string) (closeoutResult, er
 		result.DeliveryFound = true
 		result.DeliveryVerdict = review.Verdict
 		result.DeliverySummary = review.Summary
-		report, reportErr := store.LatestDeliveryReport(cmd.Context(), selection.Workspace.ID, work.Key)
+		report, reportErr := store.DeliveryReportForReview(cmd.Context(), selection.Workspace.ID, review)
 		if reportErr != nil {
 			return closeoutResult{}, reportErr
 		}
 		result.Criteria, result.Checks = localReportEvidence(work.AcceptanceCriteria, report)
 	}
 	result.CleanupEligible = workPhaseDelivered(work.Phase) && review.HumanDecision == "approve"
-	result.NextCommand = closeoutNextCommand(result)
+	if result.CleanupEligible {
+		result.NextCommand = "specgate cleanup --work --dry-run"
+	}
 	return result, nil
 }
 
-func closeoutReadError(operation string, err error) error {
-	var apiErr *client.APIError
-	if errors.As(err, &apiErr) {
-		copy := *apiErr
-		copy.Message = operation
-		copy.Detail = apiErr.Error()
-		return &copy
-	}
-	return fmt.Errorf("%s: %w", operation, err)
-}
-
-func mergeCriterionReviews(criteria []client.AcceptanceCriterion, reviews []client.CriterionReview) []client.CriterionReview {
-	byID := make(map[string]client.CriterionReview, len(reviews))
-	for _, review := range reviews {
-		byID[review.CriterionID] = review
-	}
-	result := make([]client.CriterionReview, 0, len(criteria))
-	for _, criterion := range criteria {
-		review, ok := byID[criterion.ID]
-		if !ok {
-			review = client.CriterionReview{CriterionID: criterion.ID, Text: criterion.Text, Verdict: "pending", Why: "no delivery evidence"}
-		}
-		if review.Text == "" {
-			review.Text = criterion.Text
-		}
-		if review.VerificationBinding == "" {
-			review.VerificationBinding = criterion.VerificationBinding
-		}
-		result = append(result, review)
-	}
-	return result
-}
-
-func localPendingCriteria(criteria []string) []client.CriterionReview {
-	result := make([]client.CriterionReview, 0, len(criteria))
+func localPendingCriteria(criteria []string) []workflow.CriterionReview {
+	result := make([]workflow.CriterionReview, 0, len(criteria))
 	for index, raw := range criteria {
 		text, binding := parseAcceptanceCriterionBinding(raw)
-		result = append(result, client.CriterionReview{
+		result = append(result, workflow.CriterionReview{
 			CriterionID:         fmt.Sprintf("local-%d", index+1),
 			Text:                text,
 			VerificationBinding: binding,
@@ -395,17 +276,17 @@ func localPendingCriteria(criteria []string) []client.CriterionReview {
 	return result
 }
 
-func localReportEvidence(criteria []string, report local.DeliveryReport) ([]client.CriterionReview, []client.CheckResult) {
+func localReportEvidence(criteria []string, report local.DeliveryReport) ([]workflow.CriterionReview, []workflow.CheckResult) {
 	reviews := localPendingCriteria(criteria)
 	byID := make(map[string]int, len(reviews))
 	for index, review := range reviews {
 		byID[review.CriterionID] = index
 	}
 	rawChecks, _ := report.Body["checks"].([]any)
-	checks := make([]client.CheckResult, 0, len(rawChecks))
+	checks := make([]workflow.CheckResult, 0, len(rawChecks))
 	for _, raw := range rawChecks {
 		row, _ := raw.(map[string]any)
-		checks = append(checks, client.CheckResult{
+		checks = append(checks, workflow.CheckResult{
 			Name: strings.TrimSpace(fmt.Sprint(row["name"])), Status: strings.TrimSpace(fmt.Sprint(row["status"])), Detail: strings.TrimSpace(fmt.Sprint(row["detail"])),
 			Source: checkSource(row["source"]),
 		})
@@ -452,7 +333,7 @@ func localReportEvidence(criteria []string, report local.DeliveryReport) ([]clie
 	return reviews, checks
 }
 
-func selectedJUnitDiagnostic(binding string, checks []client.CheckResult) string {
+func selectedJUnitDiagnostic(binding string, checks []workflow.CheckResult) string {
 	const marker = " — selected-test report: "
 	for _, check := range checks {
 		if check.Name != binding || check.Source != "specgate_cli" {
@@ -494,7 +375,7 @@ func checkSource(raw any) string {
 	return strings.TrimSpace(source)
 }
 
-func boundCriterionOutcome(binding string, checks []client.CheckResult) (string, string) {
+func boundCriterionOutcome(binding string, checks []workflow.CheckResult) (string, string) {
 	for _, check := range checks {
 		if check.Name != binding {
 			continue
@@ -535,36 +416,8 @@ func evidenceSummary(row map[string]any) string {
 	return "no evidence supplied"
 }
 
-func deliveryPassed(mode config.Mode, verdict string) bool {
-	if mode == config.ModeLocal {
-		return verdict == "passed"
-	}
-	return verdict == "pass"
-}
-
 func workPhaseDelivered(phase string) bool {
 	return strings.EqualFold(strings.TrimSpace(phase), "delivered")
-}
-
-func closeoutNextCommand(result closeoutResult) string {
-	ref := result.Work.Key
-	switch {
-	case result.Artifact == nil && !result.QuickRoute:
-		return "specgate work context " + ref + " --json"
-	case !result.DeliveryFound:
-		return "specgate delivery report " + ref + " --init"
-	case result.CleanupEligible:
-		return "specgate cleanup --work --dry-run"
-	case !deliveryPassed(result.Mode, result.DeliveryVerdict):
-		return "specgate delivery status " + ref + " --detail"
-	case !workPhaseDelivered(result.Work.Phase):
-		if result.Mode == config.ModeLocal {
-			return "specgate --yes change accept " + ref
-		}
-		return "specgate change accept " + ref
-	default:
-		return "specgate cleanup --work --dry-run"
-	}
 }
 
 func printCloseout(deps *Deps, result closeoutResult) {

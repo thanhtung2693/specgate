@@ -18,7 +18,7 @@ func TestPreservationEvidenceSurvivesHumanDecisionAndLaterCheckoutChange(t *test
 		{"request-changes", "stable", "passed", "reject"},
 	} {
 		t.Run(tc.verb, func(t *testing.T) {
-			deps, _, _, out := newFakeDeps(t)
+			deps, out := newTestDeps(t)
 			dir, store, sel, _ := newLocalChangeWork(t, deps)
 			root := deps.WorkingDir
 			path := filepath.Join(root, "data.txt")

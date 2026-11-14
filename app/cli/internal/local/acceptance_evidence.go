@@ -1,9 +1,6 @@
 package local
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
 // ProjectAcceptanceEvidence keeps reviewer-facing facts separate from raw
 // completion prose and command output. Missing rows remain explicit gaps.
@@ -50,12 +47,8 @@ func ProjectAcceptanceEvidence(criteria []string, body map[string]any, contracts
 			item.Gaps = append(item.Gaps, "claim: "+item.Claim)
 		}
 		if binding != "" {
-			for _, raw := range checks {
-				check, _ := raw.(map[string]any)
-				if name, _ := check["name"].(string); name != binding {
-					continue
-				}
-				item.CheckStatus, _ = check["status"].(string)
+			if check := findBoundCheck(checks, binding); check != nil {
+				item.CheckStatus = completionCheckStatus(check)
 				item.CheckSource, _ = check["source"].(string)
 				if item.CheckSource == "" {
 					item.CheckSource = "agent_attested"
@@ -117,10 +110,9 @@ func ProjectAcceptanceEvidence(criteria []string, body map[string]any, contracts
 				if item.CheckSource == "specgate_cli" && item.CheckProvenance != "selected_test_observed" {
 					item.CheckProvenance = "command_only"
 				}
-				break
 			}
 			if item.CheckStatus != "pass" {
-				item.Gaps = append(item.Gaps, "bound check "+binding+": "+strings.TrimSpace(item.CheckStatus))
+				item.Gaps = append(item.Gaps, "bound check "+binding+": "+item.CheckStatus)
 			}
 		}
 		if item.Claim == "satisfied" && item.EvidenceKind == "" && item.EvidencePath == "" && item.Citation == "" && (item.CheckStatus == "" || item.CheckStatus == "fail") {

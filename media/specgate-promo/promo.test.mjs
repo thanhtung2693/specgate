@@ -18,31 +18,19 @@ test("media commands share one stable tool pin documented for contributors", () 
   assert.ok(readFileSync(new URL("README.md", here), "utf8").includes(`HyperFrames ${versions[0]}`));
 });
 
-test("peer connector reaches the peer note instead of dangling in the proof lane", () => {
-  const path = html.match(/id="peer-connector"[^>]+d="M710 \d+ V(?<vertical>\d+) H(?<horizontal>\d+)"/);
-
-  assert.ok(path, "peer connector path is missing");
-  assert.ok(Number(path.groups.vertical) >= 299, "connector stops before the peer-note marker");
-  assert.ok(Number(path.groups.horizontal) >= 820, "connector does not tuck under the peer-note marker");
-});
-
-test("the evidence runner and proof dots share the lane center", () => {
-  assert.match(html, /viewBox="0 0 1500 258"/);
-  assert.match(html, /class="lane-base" d="M47 128 H1043"/);
-  assert.match(html, /id="lane-progress" class="lane-progress" d="M47 128 H1043"/);
-  assert.match(html, /id="peer-connector" class="peer-connector" d="M710 128 V299 H820"/);
-  assert.match(styles, /--lane-center-y: 128px;/);
-  assert.match(styles, /top: calc\(var\(--lane-center-y\) - 7\.5px\);/);
-  assert.match(styles, /top: calc\(var\(--lane-center-y\) - var\(--node-top\) - 8\.5px\);/);
-});
-
-test("revision copy describes readiness and retained evidence", () => {
-  assert.match(html, />REVISION READY</);
-  assert.match(html, />Evidence reproduced · peer affirmed</);
-  assert.match(timeline, /textContent: "Evidence reproduced · peer affirmed"/);
-  assert.doesNotMatch(html, />REVISION VERIFIED</);
-  assert.doesNotMatch(html, />AC-02 reproduced · peer affirmed</);
-  assert.doesNotMatch(timeline, /textContent: "AC-02 reproduced · peer affirmed"/);
+test("the evidence rail aligns its endpoints with the claim and human markers", () => {
+  const [, viewWidth, viewHeight] = html.match(/viewBox="0 0 (\d+) (\d+)"/);
+  const [, claimX, railY, decisionX] = html.match(/class="lane-base" d="M([\d.]+) (\d+) H([\d.]+)"/);
+  const [, nodeSize] = styles.match(/\.proof-node \.node-dot\s*\{[^}]*width: (\d+)px;/);
+  const [, claimLeft] = styles.match(/\.node-claim \{ left: (\d+)px;/);
+  const [, decisionLeft] = styles.match(/\.node-human \{ left: (\d+)px;/);
+  assert.equal(Number(claimX), Number(claimLeft) + Number(nodeSize) / 2);
+  assert.equal(Number(decisionX), Number(decisionLeft) + Number(nodeSize) / 2);
+  assert.ok(Number(decisionX) < Number(viewWidth) && Number(railY) < Number(viewHeight));
+  assert.match(styles, new RegExp(`--lane-center-y: ${railY}px;`));
+  assert.ok(html.includes(`class="lane-progress" d="M${claimX} ${railY} H${decisionX}"`));
+  assert.ok(html.includes('window.__timelines["specgate-promo"] = window.__specgatePromoTimeline'));
+  assert.ok(timeline.includes('gsap.timeline({ paused: true })'));
 });
 
 test("README uses the concise landing-player label", () => {

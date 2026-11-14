@@ -8,8 +8,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
-	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
@@ -18,167 +16,10 @@ func registerGatesCommands(root *cobra.Command, deps *Deps) {
 		Use:   "gates",
 		Short: "Manage and inspect quality gates",
 	}
-	gates.AddCommand(newGatesRunCmd(deps))
-	gates.AddCommand(newGatesStatusCmd(deps))
-	gates.AddCommand(newGatesHistoryCmd(deps))
 	gates.AddCommand(newGatesCheckCmd(deps))
 	gates.AddCommand(newGatesResultsCmd(deps))
 	gates.AddCommand(newGatesTasksCmd(deps))
 	root.AddCommand(gates)
-}
-
-// specgate gates run [work-ref]
-func newGatesRunCmd(deps *Deps) *cobra.Command {
-	return &cobra.Command{
-		Use:   "run [ref]",
-		Short: "Trigger quality gates for a work item",
-		Args:  cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ref, err := resolveRef(cmd, args, deps)
-			if err != nil {
-				return err
-			}
-
-			work, err := deps.Client.ResolveWorkRef(cmd.Context(), ref)
-			if err != nil {
-				code := deps.Printer.Error("gates.run", mapWorkRefError(ref, err))
-				return &output.ExitError{Code: code, Err: err}
-			}
-
-			proceed, err := requireConfirm(deps,
-				fmt.Sprintf("Run quality gates for %s?", work.ChangeRequestKey))
-			if err != nil {
-				return err
-			}
-			if !proceed {
-				return nil
-			}
-
-			result, err := deps.Client.RunLLMGates(cmd.Context(), work.ChangeRequestID)
-			if err != nil {
-				return apiExitError(deps, "gates.run", err)
-			}
-
-			if deps.Printer.Mode() == output.ModeJSON {
-				deps.Printer.Success("gates.run", result)
-				return nil
-			}
-
-			if status, ok := result["status"].(string); ok {
-				fmt.Fprintf(deps.Stdout, "%s %s for %s\n", title(deps, "Gates"), styledStatus(deps, status), styled(deps, output.StyleBold, work.ChangeRequestKey))
-			} else {
-				fmt.Fprintf(deps.Stdout, "%s triggered for %s\n", title(deps, "Gates"), styled(deps, output.StyleBold, work.ChangeRequestKey))
-			}
-			return nil
-		},
-	}
-}
-
-// specgate gates status [work-ref]
-func newGatesStatusCmd(deps *Deps) *cobra.Command {
-	return &cobra.Command{
-		Use:   "status [ref]",
-		Short: "Show current gate state for a work item",
-		Args:  cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ref, err := resolveRef(cmd, args, deps)
-			if err != nil {
-				return err
-			}
-
-			work, err := deps.Client.ResolveWorkRef(cmd.Context(), ref)
-			if err != nil {
-				code := deps.Printer.Error("gates.status", mapWorkRefError(ref, err))
-				return &output.ExitError{Code: code, Err: err}
-			}
-
-			gs, err := deps.Client.GatesStatus(cmd.Context(), work.ChangeRequestID)
-			if err != nil {
-				return apiExitError(deps, "gates.status", err)
-			}
-
-			if deps.Printer.Mode() == output.ModeJSON {
-				deps.Printer.Success("gates.status", gs)
-				return nil
-			}
-
-			if len(gs.Gates) == 0 {
-				fmt.Fprintln(deps.Stdout, "No gate runs found.")
-				return nil
-			}
-			if humanVisuals(deps) {
-				printGatesStatusDashboard(deps, gs.Gates)
-				return nil
-			}
-			for _, g := range gs.Gates {
-				if g.Hint != "" {
-					fmt.Fprintf(deps.Stdout, "%-30s  %s  %s\n", g.Gate, styledStatusPadded(deps, g.State, 15), g.Hint)
-				} else {
-					fmt.Fprintf(deps.Stdout, "%-30s  %s\n", g.Gate, styledStatus(deps, g.State))
-				}
-			}
-			return nil
-		},
-	}
-}
-
-// specgate gates history [work-ref] [--gate <gate>] [--limit <n>]
-func newGatesHistoryCmd(deps *Deps) *cobra.Command {
-	var gateFilter string
-	var limit int
-
-	cmd := &cobra.Command{
-		Use:   "history [ref]",
-		Short: "Show gate run history for a work item",
-		Args:  cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ref, err := resolveRef(cmd, args, deps)
-			if err != nil {
-				return err
-			}
-
-			work, err := deps.Client.ResolveWorkRef(cmd.Context(), ref)
-			if err != nil {
-				code := deps.Printer.Error("gates.history", mapWorkRefError(ref, err))
-				return &output.ExitError{Code: code, Err: err}
-			}
-
-			gh, err := deps.Client.GateHistory(cmd.Context(), work.ChangeRequestID, gateFilter, limit)
-			if err != nil {
-				return apiExitError(deps, "gates.history", err)
-			}
-
-			if deps.Printer.Mode() == output.ModeJSON {
-				deps.Printer.Success("gates.history", gh)
-				return nil
-			}
-
-			if len(gh.Runs) == 0 {
-				fmt.Fprintln(deps.Stdout, "No gate runs found.")
-				return nil
-			}
-			if humanVisuals(deps) {
-				printGateHistoryDashboard(deps, gh.Runs)
-				return nil
-			}
-			for _, r := range gh.Runs {
-				id := r.GateRunID
-				if len(id) > 8 {
-					id = id[:8]
-				}
-				if r.Hint != "" {
-					fmt.Fprintf(deps.Stdout, "%s  %-30s  %s  %s  %s\n", id, r.Gate, styledStatusPadded(deps, r.State, 15), r.CreatedAt, r.Hint)
-				} else {
-					fmt.Fprintf(deps.Stdout, "%s  %-30s  %s  %s\n", id, r.Gate, styledStatusPadded(deps, r.State, 15), r.CreatedAt)
-				}
-			}
-			return nil
-		},
-	}
-
-	cmd.Flags().StringVar(&gateFilter, "gate", "", "Filter history to a specific gate name")
-	cmd.Flags().IntVar(&limit, "limit", 0, "Maximum number of runs to return (default 20 server-side)")
-	return cmd
 }
 
 // specgate gates check <artifact-id>
@@ -197,45 +38,25 @@ gates results for read-only access to stored detailed evidence.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			commandName := "gates.check"
-			if deps.Topology == config.ModeLocal {
-				store, err := openLocalStore(deps)
-				if err != nil {
-					return localExitError(deps, commandName, err)
-				}
-				defer store.Close()
-				selection, err := localSelection(cmd.Context(), deps, store)
-				if err != nil {
-					return localExitError(deps, commandName, err)
-				}
-				run, err := store.RunReadiness(cmd.Context(), selection.Workspace.ID, args[0])
-				if err != nil {
-					return localExitError(deps, commandName, err)
-				}
-				evaluations := localReadinessEvaluations(run.Checks)
-				readinessRuns := make([]any, len(evaluations))
-				for i := range evaluations {
-					readinessRuns[i] = evaluations[i]
-				}
-				result := map[string]any{"artifact_id": run.ArtifactID, "aggregate": run.Aggregate, "readiness_runs": readinessRuns, "dispatched_to_ide_agent": localDispatchPayload(run.Dispatch)}
-				if deps.Printer.Mode() == output.ModeJSON {
-					if summary {
-						result = artifactReadinessSummary(args[0], result)
-					}
-					deps.Printer.Success(commandName, result)
-					return nil
-				}
-				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Spec quality:"), styledStatus(deps, run.Aggregate))
-				printReadinessGates(deps, evaluations)
-				if len(run.Dispatch.PendingTaskIDs) > 0 {
-					fmt.Fprintf(deps.Stdout, "%s %d semantic checks need your IDE agent.\n", styled(deps, output.StyleWarning, "No external model configured —"), len(run.Dispatch.PendingTaskIDs))
-					fmt.Fprintln(deps.Stdout, nextStep(deps, "inspect the rubrics with", "specgate gates tasks list "+args[0]))
-				}
-				return nil
-			}
-			result, err := deps.Client.RunArtifactReadiness(cmd.Context(), args[0])
+			store, err := openLocalStore(deps)
 			if err != nil {
-				return apiExitError(deps, commandName, err)
+				return localExitError(deps, commandName, err)
 			}
+			defer store.Close()
+			selection, err := localSelection(cmd.Context(), deps, store)
+			if err != nil {
+				return localExitError(deps, commandName, err)
+			}
+			run, err := store.RunReadiness(cmd.Context(), selection.Workspace.ID, args[0])
+			if err != nil {
+				return localExitError(deps, commandName, err)
+			}
+			evaluations := localReadinessEvaluations(run.Checks)
+			readinessRuns := make([]any, len(evaluations))
+			for i := range evaluations {
+				readinessRuns[i] = evaluations[i]
+			}
+			result := map[string]any{"artifact_id": run.ArtifactID, "aggregate": run.Aggregate, "readiness_runs": readinessRuns, "dispatched_to_ide_agent": localDispatchPayload(run.Dispatch)}
 			if deps.Printer.Mode() == output.ModeJSON {
 				if summary {
 					result = artifactReadinessSummary(args[0], result)
@@ -243,23 +64,11 @@ gates results for read-only access to stored detailed evidence.`,
 				deps.Printer.Success(commandName, result)
 				return nil
 			}
-			if agg, ok := result["aggregate"].(string); ok {
-				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Spec quality:"), styledStatus(deps, agg))
-			} else {
-				fmt.Fprintln(deps.Stdout, styled(deps, output.StyleSuccess, "Spec quality check submitted"))
-			}
-			// No platform model: the server dispatched model-judged gates as
-			// ide_agent tasks instead of evaluating them. Say so — otherwise
-			// "not_run" reads as a dead end.
-			if disp, ok := result["dispatched_to_ide_agent"].(map[string]any); ok {
-				ids, _ := disp["pending_task_ids"].([]any)
-				if len(ids) == 0 {
-					ids, _ = disp["created_task_ids"].([]any)
-				}
-				if len(ids) > 0 {
-					fmt.Fprintf(deps.Stdout, "%s %d gate task(s) dispatched to the IDE agent.\n", styled(deps, output.StyleWarning, "No platform model configured —"), len(ids))
-					fmt.Fprintln(deps.Stdout, nextStep(deps, "inspect the rubrics with", "specgate gates tasks list "+args[0]))
-				}
+			fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Spec quality:"), styledStatus(deps, run.Aggregate))
+			printReadinessGates(deps, evaluations)
+			if len(run.Dispatch.PendingTaskIDs) > 0 {
+				fmt.Fprintf(deps.Stdout, "%s %d semantic checks need your IDE agent.\n", styled(deps, output.StyleWarning, "No external model configured —"), len(run.Dispatch.PendingTaskIDs))
+				fmt.Fprintln(deps.Stdout, nextStep(deps, "inspect the rubrics with", "specgate gates tasks list "+args[0]))
 			}
 			return nil
 		},
@@ -321,35 +130,24 @@ JSON output includes the persisted evidence needed for deeper agent inspection.`
 		Example: `  specgate gates results <artifact-id> --json`,
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if deps.Topology == config.ModeLocal {
-				store, err := openLocalStore(deps)
-				if err != nil {
-					return localExitError(deps, "gates.results", err)
-				}
-				defer store.Close()
-				selection, err := localSelection(cmd.Context(), deps, store)
-				if err != nil {
-					return localExitError(deps, "gates.results", err)
-				}
-				runs, err := store.ListReadinessRuns(cmd.Context(), selection.Workspace.ID, args[0])
-				if err != nil {
-					return localExitError(deps, "gates.results", err)
-				}
-				items := []map[string]any{}
-				if len(runs) > 0 {
-					items = localReadinessEvaluations(runs[0].Checks)
-				}
-				result := map[string]any{"items": items}
-				if deps.Printer.Mode() == output.ModeJSON {
-					deps.Printer.Success("gates.results", result)
-					return nil
-				}
-				return printReadinessItems(deps, result)
-			}
-			result, err := deps.Client.ListArtifactReadinessRuns(cmd.Context(), args[0])
+			store, err := openLocalStore(deps)
 			if err != nil {
-				return apiExitError(deps, "gates.results", err)
+				return localExitError(deps, "gates.results", err)
 			}
+			defer store.Close()
+			selection, err := localSelection(cmd.Context(), deps, store)
+			if err != nil {
+				return localExitError(deps, "gates.results", err)
+			}
+			runs, err := store.ListReadinessRuns(cmd.Context(), selection.Workspace.ID, args[0])
+			if err != nil {
+				return localExitError(deps, "gates.results", err)
+			}
+			items := []map[string]any{}
+			if len(runs) > 0 {
+				items = localReadinessEvaluations(runs[0].Checks)
+			}
+			result := map[string]any{"items": items}
 			if deps.Printer.Mode() == output.ModeJSON {
 				deps.Printer.Success("gates.results", result)
 				return nil
@@ -435,51 +233,4 @@ func printJSON(deps *Deps, v any) error {
 	enc := json.NewEncoder(deps.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
-}
-
-func printGatesStatusDashboard(deps *Deps, gates []client.GateSummary) {
-	passed := 0
-	for _, g := range gates {
-		if passingStatus(g.State) {
-			passed++
-		}
-	}
-	fmt.Fprintln(deps.Stdout, title(deps, "Quality Gates"))
-	fmt.Fprintln(deps.Stdout, visualRule(deps))
-	fmt.Fprintf(deps.Stdout, "%s %s %s %d/%d pass (%d%%)\n\n",
-		coloredBullet(deps, output.StyleSuccess),
-		label(deps, "Progress:"),
-		progressBar(deps, passed, len(gates), 18),
-		passed,
-		len(gates),
-		percent(passed, len(gates)))
-	for _, g := range gates {
-		fmt.Fprintf(deps.Stdout, "  %s %-30s %s\n",
-			statusIcon(deps, g.State),
-			g.Gate,
-			styledStatus(deps, g.State))
-		if g.Hint != "" {
-			fmt.Fprintf(deps.Stdout, "    %s\n", styled(deps, output.StyleMuted, g.Hint))
-		}
-	}
-}
-
-func printGateHistoryDashboard(deps *Deps, runs []client.GateRun) {
-	fmt.Fprintln(deps.Stdout, title(deps, "Quality Gate History"))
-	fmt.Fprintln(deps.Stdout, visualRule(deps))
-	for _, r := range runs {
-		id := r.GateRunID
-		if len(id) > 8 {
-			id = id[:8]
-		}
-		fmt.Fprintf(deps.Stdout, "  %s %s  %-30s %s  %s\n",
-			statusIcon(deps, r.State),
-			styled(deps, output.StyleMuted, id),
-			r.Gate,
-			styledStatus(deps, r.State),
-			styled(deps, output.StyleMuted, r.CreatedAt))
-		if r.Hint != "" {
-			fmt.Fprintf(deps.Stdout, "    %s\n", styled(deps, output.StyleMuted, r.Hint))
-		}
-	}
 }

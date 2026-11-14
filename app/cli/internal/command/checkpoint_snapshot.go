@@ -5,21 +5,22 @@ import (
 	"crypto/sha1" // Git's default object identity, not an authentication primitive.
 	"crypto/sha256"
 	"fmt"
-	"github.com/specgate/specgate/app/cli/internal/deploy"
-	"github.com/specgate/specgate/app/cli/internal/local"
 	"hash"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/specgate/specgate/app/cli/internal/executil"
+	"github.com/specgate/specgate/app/cli/internal/local"
 )
 
-func captureCheckout(ctx context.Context, deps *Deps) local.CheckoutSnapshot {
-	s := local.CheckoutSnapshot{Version: 1, State: "unavailable", Files: map[string]string{}}
-	runner := deps.DeployRunner
+func captureCheckout(ctx context.Context, deps *Deps, generation string) local.CheckoutSnapshot {
+	s := local.CheckoutSnapshot{Version: 1, State: "unavailable", CheckoutGeneration: generation, Files: map[string]string{}}
+	runner := deps.CommandRunner
 	if runner == nil {
-		runner = deploy.ExecRunner{}
+		runner = executil.ExecRunner{}
 	}
 	dir := deliveryWorkingDir(deps)
 	out, err := gitOutput(ctx, runner, dir, "rev-parse", "--show-toplevel")
@@ -32,9 +33,8 @@ func captureCheckout(ctx context.Context, deps *Deps) local.CheckoutSnapshot {
 		s.Reason = "checkout path unavailable"
 		return s
 	}
-	identity := sha256.Sum256([]byte(root))
-	s.CheckoutID = fmt.Sprintf("%x", identity)
-	before := collectGitReceipt(ctx, runner, root, nil)
+	s.CheckoutID = checkoutIdentity(root, generation)
+	before := collectGitReceipt(ctx, runner, root, nil, generation)
 	s.Head = before.HeadRevision
 	s.Fingerprint = before.DiffDigest
 	if s.Head == "" || s.Fingerprint == "" {
@@ -73,7 +73,7 @@ func captureCheckout(ctx context.Context, deps *Deps) local.CheckoutSnapshot {
 		}
 		s.Files[path] = value
 	}
-	after := collectGitReceipt(ctx, runner, root, nil)
+	after := collectGitReceipt(ctx, runner, root, nil, generation)
 	if before.DiffDigest != after.DiffDigest || before.HeadRevision != after.HeadRevision {
 		s.Reason = "checkout changed during capture"
 		s.Files = nil
@@ -105,11 +105,12 @@ func completionReceiptBaseline(stored, current gitReceipt, snapshot local.Checko
 		return local.CheckoutSnapshot{}, false
 	}
 	return local.CheckoutSnapshot{
-		Version:     1,
-		State:       "available",
-		CheckoutID:  snapshot.CheckoutID,
-		Head:        stored.HeadRevision,
-		Fingerprint: stored.DiffDigest,
+		Version:            1,
+		State:              "available",
+		CheckoutID:         snapshot.CheckoutID,
+		CheckoutGeneration: snapshot.CheckoutGeneration,
+		Head:               stored.HeadRevision,
+		Fingerprint:        stored.DiffDigest,
 	}, true
 }
 
@@ -172,15 +173,18 @@ func checkoutBlob(root, path string, sha256Objects bool) (string, int64, error) 
 }
 
 func compareCheckout(ctx context.Context, deps *Deps, before, after local.CheckoutSnapshot) checkpointDelta {
+	if before.Version != 0 && before.CheckoutGeneration != after.CheckoutGeneration {
+		return checkpointDelta{State: "noncomparable", Limit: "checkpoint is historical checkout evidence from a different Local store generation"}
+	}
 	if before.State != "available" || after.State != "available" {
 		return checkpointDelta{State: "unavailable", Limit: "baseline/current checkout incomplete: " + before.Reason + " " + after.Reason}
 	}
 	if before.CheckoutID == "" || before.CheckoutID != after.CheckoutID {
 		return checkpointDelta{State: "noncomparable", Limit: "different checkout identities"}
 	}
-	runner := deps.DeployRunner
+	runner := deps.CommandRunner
 	if runner == nil {
-		runner = deploy.ExecRunner{}
+		runner = executil.ExecRunner{}
 	}
 	dir := deliveryWorkingDir(deps)
 	for _, head := range []string{before.Head, after.Head} {

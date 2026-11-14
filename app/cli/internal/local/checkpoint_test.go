@@ -2,7 +2,6 @@ package local_test
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/specgate/specgate/app/cli/internal/local"
@@ -75,30 +74,6 @@ func TestCheckpointIsAppendOnlyAndWorkScoped(t *testing.T) {
 	}
 	if _, err := s.GetCheckpoint(t.Context(), work.WorkspaceID, other.Key, first.ID); err == nil {
 		t.Fatalf("foreign checkpoint accepted: %v", err)
-	}
-}
-
-func TestExportWorkspaceRejectsCheckpointData(t *testing.T) {
-	s, work, _ := verificationFixture(t)
-	if _, err := s.CreateCheckpointWithFiles(t.Context(), work.WorkspaceID, work.Key, "checkout", nil, ""); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.ExportWorkspace(t.Context(), work.WorkspaceID); err == nil || !strings.Contains(err.Error(), "Local checkpoints") {
-		t.Fatalf("checkpoint export error = %v", err)
-	}
-}
-
-func TestExportWorkspaceRejectsLineageWithoutSourceCriteria(t *testing.T) {
-	s, work, _ := verificationFixture(t)
-	base, err := s.PublishArtifact(t.Context(), work.WorkspaceID, local.ArtifactInput{FeatureKey: "EMPTY", RequestType: "new_feature", Documents: []local.ArtifactDocumentInput{{Path: "spec.md", Role: "spec", Content: []byte("base")}}, SourceCriteria: []local.SourceCriterion{{ID: "old", Text: "Old", SourcePath: "spec.md"}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.PublishArtifact(t.Context(), work.WorkspaceID, local.ArtifactInput{FeatureKey: "EMPTY", RequestType: "change_request", BaseVersion: "v1", Documents: []local.ArtifactDocumentInput{{Path: "spec.md", Role: "spec", Content: []byte("target")}}, SourceCriteria: []local.SourceCriterion{}, SourceLineage: &local.SourceLineage{Version: 1, BaseArtifactID: base.ID, BaseDigest: base.SnapshotDigest, Rows: []local.LineageRow{{BaseID: "old", Reason: "removed"}}}}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.ExportWorkspace(t.Context(), work.WorkspaceID); err == nil || !strings.Contains(err.Error(), "lineage") {
-		t.Fatalf("lineage export error = %v", err)
 	}
 }
 

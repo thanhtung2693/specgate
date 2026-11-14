@@ -1,14 +1,9 @@
 # Contracts
 
-Use this reference when a change crosses module boundaries. It records the
-vocabulary and behavior that must match between the SpecGate CLI, Doc Registry,
-agents service, UI, IDE plugins, and integrations. Module-specific details stay
-in the module specifications.
-
-For product workflow, use [How SpecGate works](../using-specgate/concepts/how-specgate-works.md)
-and the [CLI reference](../using-specgate/reference/cli.md). For the Doc Registry
-route catalog, see
-[app/doc-registry/docs/spec.md](../../app/doc-registry/docs/spec.md).
+This reference describes the supported Local CLI, embedded review API, and
+IDE handoff. The [CLI reference](../using-specgate/reference/cli.md) owns
+public command syntax. Prior Full service contracts remain in historical
+revisions and [ADRs](adr/README.md).
 
 ## Local verification pin and pickup projections
 
@@ -25,8 +20,7 @@ executing commands. Pinned reports carry `verification_contract_digest` and the
 exact configured checks; mismatches are rejected before execution and again
 inside the report transaction. Pin status is separate from check outcome and
 human acceptance. Local same-user storage is not an authentication or hostile
-agent security boundary. Portable/v1 cannot transfer these Local-only pins and
-must refuse export rather than silently weaken them in Full mode.
+agent security boundary. Use a complete Local backup to keep these records.
 
 Local report-enabled checks use exact JUnit identities, not text matching.
 Every reported failure/error fails the observation, including unselected cases;
@@ -38,7 +32,10 @@ are not promoted to that trusted reason.
 The CLI supplies the output path to the actual shell process, verifies Git
 ignores it, and retains normalized evidence rather than XML or output tails.
 Run receipts bind work/context/pin/check/completion identity and endpoint
-observations. Changed endpoints fail; unavailable endpoints stay explicit.
+observations. Changes to Git or watched-file states/digests during the run fail
+the check, including Git-ignored watched paths. Unavailable observations stay
+explicit. Equal watched endpoints that already differ from the pin retain a
+separate drift warning.
 Cleanup must not remove unrelated files in the run directory.
 
 Watched files resolve inside the checkout and use confined, bounded reads
@@ -46,7 +43,7 @@ Watched files resolve inside the checkout and use confined, bounded reads
 digests participate in enhanced acceptance material: changing them after status
 invalidates the old basis token. This is a review freshness boundary, not a
 claim that an input was intentionally weakened or that a same-user runner is
-trustworthy. Full mode rejects Local comparison selections before API calls.
+trustworthy.
 
 Local `work resume` and context summary/document views are additive read-only
 projections. They never select work from branches, revise approved content,
@@ -92,126 +89,168 @@ workspace, and comparable checkout. An unavailable or noncomparable comparison
 is invalid for basis generation and decisions; resume may still display that
 limitation without claiming an unchanged delta.
 
+A received Local store has a fresh checkout generation independent of its
+store, workspace, work, and artifact IDs. Normal and enhanced v1 stores omit
+`checkout_generation`. Received stores use v2 and include it in new
+checkout observations, including checkpoints, Git receipts and verification
+run endpoints. Default resume selects a checkpoint for the current checkout
+identity. An explicit `--since` may display a historical checkpoint and its
+note while reporting a generation mismatch as `noncomparable`. A historical
+checkpoint is ineligible for acceptance.
+
+CLI and browser inspection compute a receiving-generation basis for a pending
+review, including reviews that previously needed only a review ID. A human
+decision requires that new basis. Historical verdicts, checks, review IDs
+and recorded acceptance bases retain their original values. Inspection runs
+no checks and leaves the lifecycle state and next actor intact. When the
+completion comes from a different generation, `historical_verification`
+labels the stored results in status and the current acceptance basis.
+
 The first enhanced Local write snapshots the legacy store inside a private
 temporary directory before publishing a mode-`0600` backup without overwrite.
 The compatibility marker, guards, and first record then commit together. The
 backup is an older recovery point, not a lossless downgrade.
-Portable and delivery-handoff exports reject this recovery backup as a
+Delivery-handoff export rejects this recovery backup as a
 destination, including symlink and hard-link aliases, regardless of which
 workspace is selected in the store.
 
-## Module Boundaries
+## Local snapshot transfer
 
-| Module | Owns | Does not own |
-| --- | --- | --- |
-| CLI | install, local config, workspace selection, work/artifact/delivery commands, IDE plugin install | model reasoning or durable state |
-| Doc Registry | artifacts, workboard, Knowledge, settings, evidence, integrations, REST, persistence | LLM judgment |
-| Agents | model-backed readiness, delivery review, governance chat | direct durable writes outside Doc Registry APIs |
-| UI | review, inspection, settings, team/workspace views, governance chat shell | hidden sample data or source-of-truth mutation outside APIs |
-| IDE plugins | skills/hooks/rules that guide a coding agent through the CLI | product scope or approval authority |
+The CLI owns `transfer prepare`, `transfer inspect`, `transfer receive` and
+`transfer activate`. The v1 archive carries a private SQLite snapshot of
+the entire selected Local store, including committed WAL data. The
+versioned manifest declares inventory and a pickup workspace, work ID/key
+and Context Pack digest, with an optional checkpoint and note. The
+workspace/work/checkpoint is a bookmark. The manifest and picked records
+are validated against the staged SQLite copy used for the exact published
+archive. The payload SHA-256 checks the DB and the archive SHA-256 binds
+the manifest to it.
 
-Doc Registry is internal-open behind a trusted network: it has no authentication
-of its own, and an appliance with no member credentials accepts any caller the
-gateway lets through. Where credentials exist the gateway authenticates and
-forwards the verified identity, so attribution stops being cooperative — see
-Actor precedence below. There is still no RBAC anywhere: an authenticated caller
-may do anything the API allows.
+Inspect and receive are independent of active Local config. Receive only
+publishes a complete new private directory and receipt. Receive and activate
+reject surrounding whitespace in the store path before path normalization.
+The database is validated read-only before supported migrations or generation
+writes in staging. The receiving store keeps the original StoreID and domain IDs and
+gets a fresh compatibility-protected generation every time. Activation
+validates the receipt against that generation and pickup relation. Subsequent
+legitimate history writes do not invalidate the original receipt's inventory.
+
+Activation is an explicit binding change for one repository. It previews the
+effective old and new path, workspace and generation, checks the selected
+config and environment, confirms, rechecks and saves atomically. A failure
+after the save reports a committed unverified binding and preserves both
+stores. The pickup command is ordinary `work resume` with explicit
+`--since` for a selected checkpoint. Actor ownership and decisions remain
+governed by the ordinary Local status. `delivery handoff/v1` retains its
+bounded review request contract.
 
 ## HTTP Surfaces
 
-Doc Registry serves two HTTP dialects:
+### Optional Local review surface
 
-- `/api/v1/*` is the stable CLI facade. It covers meta/status, work items,
-  delivery, artifacts, gate tasks, skills, users, workspaces, policies,
-  Knowledge, and model/setup checks.
-- Unversioned routes are the app/service surface used by the UI and agents:
-  `/workboard/*`, `/features`, `/documents`,
-  `/integrations`, `/governance/*`, `/settings`, and artifact detail routes.
+`specgate ui` serves embedded assets and an allowlisted JSON API on loopback
+for one fixed Local workspace/repository. `open --print --json` returns a clean review URL
+only for a live matching Local session; URLs contain no session credentials.
+The loopback listener trusts all local accounts and processes that can reach it.
+Session cookies, exact Origin and CSRF checks protect browser interactions
+against other origins. Local HTTP has no OS-user authentication. The private
+discovery descriptor locates the matching session and confers no HTTP access.
 
-New user-facing commands should prefer `/api/v1`. UI-only workflows may use the
-unversioned surface because UI and server ship together.
+The Local UI uses the CLI's existing `change status` vocabulary and immutable
+context readers. `next_actor`, human decision eligibility, evidence provenance
+and freshness are independent fields. UI translation never changes original
+scope, criteria, claims or notes. No fixture data is substituted for read errors.
 
-`GET /api/v1/meta` exposes typed capability details. `governance_chat` is
-derived from the Agents chat-health route: a reachable service without its
-support-model key is `configuration_required`, an absent or unreachable route
-is `unavailable`, and only configured chat is `available`. Generic Agents
-service presence must not be used as a substitute.
+`GET /api/work` includes the current completion's submitted checks, in report
+order, with recorded command, result, source, detail and selected outcomes
+when available. It exposes `review_comparison` for a displayed delivery. The
+comparison names both the displayed review/completion and the latest earlier
+human-decided review/completion in the same workspace and work. It uses stored
+criterion, check and summary material. Run IDs, timestamps and report digest
+churn alone do not mark evidence changed. The prior decision and note remain
+inspectable. `no_baseline` and `unavailable` describe the comparison only.
+Absent optional fields in earlier reports remain readable. A malformed field
+or unusable row makes the earlier evidence unavailable while preserving its
+review identity and decision note and keeping the current evidence accessible.
+The projection does not read historical checkout content or change the
+decision token, source endpoint or freshness calculation.
+
+The notification count and the human work queue use the authoritative
+`human_reviewer` and `maintainer` next actors from the work list. A failed read
+shows that the list is unavailable. Settings indicates available CLI updates
+independently of the work count. Filtered queue results show the displayed
+count against the workspace total. Approved context uses each document's
+path and role to distinguish multiple snapshots with the same path.
+
+Decision writes name the exact reviewed work, review, completion and basis.
+The Local review API requires a note containing at least one non-whitespace
+character for requested changes. The Local owner revalidates those
+identities before recording a human decision. The browser cannot approve a
+newer completion by reusing an old confirmation. Historical acceptance remains
+separate from current checkout freshness. An in-flight decision response can
+update the work list, but only updates the detail view and confirmation that
+initiated it while both are still current. Update and cache writes use explicit
+previews; neither accepts arbitrary commands, installation URLs or file paths.
+Cache cleanup requires support for verifying file ownership and link count.
+On Windows, the preview reports cleanup is unavailable and confirmation is
+refused.
+
+`GET /api/source?ref=<work>&criterion=<canonical-id>` reads only the selected
+workspace's latest completion citation for that canonical acceptance criterion.
+It rejects additional path/revision selectors. The response includes
+`completion_id` from that exact completion, `path`, `citation`,
+`origin: current_checkout`, a captured `head_revision`, `source` and `diff`.
+The browser must compare `completion_id` with its displayed completion before
+mounting the source view. This identifies citation ownership; it does not pin
+current checkout bytes or promote them to observed test evidence.
+
+`source` contains `available`, `start_line`, `highlight_start`, `highlight_end`,
+`lines: [{number, text}]`, `truncated`, and an unavailable `reason` when needed.
+Only `evidence.kind: file` with a numeric positive integer `line` and optional
+`end_line` is readable. The viewer includes about five context lines and caps
+output at 120 lines and 64 KiB of excerpt text. Files must be regular UTF-8 text
+without NUL, at most 1 MiB, confined through `os.OpenRoot` to the bound repository.
+Traversal, symlinks, Git internals, credential/private-key paths and Local
+storage are excluded; `.specgate/work` remains readable. File identity,
+size and modification time must remain stable while reading.
+
+`diff` contains `available`, `base: HEAD`, `text`, `truncated`, and an unavailable
+`reason` when needed. The diff compares the confined checkout bytes with the
+raw blob at the exact file path in captured HEAD. It requires an exact regular
+file in the index for a present checkout file. A deleted file can use the regular
+HEAD blob even after staging the deletion. An absent HEAD path is valid for an
+exact index addition. Directories, symlinks and Git submodule entries cannot
+serve as diff inputs. The same UTF-8, sensitivity and 1 MiB bounds apply to the
+HEAD blob, whose size is checked before reading it. Changed files with more than
+32,768 lines combined have no diff. The current excerpt remains available when
+it meets its own limits. Diff output is capped at 64 KiB. Git lookups use literal paths and
+a timeout without shell, external diff, clean filters, textconv or filesystem
+monitor helpers. Untracked files report `untracked`. A citation that moved out of
+range can still show its textual diff. These read-only observations may change
+while the UI is open and never alter completion claims or acceptance pins.
 
 ## Identity and Workspace
 
-Users, workspaces, and workspace members support attribution and filtering.
-They do not grant access.
-
-- CLI user and workspace selection live in local user config.
-- `specgate init` binds its current Git checkout. Other checkouts can be bound
-  with `specgate workspace bind`; bindings remain local and are not committed.
-- Named `workspace bind` changes only that project's binding, not the global
-  workspace selection. `workspace unbind` is config-only in both modes: it
-  preserves global selection, identity, other projects, and stored work data.
-- Workspace-scoped CLI operations in a Git checkout must resolve through an
-  explicit override, project binding, or repo default. They fail before Local
-  storage or Full API access when only a global fallback exists.
-- Repo `.specgate/config` may carry shared server/workspace defaults; user
-  identity must stay outside the repo.
-- Identity bootstrap idempotently installs missing built-in rubric Skills in
-  the selected workspace before returning, so its first artifact publication
-  can freeze the complete automatic policy without a server restart.
-- `GET /api/v1/workspaces/{id}/members` is read-only. It returns the workspace,
-  optional current-user match, and member rows. `current: true` means the
-  supplied local identity matched a member row; `not_member` is a status signal,
-  not an authorization denial.
+Local users identify an operator for workflow decisions and local history.
+Workspaces scope artifact, work, delivery and queue reads. The CLI honors
+an explicit workspace override, Git project binding, repo default, then global
+selection. Workspace-scoped operations in an unbound Git checkout require
+an explicit override or repo binding/default. The optional loopback UI fixes
+its active store, workspace and checkout at startup. See the
+[configuration precedence](../using-specgate/reference/configuration.md#cli).
 
 ## Work and Artifacts
 
-### Route
+Quick work has no lead artifact. Artifact-backed work pins the exact approved
+artifact version. Quick work accepts a title and explicit criteria. For an
+artifact-backed slice, the agent reads every explicit spec-role source and
+submits each human-confirmed criterion with a repeated `--ac`. Stored criteria
+drive completion and peer review.
 
-A work item is **quick route** when it has no lead artifact, and
-**artifact-backed** when it has one. That is the whole rule, and every module must
-derive it from that fact alone: `ChangeRequest.IsQuickRoute`, the Context Pack
-builder, delivery-review policy resolution, and the UI's work-item mapper.
-
-Work type never decides the route. Quick creation still stores a placeholder
-work type because the enum has no `unspecified` member; no routing logic or user
-surface may interpret it as the route.
-
-Board **phase** is separate. A lead artifact is `Review` until approved and then
-`Ready`. For work without a lead, the persisted model has no explicit
-contract-approval field. The Full-mode fallback therefore treats the quick-work
-placeholder type as `Ready` and other no-lead records as `Intake`. This proxy must
-not spread into routing or policy decisions. Acceptance-criterion `source`
-records authorship (`human` or `llm`), not approval, so it cannot safely replace
-the missing approval fact.
-
-Quick-work request criteria contain only `text` and optional
-`verification_binding`; clients, including portable import, do not send
-`source`. The governance service records supplied criteria as `human` and its
-own model-drafted criteria as `llm`. Stored provenance remains visible without
-making it a client-controlled approval signal.
-
-### Mode-aware handoff
-
-For an artifact-backed work item, the IDE agent reads every explicitly mapped
-source spec document and submits each confirmed criterion with a repeated
-`work create --ac`. SpecGate does not infer criteria from headings, numbering,
-filenames, or keywords. The persisted work-item criteria are then the canonical
-set for completion and peer-review coverage.
-
-`POST /api/v1/work-items/create` also accepts optional structured
-`source_refs[]`. Portable Local-to-Full import uses a source-workspace-qualified
-reference here so exact retries can identify the same work item without title
-or prose matching. That trusted import path may also pass `artifact_id` to
-preserve the work item's exact approved artifact when a newer version is
-canonical; the server verifies the artifact's feature, workspace, and status.
-
-Full mode may return a server-advertised URL through `specgate open --print`.
-Both printing and browser opening require an absolute HTTP(S) URL with a host
-and no control characters. Invalid metadata URLs return unavailable (exit 5);
-they do not launch local files or arbitrary protocol handlers.
-Local CLI mode has no browser UI or server: a handoff names the human-readable
-work/artifact title and stable ID, then gives the exact CLI action such as
-`specgate --yes change accept <work-ref> --review-id <review-id>`, using the
-review ID from the evidence the human reviewed. Agents must never invent a localhost
-URL for either mode.
+A handoff names the work title and stable ID and provides the authoritative
+`next_command`. Optional browser handoff uses `specgate open <work-ref> --print --json`
+only when the human chooses browser review. An agent starts the UI only on
+request. Use the exact URL the CLI returned.
 
 The product hierarchy is:
 
@@ -223,83 +262,6 @@ Workspace
         -> Context Pack
         -> delivery evidence
 ```
-
-Feature, Artifact, and ChangeRequest rows are workspace-owned governed roots.
-Human-facing Feature keys are unique within a workspace, not globally. Normal
-list/detail/mutation calls carry a non-empty selected workspace. Missing
-workspace context or a workspace ID that is not one safe opaque path segment is
-rejected with `400`; a known ID from another workspace returns the same
-not-found shape as an unknown ID. Artifact publish validates that any linked
-Feature belongs to the same workspace before writing.
-
-This requirement applies to normal WorkBoard product endpoints, including
-Feature/ChangeRequest lists, details, mutations, acceptance criteria, gate
-runs, next actions, and stale warnings. Provider callbacks derive ownership
-from their named integration rather than accepting a caller-supplied workspace.
-
-Gate tasks and unified gate runs follow the same boundary. Gate-task list,
-detail, dispatch, and result routes require `workspace_id`; task records and
-artifact-scoped run rows store the owning workspace. ChangeRequest gate runs
-derive ownership from the ChangeRequest. A task or run from another workspace
-is not returned, and writes without a resolved owner fail. Lifecycle audit rows
-also store the owning workspace and are read only within it.
-
-Dispatch atomically creates at most one current task for the same workspace,
-artifact/input digest, gate key, and gate digest. Each task carries the frozen
-gate version and rubric. Result submission must match the task's gate key,
-input digest, gate digest, workspace, and executor.
-
-Integration root catalog and lifecycle calls (`GET/POST /integrations` and
-`GET/PUT/DELETE /integrations/{id}`) also require a non-empty workspace. Child
-provider/resource routes derive the same boundary from their integration.
-Feedback events store their own required workspace owner, including
-agent-originated feedback without an integration.
-
-Artifact identity is `workspace_id + feature_id + version`; versions use
-`vMAJOR.MINOR`.
-Artifact statuses are:
-
-- `draft`
-- `approved`
-- `needs_changes`
-- `superseded`
-
-Approved artifacts are immutable. IDE/CLI agents publish a new artifact version
-instead of mutating an existing body. Humans review, approve, reject, request
-changes, and inspect history; they do not author artifact bodies through the
-registry.
-
-Governance chat follows the same boundary. The UI creates one LangGraph thread
-for the active workspace and tags it with `workspace_id`; it exposes no thread
-history or management surface, and Doc Registry stores none of this chat state.
-Each run also receives `workspace_id` and `thread_workspace_id` through trusted
-runtime configuration; the model cannot choose either value. Switching
-workspaces remounts the UI runtime, so new runs use the new workspace while an
-existing run remains pinned to its original thread context.
-
-Governance Skills are workspace-owned settings. Skill catalog and mutation
-calls carry the selected `workspace_id`; a Skill from another workspace is
-treated as not found. Automatic governance policy itself is global and code
-defined; workspaces customize gate behavior by changing the named Skills that
-the automatic policy binds.
-
-Custom Skills follow the same boundary: list/get/create/update/delete operations
-require the selected workspace, and duplicate names are allowed only across
-different workspaces.
-
-Feature attachments are workspace-owned children. Their Feature and optional
-Governance File parent must resolve inside the same workspace; create/list/delete
-operations require `workspace_id`. Context Pack attachment reads pass the CR
-workspace explicitly.
-
-Persisted Knowledge citation provenance is server-normalized (canonical location,
-title, authority, staleness, document/version, and span); callers cannot persist
-arbitrary source labels or URLs. Stale and low-authority evidence warns but does
-not invalidate a citation. A later effective changed file without retained
-citation blocks save.
-
-Artifact packages are flexible documents inside a fixed governance envelope. The
-document paths are open; the role vocabulary is fixed:
 
 | Role | Meaning |
 | --- | --- |
@@ -317,115 +279,51 @@ separate label may use `custom:prd`.
 Selected local packages are framework-agnostic at this boundary. Callers map
 explicit files into the same `{path, role, bytes, provenance}` package; no
 framework detection affects storage. A published version stores exact
-normalized repository-relative paths, server-computed file SHA-256 values, a
-deterministic manifest digest, and versioned source provenance. Local existence
-or framework generation is not cloud synchronization; only successful publish
-makes the snapshot available elsewhere.
+normalized repository-relative paths, CLI-computed file SHA-256 values, a
+deterministic manifest digest, and versioned source provenance. Publication stores the package in the selected Local workspace.
 
 The CLI source locator is explicit and never changes the artifact `path`:
 `repo_file` resolves from the nearest Git root, `source_file` resolves inside
 the manifest directory, `file_url` names an explicitly selected external local
 file, and `content` is inline. Exactly one is accepted. The CLI replaces local
-locators with UTF-8 content before crossing the service boundary and rejects
+locators with UTF-8 content for the Local store and rejects
 filesystem escapes or unsafe file types.
 
 ## Governance Policy
 
-Publish resolves automatic governance policy and snapshots it onto the artifact.
-Later readiness, handoff, and delivery review use the frozen snapshot, not any
-mutable workspace setting. The CLI uses REST.
-
-Integration catalog and lifecycle requests carry the selected `workspace_id`;
-same-provider names may repeat across workspaces, while a known integration id
-from another workspace is returned as not found. All normal root and child
-integration routes require workspace context. Provider callbacks resolve the
-named integration as the trusted parent and do not accept model/user workspace
-input. Child resources, OAuth state, webhook events, delivery links, tracker
-links, and credentials derive the same boundary from that parent; a scoped
-request cannot read or mutate a child owned by another workspace. Feedback
-without an integration still stores the trusted workspace supplied by its agent
-caller.
-
-Governance file rows are workspace-owned when created through a selected
-workspace. File catalog, commit, touch, delete, and content-proxy requests use
-the same `workspace_id`; a file from another workspace is indistinguishable from
-an unknown ID. Development data with a NULL owner is rejected at write time;
-there is no unscoped user-facing fallback.
-
-The registry has no authentication of its own. The appliance gateway
-authenticates callers when members hold credentials and forwards the verified
-username in `X-SpecGate-User`, which the gateway sets on every proxying route and
-never accepts from a client; the registry verifies one Basic credential at
-`/internal/auth` for that purpose. With no member credentials configured the
-gateway passes every request through, which is the default posture.
-
-**Actor precedence.** Where the forwarded identity is present it *is* the actor on
-a recorded decision, and `approved_by` / `decided_by` in the request body are
-ignored. Those body fields remain authoritative only for a deployment with no
-gateway credentials. Any new endpoint that records who decided something must
-follow this precedence; see
-[the gateway identity ADR](adr/2026-07-29-gateway-asserted-identity.md).
-
-**Access changes are recorded.** Issuing, rotating, or revoking a member's gateway
-credential appends an `identity.credential_issued` or
-`identity.credential_revoked` row naming the member, the authenticated actor, and
-the workspace the operator acted in. A change that cannot be recorded fails the
-request, because access granted with no trace of it is the gap the record exists
-to close. The first credential on an open appliance is issued by an
-unauthenticated caller by necessity; that row carries an empty actor and says so
-in its detail rather than attributing the change to nobody.
-
-The trail is append-only by convention and carries **no hash chain**, unlike
-`artifact_events`. It shows what the service recorded; it does not show that the
-database was never edited afterwards, and no surface may describe it as
-tamper-evident. `workspace members` reads back each member's credential state and
-its most recent change.
-
-Artifact submission source fields remain provenance, not cryptographic caller
-identity, and a credential identifies a credential rather than a person: one
-lent to a teammate or to an agent records its owner's name for their decisions.
-
-Policy snapshots use `specgate.policy/v1` and include:
-
-- work type and risk level;
-- requested and resolved governance level;
-- reason codes;
-- required roles, topics, and evidence;
-- enabled gates, gate-bound Skill names, and frozen gate definitions containing
-  gate version plus exact Skill rubric content/digest;
-- approval and evidence policy;
-- policy lineage and digest.
-
-Artifact document roles are caller-selected routing labels. Built-in Full
-governance requires `spec` for Light and `spec` plus `plan` for Standard and
-Enhanced; it does not require a separate file for every concern.
-`verification` and `design` remain valid optional roles. Verification methods
-may live in the spec, plan, or optional verification material, while delivery
-still requires criterion-specific claims and observed check evidence. Gate
-inputs are selected by explicit role only; paths, filenames, headings, and
-framework names never infer a role.
-
-`approval_policy` is `human_required`. `evidence_policy` is `attested_ok` or
-`corroborated_required`; the latter accepts a merged-PR/MR event bound to the
-latest completion head or
-canonical deterministic bindings for every criterion.
-
-Skill catalog rows are navigation metadata after publication. Full and Local
-gate execution use the frozen gate definition in the artifact snapshot, so
-editing a Skill cannot change an already-published artifact's evaluation.
-Publication fails when a bound Skill is unavailable rather than freezing an
-empty replacement.
+Policy snapshots use `specgate.policy/v1`. Each records the required roles,
+topics and checks, approval and evidence policy, gate versions, and each
+frozen rubric and digest. Role comes from the explicit document mapping.
 
 Local artifact snapshots use the fixed `local-standard` contract: Standard
 governance with `plan` and `spec` roles, the Standard topics and
 gates, `human_required`, and `attested_ok`. Local embeds default rubric content
 and does not resolve Light or Enhanced.
 
+The CLI resolves optional `.specgate/rubrics/` files at the explicit Git-project
+boundary before Local preview or publication. Only `scope_clear.md`,
+`spec_completeness.md`, `acceptance_criteria_verifiable.md` and
+`spec_repo_drift.md` append instructions to existing embedded gate definitions.
+The Store receives resolved text, never a CWD or filesystem resolver. Missing
+files preserve byte-identical default policy JSON/digests; optional gate
+`source` fields are omitted for defaults. Custom source is a project-relative
+path, and its preview digest hashes the full effective text. Publication freezes
+that text/source in the existing policy snapshot; gate dispatch and result
+validation use only immutable snapshot/task records. Later edits, removal or
+new versions never rebind historical work or tasks.
+
+Project reads use a confined directory handle, reject symlink directories/files,
+nonregular inputs, unknown `.md` filenames, empty/invalid UTF-8/binary-control
+text, and content over 64 KiB per active file. Reads are bounded and detect
+ordinary replacement/growth during observation. Preview performs no writes;
+rubrics remain user-owned source, outside transient work cleanup. Text cannot alter gate identity, structural checks, approval or
+evidence policy, or human acceptance authority.
+
 ## Context Pack
 
 A Context Pack is the implementation handoff contract for a coding agent. It is
 derived from the work item, acceptance criteria, approved/canonical artifact,
-policy snapshot, Knowledge provenance, gate state, and applicable skills.
+policy snapshot, gate state, and applicable skills.
 
 It includes:
 
@@ -496,17 +394,18 @@ overwrites each executed row with the observed status and
 `source: "specgate_cli"`; status reports `locally reproduced` only when that
 marker is present. CLI submission discards input `checks[].source` and
 `claimed_status` before execution, including skipped checks; only this invocation
-can stamp observation metadata. Full mode continues to strip caller-authored source fields at
-its trust boundary and derives assurance from server-side review.
+can stamp observation metadata.
+Check names and statuses are trimmed consistently for confirmation, execution,
+verdicts and evidence projections. A padded `skipped` status never executes;
+normalizing a read does not rewrite historical report rows.
 
 The `deterministic` trust tier means a bound check decided the criterion, not
-that anything re-ran it, so it reads as `bound deterministic check`. Both modes
-name the observer in a bound criterion's reason — `observed by the SpecGate CLI`
+that anything re-ran it, so it reads as `bound deterministic check`. Readback names the observer in a bound criterion's reason — `observed by the SpecGate CLI`
 or `reported by the coding agent, not re-run` — because the two are worth very
 different amounts to a human deciding acceptance.
 
 Acceptance criteria may include a human-authored `verification_binding`, created
-for quick work in Local or Full mode with:
+with:
 
 ```bash
 specgate work create-quick "Title" --ac "Criterion @check:tests"
@@ -525,39 +424,19 @@ deterministically:
 Agents must not invent authoritative bindings. Model-emitted bindings are
 ignored for deterministic trust.
 
-Both modes resolve bindings from the stored acceptance criterion, not from the
-submitted completion body, so omitting `verification_binding` from a report does
-not bypass the table above. The two modes differ only in how they express
-`unclear`: Full mode returns `needs_human_review`, while Local review has only
-`passed` and `failed` and therefore fails the review, naming the criterion and
-the check. Local peer review applies the same resolution.
+The stored acceptance criterion defines the binding. Local review fails when
+a bound check is missing or skipped and identifies the criterion and check.
+Local peer review applies the same resolution.
 
-Delivery review verdicts are stored as `delivery_review` gate runs. Human
-delivery decisions written by `specgate delivery approve|reject` outrank later
-platform reruns for the same `completion_feedback_event_id`. A newly reported
-completion starts a new review cycle and needs its own platform review and human
-decision. The human run carries forward the reviewed platform run's completion
-binding, evidence verdict, nested criterion/check evidence, evidence judge,
-evaluation version, and confidence so authority changes do not erase or
-mislabel the delivery projection. The decision write compare-and-swaps the
-exact reviewed gate run and latest completion while completion and review
-writes share the change-request lock. One completion accepts at most one human
-decision. Interactive clients send the `gate_run_id` and
-`completion_feedback_event_id` returned by delivery status with the decision;
-the server rejects the write if either changed while confirmation was open.
-After human acceptance, further completion reports require a new work item.
+A human decision names the latest reviewed completion and its exact review ID.
+Enhanced work also carries the observed acceptance basis. The Local store
+rechecks the selection transactionally. A new completion requires a new review
+and a new human decision. Accepted work cannot receive further completion
+reports. Keep `evidence_verdict` separate from the final `verdict`.
 
-Delivery-status responses separate the authoritative `verdict` from optional
-`evidence_verdict` when the authority is human. They may also include an
-optional `reason_code`. The
-`policy_unavailable` reason accompanies `needs_human_review` when
-artifact-backed delivery review cannot load or interpret the frozen governing
-policy. This is a deterministic fail-closed result: Agents must persist it
-instead of assuming `attested_ok`, calling a model, or deriving a verdict from
-the coding agent's claims. Older delivery-review envelopes have no reason code
-and remain readable. `delivery_review_outdated` means the latest completion has
-not yet received its own review; a human decision against the older review is
-rejected.
+`policy_unavailable` indicates that delivery review could not interpret the
+artifact's frozen policy. `delivery_review_outdated` means the latest completion
+does not have a matching review. Both block decision against stale evidence.
 
 ### Delivery handoff bundles
 
@@ -569,13 +448,12 @@ current version is `specgate.delivery-handoff/v1`; a reader that does not
 recognize the value refuses the file rather than guessing.
 
 Export drops every `criteria[].evidence.grounding.excerpt`. Grounding cites any
-path the agent read, including files outside the checkout, and the bundle is
-committed; the retained `status` and `digest` still say how the citation was
-anchored without republishing file contents. Export also refuses the active
-Local SQLite file as a destination.
+path the agent read, including files outside the checkout. The retained
+`status` and `digest` record how it was anchored. The bundle reader inspects
+that record without re-verifying the original source. Export refuses the
+active Local SQLite file as a destination.
 
-`criteria[].evidence.grounding` is written by the CLI and read by human and
-model reviewers in both modes, so its `status` is shared vocabulary:
+`criteria[].evidence.grounding` is computed by the CLI. Its `status` uses:
 
 | `status` | Meaning |
 |---|---|
@@ -591,15 +469,15 @@ the agents' delivery review requires both together, so a blank anchor reports
 file `digest`. A
 non-`grounded` status is reviewer-visible information, not a submission error —
 the citation is recorded as weak rather than silently presented as verified.
-Neither Local nor Full submission validates `grounding` against a closed set, so
-a new status never becomes a mode asymmetry.
 
-The bundle is a transport for review, never an authority. `handoff show`
+The bundle is an unsigned, bounded review request. `handoff show`
 re-derives the verdict from the report and acceptance criteria it carries and
 reports any disagreement with the recorded verdict, so a bundle written under
 weaker enforcement cannot present a stale pass as current. Reviewer decisions do
 not travel in the bundle: human decisions stay with the owning store through
-`change accept` / `change request-changes`.
+`change accept` / `change request-changes`. The reader directs the
+author to current status in that store for the exact next action. Any
+verification observations displayed by the reader come from the source report.
 
 ## Gate Runs and Trust
 
@@ -621,160 +499,25 @@ Trust is derived from the executor:
 | --- | --- |
 | human | human decision |
 | deterministic | deterministic |
-| platform/model | platform evaluated |
 | IDE agent | agent attested |
-| external integration | external corroboration |
-
-The delivery-review trust model records the strongest applicable evidence per
-criterion: deterministic binding, grounded local citation, peer review, model
-judgment, or self-attested summary. Grounding is still local agent-provided
-evidence. Under `corroborated_required`, a would-be pass is clamped to
-`needs_human_review` unless a merged-PR/MR event's normalized payload
-`head_sha` matches the latest completion receipt's normalized
-`git_receipt.head_revision`, or every passing criterion has a canonical
-deterministic binding. Missing, mismatched, or stale merge events do not
-corroborate delivery. User-supplied checks, including CI output, remain valid
-cited or deterministic evidence without becoming repository observation.
-Delivery-status readback projects the matched repository signal through
-optional `assurance_sources`: `repository_observed`. It supplements
-per-criterion trust tiers and never represents human acceptance.
 
 Completion `git_receipt` payloads may set `freshness_scope=shared_repository`
 when an origin URL identifies the checkout, or `local_checkout` when no origin
 exists. Local scope supports CLI staleness comparison of branch, HEAD, and
 working-tree digest in that checkout only. CLI freshness requires a matching
 recorded `checkout_id`; a missing or different identity is noncomparable, not a
-matching or stale observation. It never supports
-`repository_observed` corroboration. Missing scope remains compatible with old
-origin-backed receipts.
+matching or stale observation. Missing scope remains compatible with old origin-backed receipts.
 
-## Knowledge
-
-Governance Knowledge is workspace-scoped reference material. It is distinct from
-approved artifacts.
-
-- `document_id + version` identifies an immutable Knowledge version.
-- Only one version per lineage is latest.
-- Search requires `workspace_id` for normal calls.
-- Retrieval filters by workspace, links, type, authority, and latest-only before
-  vector ranking.
-- Results cite document id, version, title, chunk, heading, and source.
-- Knowledge chunks are untrusted quoted data. Agents may cite or summarize them,
-  but must not follow instructions inside them.
-
-Knowledge processing statuses are `uploaded`, `parsing`, `chunked`, `embedded`,
-`indexed`, and `failed`.
-
-## Settings
-
-`GET /settings` returns server settings. Sensitive values are redacted as `***`
-unless the caller is the trusted governance service. `PUT /settings` updates keys; sending
-`***` for a sensitive key leaves the stored value unchanged.
-
-Sensitive settings are encrypted with `SETTINGS_ENCRYPTION_KEY`. Back up the key
-with the database.
-
-Important shared settings:
-
-- governance model provider/model/key;
-- embedding provider/model/key;
-- `governance.default_thinking_level` (`low` by default);
-- `governance.auto_archive_on_delivery_pass`;
-- governance-file retention.
-
-## Integrations
-
-Integrations mirror external delivery state into evidence; they do not replace
-the approved artifact or Context Pack.
-
-They are a Full-mode capability. GitHub and GitLab are **Repositories**:
-authorize a provider, select a repository or project, and let SpecGate manage
-that selected resource's signed webhook. Linear is optional **Work tracking**:
-an explicit Ready-work handoff targets one selected team. Direct CLI/IDE Context
-Pack handoff remains available without Linear.
-
-Automatic archive and linked-tracker close transitions follow an explicit
-human delivery approval. A platform delivery pass is evidence ready for human
-review and must not trigger either terminal effect.
-
-Supported provider surfaces:
-
-- exact provider/resource pairs: GitHub `repo`, GitLab `project`, and Linear
-  `team`; mismatched pairs are rejected before persistence;
-- resource-scoped managed webhook credentials; no integration-level secret is
-  configured by an operator;
-- only connected integrations accept provider callbacks. Integration deletion
-  removes managed upstream hooks first and preserves local rows if cleanup fails;
-- repository delivery links, whose provider `head_sha` is compared only with
-  the latest `git_receipt.head_revision`; `merge_commit_sha` is separate
-  inspection metadata and never substitutes for the submitted head;
-- `repository_observed` only for a marked, merged PR/MR with that exact latest
-  completion head; CI is not a SpecGate-produced assurance source;
-- at most one primary Linear tracker link per change request. It records its
-  exact selected team `resource_id`, never falls back to another team, and is
-  Ready-only and idempotent. Provider failures leave no successful link; a
-  retry can recover a remotely created issue through its deterministic ID;
-- after human acceptance, a best-effort Done transition for that one selected
-  Linear issue. A provider failure never changes the durable acceptance;
-- webhook inbox rows for dedupe and audit. Processed and pending duplicates are
-  no-ops; a previously failed row is atomically reclaimed by at most one retry.
-  Linear uses the per-request `Linear-Delivery` UUID, not the installation-level
-  body `webhookId`, as its primary delivery id.
-
-The workboard exposes `GET /workboard/change-requests/{id}/delivery-links` for
-the persisted repository links and `POST
-/workboard/change-requests/{id}/linear-handoff` for the idempotent selected-team
-Linear handoff. Both require the selected `workspace_id`.
-
-Feedback event types include:
-
-- `delivery.pr_opened`
-- `delivery.pr_merged`
-- `delivery.pr_unmatched`
-- `delivery.pr_closed`
-- `delivery.comment_scope_drift`
-- `delivery.tracker_status_changed`
-- `coding_agent.blocked_ambiguity`
-- `coding_agent.completed`
-- `coding_agent.docs_updated`
-- `coding_agent.peer_reviewed`
-
-`coding_agent.peer_reviewed` is a cooperative review event, never an approval.
-The completion and peer review must both name their agents. The peer must differ
-from the completion agent, bind to the latest
-`coding_agent.completed` event and identical Git receipt, and claim every
-canonical acceptance criterion exactly once. A newer completion invalidates an
-older peer-review binding.
-
-Local peer-review retries reuse only an identical current latest review for that
-work item. After any intervening review, resubmitting an earlier assessment
-records a new review instead of returning an older record that cannot affect
-current status. History is append-only; the latest review determines peer state.
-
-## Stale Warnings
-
-Workboard stale warnings are derived read-model signals. Current codes:
-
-- `canonical_artifact_missing`
-- `canonical_artifact_unapproved`
-- `canonical_artifact_superseded`
-- `canonical_promotion_available`
-- `lead_artifact_superseded`
-- `linked_knowledge_newer`
-- `feature_deprecated`
-- `delivery_in_progress`
-- `tracker_status_conflict`
-- `tracker_priority_urgent`
-- `delivery_stale`
-- `delivery_approval_required`
-
-Warnings may affect queues and Context Packs, but they do not mutate approved
-artifacts.
+Across Local store generations, local-checkout receipts are noncomparable.
+Shared-repository receipts can compare repository, observed base, branch and
+HEAD. A dirty receiving checkout, an unavailable working-tree digest or a
+different digest prevents a full freshness match even when the committed
+endpoints match. Receipt digests hash a symlink's link text and require the
+changed paths to be observed. A full endpoint match remains a Git observation.
+Source verification retains its original provenance and outcome.
 
 ## Naming Rules
 
-- API payload fields use `snake_case`.
-- Feature keys use lowercase kebab-case when user-facing.
-- Enum values are lowercase.
-- Approved artifacts and Context Packs outrank chat history, tracker comments,
-  and stale repository docs.
+- JSON fields and enum values use lowercase snake case.
+- User-facing feature keys use lowercase kebab case.
+- Approved artifact snapshots and Context Packs govern implementation.

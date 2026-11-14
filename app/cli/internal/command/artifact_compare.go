@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
+	"github.com/specgate/specgate/app/cli/internal/local"
 )
 
 type artifactComparisonCounts struct {
@@ -71,20 +71,17 @@ func normalizeArtifactDocumentRole(value string) string {
 	}
 }
 
-func buildArtifactComparison(body map[string]any, base *client.Artifact, baseFiles []client.ArtifactFile) (artifactComparison, error) {
-	if base == nil {
-		return artifactComparison{}, fmt.Errorf("base artifact is required")
-	}
+func buildArtifactComparison(body map[string]any, base local.Artifact) (artifactComparison, error) {
 	comparison := artifactComparison{
 		BaseArtifactID:     base.ID,
-		BaseVersion:        base.Version,
+		BaseVersion:        fmt.Sprintf("v%d", base.Version),
 		BaseSnapshotDigest: base.SnapshotDigest,
 		Files:              []artifactComparisonFile{},
 		Removed:            []artifactComparisonFile{},
 	}
 
-	baseByKey := make(map[string]client.ArtifactFile, len(baseFiles))
-	for _, file := range baseFiles {
+	baseByKey := make(map[string]local.ArtifactDocument, len(base.Documents))
+	for _, file := range base.Documents {
 		normalized, ok := normalizeArtifactDocumentPath(file.Path)
 		if !ok {
 			return artifactComparison{}, fmt.Errorf("unsafe base document path %q", file.Path)
@@ -94,7 +91,7 @@ func buildArtifactComparison(body map[string]any, base *client.Artifact, baseFil
 		if _, exists := baseByKey[key]; exists {
 			return artifactComparison{}, fmt.Errorf("base document %q is mapped twice under role %q", normalized, file.Role)
 		}
-		if file.ContentSHA256 == "" {
+		if file.Digest == "" {
 			return artifactComparison{}, fmt.Errorf("base document %q is missing content_sha256", normalized)
 		}
 		file.Path = normalized
@@ -133,7 +130,7 @@ func buildArtifactComparison(body map[string]any, base *client.Artifact, baseFil
 			current.State = "added"
 			comparison.Counts.Added++
 		default:
-			if previous.ContentSHA256 != current.ContentSHA256 {
+			if previous.Digest != current.ContentSHA256 {
 				current.Changes = append(current.Changes, "content")
 			}
 			if len(current.Changes) == 0 {
@@ -154,7 +151,7 @@ func buildArtifactComparison(body map[string]any, base *client.Artifact, baseFil
 		comparison.Removed = append(comparison.Removed, artifactComparisonFile{
 			Path:          file.Path,
 			Role:          file.Role,
-			ContentSHA256: file.ContentSHA256,
+			ContentSHA256: file.Digest,
 			State:         "removed",
 		})
 		comparison.Counts.Removed++

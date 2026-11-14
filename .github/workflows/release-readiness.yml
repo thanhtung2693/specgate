@@ -17,6 +17,6 @@ jobs:
           node-version: "26"
           package-manager-cache: false
       # Repo-wide release gate: positioning, retired-terminology scan across all
-      # tracked files, packaging/compose defaults, and cross-module contract docs.
+      # tracked files, CLI packaging and shared contract docs.
       # Pure node:test (no dependencies); uses `git ls-files`, so it needs the checkout.
-      - run: node --test docs/release-readiness.test.mjs
+      - run: node --test docs/release-readiness.test.mjs scripts/install-cli.test.mjs scripts/local-review-notifications.test.mjs

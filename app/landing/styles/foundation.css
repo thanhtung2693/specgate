@@ -73,10 +73,10 @@ html[data-theme="light"] {
   --surface-3: #e7e9ef;
   --hairline: #d9dce4;
   --hairline-strong: #c1c6d2;
-  --ok: #1c9440;
+  --ok: #147436;
   --ok-fill: #1f9d43;
   --fail: #d24233;
-  --warn: #b07708;
+  --warn: #8a5900;
   --grid: rgba(16, 17, 22, 0.045);
   --rail: var(--hairline-strong);
   --frame: rgba(16, 17, 22, 0.22);

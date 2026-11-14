@@ -2,6 +2,8 @@ package command_test
 
 import (
 	"bytes"
+	"database/sql"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,121 +14,6 @@ import (
 	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
-
-func TestUninstallKeepsDataByDefaultAndRemovesUserFiles(t *testing.T) {
-	dir := t.TempDir()
-	setupTestBundle(t, dir)
-	if err := os.WriteFile(filepath.Join(dir, "data.txt"), []byte("keep me"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	home := t.TempDir()
-	writeTestFile(t, filepath.Join(home, ".cursor", "rules", "using-specgate.mdc"), "rule")
-	writeTestFile(t, filepath.Join(home, ".cursor", "rules", "using-specgate.mdc.specgate-owned"), "specgate-plugin-v1\n")
-	writeTestFile(t, filepath.Join(home, ".cursor", "skills", "specgate", "SKILL.md"), "skill")
-	writeTestFile(t, filepath.Join(home, ".cursor", "skills", "specgate", ".specgate-owned"), "specgate-plugin-v1\n")
-	writeTestFile(t, filepath.Join(home, ".cursor", "skills", "delivering-work", "SKILL.md"), "retired skill")
-	writeTestFile(t, filepath.Join(home, ".cursor", "skills", "delivering-work", ".specgate-owned"), "specgate-plugin-v1\n")
-	writeTestFile(t, filepath.Join(home, ".codex", "plugins", "specgate", ".codex-plugin", "plugin.json"), "{}")
-	writeTestFile(t, filepath.Join(home, ".codex", "plugins", "specgate", ".specgate-owned"), "specgate-plugin-v1\n")
-	writeTestFile(t, filepath.Join(home, ".codex", "plugins", "cache", "personal", "specgate", "v0.1.0", ".codex-plugin", "plugin.json"), "{}")
-	writeTestFile(t, filepath.Join(home, ".codex", "plugins", "cache", "personal", "specgate", "v0.1.0", ".specgate-owned"), "specgate-plugin-v1\n")
-	writeTestFile(t, filepath.Join(home, ".claude", "skills", "specgate", ".claude-plugin", "plugin.json"), "{}")
-	writeTestFile(t, filepath.Join(home, ".claude", "skills", "specgate", ".specgate-owned"), "specgate-plugin-v1\n")
-	writeTestFile(t, filepath.Join(home, ".codex", "config.toml"), "[plugins.\"specgate@personal\"]\nenabled = true\n\n[marketplaces.personal]\nsource_type = \"local\"\nsource = "+strconv.Quote(home)+"\n\n[tools]\nkeep = true\n")
-	writeTestFile(t, filepath.Join(home, ".agents", "plugins", "marketplace.json"), `{
-  "name": "personal",
-  "plugins": [
-    {"name": "specgate", "source": {"source": "local", "path": "./.codex/plugins/specgate"}},
-    {"name": "other"}
-  ]
-}
-`)
-
-	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	if err := (config.Config{
-		Server:        "http://localhost:18080",
-		DeploymentDir: dir,
-		CurrentUser:   config.CurrentUser{Username: "alpha"},
-		Workspace:     config.CurrentWorkspace{Slug: "alpha"},
-	}).SaveTo(cfgPath); err != nil {
-		t.Fatal(err)
-	}
-
-	runner := &fakeDeployRunner{}
-	deps, out := newTestDeps(t)
-	deps.ConfigPath = cfgPath
-	deps.UserHomeDir = func() (string, error) { return home, nil }
-	deps.DeployRunner = runner
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall", "--dir", dir)
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
-	}
-	gotCommands := strings.Join(runner.Commands, "\n")
-	if !strings.Contains(gotCommands, "docker compose -f "+filepath.Join(dir, "compose.yml")+" down") {
-		t.Fatalf("missing compose down command in:\n%s", gotCommands)
-	}
-	if strings.Contains(gotCommands, " down -v") {
-		t.Fatalf("default uninstall must not remove volumes:\n%s", gotCommands)
-	}
-	if _, err := os.Stat(cfgPath); !os.IsNotExist(err) {
-		t.Fatalf("config file should be removed; stat err=%v", err)
-	}
-	for _, path := range []string{
-		filepath.Join(home, ".cursor", "rules", "using-specgate.mdc"),
-		filepath.Join(home, ".cursor", "skills", "specgate"),
-		filepath.Join(home, ".cursor", "skills", "delivering-work"),
-		filepath.Join(home, ".codex", "plugins", "specgate"),
-		filepath.Join(home, ".codex", "plugins", "cache", "personal", "specgate"),
-		filepath.Join(home, ".claude", "skills", "specgate"),
-	} {
-		if _, err := os.Stat(path); !os.IsNotExist(err) {
-			t.Fatalf("%s should be removed; stat err=%v", path, err)
-		}
-	}
-	if _, err := os.Stat(filepath.Join(dir, "data.txt")); err != nil {
-		t.Fatalf("deployment data should be kept by default: %v", err)
-	}
-	configText, err := os.ReadFile(filepath.Join(home, ".codex", "config.toml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(configText), "specgate@personal") ||
-		!strings.Contains(string(configText), "[marketplaces.personal]") ||
-		!strings.Contains(string(configText), "[tools]") {
-		t.Fatalf("codex config not cleaned safely:\n%s", configText)
-	}
-	marketplace, err := os.ReadFile(filepath.Join(home, ".agents", "plugins", "marketplace.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(marketplace), `"name": "specgate"`) || !strings.Contains(string(marketplace), `"name": "other"`) {
-		t.Fatalf("marketplace not cleaned safely:\n%s", marketplace)
-	}
-}
-
-func TestUninstallRejectsUnmanagedComposeDirectoryBeforeDown(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	composePath := filepath.Join(dir, "compose.yml")
-	if err := os.WriteFile(composePath, []byte("services: {}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runner := &fakeDeployRunner{}
-	deps, out := newTestDeps(t)
-	deps.DeployRunner = runner
-
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall", "--dir", dir)
-	if code != output.ExitUsage {
-		t.Fatalf("exit = %d, want usage; output = %s", code, out.String())
-	}
-	if len(runner.Commands) != 0 {
-		t.Fatalf("Docker commands ran for unmanaged directory: %#v", runner.Commands)
-	}
-	if _, err := os.Stat(composePath); err != nil {
-		t.Fatalf("unmanaged compose file changed: %v", err)
-	}
-}
 
 func TestLocalUninstallPurgeDataRemovesSQLiteFilesWithoutDocker(t *testing.T) {
 	stateDir := t.TempDir()
@@ -143,10 +30,10 @@ func TestLocalUninstallPurgeDataRemovesSQLiteFilesWithoutDocker(t *testing.T) {
 	if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: stateDir}}).SaveTo(cfgPath); err != nil {
 		t.Fatal(err)
 	}
-	runner := &fakeDeployRunner{}
+	runner := &fakeCommandRunner{}
 	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
-	deps.DeployRunner = runner
+	deps.CommandRunner = runner
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "--yes", "uninstall", "--purge-data")
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
@@ -195,43 +82,6 @@ func TestLocalUninstallPreflightsEverySQLitePathBeforePurge(t *testing.T) {
 	}
 }
 
-// fakeDeployRunner implements deploy.CommandRunner for command-layer tests.
-func TestLocalUninstallRejectsFullOnlyDirWithoutRemovingAnything(t *testing.T) {
-	for _, mode := range []string{"json", "plain"} {
-		t.Run(mode, func(t *testing.T) {
-			stateDir := t.TempDir()
-			statePath := filepath.Join(stateDir, "state.db")
-			if err := os.WriteFile(statePath, []byte("keep"), 0o600); err != nil {
-				t.Fatal(err)
-			}
-			cfgPath := filepath.Join(t.TempDir(), "config.json")
-			if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: stateDir}}).SaveTo(cfgPath); err != nil {
-				t.Fatal(err)
-			}
-			deps, out := newTestDeps(t)
-			deps.ConfigPath = cfgPath
-			var stderr bytes.Buffer
-			deps.Stderr = &stderr
-			args := []string{"--" + mode, "--no-input", "uninstall", "--dir", filepath.Join(t.TempDir(), "full")}
-
-			code := command.ExecuteForCode(command.NewRootCommand(deps), args...)
-			if code != output.ExitUsage {
-				t.Fatalf("exit = %d, want usage; stdout=%s stderr=%s", code, out.String(), stderr.String())
-			}
-			message := out.String() + stderr.String()
-			if !strings.Contains(message, "--dir") || !strings.Contains(message, "Full mode") {
-				t.Fatalf("missing actionable mode error: %s", message)
-			}
-			if _, err := os.Stat(statePath); err != nil {
-				t.Fatalf("Local state changed: %v", err)
-			}
-			if _, err := os.Stat(cfgPath); err != nil {
-				t.Fatalf("config changed: %v", err)
-			}
-		})
-	}
-}
-
 func TestUninstallRejectsMalformedConfigBeforeAnyMutation(t *testing.T) {
 	for _, mode := range []string{"json", "plain"} {
 		t.Run(mode, func(t *testing.T) {
@@ -240,7 +90,7 @@ func TestUninstallRejectsMalformedConfigBeforeAnyMutation(t *testing.T) {
 				t.Fatal(err)
 			}
 			deployDir := t.TempDir()
-			setupTestBundle(t, deployDir)
+
 			deploySentinel := filepath.Join(deployDir, "keep.txt")
 			if err := os.WriteFile(deploySentinel, []byte("keep"), 0o600); err != nil {
 				t.Fatal(err)
@@ -250,10 +100,10 @@ func TestUninstallRejectsMalformedConfigBeforeAnyMutation(t *testing.T) {
 			writeTestFile(t, filepath.Join(pluginPath, ".codex-plugin", "plugin.json"), "{}")
 			writeTestFile(t, filepath.Join(pluginPath, ".specgate-owned"), "specgate-plugin-v1\n")
 
-			runner := &fakeDeployRunner{}
+			runner := &fakeCommandRunner{}
 			deps, out := newTestDeps(t)
 			deps.ConfigPath = cfgPath
-			deps.DeployRunner = runner
+			deps.CommandRunner = runner
 			deps.UserHomeDir = func() (string, error) { return home, nil }
 			var stderr bytes.Buffer
 			deps.Stderr = &stderr
@@ -261,7 +111,7 @@ func TestUninstallRejectsMalformedConfigBeforeAnyMutation(t *testing.T) {
 			code := command.ExecuteForCode(
 				command.NewRootCommand(deps),
 				"--"+mode, "--no-input", "--yes",
-				"uninstall", "--dir", deployDir, "--purge-data",
+				"uninstall", "--purge-data",
 			)
 			if code != output.ExitUnavailable {
 				t.Fatalf("exit = %d, want unavailable; stdout=%s stderr=%s", code, out.String(), stderr.String())
@@ -418,6 +268,164 @@ func TestLocalUninstallPurgeDataWarnsBeforeDeletingSQLiteFiles(t *testing.T) {
 	}
 }
 
+func TestLocalUninstallPurgeRejectsConflictingSelections(t *testing.T) {
+	for _, source := range []string{"SPECGATE_LOCAL_DIR", "current project"} {
+		t.Run(source, func(t *testing.T) {
+			deps, out := newTestDeps(t)
+			home, err := deps.UserHomeDir()
+			if err != nil {
+				t.Fatal(err)
+			}
+			globalStore := t.TempDir()
+			otherStore := t.TempDir()
+			globalDB := filepath.Join(globalStore, "state.db")
+			otherDB := filepath.Join(otherStore, "state.db")
+			marker := filepath.Join(home, ".codex", "plugins", "specgate", ".specgate-owned")
+			writeTestFile(t, globalDB, "global")
+			writeTestFile(t, otherDB, "other")
+			writeTestFile(t, marker, "specgate-plugin-v1\n")
+			cfg := config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: globalStore}}
+			t.Setenv("SPECGATE_LOCAL_DIR", "")
+			switch source {
+			case "SPECGATE_LOCAL_DIR":
+				t.Setenv(source, otherStore)
+			case "current project":
+				if err := os.Mkdir(filepath.Join(deps.WorkingDir, ".git"), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				root, ok := config.FindProjectRoot(deps.WorkingDir)
+				if !ok {
+					t.Fatal("test project root missing")
+				}
+				cfg.Projects = map[string]config.ProjectConfig{root: {Local: config.LocalStore{Path: otherStore}}}
+				// A matching environment override cannot hide a different project binding.
+				t.Setenv("SPECGATE_LOCAL_DIR", globalStore)
+			}
+			if err := cfg.SaveTo(deps.ConfigPath); err != nil {
+				t.Fatal(err)
+			}
+
+			code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "uninstall", "--purge-data")
+			if code != output.ExitConflict {
+				t.Errorf("exit = %d, want conflicting store refusal: %s", code, out.String())
+			}
+			var envelope struct {
+				Error output.ErrorPayload `json:"error"`
+			}
+			if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range []string{source, strconv.Quote(globalStore), strconv.Quote(otherStore)} {
+				if !strings.Contains(envelope.Error.Message, want) {
+					t.Errorf("refusal missing %q: %s", want, envelope.Error.Message)
+				}
+			}
+			for _, path := range []string{globalDB, otherDB, marker, deps.ConfigPath} {
+				if _, err := os.Stat(path); err != nil {
+					t.Errorf("ambiguous purge changed %s: %v", path, err)
+				}
+			}
+		})
+	}
+}
+
+func TestLocalUninstallPurgeRefusesEnvironmentOnlySQLiteStore(t *testing.T) {
+	deps, out := newTestDeps(t)
+	home, err := deps.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := t.TempDir()
+	t.Setenv("SPECGATE_LOCAL_DIR", store)
+	dbPath := filepath.Join(store, "state.db")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec("CREATE TABLE account_backup (name TEXT); INSERT INTO account_backup VALUES ('keep')")
+	closeErr := db.Close()
+	if err != nil || closeErr != nil {
+		t.Fatalf("create SQLite fixture: exec=%v close=%v", err, closeErr)
+	}
+	data, err := os.ReadFile(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sentinel := filepath.Join(store, "unrelated.txt")
+	marker := filepath.Join(home, ".codex", "plugins", "specgate", ".specgate-owned")
+	writeTestFile(t, sentinel, "user data")
+	writeTestFile(t, marker, "specgate-plugin-v1\n")
+
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "uninstall", "--purge-data")
+	if code != output.ExitUsage || !strings.Contains(out.String(), "saved") {
+		t.Errorf("expected an actionable usage error for the environment-only store: exit=%d output=%s", code, out)
+	}
+	if info, err := os.Stat(store); err != nil || !info.IsDir() {
+		t.Errorf("store directory changed: %v", err)
+	}
+	for path, want := range map[string][]byte{dbPath: data, sentinel: []byte("user data"), marker: []byte("specgate-plugin-v1\n")} {
+		if got, err := os.ReadFile(path); err != nil || !bytes.Equal(got, want) {
+			t.Errorf("environment-only purge modified %s: %v", path, err)
+		}
+	}
+	if _, err := os.Stat(deps.ConfigPath); !os.IsNotExist(err) {
+		t.Errorf("unexpected config after refusal: %v", err)
+	}
+}
+
+func TestLocalUninstallPurgeRequiresExplicitConsent(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		tty       bool
+		confirm   bool
+		flags     []string
+		wantCode  int
+		wantPurge bool
+	}{
+		{name: "redirected stdin", wantCode: output.ExitUsage},
+		{name: "terminal decline", tty: true, wantCode: output.ExitOK},
+		{name: "terminal confirm", tty: true, confirm: true, wantCode: output.ExitOK, wantPurge: true},
+		{name: "terminal plus yes", tty: true, flags: []string{"--yes"}, wantCode: output.ExitOK, wantPurge: true},
+		{name: "JSON plus no yes", tty: true, flags: []string{"--json"}, wantCode: output.ExitUsage},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			deps, prompt, out := newWorkflowTestDeps(t)
+			deps.StdinIsTTY = func() bool { return tc.tty }
+			prompt.confirmValue = tc.confirm
+			store := t.TempDir()
+			stateDB := filepath.Join(store, "state.db")
+			writeTestFile(t, stateDB, "sqlite fixture")
+			// Lexical aliases of one store do not create a conflict.
+			t.Setenv("SPECGATE_LOCAL_DIR", store+string(os.PathSeparator)+".")
+			cfg := config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: store}}
+			if err := cfg.SaveTo(deps.ConfigPath); err != nil {
+				t.Fatal(err)
+			}
+			var stderr bytes.Buffer
+			deps.Stderr = &stderr
+
+			args := append([]string{"uninstall", "--purge-data"}, tc.flags...)
+			code := command.ExecuteForCode(command.NewRootCommand(deps), args...)
+			if code != tc.wantCode {
+				t.Errorf("exit = %d, want %d, stdout = %s, stderr = %s", code, tc.wantCode, out, &stderr)
+			}
+			if tc.tty && len(tc.flags) == 0 {
+				if !strings.Contains(prompt.confirmTitle, store) {
+					t.Errorf("confirmation must show the SQLite directory, got %q", prompt.confirmTitle)
+				}
+			} else if prompt.confirmTitle != "" {
+				t.Errorf("unexpected confirmation: %q", prompt.confirmTitle)
+			}
+			for _, path := range []string{stateDB, deps.ConfigPath} {
+				_, err := os.Stat(path)
+				if (tc.wantPurge && !os.IsNotExist(err)) || (!tc.wantPurge && err != nil) {
+					t.Errorf("path %s, purged = %t, stat err = %v", path, tc.wantPurge, err)
+				}
+			}
+		})
+	}
+}
+
 func TestUninstallRemovesSpecGateOnlyPluginConfigFiles(t *testing.T) {
 	home := t.TempDir()
 	configPath := filepath.Join(home, ".codex", "config.toml")
@@ -436,7 +444,7 @@ func TestUninstallRemovesSpecGateOnlyPluginConfigFiles(t *testing.T) {
 	deps, out := newTestDeps(t)
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	deps.UserHomeDir = func() (string, error) { return home, nil }
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall", "--dir", filepath.Join(t.TempDir(), "deploy"))
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall")
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
 	}
@@ -464,7 +472,7 @@ func TestUninstallReportsUnownedFilesPreservedInsideManagedPluginDirectory(t *te
 	deps, out := newTestDeps(t)
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	deps.UserHomeDir = func() (string, error) { return home, nil }
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall", "--dir", filepath.Join(t.TempDir(), "deploy"))
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall")
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
 	}
@@ -495,7 +503,7 @@ func TestUninstallCleansManagedCodexConfigWhenPluginDirectoryIsMissing(t *testin
 	deps, out := newTestDeps(t)
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	deps.UserHomeDir = func() (string, error) { return home, nil }
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall", "--dir", filepath.Join(t.TempDir(), "deploy"))
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall")
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
 	}
@@ -527,7 +535,7 @@ func TestUninstallKeepsUnownedCodexMarketplaceAndConfig(t *testing.T) {
 	deps, out := newTestDeps(t)
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	deps.UserHomeDir = func() (string, error) { return home, nil }
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall", "--dir", filepath.Join(t.TempDir(), "deploy"))
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall")
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
 	}
@@ -553,7 +561,7 @@ func TestUninstallPreservesEmptySharedMarketplaceFile(t *testing.T) {
 	deps, out := newTestDeps(t)
 	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	deps.UserHomeDir = func() (string, error) { return home, nil }
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall", "--dir", filepath.Join(t.TempDir(), "deploy"))
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall")
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
 	}
@@ -566,182 +574,5 @@ func TestUninstallPreservesEmptySharedMarketplaceFile(t *testing.T) {
 	}
 	if string(body) != `{"name":"personal","plugins":[]}` {
 		t.Fatalf("empty shared marketplace changed: %s", body)
-	}
-}
-
-func TestUninstallPurgeDataRequiresConfirmation(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	setupTestBundle(t, dir)
-
-	deps, out := newTestDeps(t)
-	deps.DeployRunner = &fakeDeployRunner{}
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "uninstall", "--dir", dir, "--purge-data")
-	if code != output.ExitUsage {
-		t.Fatalf("exit = %d, want %d; output = %s", code, output.ExitUsage, out.String())
-	}
-}
-
-func TestUninstallPurgeDataRejectsUnmanagedDirectory(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	userSpec := filepath.Join(dir, "user-spec.md")
-	if err := os.WriteFile(userSpec, []byte("# Keep me\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	runner := &fakeDeployRunner{}
-	deps, out := newTestDeps(t)
-	deps.DeployRunner = runner
-
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "uninstall", "--dir", dir, "--purge-data")
-	if code != output.ExitUsage {
-		t.Fatalf("exit = %d, want usage; output = %s", code, out.String())
-	}
-	if body, err := os.ReadFile(userSpec); err != nil || string(body) != "# Keep me\n" {
-		t.Fatalf("user file changed: body=%q err=%v", body, err)
-	}
-	if len(runner.Commands) != 0 {
-		t.Fatalf("Docker commands ran for unmanaged directory: %#v", runner.Commands)
-	}
-}
-
-func TestUninstallPlainPurgeDataRequiresYes(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	setupTestBundle(t, dir)
-
-	runner := &fakeDeployRunner{}
-	deps, out := newTestDeps(t)
-	deps.DeployRunner = runner
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "uninstall", "--dir", dir, "--purge-data")
-	if code != output.ExitUsage {
-		t.Fatalf("exit = %d, want %d; output = %s", code, output.ExitUsage, out.String())
-	}
-	if len(runner.Commands) != 0 {
-		t.Fatalf("commands ran despite missing --yes: %#v", runner.Commands)
-	}
-}
-
-func TestUninstallPurgeDataRemovesDeploymentDir(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	setupTestBundle(t, dir)
-	if err := os.WriteFile(filepath.Join(dir, "data.txt"), []byte("delete me"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	runner := &fakeDeployRunner{}
-	deps, out := newTestDeps(t)
-	deps.DeployRunner = runner
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "uninstall", "--dir", dir, "--purge-data")
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
-	}
-	gotCommands := strings.Join(runner.Commands, "\n")
-	if !strings.Contains(gotCommands, "docker compose -f "+filepath.Join(dir, "compose.yml")+" down -v") {
-		t.Fatalf("missing compose down -v command in:\n%s", gotCommands)
-	}
-	if strings.Contains(gotCommands, "config --images") || strings.Contains(gotCommands, "docker image rm") {
-		t.Fatalf("--purge-data must not inspect or remove images:\n%s", gotCommands)
-	}
-	for _, want := range []string{
-		"docker container ls -q --filter label=org.specgate.managed=true --filter label=org.specgate.project=specgate",
-		"docker volume ls -q --filter label=org.specgate.managed=true --filter label=org.specgate.project=specgate",
-		"docker network ls -q --filter label=org.specgate.managed=true --filter label=org.specgate.project=specgate",
-	} {
-		if !strings.Contains(gotCommands, want) {
-			t.Fatalf("missing labeled cleanup command %q in:\n%s", want, gotCommands)
-		}
-	}
-	if _, err := os.Stat(dir); !os.IsNotExist(err) {
-		t.Fatalf("deployment dir should be removed with --purge-data; stat err=%v", err)
-	}
-}
-
-func TestUninstallPurgeDataScopesLabeledCleanupToComposeProject(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	setupTestBundle(t, dir)
-	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("SPECGATE_COMPOSE_PROJECT=alpha\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	runner := &fakeDeployRunner{OutputByCommand: map[string][]byte{
-		"docker compose -f " + filepath.Join(dir, "compose.yml") + " config --images": []byte("ghcr.io/thanhtung2693/agents:v9.9.0-rc.1\n"),
-	}}
-	deps, out := newTestDeps(t)
-	deps.DeployRunner = runner
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "uninstall", "--dir", dir, "--purge-data")
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
-	}
-	gotCommands := strings.Join(runner.Commands, "\n")
-	for _, want := range []string{
-		"docker container ls -q --filter label=org.specgate.managed=true --filter label=org.specgate.project=alpha",
-		"docker volume ls -q --filter label=org.specgate.managed=true --filter label=org.specgate.project=alpha",
-		"docker network ls -q --filter label=org.specgate.managed=true --filter label=org.specgate.project=alpha",
-	} {
-		if !strings.Contains(gotCommands, want) {
-			t.Fatalf("missing project-scoped cleanup command %q in:\n%s", want, gotCommands)
-		}
-	}
-}
-
-func TestUninstallPlainPurgeDataKeepsImages(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	setupTestBundle(t, dir)
-
-	runner := &fakeDeployRunner{}
-	deps, out := newTestDeps(t)
-	deps.DeployRunner = runner
-	var stderr bytes.Buffer
-	deps.Stderr = &stderr
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--yes", "uninstall", "--dir", dir, "--purge-data")
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
-	}
-	if !strings.Contains(stderr.String(), "Warning: Full purge permanently removes SpecGate-managed Docker volumes") ||
-		!strings.Contains(stderr.String(), dir) {
-		t.Fatalf("missing Full purge warning:\n%s", stderr.String())
-	}
-	gotCommands := strings.Join(runner.Commands, "\n")
-	if strings.Contains(gotCommands, "docker image rm") || strings.Contains(gotCommands, "config --images") {
-		t.Fatalf("--purge-data must not inspect or remove images:\n%s", gotCommands)
-	}
-}
-
-func TestUninstallChecklistCanKeepPluginsAndPurgeDataWithoutRemovingImages(t *testing.T) {
-	dir := t.TempDir()
-	setupTestBundle(t, dir)
-	home := t.TempDir()
-	pluginPath := filepath.Join(home, ".cursor", "rules", "using-specgate.mdc")
-	writeTestFile(t, pluginPath, "rule")
-
-	runner := &fakeDeployRunner{}
-	deps, _, prompter, out := newFakeDeps(t)
-	deps.ConfigPath = filepath.Join(t.TempDir(), "config.json")
-	deps.UserHomeDir = func() (string, error) { return home, nil }
-	deps.DeployRunner = runner
-	prompter.multiValues = []string{"data"}
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "uninstall", "--dir", dir)
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
-	}
-	if prompter.multiTitle != "Remove SpecGate setup" {
-		t.Fatalf("multi-select title = %q", prompter.multiTitle)
-	}
-	if _, err := os.Stat(pluginPath); err != nil {
-		t.Fatalf("plugin file should be kept when unchecked: %v", err)
-	}
-	if _, err := os.Stat(dir); !os.IsNotExist(err) {
-		t.Fatalf("deployment dir should be removed when data checked; stat err=%v", err)
-	}
-	gotCommands := strings.Join(runner.Commands, "\n")
-	if !strings.Contains(gotCommands, "docker compose -f "+filepath.Join(dir, "compose.yml")+" down -v") {
-		t.Fatalf("missing compose down -v command in:\n%s", gotCommands)
-	}
-	if strings.Contains(gotCommands, "config --images") || strings.Contains(gotCommands, "docker image rm") {
-		t.Fatalf("uninstall must not inspect or remove shared Docker images:\n%s", gotCommands)
 	}
 }

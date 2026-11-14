@@ -1,7 +1,6 @@
 package command_test
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"github.com/specgate/specgate/app/cli/internal/command"
@@ -15,7 +14,7 @@ import (
 )
 
 func TestFirstCheckpointDisclosesStoreWideUpgrade(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	if b, err := exec.Command("git", "-C", deps.WorkingDir, "init", "-q").CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v %s", err, b)
 	}
@@ -42,7 +41,7 @@ func TestFirstCheckpointDisclosesStoreWideUpgrade(t *testing.T) {
 }
 
 func TestCheckpointRejectsUnavailableCheckoutWithoutPersisting(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	dir, store, _, work := newLocalChangeWork(t, deps)
 	closeLocalChangeStore(t, deps, dir, store)
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "work", "checkpoint", work.Key); code != output.ExitUnavailable {
@@ -66,7 +65,7 @@ func TestCheckpointRejectsUnavailableCheckoutWithoutPersisting(t *testing.T) {
 }
 
 func TestSelectedCheckpointComparisonIsVisibleAndBoundToDecision(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	git := func(args ...string) {
 		t.Helper()
 		if b, err := exec.Command("git", append([]string{"-C", deps.WorkingDir}, args...)...).CombinedOutput(); err != nil {
@@ -159,7 +158,7 @@ func TestSelectedCheckpointComparisonIsVisibleAndBoundToDecision(t *testing.T) {
 }
 
 func TestDeliveryStatusOmitsEnhancedFieldsForLegacyReview(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	dir, store, sel, work := newLocalChangeWork(t, deps)
 	submitLocalChangeDelivery(t, store, sel.Workspace.ID, work, "builder", "head")
 	closeLocalChangeStore(t, deps, dir, store)
@@ -180,7 +179,7 @@ func TestDeliveryStatusOmitsEnhancedFieldsForLegacyReview(t *testing.T) {
 }
 
 func TestPinRejectsWatchedChangesDuringConfirmation(t *testing.T) {
-	deps, _, prompt, out := newFakeDeps(t)
+	deps, prompt, out := newWorkflowTestDeps(t)
 	dir, s, sel, _ := newLocalChangeWork(t, deps)
 	w, err := s.CreateQuickWork(t.Context(), sel.Workspace.ID, local.QuickWorkInput{Title: "Pin", AcceptanceCriteria: []string{"Works @check:unit"}})
 	if err != nil {
@@ -210,7 +209,7 @@ func TestPinRejectsWatchedChangesDuringConfirmation(t *testing.T) {
 }
 
 func TestDeliveryStatusReturnsEnhancedDecisionBasis(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	dir, s, sel, _ := newLocalChangeWork(t, deps)
 	w, err := s.CreateQuickWork(t.Context(), sel.Workspace.ID, local.QuickWorkInput{Title: "basis status", AcceptanceCriteria: []string{"Works @check:unit"}})
 	if err != nil {
@@ -255,7 +254,7 @@ func TestDeliveryStatusReturnsEnhancedDecisionBasis(t *testing.T) {
 }
 
 func TestDeliveryStatusPrintsCopyableBasisDecision(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	dir, s, sel, w := newLocalChangeWork(t, deps)
 	submitLocalChangeDelivery(t, s, sel.Workspace.ID, w, "builder", "head")
 	if _, err := s.CreateCheckpointWithFiles(t.Context(), sel.Workspace.ID, w.Key, "checkpoint", nil, ""); err != nil {
@@ -271,7 +270,7 @@ func TestDeliveryStatusPrintsCopyableBasisDecision(t *testing.T) {
 }
 
 func TestStatusShowsRecordedBasisAfterLegacyExplicitDecision(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	dir, store, selection, work := newLocalChangeWork(t, deps)
 	submitLocalChangeDelivery(t, store, selection.Workspace.ID, work, "builder", "head")
 	basis, err := store.AcceptanceBasis(t.Context(), selection.Workspace.ID, work.Key)
@@ -299,7 +298,7 @@ func TestStatusShowsRecordedBasisAfterLegacyExplicitDecision(t *testing.T) {
 }
 
 func TestSelectedLineageImpactRoundTripsThroughHumanDecision(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	dir := t.TempDir()
 	store, err := local.Open(filepath.Join(dir, "state.db"))
 	if err != nil {
@@ -415,47 +414,10 @@ func TestSelectedLineageImpactRoundTripsThroughHumanDecision(t *testing.T) {
 	}
 }
 
-func TestFullRejectsLocalReportExtensionsBeforeExecution(t *testing.T) {
-	for _, route := range []string{"submit", "report"} {
-		for _, field := range []string{"test_report", "test_observation", "test_run"} {
-			t.Run(route+"-"+field, func(t *testing.T) {
-				deps, client, _, out := newFakeDeps(t)
-				ran := false
-				deps.RunCheckCommand = func(context.Context, string) (int, string) { ran = true; return 0, "" }
-				file := writeDeliveryJSON(t, map[string]any{"event_type": "coding_agent.completed", "checks": []any{map[string]any{"name": "unit", "command": "true", "status": "pass", field: map[string]any{"format": "junit"}}}})
-				args := []string{"--json", "--yes", "delivery", route, "CR-1", "--file", file, "--skip-evidence-check"}
-				if route == "submit" {
-					args = append(args, "--run-checks")
-				}
-				code := command.ExecuteForCode(command.NewRootCommand(deps), args...)
-				if code != output.ExitIncompatible || ran || client.calls != 0 {
-					t.Fatalf("code=%d ran=%t calls=%d: %s", code, ran, client.calls, out.String())
-				}
-			})
-		}
-	}
-}
-
-func TestFullRejectsAcceptanceSelectionsBeforeNetwork(t *testing.T) {
-	for _, route := range [][]string{{"change", "status"}, {"change", "accept"}, {"delivery", "status"}, {"delivery", "approve"}, {"delivery", "reject"}} {
-		for _, flag := range []string{"checkpoint", "impact-base", "impact-target"} {
-			t.Run(route[0]+"-"+route[1]+"-"+flag, func(t *testing.T) {
-				deps, client, _, out := newFakeDeps(t)
-				args := append([]string{"--json", "--yes"}, route...)
-				args = append(args, "CR-1", "--"+flag, "selected")
-				code := command.ExecuteForCode(command.NewRootCommand(deps), args...)
-				if code != output.ExitIncompatible || client.calls != 0 {
-					t.Fatalf("code=%d calls=%d: %s", code, client.calls, out.String())
-				}
-			})
-		}
-	}
-}
-
 func TestEnhancedDecisionAliasesRejectWatchedDriftAndReadBackBasis(t *testing.T) {
 	for _, verb := range []string{"approve", "reject"} {
 		t.Run(verb, func(t *testing.T) {
-			deps, _, _, out := newFakeDeps(t)
+			deps, out := newTestDeps(t)
 			dir, s, sel, w := newLocalChangeWork(t, deps)
 			root := t.TempDir()
 			if err := os.Mkdir(filepath.Join(root, ".git"), 0700); err != nil {
@@ -525,7 +487,7 @@ func TestEnhancedDecisionAliasesRejectWatchedDriftAndReadBackBasis(t *testing.T)
 }
 
 func TestResumeRejectsExplicitUnknownCheckpoint(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	dir, store, _, work := newLocalChangeWork(t, deps)
 	closeLocalChangeStore(t, deps, dir, store)
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "work", "resume", work.Key, "--since", "missing")
@@ -535,7 +497,7 @@ func TestResumeRejectsExplicitUnknownCheckpoint(t *testing.T) {
 }
 
 func TestHandoffRefusesCheckpointBeforeWritingFile(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	dir, store, sel, work := newLocalChangeWork(t, deps)
 	submitLocalChangeDelivery(t, store, sel.Workspace.ID, work, "builder", "head")
 	if _, err := store.CreateCheckpointWithFiles(t.Context(), sel.Workspace.ID, work.Key, "fingerprint", nil, ""); err != nil {

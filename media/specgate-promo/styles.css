@@ -25,7 +25,6 @@
   --ok-soft: #142d1d;
   --warn: #f0ae46;
   --warn-soft: #342613;
-  --fail: #ee7269;
 }
 
 * { box-sizing: border-box; }
@@ -119,12 +118,7 @@ main {
   align-items: center;
   gap: 10px;
   color: var(--quiet);
-  font: 600 15px/1 "Commit Mono", monospace;
-}
-
-.story-position strong {
-  color: var(--ink);
-  font-size: 20px;
+  font: 600 22px/1 "Commit Mono", monospace;
 }
 
 .position-rule {
@@ -141,20 +135,20 @@ main {
 
 .headline-stage {
   position: relative;
-  height: 218px;
+  height: 230px;
   padding-left: 4px;
 }
 
 .eyebrow {
   color: var(--accent);
-  font: 700 15px/1 "Commit Mono", monospace;
+  font: 700 24px/1 "Commit Mono", monospace;
   letter-spacing: 0.11em;
   text-transform: uppercase;
 }
 
 .headline-stack {
   position: relative;
-  height: 116px;
+  height: 119px;
   margin-top: 13px;
   overflow: hidden;
 }
@@ -174,7 +168,7 @@ main {
 
 #headline-note {
   color: var(--muted);
-  font-size: 22px;
+  font-size: 34px;
   line-height: 1.3;
   letter-spacing: -0.018em;
 }
@@ -207,12 +201,12 @@ main {
 
 .surface-kicker {
   color: var(--quiet);
-  font: 700 12px/1 "Commit Mono", monospace;
+  font: 700 24px/1 "Commit Mono", monospace;
   letter-spacing: 0.13em;
 }
 
 .surface-top strong {
-  font-size: 21px;
+  font-size: 34px;
   letter-spacing: -0.02em;
 }
 
@@ -221,7 +215,7 @@ main {
   align-items: center;
   gap: 10px;
   color: var(--muted);
-  font: 600 14px/1 "Commit Mono", monospace;
+  font: 600 24px/1 "Commit Mono", monospace;
 }
 
 .state-dot {
@@ -249,8 +243,7 @@ main {
 }
 
 .lane-base,
-.lane-progress,
-.peer-connector {
+.lane-progress {
   fill: none;
   vector-effect: non-scaling-stroke;
 }
@@ -265,14 +258,7 @@ main {
   stroke-width: 3;
   stroke-linecap: round;
   filter: drop-shadow(0 0 8px rgba(137, 147, 255, 0.55));
-  transform-origin: 47px var(--lane-center-y);
-}
-
-.peer-connector {
-  opacity: 0;
-  stroke: var(--warn);
-  stroke-width: 2;
-  stroke-dasharray: 5 7;
+  transform-origin: 52.5px var(--lane-center-y);
 }
 
 .lane-runner {
@@ -291,7 +277,7 @@ main {
 .proof-node {
   position: absolute;
   top: var(--node-top);
-  width: 220px;
+  width: 385px;
   color: var(--quiet);
 }
 
@@ -311,7 +297,7 @@ main {
 .proof-node .node-index {
   display: block;
   color: inherit;
-  font: 700 13px/1 "Commit Mono", monospace;
+  font: 700 24px/1 "Commit Mono", monospace;
   letter-spacing: 0.1em;
 }
 
@@ -319,7 +305,7 @@ main {
   display: block;
   margin-top: 74px;
   color: var(--muted);
-  font-size: 21px;
+  font-size: 34px;
   letter-spacing: -0.025em;
 }
 
@@ -327,13 +313,13 @@ main {
   display: block;
   margin-top: 6px;
   color: var(--quiet);
-  font: 500 13px/1.3 "Commit Mono", monospace;
+  font: 500 23px/1.3 "Commit Mono", monospace;
 }
 
 .node-claim { left: 44px; color: var(--accent); }
-.node-ac1 { left: 415px; }
-.node-ac2 { left: 790px; }
-.node-human { left: 1165px; }
+.node-gap { left: 452px; }
+.node-rerun { left: 860px; }
+.node-human { left: 1269px; }
 
 .node-claim .node-dot {
   background: var(--accent);
@@ -348,149 +334,50 @@ main {
 }
 
 .evidence-gap,
-.peer-note,
-.human-decision,
 .revision-proof {
   position: absolute;
+  top: 36px;
   opacity: 0;
 }
 
 .evidence-gap {
-  top: 28px;
-  left: 790px;
-  display: grid;
-  width: 530px;
-  grid-template-columns: 150px 1fr;
-  gap: 0 26px;
+  left: 452px;
   padding-left: 22px;
   border-left: 4px solid var(--warn);
 }
 
-.gap-label {
-  align-self: center;
-  color: var(--warn);
-  font: 800 16px/1.1 "Commit Mono", monospace;
-  letter-spacing: 0.08em;
-}
-
-.gap-values {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1px;
-  background: var(--line);
-}
-
-.gap-values > div {
-  padding: 12px 16px;
-  background: var(--surface-raised);
-}
-
-.gap-values span {
-  display: block;
-  color: var(--quiet);
-  font: 700 11px/1 "Commit Mono", monospace;
-  letter-spacing: 0.11em;
-}
-
-.gap-values strong {
-  display: block;
-  margin-top: 5px;
-  font: 700 30px/1 "Commit Mono", monospace;
-}
-
-.gap-values .actual strong { color: var(--warn); }
-
-.evidence-gap p {
-  grid-column: 2;
-  margin-top: 12px;
-  color: var(--muted);
-  font-size: 17px;
-}
-
-.peer-note {
-  top: 24px;
-  left: 905px;
-  display: grid;
-  width: 520px;
-  grid-template-columns: 54px 1fr;
-  gap: 18px;
-}
-
-.peer-marker {
-  display: grid;
-  width: 54px;
-  height: 54px;
-  place-items: center;
-  color: var(--canvas);
-  background: var(--warn);
-  font-size: 22px;
-  font-weight: 800;
-}
-
-.peer-note span,
-.human-decision span,
+.gap-label,
 .revision-proof > div span {
   display: block;
   color: var(--warn);
-  font: 700 12px/1 "Commit Mono", monospace;
-  letter-spacing: 0.11em;
+  font: 700 24px/1.1 "Commit Mono", monospace;
+  letter-spacing: 0.07em;
 }
 
-.peer-note strong,
-.human-decision strong,
+.evidence-gap strong,
 .revision-proof strong {
   display: block;
-  margin-top: 7px;
-  font-size: 20px;
+  margin-top: 10px;
+  font-size: 36px;
   letter-spacing: -0.02em;
 }
 
-.peer-note code {
-  display: block;
-  margin-top: 14px;
-  padding: 13px 15px;
-  color: var(--fail);
-  border-left: 2px solid var(--warn);
-  background: #090a0c;
-  font: 600 16px/1 "Commit Mono", monospace;
-}
-
-.peer-note code b { color: var(--ok); }
-
-.human-decision {
-  top: 28px;
-  left: 70px;
-  width: 520px;
-  padding: 18px 21px;
-  border: 1px solid var(--accent);
-  background: #11132a;
-}
-
-.human-decision span { color: var(--accent); }
-.human-decision small {
-  display: block;
-  margin-top: 7px;
-  color: var(--muted);
-  font: 500 14px/1.3 "Commit Mono", monospace;
-}
-
 .revision-proof {
-  top: 30px;
-  left: 780px;
+  left: 860px;
   display: grid;
-  grid-template-columns: 62px 1fr;
+  grid-template-columns: 68px 1fr;
   align-items: center;
   gap: 18px;
 }
 
 .revision-check {
   display: grid;
-  width: 62px;
-  height: 62px;
+  width: 68px;
+  height: 68px;
   place-items: center;
   color: var(--canvas);
   background: var(--ok);
-  font-size: 31px;
+  font-size: 38px;
   font-weight: 800;
 }
 
@@ -503,36 +390,30 @@ main {
   left: 0;
   display: grid;
   height: 74px;
-  grid-template-columns: 28px 1fr auto;
+  grid-template-columns: 28px 1fr;
   align-items: center;
   gap: 10px;
   padding: 0 29px;
   border-top: 1px solid var(--line);
   background: #090a0c;
-  font: 560 15px/1 "Commit Mono", monospace;
+  font: 560 24px/1.2 "Commit Mono", monospace;
 }
 
 .prompt { color: var(--accent); }
 
 .command-stack {
   position: relative;
-  height: 20px;
+  height: 32px;
 }
 
-.command-stack code {
+.command-stack span {
   position: absolute;
   inset: 0;
   color: var(--ink);
   white-space: nowrap;
 }
 
-.command-stack code:not(:first-child) { opacity: 0; }
-
-.terminal-result {
-  color: var(--muted);
-  padding-left: 22px;
-  border-left: 1px solid var(--line);
-}
+.command-stack span:not(:first-child) { opacity: 0; }
 
 .delivered-state {
   position: absolute;
@@ -572,7 +453,7 @@ main {
 
 .delivered-state span {
   color: var(--ok);
-  font: 700 13px/1 "Commit Mono", monospace;
+  font: 700 24px/1 "Commit Mono", monospace;
   letter-spacing: 0.12em;
 }
 
@@ -587,5 +468,5 @@ main {
 .delivered-state small {
   margin-top: 13px;
   color: var(--muted);
-  font: 520 16px/1 "Commit Mono", monospace;
+  font: 520 26px/1 "Commit Mono", monospace;
 }

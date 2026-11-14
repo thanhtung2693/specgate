@@ -73,7 +73,7 @@
 
 .proof-trace {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   border-top: 1px solid rgba(255, 255, 255, 0.12);
   background: #090b0a;
   color: #d6d9d7;
@@ -90,12 +90,6 @@
 
 .proof-trace span + span {
   border-left: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.proof-trace small {
-  flex: none;
-  color: #8d92ef;
-  font-weight: 500;
 }
 
 @media (max-width: 768px) {

@@ -1,3 +1,0 @@
-#!/command/execlineb -P
-with-contenv
-/usr/local/bin/python3 /usr/local/lib/specgate/health_server.py

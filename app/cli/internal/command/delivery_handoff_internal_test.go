@@ -64,3 +64,15 @@ func TestDeliveryHandoffChecksumCoversPayloadNotItself(t *testing.T) {
 		t.Fatal("checksum did not change when the payload changed")
 	}
 }
+
+func TestDeliveryHandoffV1OmitsCheckoutGeneration(t *testing.T) {
+	receipt := map[string]any{"checkout_generation": "private-generation", "checkout_id": "historical-id"}
+	report, err := redactHandoffEvidence(local.DeliveryReport{Body: map[string]any{"git_receipt": receipt}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	exported, _ := report.Body["git_receipt"].(map[string]any)
+	if exported["checkout_generation"] != nil || exported["checkout_id"] != "historical-id" || receipt["checkout_generation"] != "private-generation" {
+		t.Fatalf("v1 export changed the wrong data: exported=%v source=%v", exported, receipt)
+	}
+}

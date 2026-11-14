@@ -15,8 +15,8 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"github.com/pelletier/go-toml/v2/unstable"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/output"
+	"github.com/specgate/specgate/app/cli/internal/workflow"
 )
 
 func codexPluginSourcePath(plugin map[string]any) string {
@@ -350,7 +350,7 @@ type pluginAgentFileLayout struct {
 	ownershipTargets []pluginOwnershipTarget
 }
 
-func (l *pluginAgentFileLayout) addSkills(dir string, pkg *client.PluginPackage) {
+func (l *pluginAgentFileLayout) addSkills(dir string, pkg *workflow.PluginPackage) {
 	for _, skill := range pluginSkillsFromPackage(pkg) {
 		skillDir := filepath.Join(dir, skill)
 		l.ownershipTargets = append(l.ownershipTargets, pluginOwnershipTarget{path: skillDir, directory: true})
@@ -374,7 +374,7 @@ func pluginHealthRoot(home string, projectLocal bool, projectRoots ...string) st
 	return home
 }
 
-func checkPluginAgentFiles(agent string, projectLocal bool, pkg *client.PluginPackage, layout pluginAgentFileLayout) pluginAgentHealth {
+func checkPluginAgentFiles(agent string, projectLocal bool, pkg *workflow.PluginPackage, layout pluginAgentFileLayout) pluginAgentHealth {
 	health := pluginAgentHealth{Agent: agent, OK: true}
 	latestVersion := ""
 	if pkg != nil {
@@ -427,7 +427,7 @@ func finishPluginAgentHealth(health pluginAgentHealth, projectLocal bool) plugin
 	return health
 }
 
-func checkCursorPluginAgent(home string, projectLocal bool, pkg *client.PluginPackage, projectRoots ...string) pluginAgentHealth {
+func checkCursorPluginAgent(home string, projectLocal bool, pkg *workflow.PluginPackage, projectRoots ...string) pluginAgentHealth {
 	root := pluginHealthRoot(home, projectLocal, projectRoots...)
 	pluginRoot := filepath.Join(root, ".cursor")
 	rule := filepath.Join(pluginRoot, "rules", "using-specgate.mdc")
@@ -439,7 +439,7 @@ func checkCursorPluginAgent(home string, projectLocal bool, pkg *client.PluginPa
 	return finishPluginAgentHealth(checkPluginAgentFiles("cursor", projectLocal, pkg, layout), projectLocal)
 }
 
-func checkCodexPluginAgent(home string, projectLocal bool, pkg *client.PluginPackage, projectRoots ...string) pluginAgentHealth {
+func checkCodexPluginAgent(home string, projectLocal bool, pkg *workflow.PluginPackage, projectRoots ...string) pluginAgentHealth {
 	root := pluginHealthRoot(home, projectLocal, projectRoots...)
 	layout := pluginAgentFileLayout{}
 	if projectLocal {
@@ -490,7 +490,7 @@ func checkCodexPluginAgent(home string, projectLocal bool, pkg *client.PluginPac
 	return finishPluginAgentHealth(health, projectLocal)
 }
 
-func checkClaudePluginAgent(home string, projectLocal bool, pkg *client.PluginPackage, projectRoots ...string) pluginAgentHealth {
+func checkClaudePluginAgent(home string, projectLocal bool, pkg *workflow.PluginPackage, projectRoots ...string) pluginAgentHealth {
 	root := pluginHealthRoot(home, projectLocal, projectRoots...)
 	layout := pluginAgentFileLayout{}
 	if projectLocal {
@@ -630,7 +630,7 @@ func pluginRepairCommand(agent string, projectLocal bool) string {
 	return cmd
 }
 
-func pluginSkillsFromPackage(pkg *client.PluginPackage) []string {
+func pluginSkillsFromPackage(pkg *workflow.PluginPackage) []string {
 	if pkg != nil && len(pkg.Skills) > 0 {
 		skills := append([]string(nil), pkg.Skills...)
 		sort.Strings(skills)
@@ -653,7 +653,7 @@ func readPluginManifestVersion(path string) string {
 	return strings.TrimSpace(manifest.Version)
 }
 
-func codexCacheWarnings(home, pluginRoot, latestVersion string, pkg *client.PluginPackage) []string {
+func codexCacheWarnings(home, pluginRoot, latestVersion string, pkg *workflow.PluginPackage) []string {
 	cacheRoot := filepath.Join(home, ".codex", "plugins", "cache", "personal", specgatePluginName, latestVersion)
 	if _, err := os.Stat(cacheRoot); err != nil {
 		return nil

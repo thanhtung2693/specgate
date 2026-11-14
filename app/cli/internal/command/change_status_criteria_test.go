@@ -15,7 +15,7 @@ import (
 
 func TestChangeStatusExposesPerCriterionVerdictAndDecidingCheck(t *testing.T) {
 	t.Parallel()
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	// A bound criterion, so the verdict is decided by a named check rather than
 	// by the agent's claim.
 	_, work := handoffWork(t, deps, "Retries stop @check:unit", nil)
@@ -58,7 +58,7 @@ func TestChangeStatusExposesPerCriterionVerdictAndDecidingCheck(t *testing.T) {
 // that is what the delivery skill renders verbatim.
 func TestChangeStatusHumanOutputListsCriteriaVerdicts(t *testing.T) {
 	t.Parallel()
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir, store, _, work := newLocalChangeWork(t, deps)
 	closeLocalChangeStore(t, deps, stateDir, store)
 	f := writeDeliveryJSON(t, map[string]any{

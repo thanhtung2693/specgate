@@ -4,20 +4,18 @@ set -eu
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 cd "$ROOT"
 CANONICAL=plugins
-DESTINATIONS="app/doc-registry/internal/agentpackages/plugins app/cli/internal/command/local_plugin_assets"
+EMBEDDED=app/cli/internal/command/local_plugin_assets
 
 fail() {
   echo "ERROR: $*" >&2
   exit 1
 }
 
-python3 app/doc-registry/scripts/generate-plugin-metadata.py \
+python3 scripts/generate-plugin-metadata.py \
   --plugin-dir "$CANONICAL" --check
 
-for embedded in $DESTINATIONS; do
-  diff -r -x .DS_Store "$CANONICAL" "$embedded" >/dev/null ||
-    fail "embedded plugins differ: $embedded"
-done
+diff -r -x .DS_Store "$CANONICAL" "$EMBEDDED" >/dev/null ||
+  fail "embedded plugins differ: $EMBEDDED"
 for file in app/cli/internal/command/local_plugin_assets/.agents/plugins/marketplace.json \
   app/cli/internal/command/local_plugin_assets/.agents/plugins/personal-marketplace.json; do
   git ls-files --error-unmatch "$file" >/dev/null 2>&1 ||
@@ -37,7 +35,7 @@ if grep -rn '\.claude/skills/using-specgate\|legacy global skill\|older global s
   fail "plugin hooks reference stale global fallbacks"
 fi
 
-for skill in specgate specgate-project-setup specgate-work-preparation specgate-work-delivery; do
+for skill in specgate specgate-project-setup specgate-work-preparation specgate-work-delivery specgate-human-handoff; do
   path="$CANONICAL/skills/$skill/SKILL.md"
   [ -f "$path" ] && grep -Fxq "name: $skill" "$path" ||
     fail "missing skill or mismatched frontmatter: $skill"

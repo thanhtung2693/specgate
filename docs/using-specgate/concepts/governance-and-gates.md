@@ -3,28 +3,12 @@
 Governance answers two practical questions: is this work ready for a coding
 agent, and does the returned evidence support accepting the result?
 
-## Policy matches the checks to the risk
+## Policy for Local work
 
-SpecGate resolves a governance level from explicit structured inputs: request
-type, impact level, requested governance level, and the impact declaration
-(protected domains, data/schema change, external contracts, rollback
-complexity, and blast radius). It does not infer risk from titles,
-descriptions, filenames, or keywords.
-
-The built-in levels are:
-
-| Level | Meaning |
-|---|---|
-| `light` | minimum contract and focused evidence |
-| `standard` | normal readiness, acceptance-criteria evidence, and human approval |
-| `enhanced` | expanded readiness, stronger evidence, and independent review |
-
-See [Governance reference](../reference/governance.md) for exact resolution
-rules.
-
-Full mode resolves among these levels. Local artifact-backed work stays on a
-fixed Standard policy so it remains model-free and server-free; Local Quick
-work is the lighter path for small changes.
+Quick work begins with explicit criteria and skips artifact readiness.
+Artifact-backed work uses fixed Standard governance. Each artifact freezes
+required roles, topics, gates, rubrics, and human approval policy when
+published.
 
 ## Readiness checks happen before implementation
 
@@ -47,9 +31,7 @@ policy obligations. It can use:
 - completion reports;
 - tests and build output;
 - files changed;
-- gate runs;
-- user-cited or externally supplied test and CI output;
-- repository PR/MR observations and optional Linear state;
+- user-cited test and CI output;
 - human or agent notes.
 
 If the evidence is missing or unclear, SpecGate points out the gap or asks for a
@@ -64,24 +46,21 @@ Common verdict states:
 | `pass` | requirement satisfied |
 | `warn` | issue exists, but may not block |
 | `fail` | requirement not satisfied |
-| `needs_human_review` | model or evidence cannot decide safely |
+| `needs_human_review` | unresolved scope or evidence needs human judgment |
 | `not_run` | no current result |
 | `not_applicable` | gate does not apply |
 
 ## Evidence quality matters
 
-An agent's own report is useful, but independent evidence is stronger. A merged
-PR/MR provides repository observation only when its submitted `head_sha` matches
-the latest completion receipt head. An enhanced policy may require that
-observation or deterministic bindings for every criterion before a delivery
-review can pass. CI results do not automatically become SpecGate-produced
-assurance.
+The review identifies agent claims, file citations, bound checks, and
+CLI-observed results. Review CI output in its original context to see which
+revision and test environment it covers. See [How verification works](verification.md).
 
 ## Skills act as team rubrics
 
-Skills are reusable team instructions. Full mode can attach workspace-edited
-Skills to gates. Local mode freezes equivalent default rubric content into each
-artifact without adding a Skill editor or server.
+Local project rubrics add team instructions to the four existing semantic
+gates. Publication freezes them with the artifact. See
+[Customize governance](../guides/customize-governance.md).
 
 ## Human approval remains separate
 

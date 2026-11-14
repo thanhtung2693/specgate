@@ -101,5 +101,8 @@ func acceptanceRisks(status changeStatusResult) []acceptanceRiskCategory {
 	if unverifiedFreshness {
 		add("unknown", "", "current-checkout provenance unavailable or not verified")
 	}
+	if status.HistoricalVerification {
+		add("unknown", "", "verification reproduction on this Local store generation is unverified")
+	}
 	return risks
 }

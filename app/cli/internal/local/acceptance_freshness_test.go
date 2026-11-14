@@ -19,3 +19,41 @@ func TestAcceptanceFreshnessKeepsCheckoutScopeAndUnavailableDistinct(t *testing.
 		}
 	}
 }
+
+func TestAcceptanceHistoricalSharedReceiptRequiresFullEndpointMatch(t *testing.T) {
+	report := map[string]any{"git_receipt": map[string]any{
+		"availability": "available", "freshness_scope": "shared_repository",
+		"checkout_generation": "source", "repository": "repo",
+		"branch": "main", "base_revision": "base", "head_revision": "head", "diff_digest": "source-dirty",
+	}}
+	opts := AcceptanceOptions{CheckoutGeneration: "receiving", CheckoutRepository: "repo", CheckoutBranch: "main", CheckoutBaseRevision: "base", CheckoutFingerprint: "available:head:receiver-dirty"}
+	if got := acceptanceCheckoutFreshness(report, opts); got != "noncomparable" {
+		t.Fatalf("working-tree mismatch comparison = %s", got)
+	}
+	opts.CheckoutFingerprint = "available:head:source-dirty"
+	if got := acceptanceCheckoutFreshness(report, opts); got != "matching_endpoints" {
+		t.Fatalf("full endpoint comparison = %s", got)
+	}
+	stored := report["git_receipt"].(map[string]any)
+	stored["base_revision"] = ""
+	if got := acceptanceCheckoutFreshness(report, opts); got != "unavailable" {
+		t.Fatalf("missing source base comparison = %s", got)
+	}
+	stored["base_revision"] = "base"
+	stored["branch"] = ""
+	if got := acceptanceCheckoutFreshness(report, opts); got != "stale" {
+		t.Fatalf("named versus detached branch comparison = %s", got)
+	}
+	stored["branch"] = "main"
+	stored["checkout_generation"] = ""
+	opts.CheckoutDirty = true
+	if got := acceptanceCheckoutFreshness(report, opts); got != "noncomparable" {
+		t.Fatalf("pre-generation dirty endpoint comparison = %s", got)
+	}
+	opts.CheckoutDirty = false
+	stored["checkout_generation"] = "source"
+	opts.CheckoutFingerprint = "available:different-head:receiver-dirty"
+	if got := acceptanceCheckoutFreshness(report, opts); got != "stale" {
+		t.Fatalf("different HEAD comparison = %s", got)
+	}
+}

@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
-	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/local"
+	"github.com/specgate/specgate/app/cli/internal/workflow"
 )
 
 func printChangeStatus(deps *Deps, result changeStatusResult, detailed ...bool) {
@@ -20,7 +19,7 @@ func printChangeStatus(deps *Deps, result changeStatusResult, detailed ...bool) 
 	fmt.Fprintf(deps.Stdout, "Decision: %s\n", result.Decision)
 	fmt.Fprintf(deps.Stdout, "Receipt: %s\n", result.Receipt)
 	fmt.Fprintf(deps.Stdout, "Freshness: %s\n", result.Freshness)
-	if result.Mode == config.ModeLocal {
+	{
 		if len(result.Risks) == 0 {
 			result.Risks = acceptanceRisks(result)
 		}
@@ -89,9 +88,9 @@ func printChangeStatus(deps *Deps, result changeStatusResult, detailed ...bool) 
 	}
 	// Same shape as `verify`: the criterion text and the reason, so a human can
 	// see which one is weak without opening the completion file.
-	if result.Mode == config.ModeLocal && len(result.Criteria) == 0 {
+	if len(result.Criteria) == 0 {
 		for _, row := range result.CriterionEvidence {
-			result.Criteria = append(result.Criteria, client.CriterionReview{CriterionID: row.ID, Text: row.Text, Verdict: "not reviewed"})
+			result.Criteria = append(result.Criteria, workflow.CriterionReview{CriterionID: row.ID, Text: row.Text, Verdict: "not reviewed"})
 		}
 	}
 	if len(result.Criteria) > 0 {
@@ -102,9 +101,6 @@ func printChangeStatus(deps *Deps, result changeStatusResult, detailed ...bool) 
 		fmt.Fprintln(deps.Stdout, "Criteria:")
 		for _, criterion := range result.Criteria {
 			fmt.Fprintf(deps.Stdout, "  [%s] %s — %s\n", criterion.Verdict, criterion.Text, criterion.Why)
-			if result.Mode != config.ModeLocal {
-				continue
-			}
 			row, ok := evidence[criterion.CriterionID]
 			if !ok {
 				fmt.Fprintln(deps.Stdout, "    gap: criterion evidence missing")

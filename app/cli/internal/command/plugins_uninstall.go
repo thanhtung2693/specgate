@@ -298,18 +298,6 @@ func removeOwnedPluginFile(path string) (bool, error) {
 	return true, nil
 }
 
-func removePathIfExists(path string) (bool, error) {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return false, nil
-	} else if err != nil {
-		return false, err
-	}
-	if err := os.RemoveAll(path); err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
 func removeCodexConfigSections(path string, removePersonalMarketplace bool, marketplaceRoot string) (bool, error) {
 	if err := validateRegularFileOrMissing(path); err != nil {
 		return false, err

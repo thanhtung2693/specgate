@@ -75,15 +75,14 @@ func TestPluginsDoctorDoesNotWarnWhenSelectedAgentExecutableIsUnavailable(t *tes
 func TestPluginsDoctorDetectsStaleDirectFileInstalls(t *testing.T) {
 	for _, agentName := range []string{"codex", "claude", "cursor"} {
 		t.Run(agentName, func(t *testing.T) {
-			srv := newPluginRegistry(t)
+
 			workDir := t.TempDir()
 			t.Chdir(workDir)
 			homeDir := t.TempDir()
 
 			deps, out := newPluginDeps(homeDir)
 			if code := command.ExecuteForCode(command.NewRootCommand(deps),
-				"--json", "--server", srv.URL,
-				"plugins", "install", "--project-local", "--agent", agentName,
+				"--json", "plugins", "install", "--project-local", "--agent", agentName,
 			); code != output.ExitOK {
 				t.Fatalf("install exit = %d, output = %s", code, out.String())
 			}
@@ -97,10 +96,18 @@ func TestPluginsDoctorDetectsStaleDirectFileInstalls(t *testing.T) {
 			case "cursor":
 				markerRoot = filepath.Join(workDir, ".cursor", "skills")
 			}
-			for _, skill := range []string{"specgate", "specgate-project-setup", "specgate-work-preparation", "specgate-work-delivery"} {
+			for _, skill := range embeddedTestPluginPackage(t).Skills {
 				marker := filepath.Join(markerRoot, skill, ".specgate-owned")
 				if err := os.WriteFile(marker, []byte("specgate-plugin-v1\nversion=0.0.9\n"), 0o600); err != nil {
 					t.Fatal(err)
+				}
+			}
+			for _, file := range embeddedTestPluginPackage(t).ServedFiles {
+				if relative, found := strings.CutPrefix(file, "skills/"); found && filepath.Base(relative) != "SKILL.md" {
+					marker := filepath.Join(markerRoot, filepath.FromSlash(relative)) + ".specgate-owned"
+					if err := os.WriteFile(marker, []byte("specgate-plugin-v1\nversion=0.0.9\n"), 0o600); err != nil {
+						t.Fatal(err)
+					}
 				}
 			}
 			switch agentName {
@@ -118,8 +125,7 @@ func TestPluginsDoctorDetectsStaleDirectFileInstalls(t *testing.T) {
 
 			deps, out = newPluginDeps(homeDir)
 			code := command.ExecuteForCode(command.NewRootCommand(deps),
-				"--json", "--server", srv.URL,
-				"plugins", "doctor", "--project-local", "--agent", agentName,
+				"--json", "plugins", "doctor", "--project-local", "--agent", agentName,
 			)
 			if code != output.ExitOK {
 				t.Fatalf("doctor exit = %d, output = %s", code, out.String())
@@ -141,11 +147,11 @@ func TestPluginsDoctorDetectsStaleDirectFileInstalls(t *testing.T) {
 				t.Fatalf("unexpected doctor envelope: %s", out.String())
 			}
 			agent := env.Data.Agents[0]
-			if agent.InstalledVersion != "0.0.9" || agent.LatestVersion != "0.1.0" || !agent.NeedsUpdate {
+			if agent.InstalledVersion != "0.0.9" || agent.LatestVersion != embeddedTestPluginPackage(t).Version || !agent.NeedsUpdate {
 				t.Fatalf("stale direct install was not detected: %+v", agent)
 			}
 			warnings := strings.Join(agent.Warnings, "\n")
-			if !strings.Contains(warnings, "does not match latest 0.1.0") {
+			if !strings.Contains(warnings, "does not match latest "+embeddedTestPluginPackage(t).Version) {
 				t.Fatalf("version mismatch warning is inaccurate: %s", out.String())
 			}
 			if !strings.Contains(warnings, "plugins install --agent "+agentName+" --project-local") {
@@ -156,15 +162,14 @@ func TestPluginsDoctorDetectsStaleDirectFileInstalls(t *testing.T) {
 }
 
 func TestPluginsDoctorRequiresCodexMarketplaceRegistration(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	workDir := t.TempDir()
 	t.Chdir(workDir)
 	homeDir := t.TempDir()
 
 	deps, out := newPluginDeps(homeDir)
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--json", "--server", srv.URL,
-		"plugins", "install",
+		"--json", "plugins", "install",
 		"--agent", "codex",
 	)
 	if code != output.ExitOK {
@@ -177,8 +182,7 @@ func TestPluginsDoctorRequiresCodexMarketplaceRegistration(t *testing.T) {
 
 	deps, out = newPluginDeps(homeDir)
 	code = command.ExecuteForCode(command.NewRootCommand(deps),
-		"--json", "--server", srv.URL,
-		"plugins", "doctor",
+		"--json", "plugins", "doctor",
 		"--agent", "codex",
 	)
 	if code != output.ExitUnavailable {
@@ -266,11 +270,11 @@ func TestPluginsDoctorRejectsUnsafeOrUnownedExpectedContent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv := newPluginRegistry(t)
+
 			home := t.TempDir()
 			deps, out := newPluginDeps(home)
 			if code := command.ExecuteForCode(command.NewRootCommand(deps),
-				"--plain", "--server", srv.URL, "plugins", "install", "--agent", tt.agent,
+				"--plain", "plugins", "install", "--agent", tt.agent,
 			); code != output.ExitOK {
 				t.Fatalf("install exit = %d, output = %s", code, out.String())
 			}
@@ -278,7 +282,7 @@ func TestPluginsDoctorRejectsUnsafeOrUnownedExpectedContent(t *testing.T) {
 			tt.mutate(t, home)
 			deps, out = newPluginDeps(home)
 			code := command.ExecuteForCode(command.NewRootCommand(deps),
-				"--json", "--server", srv.URL, "plugins", "doctor", "--agent", tt.agent,
+				"--json", "plugins", "doctor", "--agent", tt.agent,
 			)
 			if code != output.ExitUnavailable {
 				t.Fatalf("doctor exit = %d, want unavailable; output = %s", code, out.String())
@@ -296,8 +300,7 @@ func TestPluginsDoctorReportsMissing(t *testing.T) {
 	homeDir := t.TempDir()
 	deps, out := newPluginDeps(homeDir)
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--json", "--server", "http://127.0.0.1:1",
-		"plugins", "doctor",
+		"--json", "plugins", "doctor",
 		"--project-local",
 		"--agent", "codex",
 	)
@@ -323,15 +326,14 @@ func TestPluginsDoctorReportsMissing(t *testing.T) {
 }
 
 func TestPluginsDoctorProjectLocalRequiresFocusedCodexSkill(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	workDir := t.TempDir()
 	t.Chdir(workDir)
 	homeDir := t.TempDir()
 
 	deps, out := newPluginDeps(homeDir)
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--json", "--server", srv.URL,
-		"plugins", "install",
+		"--json", "plugins", "install",
 		"--project-local",
 		"--agent", "codex",
 	)
@@ -345,8 +347,7 @@ func TestPluginsDoctorProjectLocalRequiresFocusedCodexSkill(t *testing.T) {
 
 	deps, out = newPluginDeps(homeDir)
 	code = command.ExecuteForCode(command.NewRootCommand(deps),
-		"--json", "--server", srv.URL,
-		"plugins", "doctor",
+		"--json", "plugins", "doctor",
 		"--project-local",
 		"--agent", "codex",
 	)
@@ -394,15 +395,14 @@ func TestPluginsDoctorProjectLocalClaudeRequiresRuntimeIntegration(t *testing.T)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv := newPluginRegistry(t)
+
 			workDir := t.TempDir()
 			t.Chdir(workDir)
 			homeDir := t.TempDir()
 
 			deps, out := newPluginDeps(homeDir)
 			if code := command.ExecuteForCode(command.NewRootCommand(deps),
-				"--json", "--server", srv.URL,
-				"plugins", "install", "--project-local", "--agent", "claude",
+				"--json", "plugins", "install", "--project-local", "--agent", "claude",
 			); code != output.ExitOK {
 				t.Fatalf("install exit = %d, output = %s", code, out.String())
 			}
@@ -410,8 +410,7 @@ func TestPluginsDoctorProjectLocalClaudeRequiresRuntimeIntegration(t *testing.T)
 			tt.mutate(t, workDir)
 			deps, out = newPluginDeps(homeDir)
 			code := command.ExecuteForCode(command.NewRootCommand(deps),
-				"--json", "--server", srv.URL,
-				"plugins", "doctor", "--project-local", "--agent", "claude",
+				"--json", "plugins", "doctor", "--project-local", "--agent", "claude",
 			)
 			if code != output.ExitUnavailable {
 				t.Fatalf("doctor exit = %d, want unavailable; output = %s", code, out.String())
@@ -425,22 +424,21 @@ func TestPluginsDoctorProjectLocalClaudeRequiresRuntimeIntegration(t *testing.T)
 }
 
 func TestPluginsDoctorWarnsWhenCodexCacheIsStale(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	workDir := t.TempDir()
 	t.Chdir(workDir)
 	homeDir := t.TempDir()
 
 	deps, out := newPluginDeps(homeDir)
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--plain", "--server", srv.URL,
-		"plugins", "install",
+		"--plain", "plugins", "install",
 		"--agent", "codex",
 	)
 	if code != output.ExitOK {
 		t.Fatalf("install exit = %d, output = %s", code, out.String())
 	}
 
-	cacheRoot := filepath.Join(homeDir, ".codex", "plugins", "cache", "personal", "specgate", "0.1.0")
+	cacheRoot := filepath.Join(homeDir, ".codex", "plugins", "cache", "personal", "specgate", embeddedTestPluginPackage(t).Version)
 	for _, skill := range []string{"specgate-project-setup", "specgate-work-preparation"} {
 		if err := os.Remove(filepath.Join(cacheRoot, "skills", skill, "SKILL.md")); err != nil {
 			t.Fatal(err)
@@ -461,8 +459,7 @@ func TestPluginsDoctorWarnsWhenCodexCacheIsStale(t *testing.T) {
 
 	deps, out = newPluginDeps(homeDir)
 	code = command.ExecuteForCode(command.NewRootCommand(deps),
-		"--json", "--server", srv.URL,
-		"plugins", "doctor",
+		"--json", "plugins", "doctor",
 		"--agent", "codex",
 	)
 	if code != output.ExitOK {
@@ -483,7 +480,7 @@ func TestPluginsDoctorWarnsWhenCodexCacheIsStale(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
 		t.Fatalf("unmarshal: %v, output = %s", err, out.String())
 	}
-	if !env.OK || env.Data.LatestVersion != "0.1.0" || len(env.Data.Agents) != 1 {
+	if !env.OK || env.Data.LatestVersion != embeddedTestPluginPackage(t).Version || len(env.Data.Agents) != 1 {
 		t.Fatalf("unexpected doctor envelope: %s", out.String())
 	}
 	agent := env.Data.Agents[0]

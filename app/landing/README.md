@@ -1,7 +1,8 @@
 # SpecGate Landing Page
 
-Standalone static landing page for introducing SpecGate, CLI-first IDE handoff,
-artifact governance, and evidence-backed delivery review.
+Standalone static landing page for SpecGate Local. It introduces approved
+agent handoff, per-criterion delivery evidence, and developer acceptance for
+solo developers and small teams.
 
 Design language: "the governed pipeline." The page keeps a dark control-room
 canvas, indigo brand accent, semantic verdict colors, and one governance rail in
@@ -37,31 +38,34 @@ Use the manual workflow trigger to redeploy unchanged landing-page files.
 - `logo.svg` - the branded header mark used in the top-left nav
 - `fonts/` - self-hosted Host Grotesk and Commit Mono assets plus their OFL licenses
 
-The terminal carousel demonstrates four current CLI value paths: publish an
-artifact after an explicit preview, resume Local work and read pinned documents, submit
-delivery evidence with an explicit missing selected-test result before rerun
-and exact-basis human review, and inspect observed governance signals. Keep
-command shapes aligned with `specgate --help` and the user documentation. Use
-returned scaffold paths and the exact review ID for Local acceptance. Demo
-outputs are abbreviated illustrations, not captured CLI transcripts. The
-initial Publish frame is present in HTML for no-JavaScript use; `script.js`
-enhances it with accessible tabs and plain-text playback.
-The [selected-test walkthrough](../../docs/using-specgate/guides/observe-selected-tests.md)
-provides a runnable counterpart. It retains watched-input drift after adding
-the missing test; human acceptance remains separate from the test outcome.
+The terminal carousel shows local artifact publication after preview, resuming
+with approved Context Pack documents, observing a missing selected-test
+result, and reading an eligible bounded Git handoff. Keep commands aligned
+with `specgate --help` and the user documentation. Use the returned scaffold
+path and the exact review ID for Local acceptance. The examples are abbreviated
+illustrations. The initial Publish frame is available without JavaScript.
 
-The page keeps the public story compact: hero, compatibility, governed loop,
-CLI demo, where-it-fits comparison, six-question FAQ, and CTA. The governed
-loop should describe the real product boundary: OpenSpec, Spec Kit, Superpowers,
+The hero and tour illustrate a unit-test suite that exits zero while omitting
+the agreed 503 case. The [selected-test walkthrough](../../docs/using-specgate/guides/observe-selected-tests.md)
+uses the same health-status function and retains watched-input drift after the
+agent adds the case. The
+[delivery proof](../../docs/using-specgate/guides/try-delivery-proof.md) uses a
+small name-normalization example and observes command results. Both leave the
+acceptance decision with the developer. Refresh the landing MP4 and poster by
+following the [HyperFrames render guide](../../media/specgate-promo/README.md).
+
+The page covers the entry path, tool compatibility, Local workflow, product
+tour, CLI examples, and FAQ. Preserve the authoring and execution boundaries.
+In the versioned artifact route, OpenSpec, Spec Kit, Superpowers,
 Markdown, and custom documents remain in their authoring systems; users map
 their roles explicitly; SpecGate records approval for one immutable version and
 hands it off as a pinned Context Pack. Avoid copy that implies SpecGate authors
 the source spec, detects its framework, or replaces the IDE, tracker, or
 repository.
 
-The compatibility section keeps direct CLI and IDE handoff primary. Full-mode
-Repositories add exact-commit PR and MR confirmation, while Linear remains an
-optional work-tracking handoff for teams.
+The compatibility section explains IDE handoff and optional Local browser
+review. A teammate can use a bounded Git handoff to read the request beside the
+diff. The originating Local store records the human decision.
 
 Keep Lighthouse fixes grounded in the public page instead of browser extension
 noise. Accessibility-critical controls should keep visible labels aligned with

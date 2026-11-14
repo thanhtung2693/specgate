@@ -12,67 +12,8 @@ import (
 	"github.com/specgate/specgate/app/cli/internal/config"
 )
 
-func TestServerPrecedence(t *testing.T) {
-	t.Setenv("SPECGATE_SERVER", "https://env.example")
-	got := config.ResolveServer("https://flag.example", config.RepoConfig{Server: "https://repo.example"}, config.Config{Server: "https://file.example"})
-	if got != "https://flag.example" {
-		t.Fatalf("server = %q, want flag value", got)
-	}
-}
-
-func TestEnvOverridesFile(t *testing.T) {
-	t.Setenv("SPECGATE_SERVER", "https://env.example")
-	got := config.ResolveServer("", config.RepoConfig{Server: "https://repo.example"}, config.Config{Server: "https://file.example"})
-	if got != "https://env.example" {
-		t.Fatalf("server = %q, want env value", got)
-	}
-}
-
 // TestRepoConfigOverridesGlobalFile: with no flag and no env, the repo
 // .specgate/config server outranks the global user config server.
-func TestRepoConfigOverridesGlobalFile(t *testing.T) {
-	t.Setenv("SPECGATE_SERVER", "")
-	got := config.ResolveServer("", config.RepoConfig{Server: "https://repo.example"}, config.Config{Server: "https://file.example"})
-	if got != "https://repo.example" {
-		t.Fatalf("server = %q, want repo value", got)
-	}
-}
-
-func TestResolvePluginRegistryIgnoresRepoServer(t *testing.T) {
-	t.Setenv("SPECGATE_SERVER", "")
-	got := config.ResolvePluginRegistry("", config.Config{Server: "https://global.example"})
-	if got != "https://global.example" {
-		t.Fatalf("plugin registry = %q, want global server", got)
-	}
-}
-
-func TestFileOverridesDefault(t *testing.T) {
-	t.Setenv("SPECGATE_SERVER", "")
-	got := config.ResolveServer("", config.RepoConfig{}, config.Config{Server: "https://file.example"})
-	if got != "https://file.example" {
-		t.Fatalf("server = %q, want file value", got)
-	}
-}
-
-func TestDefaultFallback(t *testing.T) {
-	t.Setenv("SPECGATE_SERVER", "")
-	got := config.ResolveServer("", config.RepoConfig{}, config.Config{})
-	if got != "http://localhost:3000/api/doc-registry" {
-		t.Fatalf("server = %q, want http://localhost:3000/api/doc-registry", got)
-	}
-}
-
-func TestResolveModeDefaultsUnsetConfigToFullAndPreservesExplicitLocal(t *testing.T) {
-	if got := config.ResolveMode(config.Config{}); got != config.ModeFull {
-		t.Fatalf("unset mode = %q, want %q", got, config.ModeFull)
-	}
-	if got := config.ResolveMode(config.Config{Server: "https://server.example"}); got != config.ModeFull {
-		t.Fatalf("server-only config mode = %q, want %q", got, config.ModeFull)
-	}
-	if got := config.ResolveMode(config.Config{Mode: config.ModeLocal}); got != config.ModeLocal {
-		t.Fatalf("explicit mode = %q, want %q", got, config.ModeLocal)
-	}
-}
 
 func TestLoadFromRejectsUnknownMode(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
@@ -80,7 +21,7 @@ func TestLoadFromRejectsUnknownMode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := config.LoadFrom(path); err == nil || !strings.Contains(err.Error(), "local or full") {
+	if _, err := config.LoadFrom(path); err == nil || !strings.Contains(err.Error(), "expected local") {
 		t.Fatalf("LoadFrom error = %v, want actionable invalid-mode error", err)
 	}
 }

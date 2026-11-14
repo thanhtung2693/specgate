@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>SpecGate · Local</title>
+    <link rel="icon" href="/assets/logo.svg" />
+    <link rel="stylesheet" href="/style.css" />
+    <script defer src="/core.js"></script>
+    <script defer src="/locale.js"></script>
+    <script defer src="/assets/vendor/marked/marked.umd.js"></script>
+    <script defer src="/markdown.js"></script>
+    <script defer src="/presentation.js"></script>
+    <script defer src="/source-view.js"></script>
+    <script defer src="/app.js"></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <div id="app">
+      <main id="main"><p role="status">Connecting to SpecGate…</p></main>
+    </div>
+    <div id="notice" role="status" aria-live="polite"></div>
+    <dialog id="settings-dialog" aria-labelledby="settings-title"></dialog>
+    <dialog id="dialog" aria-labelledby="dialog-title"></dialog>
+  </body>
+</html>

@@ -14,7 +14,7 @@ import (
 // both modes, before any network call.
 func TestCompletionRejectsUnknownEvidenceFieldInLocalMode(t *testing.T) {
 	t.Parallel()
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	_, work := handoffWork(t, deps, "Retries stop", nil)
 	f := writeDeliveryJSON(t, map[string]any{
 		"event_type":     "coding_agent.completed",
@@ -40,7 +40,7 @@ func TestCompletionRejectsUnknownEvidenceFieldInLocalMode(t *testing.T) {
 
 func TestCompletionAcceptsEveryDocumentedEvidenceField(t *testing.T) {
 	t.Parallel()
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	_, work := handoffWork(t, deps, "Retries stop", nil)
 	f := writeDeliveryJSON(t, map[string]any{
 		"event_type":     "coding_agent.completed",

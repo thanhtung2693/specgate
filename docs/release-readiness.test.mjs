@@ -23,10 +23,8 @@
 // app/cli/internal/command/docs_contract_internal_test.go, where the Cobra tree
 // and the structs are in memory. Do not re-pin them as literals here.
 
-import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, statSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, dirname } from "node:path";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -42,119 +40,34 @@ const gitFiles = (...args) =>
 
 const trackedFiles = () => gitFiles();
 const workingFiles = () => gitFiles("--cached", "--others", "--exclude-standard");
+
+test("Local distribution has no server owners and keeps plugin tooling at the root", () => {
+  const roots = ["app/agents/", "app/doc-registry/", "app/ui/", "deploy/", "docker/"];
+  const retired = workingFiles().filter((path) => roots.some((root) => path.startsWith(root)) && exists(path));
+  assert.equal(retired.length, 0, `retired source still ships: ${retired.slice(0, 5).join(", ")}`);
+  for (const path of ["scripts/generate-plugin-metadata.py", "scripts/sync-embedded-plugins.sh", "app/cli/internal/command/local_ui_assets/index.html"]) {
+    assert.ok(exists(path), path);
+  }
+  assert.doesNotMatch(read("Makefile"), /\bdocker compose\b|app\/doc-registry/);
+  assert.doesNotMatch(read(".github/workflows/release.yml"), /\bghcr\.io\b|specgate-compose|docker\/setup-buildx/);
+});
 const markdownFiles = () =>
-  trackedFiles().filter((path) => path.endsWith(".md") && !path.includes("/node_modules/"));
+  workingFiles().filter((path) => path.endsWith(".md") && !path.includes("/node_modules/"));
 
 const uniqueMatches = (text, pattern) => [...new Set([...text.matchAll(pattern)].map(([, value]) => value))];
 const wordCount = (text) => text.trim().split(/\s+/).length;
 
-test("release Compose validation preserves an existing environment on success and failure", { skip: process.platform === "win32" }, () => {
-  const example = read("docs/contributing/release.md").match(/Validate Compose:\s+```bash\n([\s\S]*?)\n```/);
-  assert.ok(example, "release Compose validation example missing");
-  for (const dockerExit of [0, 7]) {
-    const fixture = mkdtempSync(join(tmpdir(), "specgate-release-env-"));
-    try {
-      const bundle = join(fixture, "deploy/local");
-      const bin = join(fixture, "bin");
-      const trace = join(fixture, "docker-args");
-      mkdirSync(bundle, { recursive: true });
-      mkdirSync(bin);
-      for (const name of ["compose.yml", ".env.example", "specgate.env.example"]) {
-        writeFileSync(join(bundle, name), read(`deploy/local/${name}`));
-      }
-      const secret = "SETTINGS_ENCRYPTION_KEY=synthetic-preserved-key\n";
-      writeFileSync(join(bundle, "specgate.env"), secret, { mode: 0o600 });
-      writeFileSync(join(bundle, "unrelated.txt"), "keep me");
-      // Replace only the external Compose process; execute the actual documented
-      // copy/cleanup workflow against disposable files.
-      writeFileSync(join(bin, "docker"), '#!/bin/sh\nprintf "%s\\n" "$@" > "$DOCKER_CHECK_TRACE"\nexit "$DOCKER_CHECK_EXIT"\n', { mode: 0o700 });
-      const result = spawnSync("bash", ["-c", example[1]], {
-        cwd: fixture,
-        env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, DOCKER_CHECK_TRACE: trace, DOCKER_CHECK_EXIT: String(dockerExit) },
-        encoding: "utf8",
-      });
-      assert.equal(result.status, dockerExit, result.stderr);
-      assert.equal(readFileSync(join(bundle, "specgate.env"), "utf8"), secret);
-      assert.equal(statSync(join(bundle, "specgate.env")).mode & 0o777, 0o600);
-      assert.equal(readFileSync(join(bundle, "unrelated.txt"), "utf8"), "keep me");
-      const args = readFileSync(trace, "utf8").trim().split("\n");
-      const composePath = args[args.indexOf("-f") + 1];
-      assert.notEqual(dirname(composePath), bundle, "validation must use an isolated bundle");
-      assert.equal(existsSync(dirname(composePath)), false, "temporary validation bundle was not cleaned up");
-    } finally {
-      rmSync(fixture, { recursive: true, force: true });
-    }
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Derived: the code is the source of truth and the docs must keep up.
-// ---------------------------------------------------------------------------
-
-test("every doc-registry config env var reaches the operator docs", () => {
-  const operatorDocs = [
-    "app/doc-registry/.env.example",
-    "deploy/README.md",
-    "app/doc-registry/docs/README.md",
-    "app/doc-registry/docs/spec.md",
-  ]
-    .map(read)
-    .join("\n");
-  const configEnvVars = uniqueMatches(
-    read("app/doc-registry/internal/config/config.go"),
-    /\bgetEnv(?:Bool|Int|Int64|Float)?\("([A-Z0-9_]+)"/g,
-  );
-
-  assert.ok(configEnvVars.length > 0, "no doc-registry config env vars found; the accessor pattern changed");
-  assert.deepEqual(
-    configEnvVars.filter((name) => !new RegExp(`\\b${name}\\b`).test(operatorDocs)),
-    [],
-  );
-});
-
-test("both modes emit the same delivery-assurance vocabulary", () => {
-  // These strings are the reader-facing verdict language, and they are written
-  // out twice — once in Go for Local, once in Python for Full. They have already
-  // drifted once: Full said "(deterministic)" for a check nobody re-ran while
-  // Local named the observer. There is no shared constant across the language
-  // boundary, so contracts.md is the authority and this is what notices.
+test("Local delivery-assurance vocabulary distinguishes binding and observation", () => {
   const contracts = read("docs/contributing/contracts.md");
   const vocabulary = uniqueMatches(
-    contracts.slice(contracts.indexOf("The `deterministic` trust tier")),
+    contracts,
     /`(observed by the SpecGate CLI|reported by the coding agent, not re-run|bound deterministic check)`/g,
   );
-  assert.equal(vocabulary.length, 3, "contracts.md no longer declares the three assurance phrases");
-
-  const localReadback = read("app/cli/internal/command/assurance.go");
-  const localAssurance = read("app/cli/internal/command/delivery_status.go");
-  const fullReview = read("app/agents/src/specgate_agents/governance/quality_gates/delivery_review.py");
-
-  for (const phrase of vocabulary) {
-    const inGo = localReadback.includes(phrase) || localAssurance.includes(phrase);
-    assert.ok(inGo, `Local no longer emits ${JSON.stringify(phrase)}`);
+  assert.equal(vocabulary.length, 3);
+  const readback = ["assurance.go", "delivery_status.go"].map(name => read("app/cli/internal/command/" + name)).join("\n");
+  for (const phrase of vocabulary.filter(value => value !== "bound deterministic check")) {
+    assert.ok(readback.includes(phrase), phrase);
   }
-  // The observer phrases are the pair both modes must agree on; the tier label
-  // is rendered by the CLI alone.
-  for (const phrase of vocabulary.filter((value) => value.startsWith("observed") || value.startsWith("reported"))) {
-    assert.ok(fullReview.includes(phrase), `Full no longer emits ${JSON.stringify(phrase)}`);
-  }
-});
-
-test("every workboard warning code reaches the shared contract and the registry docs", () => {
-  const contracts = read("docs/contributing/contracts.md");
-  const registryContract = `${read("app/doc-registry/docs/spec.md")}\n${read("app/doc-registry/docs/api.md")}`;
-  const warningCodes = uniqueMatches(
-    read("app/doc-registry/internal/workboard/model.go"),
-    /\bWarning[A-Za-z0-9_]+\s+WarningCode\s*=\s*"([^"]+)"/g,
-  );
-
-  assert.ok(warningCodes.length > 0, "no WarningCode constants found; the declaration pattern changed");
-  assert.deepEqual(
-    warningCodes.filter(
-      (code) => !contracts.includes(`\`${code}\``) || !registryContract.includes(`\`${code}\``),
-    ),
-    [],
-  );
 });
 
 test("every CLI exit code is documented as stable API", () => {
@@ -283,56 +196,16 @@ test("every GitHub workflow uses supported action majors", () => {
   assert.deepEqual(stale, []);
 });
 
-test("Dockerfiles share one explicit stable frontend documented for build verification", () => {
-  const dockerfiles = trackedFiles().filter((path) => /(?:^|\/)Dockerfile[.\w-]*$/.test(path) && !path.endsWith(".dockerignore"));
-  assert.ok(dockerfiles.length > 0, "no Dockerfiles found");
-  const versions = dockerfiles.map((path) => {
-    const version = read(path).match(/^# syntax=docker\/dockerfile:(\d+\.\d+\.\d+)\s*$/m)?.[1];
-    assert.ok(version, `${path}: use an explicit stable frontend patch, not a floating or labs tag`);
-    return version;
-  });
-  assert.equal(new Set(versions).size, 1, "Dockerfile frontends must upgrade together");
-  assert.ok(read("docs/contributing/testing.md").includes(`docker/dockerfile:${versions[0]}`), "frontend verification pin missing from contributor docs");
-});
-
-test("every image that builds the UI uses the supported Node major", () => {
-  const dockerfiles = trackedFiles().filter((path) => /(?:^|\/)Dockerfile[.\w-]*$/.test(path));
-  assert.ok(dockerfiles.length > 0, "no Dockerfiles found");
-
-  const stale = [];
-  for (const path of dockerfiles) {
-    for (const major of uniqueMatches(read(path), /^FROM node:(\d+)/gm)) {
-      if (Number(major) !== 26) stale.push(`${path}: node:${major}`);
-    }
-  }
-
-  assert.deepEqual(stale, []);
-});
-
-test("both agents image recipes use the production lock without extra dependency resolution", () => {
-  for (const path of ["docker/Dockerfile.local", "docker/Dockerfile.agents"]) {
-    const text = read(path);
-    assert.match(text, /COPY app\/agents\/pyproject\.toml app\/agents\/uv\.lock app\/agents\/README\.md/, `${path}: copy dependency inputs before syncing`);
-    assert.match(text, /uv sync --frozen --no-dev/, `${path}: install the frozen production environment`);
-    assert.doesNotMatch(text, /(?:pip install uv|uv pip install)/, `${path}: no parallel unlocked resolver`);
-  }
-  const standalone = read("docker/Dockerfile.agents");
-  assert.match(standalone, /--mount=from=ghcr\.io\/astral-sh\/uv:[\d.]+,source=\/uv,target=/, "standalone build tool must be temporary");
-  assert.doesNotMatch(standalone, /COPY --from=ghcr\.io\/astral-sh\/uv/, "standalone runtime must not copy the build tool");
-  assert.match(standalone, /ENV PATH=\/deps\/agents\/\.venv\/bin:\$PATH/, "supported commands must use the locked environment");
-});
-
-// Every word in a skill is paid on each IDE agent session. Raise a budget only
-// for a capability the agent cannot otherwise discover.
 const skillBudgets = {
   "plugins/skills/specgate/SKILL.md": 550,
   "plugins/skills/specgate-project-setup/SKILL.md": 750,
   "plugins/skills/specgate-work-preparation/SKILL.md": 1000,
   "plugins/skills/specgate-work-delivery/SKILL.md": 1000,
+  "plugins/skills/specgate-human-handoff/SKILL.md": 350,
 };
 
 test("every installed skill stays inside a declared word budget", () => {
-  const skills = trackedFiles()
+  const skills = workingFiles()
     .filter((path) => /^plugins\/skills\/[^/]+\/SKILL\.md$/.test(path))
     .sort();
   assert.deepEqual(skills, Object.keys(skillBudgets).sort(), "a skill has no declared word budget");
@@ -345,14 +218,14 @@ test("every installed skill stays inside a declared word budget", () => {
   );
 });
 
-test("the router names exactly the phase skills that exist", () => {
+test("the router names exactly the companion and phase skills that exist", () => {
   // A router edit can silently advertise a phase that was renamed or drop one
   // that still ships. Either way the agent loses a phase it is told to select
   // from, and nothing else in the suite would notice.
   const router = read("plugins/skills/specgate/SKILL.md");
   const named = new Set(uniqueMatches(router, /`(specgate-[a-z-]+)`/g));
   const onDisk = new Set(
-    trackedFiles()
+    workingFiles()
       .filter((path) => /^plugins\/skills\/[^/]+\/SKILL\.md$/.test(path))
       .map((path) => path.split("/")[2])
       .filter((name) => name !== "specgate"),
@@ -365,7 +238,7 @@ test("the router names exactly the phase skills that exist", () => {
 
 test("every installed skill declares when it applies", () => {
   assert.deepEqual(
-    trackedFiles()
+    workingFiles()
       .filter((path) => /^plugins\/skills\/[^/]+\/SKILL\.md$/.test(path))
       .filter((path) => !/^description: Use when /m.test(read(path))),
     [],
@@ -373,29 +246,26 @@ test("every installed skill declares when it applies", () => {
 });
 
 test("every skill shipped to users is byte-identical across its embedded copies", () => {
-  const canonical = trackedFiles().filter((path) => path.startsWith("plugins/skills/"));
+  const canonical = workingFiles().filter((path) => path.startsWith("plugins/skills/"));
   assert.ok(canonical.length > 0, "no canonical plugin skills found");
 
   const drift = [];
   for (const source of canonical) {
-    for (const prefix of [
-      "app/doc-registry/internal/agentpackages/plugins/",
-      "app/cli/internal/command/local_plugin_assets/",
-    ]) {
-      const copy = source.replace("plugins/", prefix);
-      if (!exists(copy)) drift.push(`${copy} is missing; run make sync-plugins`);
-      else if (read(copy) !== read(source)) drift.push(`${copy} differs from ${source}; run make sync-plugins`);
-    }
+    const copy = source.replace("plugins/", "app/cli/internal/command/local_plugin_assets/");
+    if (!exists(copy)) drift.push(`${copy} is missing; run make sync-plugins`);
+    else if (read(copy) !== read(source)) drift.push(`${copy} differs from ${source}; run make sync-plugins`);
   }
 
   assert.deepEqual(drift, []);
 });
 
+const handwrittenTestFile = /(?:^|\/)tests?(?:\/|$)|(?:_test\.go|[._]test\.[cm]?[jt]sx?|\.spec\.[cm]?[jt]sx?)$/;
+
 test("handwritten production modules stay below 800 lines", () => {
   const oversized = workingFiles()
     .filter((path) => /\.(?:go|py|[cm]?[jt]sx?|sh)$/.test(path))
     .filter((path) => !/(?:^|\/)(?:tests?|fixtures|generated|node_modules|dist)(?:\/|$)/.test(path))
-    .filter((path) => !/(?:_test\.go|\.test\.[cm]?[jt]sx?|\.spec\.[cm]?[jt]sx?|\.d\.ts)$/.test(path))
+    .filter((path) => !handwrittenTestFile.test(path) && !path.endsWith(".d.ts"))
     .map((path) => ({ path, lines: read(path).split("\n").length - 1 }))
     .filter(({ lines }) => lines >= 800);
 
@@ -405,7 +275,7 @@ test("handwritten production modules stay below 800 lines", () => {
 test("handwritten test modules stay below 1000 lines", () => {
   const oversized = workingFiles()
     .filter((path) => /\.(?:go|py|[cm]?[jt]sx?)$/.test(path))
-    .filter((path) => /(?:^|\/)tests?(?:\/|$)|(?:_test\.go|\.test\.[cm]?[jt]sx?|\.spec\.[cm]?[jt]sx?)$/.test(path))
+    .filter((path) => handwrittenTestFile.test(path))
     .filter((path) => !/(?:^|\/)(?:fixtures|generated|node_modules|dist)(?:\/|$)/.test(path))
     .map((path) => ({ path, lines: read(path).split("\n").length - 1 }))
     .filter(({ lines }) => lines >= 1000);
@@ -459,7 +329,7 @@ const retired = [
   {
     pattern: /plugins\/install\.sh/,
     why: "the SpecGate CLI owns plugin installation; the standalone installer was removed",
-    allow: ["app/doc-registry/internal/api/handlers_agent_packages_test.go"],
+
   },
   {
     pattern: /specgate-router/,
@@ -468,9 +338,9 @@ const retired = [
   },
   { pattern: /hooks-cursor\.json/, why: "the Cursor bootstrap hook was removed" },
   { pattern: /agent-handoff\.md/, why: "the handoff doc was retired" },
-  { pattern: /ADMIN_SECRET/, why: "no admin secret ever shipped; shared appliances use member gateway credentials" },
-  { pattern: /docker-compose\.dev\.yml/, why: "the release is a single local appliance" },
-  { pattern: /multi-service Compose/i, why: "the release is a single local appliance" },
+  { pattern: /ADMIN_SECRET/, why: "no admin secret shipped" },
+  { pattern: /docker-compose\.dev\.yml/, why: "deployment packaging is retired" },
+  { pattern: /multi-service Compose/i, why: "deployment packaging is retired" },
   {
     pattern: /\broute (?:suggestions|advice)\b/i,
     why: "prose route classification was removed from the governance model surface",
@@ -484,7 +354,7 @@ const retired = [
     // deployment boundary in SECURITY.md and trust-and-security.md remains.
     pattern: /\b(?:experimental|early release|alpha release)\b/i,
     why: "SpecGate does not describe itself as provisional; state the capability and its boundary instead",
-    allow: ["app/ui/src/App.integrations.test.tsx"],
+
   },
   {
     pattern: /\b(?:CI ingestion|tracker authority)\b/i,
@@ -577,7 +447,8 @@ test("the delivery skill reads the authoritative actor before it acts", () => {
     return index;
   };
 
-  const status = at('specgate change status "$WORK_REF" --json');
+  const status = at('specgate work resume "$WORK_REF" --json');
+  assert.ok(at("Use `data.status`") > status);
   const reviewPending = at("`review_pending`");
   const rework = at("`rework_requested`");
   const dispatch = at('specgate gates tasks dispatch "$ARTIFACT_ID" --json');
@@ -591,6 +462,16 @@ test("the delivery skill reads the authoritative actor before it acts", () => {
 // In Local mode a human decision has no second party to confirm it, so the CLI
 // requires an explicit `--yes`. An example without it teaches a command that
 // fails, and the agent learns to add `--yes` by trial instead of by contract.
+test("Local human handoff gives the CLI next command before optional browser review", () => {
+  const handoff = read("plugins/skills/specgate-human-handoff/SKILL.md").replace(/\s+/g, " ");
+  const cli = handoff.indexOf("show `next_command` verbatim");
+  const local = handoff.indexOf("In Local mode, look up a review link only when the user has chosen browser review");
+  assert.ok(cli >= 0 && local > cli, "the authoritative command must precede optional Local review");
+  assert.ok(handoff.indexOf("specgate open <work-ref> --print --json") > local);
+  assert.match(handoff, /prefer the CLI or have expressed no preference, use the CLI handoff and skip the lookup/);
+  assert.match(handoff, /Start the UI only when the user asks to start it/);
+});
+
 test("documented Local human decisions carry the explicit assertion flag", () => {
   const bare = [];
 
@@ -601,13 +482,9 @@ test("documented Local human decisions carry the explicit assertion flag", () =>
     "docs/using-specgate/quickstart.md",
     "plugins/skills/specgate-work-preparation/SKILL.md",
   ]) {
-    let full = false;
     for (const line of read(path).split("\n")) {
-      // A `# Full` comment opens an example that is correct without --yes,
-      // because Full mode confirms interactively.
-      if (/^\s*#\s*(Local|Full)\b/.test(line)) full = /Full/.test(line);
       const decision = line.match(/specgate (?:--yes )?change (approve|accept|request-changes)\b/);
-      if (decision && !full && !line.includes("specgate --yes change")) bare.push(`${path}: ${decision[0]}`);
+      if (decision && !line.includes("specgate --yes change")) bare.push(`${path}: ${decision[0]}`);
     }
   }
 
@@ -641,12 +518,12 @@ test("the public installer explains its flags without installing", () => {
   assert.match(help, /Usage:/);
   assert.match(help, /--version/);
   assert.match(help, /--install-dir/);
-  assert.match(help, /--server/);
+  assert.doesNotMatch(help, /--server|--no-config/);
 });
 
 test("the public installer explains missing flag values", () => {
-  for (const flag of ["--version", "--install-dir", "--server"]) {
-    for (const args of [[flag], [flag, "--no-config"]]) {
+  for (const flag of ["--version", "--install-dir"]) {
+    for (const args of [[flag], [flag, "--help"]]) {
       assert.throws(
         () => execFileSync("sh", ["scripts/install-cli.sh", ...args], { cwd: root, stdio: "pipe" }),
         (error) => error.status === 1 && error.stderr.toString("utf8").includes(`${flag} requires a value`),
@@ -656,83 +533,26 @@ test("the public installer explains missing flag values", () => {
   }
 });
 
-const GATEWAYS = ["docker/local/nginx.conf", "app/ui/docker/nginx-default.conf"];
-
-// Split a gateway config into its location blocks, keyed by the matcher.
-function gatewayLocations(text) {
-  return text
-    .split(/\n\s*(?=location )/)
-    .slice(1)
-    .map((block) => ({ name: block.split("{")[0].trim(), body: block.split("\n    }")[0] }));
-}
-
-test("both gateways strip the internal header and accept the documented limits", () => {
-  for (const gateway of GATEWAYS) {
-    const text = read(gateway);
-    assert.match(text, /proxy_set_header X-SpecGate-Internal-Agent "";/, `${gateway} leaks the internal header`);
-    assert.match(text, /client_max_body_size 32m;/);
-    assert.match(text, /location = \/integrations\/oauth-callback/);
-    assert.match(
-      text,
-      /location ~ \^\/integrations\/\[\^\/\]\+\/resources\/\[\^\/\]\+\/\(github\|gitlab\|linear\)\/webhook\$/,
+test("the public installer rejects retired remote setup flags before downloading", () => {
+  for (const args of [["--server", "https://127.0.0.1"], ["--no-config"]]) {
+    assert.throws(
+      () => execFileSync("sh", ["scripts/install-cli.sh", ...args], { cwd: root, stdio: "pipe" }),
+      error => error.status === 1 && /Unknown flag/.test(error.stderr.toString("utf8")),
     );
   }
 });
 
-test("no gateway route can forward a caller-supplied identity", () => {
-  // Identity is the actor recorded against an approval, so a route that passes a
-  // client's own X-SpecGate-User through would let anyone approve under any name.
-  // The invariant has no exceptions on purpose: every proxying location either
-  // sets the header from the verifier or blanks it, and reviewing a diff is not a
-  // substitute for asserting it.
-  for (const gateway of GATEWAYS) {
-    const text = read(gateway);
-    assert.match(text, /auth_request \/internal\/gateway-auth;/, `${gateway} does not verify callers`);
-    assert.match(
-      text,
-      /auth_request_set \$specgate_user \$upstream_http_x_specgate_user;/,
-      `${gateway} does not take the identity from the verifier`,
-    );
-    const unset = gatewayLocations(text).filter(
-      ({ name, body }) =>
-        body.includes("proxy_pass") && !name.includes("/internal/gateway-auth") && !body.includes("X-SpecGate-User"),
-    );
-    assert.deepEqual(unset.map(({ name }) => name), [], `${gateway} forwards a client identity`);
-  }
-});
-
-test("only machine-to-machine gateway routes skip verification", () => {
-  // A probe answers monitoring, a provider redirect cannot hold a credential, and
-  // a webhook authenticates by payload signature. Anything else skipping
-  // verification is an unauthenticated hole into governance state.
-  const allowedToSkip = /healthz|oauth-callback|webhook/;
-  for (const gateway of GATEWAYS) {
-    const skipped = gatewayLocations(read(gateway))
-      .filter(({ body }) => body.includes("auth_request off"))
-      .map(({ name }) => name)
-      .filter((name) => !allowedToSkip.test(name));
-    assert.deepEqual(skipped, [], `${gateway} skips verification on a governance route`);
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Positioning and release automation: the public claims a release may make, and
-// the workflow invariants that a doc alone cannot express.
-// ---------------------------------------------------------------------------
-
-test("public docs lead with the deployment boundary, not with hedging", () => {
-  // The boundary is a safety fact and has to stay stated. Product messaging
-  // should state capabilities directly; retired wording is enforced below.
+test("public docs explain the Local trust boundary and legacy data recovery", () => {
   const readme = read("README.md");
-  assert.match(readme, /trusted machine or private network/i);
-  assert.match(readme, /no HTTP[\s>]+authentication layer/i);
-  assert.match(readme, /optional gateway credentials/i);
+  assert.match(readme, /loopback/);
+  assert.match(readme, /local\s+processes and accounts that can reach it/);
   assert.match(readme, /release notes before updating/i);
   assert.match(readme, /CHANGELOG\.md/);
-
-  const featureStatus = read("docs/using-specgate/reference/feature-status.md");
-  assert.match(featureStatus, /## Established paths/);
-  assert.match(featureStatus, /## Newer surfaces/);
+  const recovery = read("docs/using-specgate/guides/operate-specgate.md");
+  assert.match(recovery, /preserv|in place/i);
+  assert.match(recovery, /`SPECGATE_CONFIG_PATH`[^.]{0,100}separate/);
+  assert.match(recovery, /unsigned bounded review request/);
+  assert.match(read("docs/using-specgate/reference/feature-status.md"), /## Retired distribution features/);
 });
 
 test("the repository ignores generated per-project agent rule files", () => {
@@ -753,11 +573,7 @@ test("release automation rejects an already-published GitHub Release before veri
 });
 
 test("re-running a version reuses its draft instead of adding a second", () => {
-  // A second draft for one tag is not a cosmetic duplicate: `gh release upload`
-  // resolves by tag name and wrote the appliance bundle to the older draft while
-  // the binaries went to the newer one, then the smoke job refused a tag with
-  // more than one draft. GoReleaser must reuse the existing draft and replace
-  // matching binary assets when a release is retried.
+  // A retry must preserve one private asset set for the tag.
   const goreleaser = read(".goreleaser.yaml");
   const releaseBlock = goreleaser.slice(goreleaser.indexOf("\nrelease:"));
   assert.match(releaseBlock, /^\s*draft: true$/m, "assets must stay private until the smoke job passes");
@@ -785,12 +601,42 @@ test("release verification covers every module a release ships", () => {
 
   for (const command of [
     "make test",
-    "uv run pytest -q",
-    "npm run test -- --run",
-    "npm run build",
+    "bash .github/scripts/check-legacy-cli.sh",
+    "make check-plugins",
     "node --test docs/release-readiness.test.mjs",
+    "scripts/install-cli.test.mjs",
   ]) {
     assert.ok(verifyJob.includes(command), `release verification does not run ${command}`);
+  }
+});
+
+test("the canonical plugin version matches the most recent authored release notes", () => {
+  const { version } = JSON.parse(read("plugins/package.json"));
+  const latest = read("CHANGELOG.md").match(/^## \[([^\]]+)\]/m)?.[1];
+  assert.equal(version, latest);
+  const tag = `v${version}`;
+  assert.ok(execFileSync(process.execPath, [".github/scripts/release-notes.mjs", tag], { cwd: root }).length > 0);
+});
+
+test("Local browser and pilot checks run in their Node 26 CI jobs", () => {
+  const cli = read(".github/workflows/cli.yml");
+  assert.match(cli, /actions\/setup-node@v\d+\s+with:\s+node-version: "26"(?:(?!\n  \w)[\s\S])*\bmake test\b/, "CLI tests require Node 26 before make test");
+  const cliTests = read("app/cli/Makefile").match(/^\tnode --test (.+)$/m)?.[1]?.split(/\s+/) || [];
+  for (const path of workingFiles().filter((path) => /^app\/cli\/internal\/command\/local_ui.*[._]test\.cjs$/.test(path))) {
+    assert.ok(cliTests.includes(path.slice("app/cli/".length)), `make test does not run ${path}`);
+  }
+  for (const path of [".github/workflows/release-readiness.yml", ".github/workflows/release.yml"]) {
+    const workflow = read(path);
+    assert.match(workflow, /actions\/setup-node@v\d+\s+with:\s+node-version: "26"(?:(?!\n  \w)[\s\S])*node --test [^\n]*\bscripts\/local-review-notifications\.test\.mjs\b/, path);
+  }
+});
+
+test("native Windows CLI and release jobs cover Local UI cache cleanup and transfer", () => {
+  for (const path of [".github/workflows/cli.yml", ".github/workflows/release.yml"]) {
+    const workflow = read(path);
+    assert.match(workflow, /runs-on: windows-latest(?:(?!\n  \w)[\s\S])*go test .* -run '[^'\n]*\bTestLocalUIMaintenanceCacheDeletesOnlyConfirmedOwnedCache\b[^'\n]*'/, path);
+    assert.match(workflow, /runs-on: windows-latest(?:(?!\n  \w)[\s\S])*go test \.\/internal\/command -run '[^'\n]*\bTestTransfer\b/, path);
+    assert.match(workflow, /runs-on: windows-latest(?:(?!\n  \w)[\s\S])*go test \.\/internal\/local -run '[^'\n]*\bTestTransferGeneration\b[^'\n]*\bTestGenerationStore\b/, path);
   }
 });
 
@@ -802,39 +648,50 @@ test("CLI and release CI execute the real legacy compatibility gate", () => {
   }
   const gate = read(gatePath);
   assert.match(gate, /baseline=[a-f0-9]{40}\b/, "baseline must be an immutable pre-enhancement revision");
+  assert.match(gate, /pre_transfer=[a-f0-9]{40}\b/, "prior enhanced writer must be pinned to an immutable revision");
   assert.match(gate, /git archive.*\bapp\/cli\b/, "build the baseline, not the implementation under test");
   assert.match(gate, /go build.*-o/, "gate must supply an actual executable");
-  assert.match(gate, /SPECGATE_LEGACY_CLI=.*go test.*-count=1/, "legacy tests must run without cache or optional skip");
+  const gateCommand = gate.replaceAll(/\\\n\s*/g, " ");
+  for (const env of ["SPECGATE_LEGACY_CLI", "SPECGATE_PRE_TRANSFER_CLI"]) {
+    assert.match(gateCommand, new RegExp(`${env}=.*go test.*-count=1`), `${env} tests must run without caching or an optional skip`);
+  }
   for (const path of workingFiles().filter(path => path.startsWith("app/cli/internal/local/") && path.endsWith("_test.go"))) {
     for (const [, name, body] of read(path).matchAll(/func (Test\w+)\(t \*testing\.T\) \{([\s\S]*?)(?=\nfunc |$)/g)) {
-      if (body.includes('os.Getenv("SPECGATE_LEGACY_CLI")')) {
+      if (/os\.Getenv\("SPECGATE_(?:LEGACY|PRE_TRANSFER)_CLI"\)/.test(body)) {
         assert.ok(gate.includes(name.replace(/^Test/, "")), `gate omits ${name}`);
       }
     }
   }
 });
 
-test("release workflow builds only the single local appliance, with provenance and a blocking scan", () => {
+test("a private CLI release draft verifies the shipped platform archives before publish", () => {
   const workflow = read(".github/workflows/release.yml");
-
-  assert.match(workflow, /--file docker\/Dockerfile\.local/);
-  assert.doesNotMatch(workflow, /dockerfile: docker\/Dockerfile\.(?:doc-registry|agents|ui)/);
-  assert.match(workflow, /--provenance=mode=max/);
-  assert.match(workflow, /--sbom=true/);
-  assert.match(workflow, /severity-cutoff: high/);
-  assert.match(workflow, /only-fixed: true/);
+  const smoke = workflow.slice(workflow.indexOf("\n  release-cli-smoke:"), workflow.indexOf("\n  release-publish:"));
+  const publish = workflow.slice(workflow.indexOf("\n  release-publish:"));
+  const packaging = read(".goreleaser.yaml");
+  for (const [os, architectures, format] of [
+    ["linux", ["amd64", "arm64"], "tar.gz"],
+    ["darwin", ["amd64", "arm64"], "tar.gz"],
+    ["windows", ["amd64"], "zip"],
+  ]) {
+    assert.match(packaging, new RegExp(`^\\s+- ${os}$`, "m"));
+    for (const arch of architectures) assert.ok(smoke.includes(`_${os}_${arch}.${format}`), `${os}/${arch}`);
+  }
+  assert.match(workflow, /concurrency:\n  group: release-/);
+  assert.match(smoke, /permissions:[\s\S]*?contents: write/);
+  assert.match(smoke, /sha256sum -c -/);
+  assert.match(smoke, /cmp install-cli\.sh/);
+  assert.match(smoke, /local-delivery-proof\.mjs/);
+  assert.match(smoke, /Next actor: human_reviewer/);
+  assert.match(publish, /needs: release-cli-smoke/);
 });
 
 test("the release guide matches the automation it drives", () => {
   const guide = read("docs/contributing/release.md");
-
-  assert.match(guide, /git push origin "\$VERSION"/, "the tag push is what triggers the release");
-  assert.match(guide, /Do not create or publish a GitHub Release/i, "a pre-published release fails the preflight");
-  assert.match(
-    guide,
-    /downloaded appliance image stays in Docker's cache/i,
-    "purge guidance must not claim the image is removed",
-  );
+  assert.match(guide, /git push origin "\$VERSION"/);
+  assert.match(guide, /Do not create or publish a GitHub Release/i);
+  assert.match(guide, /draft/);
+  assert.match(guide, /native Windows/i);
 });
 
 test("Pages validates landing changes without redeploying unrelated main pushes", () => {
@@ -846,12 +703,4 @@ test("Pages validates landing changes without redeploying unrelated main pushes"
     workflow,
     /deploy:\s*\n\s+if: github\.event_name != 'pull_request'[\s\S]*?concurrency:\s*\n\s+group: pages/,
   );
-});
-
-test("contributor appliance commands use the released local Compose entry point", () => {
-  const makefile = read("Makefile");
-
-  assert.match(makefile, /LOCAL_DEPLOY_DIR := deploy\/local/);
-  assert.match(makefile, /-f \$\(LOCAL_DEPLOY_DIR\)\/compose\.yml/);
-  assert.ok(statSync(new URL("deploy/local/compose.yml", root)).isFile());
 });

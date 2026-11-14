@@ -6,15 +6,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
-)
-
-const (
-	workspaceSaveScopeGlobal  = "global"
-	workspaceSaveScopeProject = "project"
 )
 
 func registerIdentityCommands(root *cobra.Command, deps *Deps) {
@@ -39,7 +33,7 @@ func newUserLoginCmd(deps *Deps) *cobra.Command {
 		Short: "Create or select the local user and workspace",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			var in client.IdentityBootstrapInput
+			var in local.InitInput
 			var err error
 			if strings.TrimSpace(workspaceName) == "" ||
 				strings.TrimSpace(displayName) == "" ||
@@ -57,7 +51,7 @@ func newUserLoginCmd(deps *Deps) *cobra.Command {
 					return err
 				}
 			} else {
-				in = client.IdentityBootstrapInput{
+				in = local.InitInput{
 					WorkspaceName: strings.TrimSpace(workspaceName),
 					DisplayName:   strings.TrimSpace(displayName),
 					Username:      strings.ToLower(strings.TrimSpace(username)),
@@ -70,49 +64,30 @@ func newUserLoginCmd(deps *Deps) *cobra.Command {
 				}
 			}
 
-			if deps.Topology == config.ModeLocal {
-				store, err := openLocalStore(deps)
-				if err != nil {
-					return localExitError(deps, "user.login", err)
-				}
-				defer store.Close()
-				selection, err := store.Initialize(cmd.Context(), local.InitInput{
-					WorkspaceName: in.WorkspaceName,
-					DisplayName:   in.DisplayName,
-					Username:      in.Username,
-					Email:         in.Email,
-				})
-				if err != nil {
-					return localExitError(deps, "user.login", err)
-				}
-				result := localIdentitySelection(selection)
-				if err := saveIdentitySelection(deps, result); err != nil {
-					return localExitError(deps, "user.login", err)
-				}
-				if deps.Printer.Mode() == output.ModeJSON {
-					deps.Printer.Success("user.login", result)
-					return nil
-				}
-				fmt.Fprintf(deps.Stdout, "%s %s\n", styled(deps, output.StyleSuccess, "Logged in as"), styled(deps, output.StyleBold, result.User.Username))
-				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Workspace set to"), styled(deps, output.StyleAction, result.Workspace.Slug))
-				return nil
-			}
-
-			selection, err := deps.Client.BootstrapIdentity(cmd.Context(), in)
+			store, err := openLocalStore(deps)
 			if err != nil {
-				return apiExitError(deps, "user.login", err)
+				return localExitError(deps, "user.login", err)
 			}
-			if err := saveIdentitySelection(deps, *selection); err != nil {
-				payload := output.ErrorPayload{Code: "unavailable", Message: err.Error()}
-				code := deps.Printer.Error("user.login", payload)
-				return &output.ExitError{Code: code, Err: err}
+			defer store.Close()
+			selection, err := store.Initialize(cmd.Context(), local.InitInput{
+				WorkspaceName: in.WorkspaceName,
+				DisplayName:   in.DisplayName,
+				Username:      in.Username,
+				Email:         in.Email,
+			})
+			if err != nil {
+				return localExitError(deps, "user.login", err)
+			}
+			result := identitySelection{User: selection.User, Workspace: selection.Workspace}
+			if err := saveIdentitySelection(deps, result); err != nil {
+				return localExitError(deps, "user.login", err)
 			}
 			if deps.Printer.Mode() == output.ModeJSON {
-				deps.Printer.Success("user.login", selection)
+				deps.Printer.Success("user.login", result)
 				return nil
 			}
-			fmt.Fprintf(deps.Stdout, "%s %s\n", styled(deps, output.StyleSuccess, "Logged in as"), styled(deps, output.StyleBold, selection.User.Username))
-			fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Workspace set to"), styled(deps, output.StyleAction, selection.Workspace.Slug))
+			fmt.Fprintf(deps.Stdout, "%s %s\n", styled(deps, output.StyleSuccess, "Logged in as"), styled(deps, output.StyleBold, result.User.Username))
+			fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Workspace set to"), styled(deps, output.StyleAction, result.Workspace.Slug))
 			return nil
 		},
 	}
@@ -129,15 +104,13 @@ func newUserLogoutCmd(deps *Deps) *cobra.Command {
 		Short: "Clear the selected local user and workspace",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if deps.Topology == config.ModeLocal {
-				store, err := openLocalStore(deps)
-				if err != nil {
-					return localExitError(deps, "user.logout", err)
-				}
-				defer store.Close()
-				if err := store.ClearSelection(cmd.Context()); err != nil {
-					return localExitError(deps, "user.logout", err)
-				}
+			store, err := openLocalStore(deps)
+			if err != nil {
+				return localExitError(deps, "user.logout", err)
+			}
+			defer store.Close()
+			if err := store.ClearSelection(cmd.Context()); err != nil {
+				return localExitError(deps, "user.logout", err)
 			}
 			cfg, _ := config.LoadFrom(deps.ConfigPath)
 			cfg.CurrentUser = config.CurrentUser{}
@@ -164,36 +137,18 @@ func newUserListCmd(deps *Deps) *cobra.Command {
 		Short: "List local users",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if deps.Topology == config.ModeLocal {
-				store, err := openLocalStore(deps)
-				if err != nil {
-					return localExitError(deps, "user.list", err)
-				}
-				defer store.Close()
-				localUsers, err := store.ListUsers(cmd.Context())
-				if err != nil {
-					return localExitError(deps, "user.list", err)
-				}
-				users := make([]client.IdentityUser, 0, len(localUsers))
-				for _, user := range localUsers {
-					users = append(users, localIdentityUser(user))
-				}
-				if deps.Printer.Mode() == output.ModeJSON {
-					deps.Printer.Success("user.list", map[string]any{"items": users})
-					return nil
-				}
-				for _, user := range users {
-					email := user.Email
-					if email == "" {
-						email = "-"
-					}
-					fmt.Fprintf(deps.Stdout, "%s %-24s %s\n", styled(deps, output.StyleBold, fmt.Sprintf("%-20s", user.Username)), user.DisplayName, email)
-				}
-				return nil
-			}
-			users, err := deps.Client.ListUsers(cmd.Context())
+			store, err := openLocalStore(deps)
 			if err != nil {
-				return apiExitError(deps, "user.list", err)
+				return localExitError(deps, "user.list", err)
+			}
+			defer store.Close()
+			localUsers, err := store.ListUsers(cmd.Context())
+			if err != nil {
+				return localExitError(deps, "user.list", err)
+			}
+			users := localUsers
+			if users == nil {
+				users = []local.User{}
 			}
 			if deps.Printer.Mode() == output.ModeJSON {
 				deps.Printer.Success("user.list", map[string]any{"items": users})

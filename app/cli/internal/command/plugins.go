@@ -13,10 +13,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
-	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/interactive"
 	"github.com/specgate/specgate/app/cli/internal/output"
+	"github.com/specgate/specgate/app/cli/internal/workflow"
 )
 
 const (
@@ -35,21 +34,19 @@ const (
 )
 
 type pluginPackageClient interface {
-	PluginPackage(ctx context.Context) (*client.PluginPackage, error)
+	PluginPackage(ctx context.Context) (*workflow.PluginPackage, error)
 	PluginFile(ctx context.Context, path string) ([]byte, error)
 }
 
 type pluginInstallOptions struct {
 	Agent        string
-	Registry     string
 	ProjectLocal bool
 	DryRun       bool
-	useRegistry  bool
+	source       pluginPackageClient
 }
 
 type pluginDoctorOptions struct {
 	Agent        string
-	Registry     string
 	ProjectLocal bool
 }
 
@@ -105,7 +102,7 @@ type pluginInstaller struct {
 	ctx    context.Context
 	deps   *Deps
 	client pluginPackageClient
-	pkg    *client.PluginPackage
+	pkg    *workflow.PluginPackage
 	opts   pluginInstallOptions
 	home   string
 	files  map[string][]byte
@@ -172,7 +169,6 @@ specgate plugins install --agent codex --project-local`),
 	}
 	f := cmd.Flags()
 	f.StringVar(&opts.Agent, "agent", "", "IDE target: "+supportedPluginAgentList()+" (prompts interactively if omitted)")
-	f.StringVar(&opts.Registry, "registry", "", "SpecGate agent-package registry base URL (default: configured SpecGate server)")
 	f.BoolVar(&opts.ProjectLocal, "project-local", false, "Install IDE files into the current repository instead of user-global locations")
 	f.BoolVar(&opts.DryRun, "dry-run", false, "Print planned file operations without writing")
 	return cmd
@@ -182,9 +178,6 @@ func runPluginInstall(ctx context.Context, deps *Deps, opts pluginInstallOptions
 	agents, err := normalizePluginAgents(opts.Agent)
 	if err != nil {
 		return pluginInstallResult{}, pluginInstallError{kind: "validation_failed", err: err}
-	}
-	if deps.Topology == config.ModeLocal && strings.TrimSpace(opts.Registry) != "" && !opts.useRegistry {
-		return pluginInstallResult{}, pluginInstallError{kind: "incompatible", err: fmt.Errorf("--registry cannot be used in Local mode; the matching plugin is embedded in this CLI")}
 	}
 	home, homeErr := userHomeDir(deps)
 	if homeErr != nil && (!opts.ProjectLocal || needsNativePluginInspection(agents)) {
@@ -205,11 +198,9 @@ func runPluginInstall(ctx context.Context, deps *Deps, opts pluginInstallOptions
 			},
 		}
 	}
-	var pc pluginPackageClient
-	if useEmbeddedPluginPackage(deps, opts.Registry, opts.useRegistry) {
+	pc := opts.source
+	if pc == nil {
 		pc = embeddedLocalPlugin{}
-	} else {
-		pc = pluginClientFor(deps, opts.Registry)
 	}
 	pkg, err := pc.PluginPackage(ctx)
 	if err != nil {
@@ -253,7 +244,7 @@ func pluginInstallErrorPayload(err error) output.ErrorPayload {
 	if errors.As(err, &installErr) {
 		return output.ErrorPayload{Code: installErr.kind, Message: installErr.Error(), Details: installErr.details}
 	}
-	return mapAPIError(err)
+	return output.ErrorPayload{Code: "unavailable", Message: err.Error()}
 }
 
 func newPluginsDoctorCmd(deps *Deps) *cobra.Command {
@@ -282,11 +273,6 @@ specgate plugins doctor --agent codex --project-local`),
 				code := deps.Printer.Error("plugins.doctor", payload)
 				return &output.ExitError{Code: code, Err: err}
 			}
-			if deps.Topology == config.ModeLocal && strings.TrimSpace(opts.Registry) != "" {
-				payload := output.ErrorPayload{Code: "incompatible", Message: "--registry cannot be used in Local mode; the matching plugin is embedded in this CLI"}
-				code := deps.Printer.Error("plugins.doctor", payload)
-				return &output.ExitError{Code: code}
-			}
 			result := pluginDoctorResult{Scope: pluginScope(opts.ProjectLocal)}
 			nativeHealth := make(map[string]pluginAgentHealth, len(agents))
 			needsPackage := false
@@ -297,13 +283,9 @@ specgate plugins doctor --agent codex --project-local`),
 					needsPackage = true
 				}
 			}
-			var pkg *client.PluginPackage
+			var pkg *workflow.PluginPackage
 			if needsPackage {
-				pc := pluginPackageClient(pluginClientFor(deps, opts.Registry))
-				if useEmbeddedPluginPackage(deps, opts.Registry, false) {
-					pc = embeddedLocalPlugin{}
-				}
-				pkg, err = pc.PluginPackage(cmd.Context())
+				pkg, err = (embeddedLocalPlugin{}).PluginPackage(cmd.Context())
 				if pkg != nil {
 					result.LatestVersion = pkg.Version
 					if err := validatePluginPackage(pkg); err != nil {
@@ -379,7 +361,6 @@ specgate plugins doctor --agent codex --project-local`),
 	}
 	f := cmd.Flags()
 	f.StringVar(&opts.Agent, "agent", "", "IDE target to inspect: "+supportedPluginAgentList()+" (prompts interactively if omitted)")
-	f.StringVar(&opts.Registry, "registry", "", "SpecGate agent-package registry base URL (default: configured SpecGate server)")
 	f.BoolVar(&opts.ProjectLocal, "project-local", false, "Inspect project-local IDE files in the current repository")
 	return cmd
 }
@@ -466,26 +447,6 @@ func pluginAgentPromptOptions() []interactive.Option {
 	return options
 }
 
-func pluginClientFor(deps *Deps, registry string) pluginPackageClient {
-	base := strings.TrimSpace(registry)
-	if base == "" {
-		base = strings.TrimSpace(deps.PluginRegistryURL)
-	}
-	if base == "" {
-		// Tests and embedded callers can invoke plugin commands without the root
-		// pre-run; production commands always populate PluginRegistryURL there.
-		base = deps.ServerURL
-	}
-	return client.New(base, deps.Timeout)
-}
-
-func useEmbeddedPluginPackage(deps *Deps, registry string, forceRegistry bool) bool {
-	if forceRegistry || strings.TrimSpace(registry) != "" {
-		return false
-	}
-	return deps.Topology == config.ModeLocal || deps.useEmbeddedPlugins
-}
-
 func normalizePluginAgents(input string) ([]string, error) {
 	input = strings.TrimSpace(input)
 	if input == "" || input == "all" {
@@ -512,7 +473,7 @@ func normalizePluginAgents(input string) ([]string, error) {
 	return agents, nil
 }
 
-func validatePluginPackage(pkg *client.PluginPackage) error {
+func validatePluginPackage(pkg *workflow.PluginPackage) error {
 	if pkg == nil {
 		return fmt.Errorf("plugin package is empty")
 	}

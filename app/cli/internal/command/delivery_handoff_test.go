@@ -63,9 +63,9 @@ func handoffWork(t *testing.T, deps *command.Deps, criterion string, checks []an
 }
 
 func TestDeliveryHandoffShowReportsBoundCriterionFailureFromTheFileAlone(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	_, work := handoffWork(t, deps, "Retries stop @check:unit",
-		[]any{map[string]any{"name": "unit", "status": "skipped", "detail": "no runner"}})
+		[]any{map[string]any{"name": "unit", "status": "skipped", "detail": "no runner"}, map[string]any{"name": "format", "source": "specgate_cli", "status": "pass"}})
 	bundlePath := filepath.Join(t.TempDir(), "handoff.json")
 
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "delivery", "handoff", "export", work.Key, "--file", bundlePath)
@@ -73,20 +73,40 @@ func TestDeliveryHandoffShowReportsBoundCriterionFailureFromTheFileAlone(t *test
 		t.Fatalf("export exit = %d, output = %s", code, out.String())
 	}
 
-	// The reviewer has no Local store and no workspace of their own.
-	reviewer, fc, _, reviewerOut := newFakeDeps(t)
-	code = command.ExecuteForCode(command.NewRootCommand(reviewer), "--plain", "delivery", "handoff", "show", "--file", bundlePath)
-	if code != output.ExitGovernanceFailed {
-		t.Fatalf("show exit = %d, want governance failure; output = %s", code, reviewerOut.String())
-	}
-	if fc.calls != 0 {
-		t.Fatalf("show contacted a server: calls = %d", fc.calls)
-	}
-	rendered := reviewerOut.String()
-	for _, want := range []string{work.Key, "Retries stop", "unit", "failed"} {
-		if !strings.Contains(rendered, want) {
-			t.Fatalf("rendered handoff missing %q:\n%s", want, rendered)
-		}
+	for _, fixture := range []struct{ name, config string }{
+		{"missing configuration", ""},
+		{"malformed configuration", `{"mode":`},
+		{"legacy Full configuration", `{"mode":"full","server":"https://old.example.invalid"}`},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			reviewer, reviewerOut := newTestDeps(t)
+			if fixture.config != "" {
+				if err := os.WriteFile(reviewer.ConfigPath, []byte(fixture.config), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			code := command.ExecuteForCode(command.NewRootCommand(reviewer), "--plain", "delivery", "handoff", "show", "--file", bundlePath)
+			if code != output.ExitGovernanceFailed {
+				t.Fatalf("show exit = %d, want governance failure; output = %s", code, reviewerOut.String())
+			}
+			for _, want := range []string{work.Key, "Retries stop", "unit", "failed", "reproduced by the source SpecGate CLI", "specgate change status '" + work.Key + "' --json"} {
+				if !strings.Contains(reviewerOut.String(), want) {
+					t.Fatalf("rendered handoff missing %q:\n%s", want, reviewerOut.String())
+				}
+			}
+			if strings.Contains(reviewerOut.String(), "--review-id") {
+				t.Fatalf("store-free handoff offered a decision token: %s", reviewerOut.String())
+			}
+			reviewerOut.Reset()
+			if code := command.ExecuteForCode(command.NewRootCommand(reviewer), "--json", "delivery", "handoff", "show", "--file", bundlePath); code != output.ExitGovernanceFailed ||
+				!strings.Contains(reviewerOut.String(), `"next_command":"specgate change status '`+work.Key+`' --json"`) {
+				t.Fatalf("store-free handoff machine output did not direct to current status: %d %s", code, reviewerOut.String())
+			}
+			contents, err := os.ReadFile(reviewer.ConfigPath)
+			if fixture.config == "" && !os.IsNotExist(err) || fixture.config != "" && (err != nil || string(contents) != fixture.config) {
+				t.Fatalf("handoff reader configuration changed: %v", err)
+			}
+		})
 	}
 }
 
@@ -95,7 +115,8 @@ func TestDeliveryHandoffShowReportsBoundCriterionFailureFromTheFileAlone(t *test
 // reviewer will never receive the file.
 func TestDeliveryHandoffExportWarnsWhenGitIgnoresTheBundle(t *testing.T) {
 	// No t.Parallel: t.Chdir changes process-wide state.
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
+	deps.Stderr = out
 	_, work := handoffWork(t, deps, "Retries stop @check:unit",
 		[]any{map[string]any{"name": "unit", "status": "pass", "command": "go test ./..."}})
 	repo := t.TempDir()
@@ -132,7 +153,7 @@ func gitInit(t *testing.T, dir string) {
 // A handoff is committed, so it must not republish the contents of files the
 // agent cited — those paths can live outside the repository.
 func TestDeliveryHandoffExportDropsEvidenceExcerptsButKeepsGroundingProof(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir := t.TempDir()
 	store, err := local.Open(filepath.Join(stateDir, "state.db"))
 	if err != nil {
@@ -194,7 +215,7 @@ func TestDeliveryHandoffExportDropsEvidenceExcerptsButKeepsGroundingProof(t *tes
 
 // The Local SQLite store must never be a valid export destination.
 func TestDeliveryHandoffExportRefusesToOverwriteLocalState(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir, work := handoffWork(t, deps, "Retries stop @check:unit",
 		[]any{map[string]any{"name": "unit", "status": "pass", "command": "go test ./..."}})
 	statePath := filepath.Join(stateDir, "state.db")
@@ -216,8 +237,49 @@ func TestDeliveryHandoffExportRefusesToOverwriteLocalState(t *testing.T) {
 	}
 }
 
+func TestDeliveryHandoffRefusesEverySQLiteSidecarAndAlias(t *testing.T) {
+	for _, suffix := range []string{"-wal", "-shm", "-journal"} {
+		t.Run(suffix, func(t *testing.T) {
+			deps, out := newTestDeps(t)
+			// The guard must refuse these paths before SQLite opens. Sentinel
+			// bytes also prove the check never rewrites them on rejection.
+			dir := t.TempDir()
+			if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: dir}}).SaveTo(deps.ConfigPath); err != nil {
+				t.Fatal(err)
+			}
+			protected := filepath.Join(dir, "state.db"+suffix)
+			const sentinel = "keep sidecar bytes"
+			if err := os.WriteFile(protected, []byte(sentinel), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			destinations := []string{protected}
+			for name, link := range map[string]func(string, string) error{"symlink": os.Symlink, "hardlink": os.Link} {
+				alias := filepath.Join(dir, name)
+				if err := link(protected, alias); err != nil {
+					t.Logf("%s unavailable: %v", name, err)
+					continue
+				}
+				destinations = append(destinations, alias)
+			}
+			for _, destination := range destinations {
+				out.Reset()
+				code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "delivery", "handoff", "export", "LOCAL-example", "--file", destination)
+				if code != output.ExitUsage || !strings.Contains(out.String(), "Local SQLite state or recovery file") {
+					t.Fatalf("export %q = %d: %s", destination, code, out.String())
+				}
+				if data, err := os.ReadFile(protected); err != nil || string(data) != sentinel {
+					t.Fatalf("protected sidecar %q changed: %v", protected, err)
+				}
+			}
+			if _, err := os.Stat(filepath.Join(dir, "state.db")); !os.IsNotExist(err) {
+				t.Fatalf("the rejected export opened SQLite: %v", err)
+			}
+		})
+	}
+}
+
 func TestDeliveryHandoffExportRefusesWorkWithoutDeliveryEvidence(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	_, work := handoffWork(t, deps, "Retries stop @check:unit", nil)
 	bundlePath := filepath.Join(t.TempDir(), "handoff.json")
 
@@ -236,7 +298,8 @@ func TestDeliveryHandoffExportRefusesWorkWithoutDeliveryEvidence(t *testing.T) {
 // The checksum detects an edited bundle; a reviewer must never render evidence
 // that no longer matches what the author exported.
 func TestDeliveryHandoffShowRejectsEditedBundle(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
+	deps.Stderr = out
 	_, work := handoffWork(t, deps, "Retries stop @check:unit",
 		[]any{map[string]any{"name": "unit", "status": "pass", "command": "go test ./..."}})
 	bundlePath := filepath.Join(t.TempDir(), "handoff.json")
@@ -267,8 +330,8 @@ func TestDeliveryHandoffShowRejectsEditedBundle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reviewer, _, _, reviewerOut := newFakeDeps(t)
-	code := command.ExecuteForCode(command.NewRootCommand(reviewer), "--plain", "delivery", "handoff", "show", "--file", bundlePath)
+	reviewer, reviewerOut := newTestDeps(t)
+	code := command.ExecuteForCode(command.NewRootCommand(reviewer), "--json", "delivery", "handoff", "show", "--file", bundlePath)
 	if code == output.ExitOK {
 		t.Fatalf("show accepted an edited bundle: %s", reviewerOut.String())
 	}
@@ -279,7 +342,7 @@ func TestDeliveryHandoffShowRejectsEditedBundle(t *testing.T) {
 
 func TestDeliveryHandoffExportIsVisibleToGitFromAFreshWorkingDir(t *testing.T) {
 	// No t.Parallel: t.Chdir changes process-wide state.
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	_, work := handoffWork(t, deps, "Retries stop @check:unit",
 		[]any{map[string]any{"name": "unit", "status": "pass", "command": "go test ./..."}})
 	repo := t.TempDir()
@@ -315,7 +378,7 @@ func TestDeliveryHandoffExportIsVisibleToGitFromAFreshWorkingDir(t *testing.T) {
 }
 
 func TestDefaultHandoffExportRefusesLocalStateAlias(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir, work := handoffWork(t, deps, "Retries stop @check:unit",
 		[]any{map[string]any{"name": "unit", "status": "pass", "command": "go test ./..."}})
 	t.Chdir(t.TempDir())
@@ -348,7 +411,7 @@ func TestDefaultHandoffExportRefusesLocalStateAlias(t *testing.T) {
 func TestDeliveryHandoffExportPreservesSymlinkDestination(t *testing.T) {
 	for _, explicit := range []bool{false, true} {
 		t.Run(fmt.Sprintf("explicit=%v", explicit), func(t *testing.T) {
-			deps, _, _, out := newFakeDeps(t)
+			deps, out := newTestDeps(t)
 			_, work := handoffWork(t, deps, "Retries stop @check:unit",
 				[]any{map[string]any{"name": "unit", "status": "pass", "command": "go test ./..."}})
 			t.Chdir(t.TempDir())
@@ -383,7 +446,7 @@ func TestDeliveryHandoffExportPreservesSymlinkDestination(t *testing.T) {
 }
 
 func TestDefaultHandoffExportRefusesSymlinkedDirectory(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	_, work := handoffWork(t, deps, "Retries stop @check:unit",
 		[]any{map[string]any{"name": "unit", "status": "pass", "command": "go test ./..."}})
 	t.Chdir(t.TempDir())
@@ -409,7 +472,7 @@ func TestDefaultHandoffExportRefusesSymlinkedDirectory(t *testing.T) {
 }
 
 func TestDeliveryHandoffExportReplacesExistingFilePrivatelyWithoutChangingHardlink(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	_, work := handoffWork(t, deps, "Retries stop @check:unit",
 		[]any{map[string]any{"name": "unit", "status": "pass", "command": "go test ./..."}})
 	dir := t.TempDir()
@@ -433,7 +496,7 @@ func TestDeliveryHandoffExportReplacesExistingFilePrivatelyWithoutChangingHardli
 	if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0600) {
 		t.Errorf("exported bundle is not private: info=%v err=%v", info, err)
 	}
-	reviewer, _, _, reviewerOut := newFakeDeps(t)
+	reviewer, reviewerOut := newTestDeps(t)
 	if code := command.ExecuteForCode(command.NewRootCommand(reviewer), "--json", "delivery", "handoff", "show", "--file", destination); code != output.ExitOK {
 		t.Fatalf("export did not produce valid checksummed handoff: exit=%d output=%s", code, reviewerOut.String())
 	}

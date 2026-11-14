@@ -1,5 +1,8 @@
 # ADR: Server-as-governance-truth (spec source of truth)
 
+> Historical record for the retired Full distribution. See the
+> [current architecture](../architecture.md) for Local behavior.
+
 ## Status
 
 Accepted 2026-07-08. Decided after testing the feature-backed governance flow

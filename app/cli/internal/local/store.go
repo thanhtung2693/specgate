@@ -80,7 +80,7 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	if hasMetadata > 0 {
-		if _, err := (&Store{db: db, path: path}).enhancedStoreEnabled(context.Background()); err != nil {
+		if _, _, err := enhancedStoreFormat(context.Background(), db); err != nil {
 			db.Close()
 			return nil, err
 		}
@@ -94,47 +94,11 @@ func Open(path string) (*Store, error) {
 			return nil, err
 		}
 	}
-	for _, statement := range []string{
-		"PRAGMA journal_mode = WAL",
-		`CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
-		`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, display_name TEXT NOT NULL, email TEXT NOT NULL DEFAULT '')`,
-		`CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, slug TEXT UNIQUE NOT NULL, name TEXT NOT NULL)`,
-		`CREATE TABLE IF NOT EXISTS selection (id INTEGER PRIMARY KEY CHECK (id = 1), user_id TEXT NOT NULL, workspace_id TEXT NOT NULL)`,
-		`CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), feature_key TEXT NOT NULL, request_type TEXT NOT NULL, version INTEGER NOT NULL, status TEXT NOT NULL, snapshot_digest TEXT NOT NULL, policy_digest TEXT NOT NULL DEFAULT '', policy_snapshot_json TEXT NOT NULL DEFAULT '', source_criteria_json TEXT NOT NULL DEFAULT '[]', source_lineage_json TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, UNIQUE(workspace_id, feature_key, version))`,
-		`CREATE TABLE IF NOT EXISTS artifact_documents (artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE, path TEXT NOT NULL, role TEXT NOT NULL, content BLOB NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(artifact_id, path, role))`,
-		`CREATE TABLE IF NOT EXISTS artifact_readiness_runs (id TEXT PRIMARY KEY, artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE, workspace_id TEXT NOT NULL REFERENCES workspaces(id), aggregate TEXT NOT NULL, evidence TEXT NOT NULL, created_at TEXT NOT NULL)`,
-		`CREATE TABLE IF NOT EXISTS local_gate_tasks (
-  id TEXT PRIMARY KEY,
-  workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-  artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
-  gate_key TEXT NOT NULL,
-  gate_version TEXT NOT NULL,
-  gate_digest TEXT NOT NULL,
-  artifact_digest TEXT NOT NULL,
-  policy_digest TEXT NOT NULL,
-  executor TEXT NOT NULL,
-  skill_content TEXT NOT NULL,
-  expires_at TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  result_id TEXT,
-  result_state TEXT,
-  result_summary TEXT,
-  evaluator_json TEXT,
-  evidence_json TEXT,
-  findings_json TEXT,
-  submitted_at TEXT
-)`,
-		`CREATE TABLE IF NOT EXISTS artifact_approvals (artifact_id TEXT PRIMARY KEY REFERENCES artifacts(id) ON DELETE CASCADE, workspace_id TEXT NOT NULL REFERENCES workspaces(id), actor TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)`,
-		`CREATE TABLE IF NOT EXISTS features (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), key TEXT NOT NULL, canonical_artifact_id TEXT NOT NULL REFERENCES artifacts(id), version INTEGER NOT NULL, created_at TEXT NOT NULL, UNIQUE(workspace_id, key))`,
-		`CREATE TABLE IF NOT EXISTS work_items (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), key TEXT NOT NULL, feature_id TEXT REFERENCES features(id), artifact_id TEXT REFERENCES artifacts(id), title TEXT NOT NULL, description TEXT NOT NULL, phase TEXT NOT NULL, context_digest TEXT NOT NULL, acceptance_criteria TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(workspace_id, key))`,
-		`CREATE TABLE IF NOT EXISTS delivery_reports (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), work_id TEXT NOT NULL REFERENCES work_items(id), context_digest TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL)`,
-		`CREATE TABLE IF NOT EXISTS verification_contracts (workspace_id TEXT NOT NULL REFERENCES workspaces(id), work_id TEXT NOT NULL REFERENCES work_items(id), body TEXT NOT NULL, PRIMARY KEY(workspace_id, work_id))`,
-		`CREATE TABLE IF NOT EXISTS work_checkpoints (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), work_id TEXT NOT NULL REFERENCES work_items(id), body TEXT NOT NULL, created_at TEXT NOT NULL)`,
-		`CREATE TABLE IF NOT EXISTS acceptance_bases (review_id TEXT PRIMARY KEY REFERENCES delivery_reviews(id), workspace_id TEXT NOT NULL REFERENCES workspaces(id), work_id TEXT NOT NULL REFERENCES work_items(id), digest TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL)`,
-		`CREATE TABLE IF NOT EXISTS delivery_reviews (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), work_id TEXT NOT NULL REFERENCES work_items(id), report_id TEXT NOT NULL DEFAULT '', verdict TEXT NOT NULL, summary TEXT NOT NULL, human_decision TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)`,
-		`CREATE TABLE IF NOT EXISTS delivery_peer_reviews (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), work_id TEXT NOT NULL REFERENCES work_items(id), agent_name TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL)`,
-		`CREATE TABLE IF NOT EXISTS audit_events (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), work_id TEXT NOT NULL REFERENCES work_items(id), action TEXT NOT NULL, detail TEXT NOT NULL, created_at TEXT NOT NULL)`,
-	} {
+	if _, err := db.Exec("PRAGMA journal_mode = WAL"); err != nil {
+		db.Close()
+		return nil, err
+	}
+	for _, statement := range localSchemaStatements {
 		if _, err := db.Exec(statement); err != nil {
 			db.Close()
 			return nil, err
@@ -161,6 +125,47 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	return &Store{db: db, path: path}, nil
+}
+
+var localSchemaStatements = []string{
+	`CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+	`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, display_name TEXT NOT NULL, email TEXT NOT NULL DEFAULT '')`,
+	`CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, slug TEXT UNIQUE NOT NULL, name TEXT NOT NULL)`,
+	`CREATE TABLE IF NOT EXISTS selection (id INTEGER PRIMARY KEY CHECK (id = 1), user_id TEXT NOT NULL, workspace_id TEXT NOT NULL)`,
+	`CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), feature_key TEXT NOT NULL, request_type TEXT NOT NULL, version INTEGER NOT NULL, status TEXT NOT NULL, snapshot_digest TEXT NOT NULL, policy_digest TEXT NOT NULL DEFAULT '', policy_snapshot_json TEXT NOT NULL DEFAULT '', source_criteria_json TEXT NOT NULL DEFAULT '[]', source_lineage_json TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, UNIQUE(workspace_id, feature_key, version))`,
+	`CREATE TABLE IF NOT EXISTS artifact_documents (artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE, path TEXT NOT NULL, role TEXT NOT NULL, content BLOB NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(artifact_id, path, role))`,
+	`CREATE TABLE IF NOT EXISTS artifact_readiness_runs (id TEXT PRIMARY KEY, artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE, workspace_id TEXT NOT NULL REFERENCES workspaces(id), aggregate TEXT NOT NULL, evidence TEXT NOT NULL, created_at TEXT NOT NULL)`,
+	`CREATE TABLE IF NOT EXISTS local_gate_tasks (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+  artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
+  gate_key TEXT NOT NULL,
+  gate_version TEXT NOT NULL,
+  gate_digest TEXT NOT NULL,
+  artifact_digest TEXT NOT NULL,
+  policy_digest TEXT NOT NULL,
+  executor TEXT NOT NULL,
+  skill_content TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  result_id TEXT,
+  result_state TEXT,
+  result_summary TEXT,
+  evaluator_json TEXT,
+  evidence_json TEXT,
+  findings_json TEXT,
+  submitted_at TEXT
+)`,
+	`CREATE TABLE IF NOT EXISTS artifact_approvals (artifact_id TEXT PRIMARY KEY REFERENCES artifacts(id) ON DELETE CASCADE, workspace_id TEXT NOT NULL REFERENCES workspaces(id), actor TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)`,
+	`CREATE TABLE IF NOT EXISTS features (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), key TEXT NOT NULL, canonical_artifact_id TEXT NOT NULL REFERENCES artifacts(id), version INTEGER NOT NULL, created_at TEXT NOT NULL, UNIQUE(workspace_id, key))`,
+	`CREATE TABLE IF NOT EXISTS work_items (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), key TEXT NOT NULL, feature_id TEXT REFERENCES features(id), artifact_id TEXT REFERENCES artifacts(id), title TEXT NOT NULL, description TEXT NOT NULL, phase TEXT NOT NULL, context_digest TEXT NOT NULL, acceptance_criteria TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(workspace_id, key))`,
+	`CREATE TABLE IF NOT EXISTS delivery_reports (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), work_id TEXT NOT NULL REFERENCES work_items(id), context_digest TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL)`,
+	`CREATE TABLE IF NOT EXISTS verification_contracts (workspace_id TEXT NOT NULL REFERENCES workspaces(id), work_id TEXT NOT NULL REFERENCES work_items(id), body TEXT NOT NULL, PRIMARY KEY(workspace_id, work_id))`,
+	`CREATE TABLE IF NOT EXISTS work_checkpoints (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), work_id TEXT NOT NULL REFERENCES work_items(id), body TEXT NOT NULL, created_at TEXT NOT NULL)`,
+	`CREATE TABLE IF NOT EXISTS acceptance_bases (review_id TEXT PRIMARY KEY REFERENCES delivery_reviews(id), workspace_id TEXT NOT NULL REFERENCES workspaces(id), work_id TEXT NOT NULL REFERENCES work_items(id), digest TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL)`,
+	`CREATE TABLE IF NOT EXISTS delivery_reviews (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), work_id TEXT NOT NULL REFERENCES work_items(id), report_id TEXT NOT NULL DEFAULT '', verdict TEXT NOT NULL, summary TEXT NOT NULL, human_decision TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)`,
+	`CREATE TABLE IF NOT EXISTS delivery_peer_reviews (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), work_id TEXT NOT NULL REFERENCES work_items(id), agent_name TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL)`,
+	`CREATE TABLE IF NOT EXISTS audit_events (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), work_id TEXT NOT NULL REFERENCES work_items(id), action TEXT NOT NULL, detail TEXT NOT NULL, created_at TEXT NOT NULL)`,
 }
 
 // registerEnhancedSQLiteDriver gives supporting SpecGate processes a private

@@ -35,7 +35,5 @@ func TestLocalWorkspaceSelectMissingSlugIsUsageWithoutMutation(t *testing.T) {
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "workspace", "current"); code != 0 || !bytes.Contains(out.Bytes(), []byte(`"slug":"alpha"`)) {
 		t.Fatalf("invalid selection changed workspace: exit=%d %s", code, out.String())
 	}
-	if deps.Client != nil {
-		t.Fatal("Local selection created an HTTP client")
-	}
+
 }

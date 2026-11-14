@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="app/ui/public/logo.svg" alt="SpecGate" width="96" />
+  <img src="app/landing/logo.svg" alt="SpecGate" width="96" />
 </p>
 
 <h1 align="center">SpecGate</h1>
 
 <p align="center">
-  <strong>Give coding agents the right spec—and know what they delivered.</strong><br/>
-  Approve one version, hand off clear context, and review the evidence that comes back.
+  <strong>Give your coding agent approved scope. Review each criterion before you accept.</strong><br/>
+  A Local CLI for solo developers and small teams.
 </p>
 
 <p align="center">
@@ -27,60 +27,35 @@
   · <a href="docs/using-specgate/guides/try-delivery-proof.md"><strong>Run the delivery proof locally</strong></a>
 </p>
 
-SpecGate is a local-first governance layer for AI-assisted software delivery.
-It remembers exactly which version you approved, gives the coding agent a
-focused Context Pack, and checks the returned evidence against your acceptance
-criteria.
-
-Keep writing specs where you already work—OpenSpec, Spec Kit, Superpowers,
-Markdown, or another tool. SpecGate does not take over authoring. It manages the
-handoff from approved intent to implementation and keeps the resulting evidence
-and review history together.
-
-> **Full mode: run it on a trusted machine or private network.** The appliance
-> trusts its network by default and supports optional gateway credentials.
-> Direct Doc Registry access has no HTTP authentication layer.
-> Protect shared access with authentication and TLS or a private overlay — see
-> [Trust and security](docs/using-specgate/concepts/trust-and-security.md).
-> Start with the CLI. Use the web UI to inspect artifacts, review work, manage
-> settings, or use governance chat. Review release notes before updating between
-> minor versions because APIs and interfaces can evolve.
+Keep writing specs in OpenSpec, Spec Kit, Superpowers, Markdown, or your chosen
+tool. Your coding agent implements the change in your IDE. SpecGate records the
+approved scope, gives the agent a Context Pack, and keeps the evidence and
+human decision in a Local SQLite store.
 
 ## Why SpecGate?
 
-Spec-driven tools help generate strong plans and specs. The hard part comes
-after: knowing which version was approved, whether an agent completed every
-acceptance criterion, and whether delivery evidence still matches the spec after
-changes.
+When several features move at once, a new agent session can pick up an older
+spec or miss a criterion. An agent can say the work is done when the existing
+name-normalization tests pass. In the delivery demo, the approved criterion
+**Reject empty names after trimming** still has a skipped required check.
+SpecGate shows the evidence gap against that criterion. The agent adds the
+missing behavior and test, reruns the checks, and submits again. You decide
+against the new review.
 
-SpecGate keeps a durable record of that handoff. It records the
-approved artifact version, gives the coding agent a focused Context Pack, and
-makes delivery reviewable against the original acceptance criteria.
-[Who SpecGate is for](docs/using-specgate/concepts/who-specgate-is-for.md) maps
-solo-developer and team pain points to the mechanism that answers each.
+The report distinguishes the agent's claims, CLI-observed command results,
+and optional selected JUnit cases. Review whether those checks actually
+exercise the required behavior and whether you need end-to-end or real-provider
+evidence. See [How verification works](docs/using-specgate/concepts/verification.md).
 
 ## Quickstart
 
-Prefer asking an AI? Copy either prompt into your assistant.
-
-**Install with your coding agent** (open your project first):
-
-```text
-Read https://github.com/thanhtung2693/specgate and its linked installation guide, then install and set up SpecGate in Local mode for this project and my coding IDE, reusing any existing installation, and run the setup diagnostics.
-```
-
-**Understand SpecGate** (use an AI with web access):
-
-```text
-Read https://github.com/thanhtung2693/specgate and its linked user docs, then explain in my language what SpecGate does, which solo-developer problems it helps solve, how it fits with my existing spec-driven tools, and its limits, using one concrete example from spec to reviewed delivery.
-```
-
-You do not need Docker, a source checkout, Go, Node.js, Python, or a model API
-key for the default Local CLI workflow.
+From your Git project, install the CLI and initialize the Local workspace.
+The base workflow needs no Docker, background service, or model API key.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/scripts/install-cli.sh | sh
-specgate init
+specgate init --mode local
+specgate doctor
 ```
 
 Using Claude Code? Install the plugin directly from this GitHub repository:
@@ -99,11 +74,8 @@ agent: **“Set up SpecGate.”** The bootstrap requests approval before install
 the CLI and hands the selected IDE integration to `specgate plugins install`,
 so one installer owns the finished plugin.
 
-Interactive `specgate init` starts with **Local CLI**: SQLite state on this
-machine, no Docker, server, browser, or TCP service. It creates a local user
-and workspace, then prints the matching IDE-plugin command. Choose **Full appliance** in
-the prompt, or run `specgate init --mode full`, when you need the browser,
-governance chat, Knowledge, integrations, or shared server-backed workspaces.
+`specgate init` creates a Local user and workspace in SQLite on this machine.
+It binds the current Git checkout and offers IDE plugin setup.
 
 If you skipped IDE setup during init:
 
@@ -123,76 +95,83 @@ or source lineage: the first such write upgrades store compatibility.
 Refresh CLI-managed IDE files with the same plugin install command and scope,
 or update native plugins through their IDE plugin manager.
 
-Continue with the [full quickstart](docs/using-specgate/quickstart.md).
+Once setup is ready, tell your coding agent:
+
+> Prepare this change in SpecGate. Show me the scope, acceptance criteria, and
+> any proposed check commands before implementation. After I approve, implement
+> it, submit per-criterion evidence, and stop for my delivery decision.
+
+Follow the [Quickstart](docs/using-specgate/quickstart.md) for the commands and
+decision steps.
 
 ## How a work item moves through SpecGate
 
 ```text
-publish artifact
--> resolve governance
--> run readiness checks
--> approve the exact artifact version
--> hand a Context Pack to the coding agent
--> submit delivery evidence
--> review delivery against acceptance criteria
--> reconcile or complete
+approve scope and criteria
+-> agent implements from the Context Pack
+-> agent submits per-criterion evidence and addresses gaps
+-> human decides against the exact review
 ```
 
-This workflow works without a server-side model, in both Local and Full mode.
-Quick work items are available in both too; Local asks you to supply each
-acceptance criterion with `--ac`.
-
-For longer Local work, explicit checkpoints help an agent resume against the
-same checkout; optional verification pins, requirement lineage, and an exact
-acceptance basis make the final decision auditable. See the
-[Local CLI workflow](docs/using-specgate/guides/cli-workflow.md).
-
-Add a server-side model in Full mode when you want independent readiness
-judgment, model-backed delivery review, governance chat, or the platform to
-draft acceptance criteria for quick work instead of writing them yourself.
+Start with explicit criteria for a small change. When the work needs a
+reviewed spec or plan, publish the package and approve its exact version.
+See the [Local CLI workflow](docs/using-specgate/guides/cli-workflow.md).
 
 ## What you can do
 
-- Versioned artifact publishing and approval.
-- Context Packs for coding agents.
-- Local resume packets keep each work item's scope, approved document index,
-  evidence gaps, and next action together. Fetch only the pinned documents
-  needed for the current task with
-  `specgate work context <work-ref> --document <path> --role <role> --json`.
-- Local users, shared workspaces, and per-project workspace binding.
-- CLI-first workflow for humans and IDE agents.
-- IDE plugin files for Codex, Claude Code, and Cursor.
-- Automatic governance policy, readiness gates, delivery evidence, and delivery review.
-- Deterministic check bindings for acceptance criteria with `@check:<name>`.
-- Optional Local verification contracts pin reviewed check commands before
-  delivery reporting. Human acceptance references the exact reviewed delivery.
-- `specgate stats` for workflow signals — first-pass yield, rework depth, and
-  cycle time — from recorded runs, in both Local and Full mode.
-- Full mode adds workspace-scoped Knowledge and Git/tracker integrations.
+- Resume a work reference with its approved scope, evidence gaps, and next
+  action. Load pinned documents as needed.
+- Run artifact readiness checks with four semantic rubrics your project can
+  extend. See [Local project instructions](docs/using-specgate/guides/customize-governance.md#add-local-project-instructions).
+- Bind checks to individual criteria and record the exact human decision.
+  See [advanced verification](docs/using-specgate/reference/cli.md#advanced-local)
+  for optional pins, selected tests, checkpoints and lineage.
+- Share an unsigned, read-only [delivery handoff](docs/using-specgate/reference/cli.md#hand-a-review-to-a-teammate-through-the-repository)
+  beside a Git diff. Each Local store has its own decisions.
 
-SpecGate does not replace your authoring tool, issue tracker, coding IDE, pull
-request review, or CI. It records the governed handoff and delivery review
-across those systems.
+To continue your own Local work on another machine, use `specgate transfer`
+to prepare a private snapshot, inspect and receive it into a new store, then
+activate it for the intended Git checkout. Move code separately.
+[Move a Local store](docs/using-specgate/guides/operate-specgate.md#move-a-local-store-to-another-checkout).
 
-## Web UI (Full mode)
+## Review in the browser
 
-Most implementation work stays in your IDE. Open the web UI when you need to see
-what is waiting on you: work whose scope you have not approved, finished work
-waiting for you to accept it, what the agent was given, and what was checked.
+Run `specgate ui` from the bound repository to inspect approved context,
+criterion evidence and current source, and record a human decision. The
+optional browser UI supports English and Vietnamese. It stays on loopback and
+trusts local processes and accounts that can reach it.
+See [Local review](docs/using-specgate/guides/local-review.md) and
+[Trust and security](docs/using-specgate/concepts/trust-and-security.md).
 
-![The SpecGate work queue: each row shows a work item, whether it is backed by an approved spec or a quick contract, its current state, who it is waiting on, and when it last changed](./docs/assets/readme/specgate-ui-work.png)
+An optional foreground [notification experiment](docs/using-specgate/guides/local-notification-pilot.md)
+runs from the source checkout. The participant study is pending.
+
+## Release status
+
+This README describes **v0.3.0**, including the
+Local-only distribution, optional browser review, and Local store transfer.
+The installer downloads the latest published version from
+[GitHub Releases](https://github.com/thanhtung2693/specgate/releases/latest).
+See the [v0.3.0 release notes](CHANGELOG.md#030---2026-11-14).
+
+## Previous installations
+
+This distribution retires the Full appliance and remote setup, governance chat,
+Knowledge, provider and tracker integrations, statistics reporting, and the
+previous portable workspace transfer. Existing Local history and prior
+deployment data, configurations, volumes, and backups remain in place. Use a
+prior compatible CLI to inspect an existing Full deployment. For a separate Local setup, see
+[Operate SpecGate](docs/using-specgate/guides/operate-specgate.md#previous-installations).
+Read the [release notes before updating](CHANGELOG.md).
 
 ## Repository layout
 
-| Module | Stack | Responsibility |
-|---|---|---|
-| `app/doc-registry` | Go | Artifacts, versions, policy, evidence, integrations, and REST |
-| `app/agents` | Python / LangGraph | Governance-ops chat, model-judged gates, delivery review, and reconciliation |
-| `app/ui` | Vite / React | Review, artifact inspection, governance chat, settings, and operations |
-| `app/cli` | Go / Cobra | Human and coding-agent interface to SpecGate |
-
-SpecGate expects a trusted network. Do not expose the general Doc Registry HTTP
-surface or web UI directly to the public internet.
+| Module | Responsibility |
+|---|---|
+| `app/cli` | CLI, Local SQLite store, and embedded review UI |
+| `app/landing` | Public landing page |
+| `plugins` | Canonical IDE package and skills |
+| `scripts` | Release installer, plugin tooling, and source-only notification pilot |
 
 ## Documentation
 
