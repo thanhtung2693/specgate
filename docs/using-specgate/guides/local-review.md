@@ -52,7 +52,7 @@ notice directs you to **View latest**. An already open confirmation remains
 bound to the old review, and the CLI refuses it if the identity changed.
 
 Criterion sheets keep the complete requirement text visible, with three marks
-for the agent claim, observed command and attached test, plus a result label.
+for the agent claim, observed check and attached test, plus a result label.
 Expand a row to read any gap, original report, run results and cited source
 together. References show the recorded path, citation, check and selected tests.
 The source view reads actual cited checkout lines and a tracked-file diff when
