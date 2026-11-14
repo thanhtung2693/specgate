@@ -275,19 +275,20 @@ test("legacy maintenance links open settings without losing the inspected work U
   );
 });
 
-test("header tab order follows its visible language, notification, settings and theme order", () => {
+test("header tab order follows its visible language, notification, theme and settings order", () => {
   const html = ui.appearanceControls(
     { lang: "en", theme: "dark" },
     { language: "Language", dark: "Dark", light: "Light" },
     "",
-    '<button data-action="notifications"></button><button data-action="settings"></button>',
+    '<button data-action="notifications"></button>',
+    '<button data-action="settings"></button>',
   );
   const positions = [
     'data-language="en"',
     'data-language="vi"',
     'data-action="notifications"',
-    'data-action="settings"',
     'data-action="theme"',
+    'data-action="settings"',
   ].map((value) => html.indexOf(value));
   assert.ok(positions.every((value) => value >= 0));
   assert.deepEqual(
@@ -524,6 +525,7 @@ test("Local attention reflects work transitions independently of Settings update
   await flush();
   assert.match(settings.innerHTML, /Update available/);
   assert.match(settings.innerHTML, /Review update/);
+  assert.match(settings.innerHTML, /data-action="update-check"[^>]*>[\s\S]*Check again/);
   await click("action", "cache-preview");
   assert.match(dialog.innerHTML, /Cache cleanup is unavailable on this platform\./);
   assert.doesNotMatch(dialog.innerHTML, /id="dialog-confirm"/);
@@ -537,7 +539,7 @@ test("Local attention reflects work transitions independently of Settings update
   poll();
   await flush();
   assert.match(bell(), /class="count"[^>]*>2</);
-  assert.match(app.innerHTML, /data-action="settings"[^>]*aria-label="Local tools · Update available"/);
+  assert.match(app.innerHTML, /data-action="settings"[^>]*aria-label="Settings · Update available"/);
   await click("action", "notifications");
   assert.match(dialog.innerHTML, /Maintainer · Inspect blocker/);
   assert.match(dialog.innerHTML, /Human reviewer · Check evidence/);
@@ -563,10 +565,10 @@ test("Local attention reflects work transitions independently of Settings update
   assert.doesNotMatch(dialog.innerHTML, /Chưa có việc cần bạn chú ý|LOCAL-blocked/);
 });
 
-test("shared status badges map waiting, accepted, agent and rework states to actual icon semantics", () => {
+test("shared status glyphs map waiting, accepted, agent and rework states to actual icon semantics", () => {
   assert.equal(
     presentation.statusPresentation({ state: "awaiting_acceptance" }).icon,
-    "clock",
+    "person",
   );
   assert.equal(
     presentation.statusPresentation({ state: "awaiting_review" }).icon,
@@ -588,15 +590,11 @@ test("shared status badges map waiting, accepted, agent and rework states to act
     presentation.statusPresentation({ state: "blocked" }).tone,
     "warning",
   );
-  assert.match(
-    presentation.stateBadge({ state: "awaiting_acceptance" }, (x) => x),
-    /data-icon="clock"/,
-  );
 });
 test("test column describes observations only and never repeats an agent claim", () => {
   const claim = { claim: "satisfied", grounding_status: "grounded" };
   assert.deepEqual(presentation.testObservation(claim, "vi"), {
-    text: "Chưa có test riêng cho tiêu chí này.",
+    text: "Chưa gắn test riêng cho tiêu chí này.",
     tone: "warning",
   });
   const command = {
@@ -605,10 +603,10 @@ test("test column describes observations only and never repeats an agent claim",
     check_status: "pass",
     check_provenance: "command_only",
   };
-  assert.match(presentation.testObservation(command, "en").text, /command/);
+  assert.match(presentation.testObservation(command, "en").text, /passing check/);
   assert.match(
     presentation.testObservation(command, "en").text,
-    /no selected test/,
+    /no selected test/i,
   );
   const failed = {
     ...command,
@@ -636,7 +634,7 @@ test("test column describes observations only and never repeats an agent claim",
   const column = html
     .split('<section class="test-result">')[1]
     .split("</section>")[0];
-  assert.match(column, /Chưa có test riêng cho tiêu chí này\./);
+  assert.match(column, /Chưa gắn test riêng cho tiêu chí này\./);
   assert.doesNotMatch(column, /Agent báo đạt/);
   assert.match(html, /Dòng 73/);
   assert.match(html, /line: 73/);
@@ -710,6 +708,45 @@ test("diff viewer renders actual escaped change lines and never fabricates unava
   assert.match(unavailable, /Source unavailable/);
   assert.match(unavailable, /no_numeric_citation/);
   assert.doesNotMatch(unavailable, /source-line/);
+});
+
+test("the source inspector can scroll independently inside both criterion grids", () => {
+  const css = readFileSync(`${__dirname}/local_ui_assets/style.css`, "utf8");
+  for (const grid of ["criteria", "criterion-body"]) {
+    assert.match(css, new RegExp(`\\.${grid}\\s*\\{[^}]*grid-template-columns:\\s*minmax\\(0,\\s*1fr\\)`));
+  }
+  assert.match(css, /\.source-code\s*\{[^}]*overflow:\s*auto/);
+});
+test("switching from code to diff updates only the content and preserves the focused toolbar", async () => {
+  const status = { ref: "LOCAL-real", review_id: "r1", completion_id: "c1" };
+  const callbacks = {};
+  const body = { innerHTML: "" };
+  const code = { setAttribute(name, value) { this[name] = value; }, getAttribute(name) { return this[name]; }, focus() {} };
+  const diff = Object.assign({}, code, { dataset: { sourceView: "diff" }, closest: () => details });
+  let requests = 0;
+  const slot = {
+    innerHTML: "", setAttribute() {},
+    querySelector: (selector) => selector === "[data-source-content]" ? body
+      : selector === '[data-source-view="code"]' ? code : diff,
+  };
+  const details = {
+    open: true, dataset: { criterion: "local-1" }, matches: () => true,
+    querySelector: () => slot,
+  };
+  const root = { contains: () => true, addEventListener: (type, fn) => callbacks[type] = fn };
+  sourceUI.mount(root, () => ({ status }), async () => {
+    requests++;
+    return { completion_id: "c1", source: { available: true }, diff: { available: true, text: "+actual diff" } };
+  }, () => "en");
+  callbacks.toggle({ target: details });
+  await new Promise(setImmediate);
+  const original = slot.innerHTML;
+  callbacks.click({ target: { closest: () => diff } });
+  assert.match(body.innerHTML, /actual diff/);
+  assert.equal(slot.innerHTML, original);
+  assert.equal(code["aria-pressed"], "false");
+  assert.equal(diff["aria-pressed"], "true");
+  assert.equal(requests, 1);
 });
 test("source requests deduplicate by inspected completion and reject stale responses after scope changes", async () => {
   const pending = [],

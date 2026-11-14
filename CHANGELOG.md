@@ -5,7 +5,10 @@ versioning.
 
 ## Unreleased
 
-## [0.3.0] - 2026-11-14
+## [0.3.0] - 2026-11-15
+
+Reissued with the redesigned landing page and Local review UI. This replaces
+the assets originally published as v0.3.0 on 2026-11-14.
 
 This version packages SpecGate as a Local-only CLI, with optional loopback
 browser review and private transfer of a Local store between checkouts.
@@ -32,6 +35,13 @@ browser review and private transfer of a Local store between checkouts.
 
 ### Improved
 
+- The landing page presents the four-step Local workflow alongside an
+  interactive delivery example for inspecting criteria and evidence.
+- The redesigned Local review UI makes the work queue, criteria, cited source,
+  and review decisions easier to navigate on desktop and narrow screens.
+- Local review announces a newer delivery without replacing the open review or
+  draft note. Choose **View latest** to load it. Decisions still apply to the
+  exact review inspected.
 - Root help and the Quickstart lead with the Local CLI and coding-agent
   workflow. Browser review stays optional and advanced Local commands remain
   discoverable.
@@ -66,6 +76,9 @@ browser review and private transfer of a Local store between checkouts.
 
 ### Upgrade notes
 
+- Already running v0.3.0? Run `specgate update --version v0.3.0` to install the
+  reissued build. The version check compares versions and will report v0.3.0
+  as current.
 - Received stores have a fresh checkout generation and require a supporting
   CLI. Older CLIs reject the receiving store. Transfer leaves the source
   SQLite database and earlier stores in place.

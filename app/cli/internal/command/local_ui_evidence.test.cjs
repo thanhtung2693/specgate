@@ -14,6 +14,23 @@ test("real gaps and claims are visible without treating optional JUnit as missin
   assert.doesNotMatch(grounded.split("</summary>")[0], /Evidence gap/);
 });
 
+test("the compact result distinguishes observed check outcomes from passing tests", () => {
+  const row = { id: "local-1", text: "Original criterion", claim: "satisfied", verdict: "met", check_source: "specgate_cli", check_provenance: "command_only" };
+  for (const [status, label] of [["pass", "Check passed"], ["fail", "Check failed"], ["skipped", "Check skipped"]]) {
+    const summary = presentation.criterionView({ ...row, check_status: status }, [], "en", t).split("</summary>")[0];
+    assert.match(summary, new RegExp(`${label}</span>`));
+    assert.match(summary, /Observed check/);
+    assert.doesNotMatch(summary, /Test passed/);
+  }
+});
+
+test("a passing selected test does not hide a source gap on the decision checklist", () => {
+  const row = { id: "local-1", text: "Original criterion", claim: "satisfied", verdict: "met", check_source: "specgate_cli", check_provenance: "selected_test_observed", check_status: "pass", selected_cases: [{ name: "real", outcome: "passed" }], gaps: ["citation is unanchored"] };
+  const work = { status: { ref: "LOCAL-real", review_id: "review", completion_id: "completion" }, can_decide: true };
+  const html = presentation.decisionView(work, "", t, t, [row]);
+  assert.match(html, /class="gap-label">Evidence gap · <\/span>Test passed<\/small>/);
+});
+
 test("every chosen check is expandable with original scope and separate provenance", () => {
   const html = presentation.reviewChecks({
     summary: "Network was stubbed <only>",
@@ -33,15 +50,19 @@ test("every chosen check is expandable with original scope and separate provenan
   assert.doesNotMatch(html, /<only>/);
 });
 
-test("a required selected test with an invalid report stays explicit", () => {
+test("an invalid required test report fails the check even when the command exits zero", () => {
   const row = {
     id: "local-1", claim: "satisfied", check_name: "unit", check_source: "specgate_cli",
     check_status: "fail", check_provenance: "command_only", selected_tests_required: true,
-    why: "required JUnit report unavailable", gaps: ["bound check unit: fail"],
+    why: "executed by specgate: exit 0 — required JUnit report unavailable",
+    selected_cases: [], gaps: ["bound check unit: fail"],
   };
   const html = presentation.criterionView(row, [], "en", t);
   assert.match(html, /Complete selected-test results are not available/);
   assert.match(html, /required JUnit report unavailable/);
+  assert.match(html, /Observed check · Failed/);
+  assert.match(html, /executed by specgate: exit 0/);
+  assert.doesNotMatch(html, /Command (?:failed|observed)/i);
   assert.doesNotMatch(html, /no selected test/);
 });
 

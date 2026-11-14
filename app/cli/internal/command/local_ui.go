@@ -314,7 +314,11 @@ func (s *localUIServer) works(w http.ResponseWriter, r *http.Request) {
 			s.fail(w, err)
 			return
 		}
-		views = append(views, map[string]any{"ref": item.Key, "title": item.Title, "state": status.State, "next_actor": status.NextActor, "decision": status.Decision, "stale": status.Stale, "created_at": item.CreatedAt})
+		views = append(views, map[string]any{
+			"ref": item.Key, "title": item.Title, "state": status.State, "next_actor": status.NextActor,
+			"decision": status.Decision, "stale": status.Stale, "created_at": item.CreatedAt,
+			"review_id": status.ReviewID, "completion_id": status.CompletionID,
+		})
 	}
 	writeLocalUIJSON(w, 200, map[string]any{"items": views})
 }

@@ -3,15 +3,16 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
     <meta
       name="description"
-      content="A Local CLI for solo developers and small teams. Give your AI coding agent approved scope, see which agreed checks ran, and decide whether to accept the delivery."
+      content="SpecGate is a Local CLI for solo developers and small teams. Review the scope, test results and evidence gaps before you approve your coding agent's work."
     />
     <meta name="author" content="SpecGate" />
     <meta name="application-name" content="SpecGate" />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
-    <meta name="theme-color" content="#010102" />
+    <meta name="theme-color" content="#0d0e12" />
     <link rel="canonical" href="https://thanhtung2693.github.io/specgate/" />
     <link rel="sitemap" type="application/xml" href="https://thanhtung2693.github.io/specgate/sitemap.xml" />
     <title>SpecGate - See the evidence before accepting AI coding work</title>
@@ -24,7 +25,7 @@
     <meta property="og:title" content="SpecGate - See the evidence before accepting AI coding work" />
     <meta
       property="og:description"
-      content="A Local CLI for solo developers and small teams. Give your AI coding agent approved scope, see which agreed checks ran, and decide whether to accept the delivery."
+      content="SpecGate is a Local CLI for solo developers and small teams. Review the scope, test results and evidence gaps before you approve your coding agent's work."
     />
     <meta property="og:image" content="https://thanhtung2693.github.io/specgate/logo.svg" />
     <meta property="og:image:type" content="image/svg+xml" />
@@ -35,12 +36,11 @@
     <meta name="twitter:title" content="SpecGate - See the evidence before accepting AI coding work" />
     <meta
       name="twitter:description"
-      content="A Local CLI for solo developers and small teams. Give your AI coding agent approved scope, see which agreed checks ran, and decide whether to accept the delivery."
+      content="SpecGate is a Local CLI for solo developers and small teams. Review the scope, test results and evidence gaps before you approve your coding agent's work."
     />
     <meta name="twitter:image" content="https://thanhtung2693.github.io/specgate/logo.svg" />
     <meta name="twitter:image:alt" content="SpecGate logo" />
 
-    <!-- Structured data -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -51,25 +51,37 @@
             "name": "SpecGate",
             "url": "https://thanhtung2693.github.io/specgate/",
             "logo": "https://thanhtung2693.github.io/specgate/logo.svg",
-            "description": "A Local CLI for solo developers and small teams. Give your AI coding agent approved scope, see which agreed checks ran, and decide whether to accept the delivery."
+            "description": "SpecGate is a Local CLI for solo developers and small teams. Review the scope, test results and evidence gaps before you approve your coding agent's work."
           },
           {
             "@type": "WebSite",
             "@id": "https://thanhtung2693.github.io/specgate/#website",
             "name": "SpecGate",
             "url": "https://thanhtung2693.github.io/specgate/",
-            "publisher": { "@id": "https://thanhtung2693.github.io/specgate/#org" },
-            "inLanguage": "en-US"
+            "publisher": {
+              "@id": "https://thanhtung2693.github.io/specgate/#org"
+            },
+            "inLanguage": [
+              "en",
+              "vi"
+            ]
           },
           {
             "@type": "WebPage",
             "@id": "https://thanhtung2693.github.io/specgate/#webpage",
             "url": "https://thanhtung2693.github.io/specgate/",
             "name": "SpecGate - See the evidence before accepting AI coding work",
-            "description": "A Local CLI for solo developers and small teams. Give your AI coding agent approved scope, see which agreed checks ran, and decide whether to accept the delivery.",
-            "isPartOf": { "@id": "https://thanhtung2693.github.io/specgate/#website" },
-            "about": { "@id": "https://thanhtung2693.github.io/specgate/#software" },
-            "inLanguage": "en-US"
+            "description": "SpecGate is a Local CLI for solo developers and small teams. Review the scope, test results and evidence gaps before you approve your coding agent's work.",
+            "isPartOf": {
+              "@id": "https://thanhtung2693.github.io/specgate/#website"
+            },
+            "about": {
+              "@id": "https://thanhtung2693.github.io/specgate/#software"
+            },
+            "inLanguage": [
+              "en",
+              "vi"
+            ]
           },
           {
             "@type": "SoftwareApplication",
@@ -78,11 +90,13 @@
             "applicationCategory": "DeveloperApplication",
             "operatingSystem": "macOS, Linux, Windows",
             "url": "https://thanhtung2693.github.io/specgate/",
-            "publisher": { "@id": "https://thanhtung2693.github.io/specgate/#org" },
+            "publisher": {
+              "@id": "https://thanhtung2693.github.io/specgate/#org"
+            },
             "codeRepository": "https://github.com/thanhtung2693/specgate",
             "license": "https://www.apache.org/licenses/LICENSE-2.0",
             "isAccessibleForFree": true,
-            "description": "A Local CLI for solo developers and small teams. Give your AI coding agent approved scope, see which agreed checks ran, and decide whether to accept the delivery.",
+            "description": "SpecGate is a Local CLI for solo developers and small teams. Review the scope, test results and evidence gaps before you approve your coding agent's work.",
             "keywords": "Local CLI, AI coding agent, delivery evidence, acceptance criteria, Context Pack, OpenSpec, Spec Kit, Superpowers"
           },
           {
@@ -90,50 +104,26 @@
             "mainEntity": [
               {
                 "@type": "Question",
-                "name": "How is this different from spec tools?",
+                "name": "Can green tests miss a requirement?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "Your spec tool owns authoring. For versioned specs, SpecGate snapshots the documents, records human approval, and gives your coding agent the approved Context Pack. The agent implements in your repository."
+                  "text": "Yes. The suite can pass while the agreed 503 case has no test result."
                 }
               },
               {
                 "@type": "Question",
-                "name": "What spec formats do you accept?",
+                "name": "What does it actually check?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "Bring documents from OpenSpec, Spec Kit, Superpowers, Markdown, or your own tools and map their roles explicitly. For a small task, start with a quick change note and clear criteria."
+                  "text": "Review agent claims, recorded check exit codes, and selected tests found in the observed reports. You decide whether the evidence is enough."
                 }
               },
               {
                 "@type": "Question",
-                "name": "Do we have to leave our coding agent?",
+                "name": "Do I need the browser UI?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "Use Cursor, Claude Code, Codex, or another agent that can follow the CLI workflow. The agent reads the Context Pack, implements the change, and reports back with evidence."
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "Do I need an LLM API key?",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "SpecGate Local runs without an LLM API key. Your coding agent uses its own access when it implements work or completes assigned artifact readiness tasks."
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "What does the delivery review check?",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "The CLI records the agent’s claims and any command or selected-test results it observes. A selected test result covers that testcase and runner. Review the evidence and decide whether the work meets your criteria."
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "How should we roll this out?",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "Start with one work item in a trusted checkout. The CLI keeps its records in your local store. Use specgate ui for optional browser inspection and review, or try the source-only notification pilot from a running terminal."
+                  "text": "The Local CLI records the scope, evidence, and decisions. Run specgate ui if you want to review and decide in a browser."
                 }
               }
             ]
@@ -141,344 +131,239 @@
         ]
       }
     </script>
-    <link rel="icon" href="./logo.svg" type="image/svg+xml" />
+    <link rel="icon" href="logo.svg" type="image/svg+xml" />
     <script>
-      document.documentElement.dataset.theme =
-        localStorage.getItem("specgate-landing-theme") || "dark";
+      (() => {
+        let theme;
+        try { theme = localStorage.getItem("specgate-landing-theme"); } catch {}
+        document.documentElement.dataset.theme = theme === "light" || theme === "dark" ? theme
+          : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      })();
     </script>
-    <link rel="preload" href="./fonts/host-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="./fonts/commit-mono.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="preload" href="fonts/host-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="fonts/geist.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="styles.css" />
+    <script defer src="script.js"></script>
   </head>
   <body>
-    <a class="skip-link" href="#top">Skip to main content</a>
     <svg class="sprite" aria-hidden="true" width="0" height="0">
-      <defs>
-        <symbol id="i-spec" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z" /><path d="M14 3v5h5" /><path d="M8.5 13h7M8.5 16.5h7" /></symbol>
-        <symbol id="i-code" viewBox="0 0 24 24"><polyline points="15 17 20 12 15 7" /><polyline points="9 7 4 12 9 17" /></symbol>
-        <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5.5c0 4.2-3 7.4-7 8.5-4-1.1-7-4.3-7-8.5V6l7-3z" /><path d="M9 12l2 2 4-4.5" /></symbol>
-        <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15" /><polyline points="13 6 19 12 13 18" /></symbol>
-        <symbol id="i-github" viewBox="0 0 24 24"><path d="M12 2.5a9.5 9.5 0 0 0-3 18.5c.48.08.65-.2.65-.45v-1.7c-2.66.58-3.22-1.14-3.22-1.14-.43-1.1-1.06-1.39-1.06-1.39-.87-.59.07-.58.07-.58.96.07 1.47.99 1.47.99.86 1.47 2.25 1.05 2.8.8.08-.62.33-1.05.6-1.29-2.12-.24-4.35-1.06-4.35-4.72 0-1.04.37-1.89.98-2.56-.1-.24-.43-1.22.09-2.52 0 0 .8-.26 2.62.98a9.1 9.1 0 0 1 4.76 0c1.82-1.24 2.62-.98 2.62-.98.52 1.3.19 2.28.09 2.52.61.67.98 1.52.98 2.56 0 3.67-2.23 4.47-4.36 4.71.34.3.64.88.64 1.78v2.64c0 .25.17.54.66.45A9.5 9.5 0 0 0 12 2.5z" /></symbol>
-      </defs>
+      <symbol id="i-agent" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></symbol>
+      <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+      <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></symbol>
+      <symbol id="i-evidence" viewBox="0 0 24 24"><path d="m3 6 1.5 1.5L7 5M3 12l1.5 1.5L7 11M3 18l1.5 1.5L7 17M11 6h10M11 12h10M11 18h10"/></symbol>
+      <symbol id="i-gap" viewBox="0 0 24 24"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17v.01"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></symbol>
+      <symbol id="i-ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+      <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></symbol>
+      <symbol id="i-replay" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8"/><path d="M4 4v4h4"/></symbol>
+      <symbol id="i-review" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M16 11l2 2 4-4"/></symbol>
+      <symbol id="i-scope" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="m9 14 2 2 4-4"/></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/></symbol>
+      <symbol id="i-word" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></symbol>
     </svg>
-    <div class="grid-bg" aria-hidden="true"></div>
-    <header class="nav">
-      <a class="brand" href="#top" aria-label="SpecGate home">
-        <span class="brand-mark" aria-hidden="true">
-          <img src="./logo.svg" alt="" decoding="async" />
-        </span>
-        <span class="brand-word">SpecGate</span>
-      </a>
-      <nav class="nav-links" aria-label="Sections">
-        <a href="#how">How it works</a>
-        <a href="#run">See it run</a>
-        <a href="#compare">Where it fits</a>
-        <a href="#faq">FAQ</a>
-      </nav>
-      <div class="nav-actions">
-        <button class="theme-toggle" type="button" aria-label="Light theme" aria-pressed="false">
-          <span class="theme-label">Light</span>
-        </button>
-        <a class="btn btn-accent nav-github" href="https://github.com/thanhtung2693/specgate" aria-label="Open SpecGate on GitHub"><svg class="ic" aria-hidden="true"><use href="#i-github" /></svg><span>GitHub</span></a>
+    <a class="skip" href="#main" data-i18n="skip">Skip to content</a>
+    <header class="bar">
+      <div class="wrap bar-in">
+        <a class="brand" href="#top" aria-label="SpecGate home" data-i18n-attr="aria-label:brand.aria"><img src="logo.svg" alt="" width="26" height="26" /><span>SpecGate</span></a>
+        <div class="bar-tools">
+          <div class="seg" role="group" aria-label="Language" data-i18n-attr="aria-label:lang.aria" hidden>
+            <button type="button" data-lang="en" aria-pressed="true">EN</button>
+            <button type="button" data-lang="vi" aria-pressed="false">VI</button>
+          </div>
+          <button class="icon-btn" type="button" data-action="theme" hidden aria-label="Switch light or dark theme" data-i18n-attr="aria-label:theme.aria">
+            <svg class="ic theme-light" aria-hidden="true"><use href="#i-moon" /></svg>
+            <svg class="ic theme-dark" aria-hidden="true"><use href="#i-sun" /></svg>
+          </button>
+          <a class="btn sm" href="https://github.com/thanhtung2693/specgate" rel="noopener">GitHub</a>
+        </div>
       </div>
     </header>
 
-    <main id="top" aria-labelledby="page-title" tabindex="-1">
-      <!-- HERO -->
-      <section class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow reveal" style="--d: 0ms">Local CLI for solo developers and small teams</p>
-          <h1 id="page-title" class="reveal" style="--d: 60ms">
-            Agent says done.<br />
-            <span class="hl">See what passed.</span>
-          </h1>
-          <p class="lede reveal" style="--d: 120ms">
-            Give your agent approved scope. See which agreed checks actually ran before you accept the work.
-          </p>
-          <div class="hero-actions reveal" style="--d: 180ms">
-            <a class="btn btn-accent btn-lg" href="https://github.com/thanhtung2693/specgate#quickstart">Run locally<svg class="ic ic-btn" aria-hidden="true"><use href="#i-arrow" /></svg></a>
-            <a class="btn btn-ghost btn-lg" href="https://github.com/thanhtung2693/specgate">View GitHub</a>
-          </div>
-        </div>
-
-        <!-- Verdict console (the protagonist) -->
-        <div class="console gate-frame reveal" style="--d: 200ms" aria-label="Delivery review console">
-          <i class="gf" aria-hidden="true"></i><i class="gf" aria-hidden="true"></i><i class="gf" aria-hidden="true"></i><i class="gf" aria-hidden="true"></i>
-          <div class="console-top">
-            <span class="mono">Health check / unit tests</span>
-            <span class="verdict-chip" id="verdict-chip" data-state="gap">Evidence gap</span>
-          </div>
-          <p class="console-eyebrow mono">Example with a configured test report</p>
-          <ul class="check-list" id="check-list">
-            <li data-status="met" data-result="met"><span class="tick" aria-hidden="true"></span><span>Healthy returns 200. Unit test passed.</span></li>
-            <li data-status="missing" data-result="missing"><span class="tick" aria-hidden="true"></span><span>Unhealthy returns 503. Required case missing.</span></li>
-          </ul>
-          <div class="console-checks" id="console-checks">
-            <span class="chk mono" data-on="1">suite exited 0</span>
-          </div>
-          <div class="console-foot">
-            <span class="mono dim">Illustrative CLI evidence</span>
-            <button class="console-replay" type="button" id="console-replay" aria-label="Replay review">replay ↻</button>
-          </div>
-        </div>
-      </section>
-
-      <section class="wordmarks" aria-label="Works with your tools">
-        <div class="wordmarks-intro">
-          <h2>Your tools stay in the loop.</h2>
-          <p>Install through the CLI, or use the Codex and Claude Code plugin managers.</p>
-        </div>
-        <div class="tool-routes">
-          <article class="tool-route">
-            <div class="tool-route-copy">
-              <p class="tool-route-kicker mono">CLI and IDE handoff</p>
-              <h3>Code where you already work</h3>
-              <p>Your agent reads the approved Context Pack before editing and reports evidence through the CLI when it finishes.</p>
+    <main id="main" tabindex="-1">
+      <!-- The static view shows the complete review. -->
+      <section class="stage-band ink" id="top" aria-labelledby="h-hero">
+        <div class="wrap">
+          <div class="hero-copy">
+            <h1 id="h-hero" data-i18n="hero.h1">“Done.” <em>Done with what, exactly?</em></h1>
+            <p class="lede" data-i18n="hero.lede">Check what meets the agreed requirements and where evidence is missing.</p>
+            <div class="cta">
+              <a class="btn lg primary" href="#install"><span data-i18n="cta.install">Start with the CLI</span><svg class="ic go" aria-hidden="true"><use href="#i-arrow" /></svg></a>
+              <a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/local-review.md" data-i18n="cta.review">Read the review guide</a>
             </div>
-            <div class="tool-mark-group">
-              <span class="tool-mark-label">Coding agents</span>
-              <ul class="tool-marks" aria-label="Supported IDE agents">
-                <li data-tool="cursor"><img src="https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/cursor.svg" alt="Cursor" loading="lazy" width="32" height="32" /></li>
-                <li data-tool="claude"><img src="https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/claudecode-color.svg" alt="Claude Code" loading="lazy" width="32" height="32" /></li>
-                <li><img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/openai.svg" alt="OpenAI Codex" loading="lazy" width="32" height="32" /></li>
+          </div>
+
+          <div class="scene3d" id="scene" data-phase="2">
+            <div class="scene-art" role="img" aria-label="Illustration: an approved scope, the agent's code and the test results stack up; the results face you as a scan reveals the missing 503 test result; the review then shows your decision options." data-i18n-attr="aria-label:story.aria">
+              <svg class="arch" viewBox="380 350 487 500" aria-hidden="true">
+                <path class="arch-body" d="M432 834 V555 C432 521 449 500 477 483 L586 417 C611 402 636 402 661 417 L770 483 C798 500 815 521 815 555 V834" />
+                <path class="arch-edge" pathLength="1" d="M432 834 V555 C432 521 449 500 477 483 L586 417 C611 402 636 402 661 417 L770 483 C798 500 815 521 815 555 V834" />
+              </svg>
+              <span class="floor" aria-hidden="true"></span>
+              <ul class="legend" aria-hidden="true">
+                <li style="--i: 2"><svg class="ic sm"><use href="#i-evidence" /></svg><span data-i18n="lg.tests">Test results</span></li>
+                <li style="--i: 1"><svg class="ic sm"><use href="#i-code" /></svg><span data-i18n="lg.code">Agent's code</span></li>
+                <li style="--i: 0"><svg class="ic sm"><use href="#i-scope" /></svg><span data-i18n="lg.scope">Approved scope</span></li>
               </ul>
+              <div class="stack" aria-hidden="true">
+                <div class="layer" style="--z: -1">
+                  <p class="lh"><svg class="ic sm"><use href="#i-scope" /></svg><span class="mono">health-endpoint.md</span></p>
+                  <p class="lr"><svg class="ic sm muted"><use href="#i-ok" /></svg><span class="mono">GET /health → 200</span></p>
+                  <p class="lr"><svg class="ic sm muted"><use href="#i-ok" /></svg><span class="mono">DB down → 503</span></p>
+                  <p class="lr"><svg class="ic sm muted"><use href="#i-ok" /></svg><span class="mono">No error text in body</span></p>
+                  <span class="stamp" data-i18n="s.stamp">Approved</span>
+                </div>
+                <div class="layer" style="--z: 0">
+                  <p class="lh"><svg class="ic sm"><use href="#i-code" /></svg><span class="mono">health.go</span></p>
+                  <pre class="lcode">func (s *Server) handleHealth(w, r) {
+  if err := s.db.PingContext(ctx); err != nil {
+<b>    writeJSON(w, 503, degraded)</b>
+    return
+  }
+  writeJSON(w, 200, ok)
+}</pre>
+                </div>
+                <div class="layer top" style="--z: 1">
+                  <p class="lh"><svg class="ic sm"><use href="#i-evidence" /></svg><span class="swap"><span class="before" data-i18n="l.claim">Agent: done · exit 0</span><span class="after"><span class="inspect-head" data-i18n="c.inspect">Evidence by criterion</span><span class="decision-head t-gap" data-i18n="c.head">1 item to check</span></span></span></p>
+                  <p class="lr" style="--i: 0"><span class="swap"><svg class="ic sm muted before"><use href="#i-ok" /></svg><svg class="ic sm t-pass after"><use href="#i-ok" /></svg></span><span><span class="mono">GET /health → 200</span><span class="swap lab"><span class="before muted" data-i18n="l.met">Agent says met</span><span class="after t-pass" data-i18n="r.pass">Test passed</span></span></span></p>
+                  <p class="lr miss" style="--i: 1"><span class="swap"><svg class="ic sm muted before"><use href="#i-ok" /></svg><svg class="ic sm t-gap after"><use href="#i-gap" /></svg></span><span><span class="mono">DB down → 503</span><span class="swap lab"><span class="before muted" data-i18n="l.met">Agent says met</span><span class="after t-gap" data-i18n="r.miss">Test result missing</span></span></span></p>
+                  <p class="lr" style="--i: 2"><span class="swap"><svg class="ic sm muted before"><use href="#i-ok" /></svg><svg class="ic sm t-read after"><use href="#i-word" /></svg></span><span><span class="mono">No error text in body</span><span class="swap lab"><span class="before muted" data-i18n="l.met">Agent says met</span><span class="after t-read" data-i18n="r.none">No test attached</span></span></span></p>
+                  <p class="lact"><span data-i18n="c.fix">Request a fix</span><span data-i18n="c.ok">Approve</span></p>
+                </div>
+                <span class="scanp"></span>
+              </div>
+              <div class="token" aria-hidden="true">
+                <span class="whole"><svg class="ic sm"><use href="#i-agent" /></svg>“Done.” · exit 0</span>
+                <span class="shard t-pass" style="--k: -1"><svg class="ic sm"><use href="#i-ok" /></svg>200</span>
+                <span class="shard t-gap" style="--k: 0"><svg class="ic sm"><use href="#i-gap" /></svg>503</span>
+                <span class="shard t-read" style="--k: 1"><svg class="ic sm"><use href="#i-word" /></svg>body</span>
+              </div>
             </div>
-          </article>
-          <article class="tool-route">
-            <div class="tool-route-copy">
-              <p class="tool-route-kicker mono">Local review</p>
-              <h3>Review in a browser or through Git</h3>
-              <p>Review in the CLI or open the optional local browser with <code>specgate ui</code>. For eligible reviews, share an unsigned review request alongside the Git diff. The originating Local store records the decision.</p>
+          </div>
+
+          <div class="ctl">
+            <p class="cap" id="cap">Accept or request changes for the delivery you reviewed.</p>
+            <div class="ctl-bar" hidden>
+              <div role="tablist" aria-label="Story steps" id="steps" data-i18n-attr="aria-label:steps.aria">
+                <button class="step" type="button" role="tab" id="step-0" aria-label="Agent says done" data-i18n-attr="aria-label:st.0" aria-controls="scene" aria-selected="false" tabindex="-1" data-step="0"><svg class="ic sm" aria-hidden="true"><use href="#i-agent" /></svg><span class="txt" data-i18n="st.0">Agent says done</span></button>
+                <button class="step" type="button" role="tab" id="step-1" aria-label="Inspect results" data-i18n-attr="aria-label:st.1" aria-controls="scene" aria-selected="false" tabindex="-1" data-step="1"><svg class="ic sm" aria-hidden="true"><use href="#i-evidence" /></svg><span class="txt" data-i18n="st.1">Inspect results</span></button>
+                <button class="step" type="button" role="tab" id="step-2" aria-label="You decide" data-i18n-attr="aria-label:st.2" aria-controls="scene" aria-selected="true" data-step="2"><svg class="ic sm" aria-hidden="true"><use href="#i-review" /></svg><span class="txt" data-i18n="st.2">You decide</span></button>
+              </div>
+              <span class="sep" aria-hidden="true"></span>
+              <button class="icon-btn" type="button" id="pp" aria-label="Play"><svg class="ic" aria-hidden="true"><use href="#i-play" /></svg></button>
+              <button class="icon-btn" type="button" id="replay" aria-label="Replay" data-i18n-attr="aria-label:pp.replay"><svg class="ic" aria-hidden="true"><use href="#i-replay" /></svg></button>
             </div>
-          </article>
+          </div>
         </div>
       </section>
 
-      <!-- HOW IT WORKS -->
-      <section class="band band-rail loop" id="how">
-        <span class="gate-node" aria-hidden="true"></span>
-        <div class="band-head reveal-up">
-          <h2>From agreed scope to your decision.</h2>
-          <p class="band-sub">
-            A handoff can lose scope, and a green test run can skip the case you agreed on.
-            SpecGate keeps the approved scope and delivery evidence together.
-          </p>
-        </div>
-        <ol class="loop-stages">
-          <li class="loop-stage reveal-up" style="--d: 0ms">
-            <div>
-              <span class="loop-verb">Publish</span>
-              <h3>Start with your own spec</h3>
-              <p>Author in OpenSpec, Spec Kit, Superpowers, Markdown, or your own tools. Map document roles for a versioned deposit, or use a quick change note for a small task.</p>
-            </div>
-            <div class="loop-artifact" aria-hidden="true">
-              <span class="la-head"><span>spec package</span><span>v0.3</span></span>
-              <span class="la-acc"># Health check</span><br />
-              <span class="la-dim">## Scope / non-goals</span><br />
-              <span class="la-dim">## Acceptance criteria</span><br />
-              <span>[ ] Unhealthy returns 503</span>
-            </div>
-          </li>
-          <li class="loop-stage reveal-up" style="--d: 60ms">
-            <div>
-              <span class="loop-verb">Hand off</span>
-              <h3>Hand off approved scope</h3>
-              <p>Approve one version and give the agent a Context Pack with the scope, criteria, and pinned documents. Resume the same work when you switch sessions.</p>
-            </div>
-            <div class="loop-artifact" aria-hidden="true">
-              <span class="la-head"><span>context-pack.md</span><span class="la-acc">approved</span></span>
-              <span>$ specgate work resume &lt;work-ref&gt; --json</span><br />
-              <span class="la-dim">scope, pinned docs, next action</span><br />
-              <span class="la-dim">for Cursor / Claude Code / Codex</span>
-            </div>
-          </li>
-          <li class="loop-stage reveal-up" style="--d: 120ms">
-            <div>
-              <span class="loop-verb">Review</span>
-              <h3>Review delivery evidence</h3>
-              <p>Compare the agent’s report and the observed results against the agreed criteria. When you pin an exact testcase, its absence can remain visible even if the suite exits green. Review any revision before accepting it.</p>
-            </div>
-            <div class="loop-artifact" aria-hidden="true">
-              <span class="la-head"><span>delivery review</span><span>example</span></span>
-              <span class="la-ok">selected unit test passed</span><br />
-              <span class="la-dim">awaiting human acceptance</span>
-            </div>
-          </li>
+      <section class="wrap band" id="fit" aria-labelledby="h-fit">
+        <h2 id="h-fit" class="reveal" data-i18n="fit.h">Keep your tools. SpecGate keeps the record.</h2>
+        <ol class="lane reveal">
+          <li style="--i: 0"><span class="tile"><svg class="ic" aria-hidden="true"><use href="#i-pen" /></svg></span><h3 data-i18n="fit.1h">You write the spec</h3><p>OpenSpec · Spec Kit · Superpowers · Markdown</p></li>
+          <li style="--i: 1"><span class="tile"><svg class="ic" aria-hidden="true"><use href="#i-code" /></svg></span><h3 data-i18n="fit.2h">Your agent writes the code</h3><p>Claude Code · Codex · Cursor</p></li>
+          <li class="mine" style="--i: 2"><span class="tile"><img src="logo.svg" alt="" width="36" height="36" /></span><h3 data-i18n="fit.3h">SpecGate keeps the record</h3><p data-i18n="fit.3p">See what each requirement has to back it up.</p></li>
         </ol>
+        <div class="workflow-block">
+          <h3 id="h-workflow" data-i18n="flow.h">From scope to decision</h3>
+          <ol class="workflow" aria-labelledby="h-workflow">
+            <li>
+              <svg class="ic" aria-hidden="true"><use href="#i-scope" /></svg>
+              <div><h4 data-i18n="flow.scope.h">Agree on scope</h4>
+                <p><span data-i18n="flow.scope.start">Keep the spec version you approved, with optional </span><a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/customize-governance.md#add-local-project-instructions" data-i18n="flow.scope.link">project rubrics for four readiness gates</a>.</p></div>
+            </li>
+            <li>
+              <svg class="ic" aria-hidden="true"><use href="#i-code" /></svg>
+              <div><h4 data-i18n="flow.agent.h">Let your agent work</h4>
+                <p><span data-i18n="flow.agent.start">Use the same Context Pack to </span><a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/operate-specgate.md#operate-local-cli" data-i18n="flow.agent.link">resume the same work</a><span data-i18n="flow.agent.end"> without losing the agreed scope</span>.</p></div>
+            </li>
+            <li>
+              <svg class="ic" aria-hidden="true"><use href="#i-evidence" /></svg>
+              <div><h4 data-i18n="flow.evidence.h">Review the evidence</h4>
+                <p><span data-i18n="flow.evidence.start">Spot gaps in cited code, command results, and </span><a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/observe-selected-tests.md#use-this-in-your-project" data-i18n="flow.evidence.link">selected tests</a>.</p></div>
+            </li>
+            <li>
+              <svg class="ic" aria-hidden="true"><use href="#i-review" /></svg>
+              <div><h4 data-i18n="flow.decision.h">Decide and hand off</h4>
+                <p><span data-i18n="flow.decision.start">Decide on the exact delivery you reviewed. Switching machines? </span><a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/operate-specgate.md#move-a-local-store-to-another-checkout" data-i18n="flow.decision.link">Move the entire Local store</a>.</p></div>
+            </li>
+          </ol>
+        </div>
       </section>
 
-      <!-- PRODUCT PROOF -->
-      <section class="band proof" id="delivery-proof">
-        <div class="proof-head reveal-up">
-          <div>
-            <p class="proof-kicker mono">15-second product tour</p>
-            <h2>A green suite missed the test.</h2>
+      <section class="wrap band" id="install" aria-labelledby="h-install">
+        <div class="install">
+          <div class="reveal">
+            <h2 id="h-install" data-i18n="ins.h">Start with the CLI.</h2>
+            <p class="muted">macOS · Linux · WSL2</p>
           </div>
-          <p id="delivery-proof-caption">
-            In this unit test example, the agent reports completion and the suite exits green.
-            The required 503 case is missing. The agent adds it and reruns the checks.
-            The developer reviews the new result and accepts that exact review.
-            <a class="accent" href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/try-delivery-proof.md">Run the delivery proof locally</a> with a small name-normalization example.
-          </p>
-        </div>
-        <figure class="proof-stage reveal-up">
-          <div class="proof-stage-bar mono" aria-hidden="true">
-            <span>Local CLI / unit test example</span>
-            <span class="proof-stage-state"><i></i>Illustrative workflow</span>
-          </div>
-          <video
-            class="proof-video"
-            controls
-            muted
-            playsinline
-            preload="metadata"
-            poster="./media/specgate-promo-poster.jpg"
-            aria-label="Silent 15-second SpecGate product tour"
-            aria-describedby="delivery-proof-caption"
-          >
-            <source src="./media/specgate-promo.mp4" type="video/mp4" />
-            Your browser cannot play this video.
-            <a href="./media/specgate-promo.mp4">Download the product tour</a>.
-          </video>
-          <figcaption class="proof-trace" aria-label="Product tour sequence">
-            <span>Agent says done</span>
-            <span>Required test is missing</span>
-            <span>Agent adds it and reruns</span>
-            <span>Developer accepts the review</span>
-          </figcaption>
-        </figure>
-      </section>
-
-      <!-- SEE IT RUN -->
-      <section class="band run" id="run">
-        <div class="band-head reveal-up">
-          <h2>A Local delivery in the terminal.</h2>
-          <p class="band-sub">
-            These abbreviated examples show the artifact path, a handoff to your agent,
-            a missing selected test, and an optional Git handoff.
-            <a class="accent" href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/observe-selected-tests.md">Try the selected-test walkthrough.</a>
-          </p>
-        </div>
-        <div class="cast-carousel reveal-up" data-carousel aria-label="SpecGate workflow demos">
-          <div class="cast-tabs" role="tablist" aria-label="Workflow demos">
-            <button id="cast-tab-publish" type="button" role="tab" aria-selected="true" aria-controls="cast-panel" data-cast-tab="0">Publish</button>
-            <button id="cast-tab-context" type="button" role="tab" aria-selected="false" aria-controls="cast-panel" data-cast-tab="1" tabindex="-1">Context</button>
-            <button id="cast-tab-verify" type="button" role="tab" aria-selected="false" aria-controls="cast-panel" data-cast-tab="2" tabindex="-1">Verify</button>
-            <button id="cast-tab-handoff" type="button" role="tab" aria-selected="false" aria-controls="cast-panel" data-cast-tab="3" tabindex="-1">Handoff</button>
-          </div>
-          <div class="termcast cast-stage gate-frame">
-            <i class="gf" aria-hidden="true"></i><i class="gf" aria-hidden="true"></i><i class="gf" aria-hidden="true"></i><i class="gf" aria-hidden="true"></i>
-            <div class="term-bar">
-              <span class="term-title mono" data-cast-title>specgate / approved artifact</span>
+          <div class="reveal" style="--d: 80ms">
+            <div class="win">
+              <div class="win-top">
+                <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <div class="seg" role="group" aria-label="Install options" data-i18n-attr="aria-label:ins.aria" id="ins-tabs" hidden>
+                  <button type="button" data-ins="cli" aria-pressed="true">CLI</button>
+                  <button type="button" data-ins="claude" aria-pressed="false">Claude Code</button>
+                  <button type="button" data-ins="prompt" aria-pressed="false" data-i18n="ins.tabPrompt">Ask your agent</button>
+                </div>
+              </div>
+              <div class="codebox" data-panel="cli">
+                <pre class="mono" id="code-cli" tabindex="0">curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/scripts/install-cli.sh | sh
+specgate init --mode local
+specgate doctor</pre>
+                <button class="btn sm copy" type="button" data-copy="code-cli" hidden><svg class="ic sm" aria-hidden="true"><use href="#i-copy" /></svg><span data-i18n="copy.copy">Copy</span></button>
+              </div>
+              <div class="codebox" data-panel="claude" hidden>
+                <pre class="mono" id="code-claude" tabindex="0">claude plugin marketplace add thanhtung2693/specgate
+claude plugin install specgate@specgate</pre>
+                <button class="btn sm copy" type="button" data-copy="code-claude" hidden><svg class="ic sm" aria-hidden="true"><use href="#i-copy" /></svg><span data-i18n="copy.copy">Copy</span></button>
+              </div>
+              <div class="codebox" data-panel="prompt" hidden>
+                <pre class="mono" id="code-prompt" data-i18n="ins.prompt">Prepare this change in SpecGate. Show me the scope, acceptance criteria, and any proposed check commands. Wait for my scope approval. Then implement the change, submit per-criterion evidence, and stop for my delivery decision.</pre>
+                <button class="btn sm copy" type="button" data-copy="code-prompt" hidden><svg class="ic sm" aria-hidden="true"><use href="#i-copy" /></svg><span data-i18n="copy.copy">Copy</span></button>
+              </div>
             </div>
-            <pre class="term-body mono" id="cast-panel" data-cast-body role="tabpanel" aria-live="polite" aria-labelledby="cast-tab-publish">$ specgate artifact publish --file artifact.json --preview
-  Artifact publish preview:
-  docs/spec.md	 spec	 4821 bytes
-  Preview only. Confirm before publishing to the Local store.
-$ specgate artifact publish --file artifact.json
-  Local snapshot created
-$ specgate gates check &lt;artifact-id&gt;
-  If IDE readiness tasks are pending, complete them before approval.
-$ specgate gates results &lt;artifact-id&gt;
-  Spec quality: pass
-$ specgate --yes artifact approve &lt;artifact-id&gt;
-  Human approval recorded (v1)</pre>
+            <span class="sr-only" id="copy-status" role="status"></span>
+            <p class="note" data-install-note="claude" hidden><span data-i18n="ins.first">Install the CLI first.</span> <a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/install-ide-plugins.md" data-i18n="ins.ide">IDE setup guide</a></p>
+            <p class="note"><span data-i18n="ins.then">Free Local CLI. Keep your coding agent. Open <code>specgate ui</code> if you prefer browser review.</span> <a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/quickstart.md" rel="noopener" data-i18n="ins.link">Full quickstart</a></p>
           </div>
-          <p class="cast-caption" data-cast-caption><span class="cast-caption-lead">Approve one snapshot.</span> Publish to your local store, run readiness checks, then record the human decision.</p>
         </div>
       </section>
 
-      <!-- WHERE IT FITS -->
-      <section class="band fit" id="compare">
-        <div class="band-head reveal-up">
-          <h2>Keep the tools you already use.</h2>
-          <p class="band-sub">
-            Keep authoring in your spec tools and execution in your agent and repo.
-            Use SpecGate to record what you agreed to and what came back.
-          </p>
-        </div>
-        <div class="fit-grid">
-          <div class="fit-side">
-            <article class="fit-card reveal-up" style="--d: 0ms">
-              <span class="cmp-tag mono"><svg class="ic" aria-hidden="true"><use href="#i-spec" /></svg> SPEC TOOLS</span>
-              <h3>Shape the work</h3>
-              <p>OpenSpec, Spec Kit, Superpowers, Markdown, and custom docs stay useful as authoring systems.</p>
-            </article>
-            <article class="fit-card reveal-up" style="--d: 60ms">
-              <span class="cmp-tag mono"><svg class="ic" aria-hidden="true"><use href="#i-code" /></svg> TRACKER + IDE</span>
-              <h3>Run execution</h3>
-              <p>Issues, sprints, code changes, PRs, and day-to-day collaboration stay in your existing stack.</p>
-            </article>
-          </div>
-          <article class="fit-card fit-card-hero gate-frame reveal-up" style="--d: 120ms">
-            <i class="gf" aria-hidden="true"></i><i class="gf" aria-hidden="true"></i><i class="gf" aria-hidden="true"></i><i class="gf" aria-hidden="true"></i>
-            <span class="cmp-tag mono accent"><svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg> SPECGATE</span>
-            <h3>Record the approved scope and evidence</h3>
-            <p>The Local CLI stores approved snapshots, readiness results, Context Packs, delivery evidence, and human decisions.</p>
-            <ul class="fit-owns">
-              <li>Approved spec versions</li>
-              <li>Readiness gates</li>
-              <li>Context Pack handoff</li>
-              <li>Evidence and human decisions</li>
-            </ul>
-          </article>
-        </div>
-      </section>
-
-      <!-- FAQ -->
-      <section class="band faq" id="faq">
-        <div class="band-head reveal-up">
-          <h2>Common questions.</h2>
-        </div>
-        <div class="faq-list">
-          <details class="faq-item reveal-up" open>
-            <summary><span>How is this different from spec tools?</span></summary>
-            <p>Your spec tool owns authoring. For versioned specs, SpecGate snapshots the documents, records human approval, and gives your coding agent the approved Context Pack. The agent implements in your repository.</p>
-          </details>
-          <details class="faq-item reveal-up">
-            <summary><span>What spec formats do you accept?</span></summary>
-            <p>Bring documents from OpenSpec, Spec Kit, Superpowers, Markdown, or your own tools and map their roles explicitly. For a small task, start with a quick change note and clear criteria.</p>
-          </details>
-          <details class="faq-item reveal-up">
-            <summary><span>Do we have to leave our coding agent?</span></summary>
-            <p>Use Cursor, Claude Code, Codex, or another agent that can follow the CLI workflow. The agent reads the Context Pack, implements the change, and reports back with evidence.</p>
-          </details>
-          <details class="faq-item reveal-up">
-            <summary><span>Do I need an LLM API key?</span></summary>
-            <p>SpecGate Local runs without an LLM API key. Your coding agent uses its own access when it implements work or completes assigned artifact readiness tasks.</p>
-          </details>
-          <details class="faq-item reveal-up">
-            <summary><span>What does the delivery review check?</span></summary>
-            <p>The CLI records the agent’s claims and any command or selected-test results it observes. A selected test result covers that testcase and runner. Review the evidence and decide whether the work meets your criteria.</p>
-          </details>
-          <details class="faq-item reveal-up">
-            <summary><span>How should we roll this out?</span></summary>
-            <p>Start with one work item in a trusted checkout. The CLI keeps its records in your local store. Use specgate ui for optional browser inspection and review, or try the <a class="accent" href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/local-notification-pilot.md">source-only notification pilot</a> from a running terminal.</p>
+      <section class="wrap band" id="faq" aria-labelledby="h-faq">
+        <h2 id="h-faq" class="reveal" data-i18n="faq.h">Quick answers</h2>
+        <div class="faq reveal">
+          <details open><summary><span data-i18n="faq.1q">Can green tests miss a requirement?</span><svg class="ic sm" aria-hidden="true"><use href="#i-chev" /></svg></summary><p data-i18n="faq.1a">Yes. The suite can pass while the agreed 503 case has no test result.</p></details>
+          <details><summary><span data-i18n="faq.2q">What does it actually check?</span><svg class="ic sm" aria-hidden="true"><use href="#i-chev" /></svg></summary><p data-i18n="faq.2a">Review agent claims, recorded check exit codes, and selected tests found in the observed reports. You decide whether the evidence is enough.</p></details>
+          <details id="delivery-proof"><summary><span data-i18n="faq.3q">Do I need the browser UI?</span><svg class="ic sm" aria-hidden="true"><use href="#i-chev" /></svg></summary><p data-i18n="faq.3a">The Local CLI records the scope, evidence, and decisions. Run <code>specgate ui</code> if you want to review and decide in a browser.</p>
+            <p><a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/try-delivery-proof.md" data-i18n="faq.proof">Run the delivery proof locally</a></p>
+            <video controls muted playsinline preload="none" width="1920" height="1080" poster="media/specgate-promo-poster.jpg" aria-label="SpecGate product tour" data-i18n-attr="aria-label:faq.video">
+              <source src="media/specgate-promo.mp4" type="video/mp4" />
+            </video>
           </details>
         </div>
       </section>
 
-      <!-- CTA -->
-      <section class="cta" id="cta">
-        <h2>Try one change locally.</h2>
-        <p class="cta-sub">The Local CLI needs no Docker or server. Pick one work item, agree on its checks, and review the results with your existing coding agent.</p>
-        <div class="hero-actions">
-          <a class="btn btn-accent btn-lg" href="https://github.com/thanhtung2693/specgate#quickstart">Run locally<svg class="ic ic-btn" aria-hidden="true"><use href="#i-arrow" /></svg></a>
-          <a class="btn btn-ghost btn-lg" href="https://github.com/thanhtung2693/specgate">View GitHub</a>
+      <section class="final ink" aria-labelledby="h-final">
+        <svg class="arch" viewBox="380 350 487 500" aria-hidden="true">
+          <path class="arch-body" d="M432 834 V555 C432 521 449 500 477 483 L586 417 C611 402 636 402 661 417 L770 483 C798 500 815 521 815 555 V834" />
+        </svg>
+        <div class="wrap">
+          <h2 id="h-final" class="reveal" data-i18n="fin.h">Try it on one small change.</h2>
+          <a class="btn lg primary reveal" href="#install"><span data-i18n="cta.install">Start with the CLI</span><svg class="ic go" aria-hidden="true"><use href="#i-arrow" /></svg></a>
         </div>
       </section>
     </main>
 
-    <footer class="footer">
-      <span class="brand-word">SpecGate</span>
-      <nav class="footer-links mono" aria-label="Footer">
-        <a href="https://github.com/thanhtung2693/specgate">GitHub</a>
-        <a href="#how">How it works</a>
-        <a href="#faq">FAQ</a>
+    <footer class="wrap foot">
+      <span>SpecGate · Apache-2.0</span>
+      <nav aria-label="Footer" data-i18n-attr="aria-label:foot.aria">
+        <a href="https://github.com/thanhtung2693/specgate" rel="noopener">GitHub</a>
+        <a href="https://github.com/thanhtung2693/specgate/tree/main/docs/using-specgate" rel="noopener" data-i18n="foot.docs">Docs</a>
       </nav>
-      <span class="mono dim">Local CLI for AI coding work</span>
     </footer>
-
-    <script src="./script.js"></script>
   </body>
 </html>

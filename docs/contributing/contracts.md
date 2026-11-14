@@ -181,6 +181,20 @@ shows that the list is unavailable. Settings indicates available CLI updates
 independently of the work count. Filtered queue results show the displayed
 count against the workspace total. Approved context uses each document's
 path and role to distinguish multiple snapshots with the same path.
+The **Scope** tab reads those approved snapshots. Criterion rows distinguish
+the agent claim, CLI-observed command and attached selected tests. An optional
+test without a binding is separate from missing required results. Queue layers
+indicate delivery presence, without inferring a delivery count.
+
+`GET /api/works` also includes each item's `review_id` and `completion_id`,
+both empty before its first delivery. The UI compares those identities with
+the currently inspected work during the existing 30-second poll. A newer
+delivery adds a notice without replacing evidence, a draft note, an open
+source view or a dialog. **View latest** reads fresh work details and decision
+identities on the same tab and retains the draft note for that work. Queue read
+errors still show that the list is unavailable. A confirmation opened after a
+new delivery is known directs the reviewer to **View latest**. An already open
+confirmation keeps its original identity for server-side revalidation.
 
 Decision writes name the exact reviewed work, review, completion and basis.
 The Local review API requires a note containing at least one non-whitespace

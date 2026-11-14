@@ -1,327 +1,252 @@
-/* SpecGate landing - interactions: theme toggle, scroll reveals, verdict console. */
+"use strict";
 
-/* ---------- Theme toggle ---------- */
-const themeToggle = document.querySelector(".theme-toggle");
+const strings = {
+  en: {
+    "cap.0": "The agent says done. Three criteria, one word.", "cap.1": "The suite passed. The 503 case still has no result.", "cap.2": "Accept or request changes for the delivery you reviewed.",
+    "pp.pause": "Pause", "pp.play": "Play", "copy.done": "Copied", "copy.fail": "Copy failed",
+  },
+  vi: {
+    skip: "Đến nội dung chính", "brand.aria": "Trang chủ SpecGate", "lang.aria": "Ngôn ngữ",
+    "theme.aria": "Đổi giao diện sáng hoặc tối", "steps.aria": "Các bước minh họa",
+    "story.aria": "Minh hoạ: phạm vi đã chốt, code của agent và kết quả test xếp chồng lên nhau; tờ kết quả xoay thẳng để bạn thấy test 503 còn thiếu, rồi hiện các lựa chọn để bạn quyết định.",
+    "hero.h1": "Agent báo xong. <em>Xong những gì?</em>", "hero.lede": "Xem bản giao đáp ứng yêu cầu nào, còn thiếu bằng chứng gì.",
+    "cta.review": "Xem hướng dẫn duyệt", "cta.install": "Bắt đầu với CLI",
+    "lg.tests": "Kết quả test", "lg.code": "Code của agent", "lg.scope": "Phạm vi đã chốt", "s.stamp": "Đã chốt",
+    "l.claim": "Agent: done · exit 0", "l.met": "Agent báo đạt", "r.pass": "Test đạt", "r.miss": "Thiếu kết quả test", "r.none": "Chưa gắn test riêng",
+    "c.inspect": "Bằng chứng từng tiêu chí", "c.head": "1 mục cần xem lại", "c.fix": "Gửi yêu cầu sửa", "c.ok": "Duyệt bản này",
+    "st.0": "Agent báo xong", "st.1": "Soi từng tiêu chí", "st.2": "Bạn quyết định",
+    "cap.0": "Agent báo xong. Vậy ba tiêu chí đã đạt chưa?", "cap.1": "Test xanh, nhưng ca 503 vẫn chưa có kết quả.", "cap.2": "Duyệt hoặc yêu cầu sửa đúng bản giao bạn vừa xem.",
+    "pp.pause": "Tạm dừng", "pp.play": "Chạy", "pp.replay": "Xem lại", "copy.copy": "Sao chép", "copy.done": "Đã chép", "copy.fail": "Chép thất bại",
+    "fit.h": "Công cụ quen cứ dùng. SpecGate lo khâu đối chiếu.", "fit.1h": "Bạn viết spec", "fit.2h": "Agent viết code",
+    "fit.3h": "SpecGate ghi lại", "fit.3p": "Xem bằng chứng cho từng yêu cầu đã chốt.",
+    "flow.h": "Từ yêu cầu đến quyết định",
+    "flow.scope.h": "Chốt yêu cầu", "flow.scope.start": "Giữ đúng phiên bản bạn đã duyệt, kèm ", "flow.scope.link": "rubric riêng của dự án",
+    "flow.agent.h": "Agent làm", "flow.agent.start": "Dùng lại Context Pack để agent ", "flow.agent.link": "tiếp tục đúng việc", "flow.agent.end": " khi đổi phiên",
+    "flow.evidence.h": "Kiểm chứng", "flow.evidence.start": "Xem tiêu chí nào còn thiếu bằng chứng từ code, lệnh đã chạy hay ", "flow.evidence.link": "test đã chọn",
+    "flow.decision.h": "Duyệt và chuyển giao", "flow.decision.start": "Duyệt hoặc yêu cầu sửa đúng bản đã xem. Đổi máy thì ", "flow.decision.link": "chuyển toàn bộ kho dữ liệu Local",
+    "ins.h": "Bắt đầu với CLI.", "ins.aria": "Cách cài đặt", "ins.tabPrompt": "Nhờ agent",
+    "ins.prompt": "Dùng SpecGate để chuẩn bị thay đổi này. Cho tôi xem phạm vi, tiêu chí chấp nhận và các lệnh kiểm tra đề xuất. Chờ tôi duyệt phạm vi, sau đó triển khai, nộp bằng chứng theo từng tiêu chí và dừng để tôi quyết định có chấp nhận kết quả hay không.",
+    "ins.first": "Cài CLI trước khi cài plugin.", "ins.ide": "Hướng dẫn cài plugin",
+    "ins.then": "CLI miễn phí, chạy cục bộ với agent bạn đang dùng. Muốn duyệt trên trình duyệt thì chạy <code>specgate ui</code>.", "ins.link": "Hướng dẫn bắt đầu",
+    "faq.h": "Hỏi nhanh", "faq.1q": "Test xanh vẫn có thể sót yêu cầu?", "faq.1a": "Có. Cả bộ test có thể xanh dù ca 503 đã chốt vẫn chưa có kết quả.",
+    "faq.2q": "SpecGate kiểm tra những gì?", "faq.2a": "Bạn xem được agent báo gì, mã thoát của các lệnh đã chạy và kết quả của những test đã chọn xuất hiện trong báo cáo. Bạn quyết định bằng chứng đã đủ chưa.",
+    "faq.3q": "Có bắt buộc dùng trình duyệt không?", "faq.3a": "CLI Local ghi lại phạm vi, bằng chứng và quyết định. Nếu muốn xem và duyệt qua trình duyệt, chạy <code>specgate ui</code>.",
+    "faq.proof": "Tự chạy ví dụ về bằng chứng bàn giao", "faq.video": "Video giới thiệu SpecGate",
+    "fin.h": "Thử với một thay đổi nhỏ xem.", "foot.aria": "Cuối trang", "foot.docs": "Tài liệu",
+  },
+};
 
-function paintToggle(theme) {
-  if (!themeToggle) return;
-  const isLight = theme === "light";
-  const nextLabel = isLight ? "Dark" : "Light";
-  themeToggle.setAttribute("aria-pressed", String(isLight));
-  themeToggle.setAttribute("aria-label", `${nextLabel} theme`);
-  const label = themeToggle.querySelector(".theme-label");
-  if (label) label.textContent = nextLabel;
+const root = document.documentElement;
+const select = (selector) => document.querySelector(selector);
+const all = (selector) => [...document.querySelectorAll(selector)];
+
+function readPreference(key) {
+  try { return localStorage.getItem(key); } catch { return null; }
 }
 
-paintToggle(document.documentElement.dataset.theme || "dark");
+function savePreference(key, value) {
+  try { localStorage.setItem(key, value); } catch { /* Preferences are optional. */ }
+}
 
-themeToggle?.addEventListener("click", () => {
-  const next = (document.documentElement.dataset.theme || "dark") === "light" ? "dark" : "light";
-  document.documentElement.dataset.theme = next;
-  localStorage.setItem("specgate-landing-theme", next);
-  paintToggle(next);
+const languageButtons = all("[data-lang]");
+const translations = all("[data-i18n], [data-i18n-attr]").map((element) => {
+  const [attribute, key] = element.dataset.i18nAttr?.split(":") ?? [];
+  return {
+    element,
+    attribute,
+    key: element.dataset.i18n ?? key,
+    english: attribute ? element.getAttribute(attribute) : element.innerHTML,
+  };
 });
 
-/* ---------- Scroll reveals ---------- */
-const revealObserver = new IntersectionObserver(
-  (entries, observer) => {
-    entries.forEach((entry) => {
-      if (entry.isIntersecting) {
-        entry.target.classList.add("in");
-        observer.unobserve(entry.target);
-      }
-    });
-  },
-  { rootMargin: "0px 0px -4% 0px", threshold: 0.05 },
-);
+const theme = select('[data-action="theme"]');
+theme.addEventListener("click", () => {
+  root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+  savePreference("specgate-landing-theme", root.dataset.theme);
+});
 
-document.querySelectorAll(".reveal-up").forEach((el) => revealObserver.observe(el));
+const controls = select(".ctl-bar");
+const scene = select("#scene");
+const steps = all("[data-step]");
+const caption = select("#cap");
+const player = select("#pp");
+const playerIcon = select("#pp use");
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+const holds = [3600, 4400, 1600];
+let at = 2;
+let playing = false;
+let timer;
+let remaining = 0;
+let started = 0;
+let pausedAnimations = [];
 
-/* ---------- Verdict console ---------- */
-const chip = document.querySelector("#verdict-chip");
-const checks = Array.from(document.querySelectorAll("#check-list li"));
-const probes = Array.from(document.querySelectorAll("#console-checks .chk"));
-const replayBtn = document.querySelector("#console-replay");
-
-let consoleTimers = [];
-const prefersReducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-function showConsoleState(state, label) {
-  chip.setAttribute("data-state", state);
-  chip.textContent = label;
+function string(key) {
+  return strings[root.lang]?.[key] ?? strings.en[key];
 }
 
-function runConsole() {
-  consoleTimers.forEach(clearTimeout);
-  consoleTimers = [];
-  if (!chip || prefersReducedMotion) return;
-
-  showConsoleState("run", "Agent says done");
-  checks.forEach((li) => li.setAttribute("data-status", "pending"));
-  probes.forEach((probe) => probe.setAttribute("data-on", "0"));
-  const stepIn = (fn, delay) => consoleTimers.push(setTimeout(fn, delay));
-  stepIn(() => {
-    showConsoleState("run", "Reading report");
-    probes.forEach((probe) => probe.setAttribute("data-on", "1"));
-  }, 500);
-  checks.forEach((li, i) => {
-    stepIn(() => li.setAttribute("data-status", li.dataset.result), 800 + i * 430);
-  });
-  stepIn(() => showConsoleState("gap", "Evidence gap"), 1330);
+function updatePlayer() {
+  caption.textContent = string(`cap.${at}`);
+  playerIcon.setAttribute("href", playing ? "#i-pause" : "#i-play");
+  player.setAttribute("aria-label", string(playing ? "pp.pause" : "pp.play"));
 }
 
-replayBtn?.addEventListener("click", runConsole);
-
-if (chip && checks.length) {
-  // Kick off once the console scrolls into view.
-  const consoleEl = document.querySelector(".console");
-  if (consoleEl) {
-    const once = new IntersectionObserver(
-      (entries, observer) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            runConsole();
-            observer.disconnect();
-          }
-        });
-      },
-      { threshold: 0.4 },
-    );
-    once.observe(consoleEl);
+function setLanguage(language) {
+  root.lang = language === "vi" ? "vi" : "en";
+  for (const { element, attribute, key, english } of translations) {
+    const value = string(key) ?? english;
+    if (attribute) element.setAttribute(attribute, value);
+    else element.innerHTML = value;
   }
+  for (const button of languageButtons) button.setAttribute("aria-pressed", String(button.dataset.lang === root.lang));
+  updatePlayer();
 }
 
-/* ---------- Scrollspy nav ---------- */
-const navLinks = Array.from(document.querySelectorAll(".nav-links a"));
-const spyTargets = navLinks
-  .map((a) => {
-    const id = a.getAttribute("href")?.slice(1);
-    const section = id && document.getElementById(id);
-    return section ? { a, section } : null;
-  })
-  .filter(Boolean);
-
-if (spyTargets.length) {
-  const spy = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        const match = spyTargets.find((t) => t.section === entry.target);
-        if (!match) return;
-        navLinks.forEach((a) => a.classList.remove("active"));
-        match.a.classList.add("active");
-      });
-    },
-    { rootMargin: "-45% 0px -50% 0px" },
-  );
-  spyTargets.forEach((t) => spy.observe(t.section));
+function showPhase(index) {
+  for (const animation of pausedAnimations) animation.finish();
+  pausedAnimations = [];
+  at = index;
+  remaining = holds[index] ?? 0;
+  scene.dataset.phase = String(index);
+  scene.setAttribute("aria-labelledby", steps[index].id);
+  scene.classList.remove("go");
+  if (index === 0) {
+    // Restart the entrance even when replay begins on the first step.
+    void scene.offsetWidth;
+    scene.classList.add("go");
+  }
+  for (const [position, step] of steps.entries()) {
+    step.setAttribute("aria-selected", String(position === index));
+    step.tabIndex = position === index ? 0 : -1;
+  }
+  updatePlayer();
 }
 
-/* ---------- See-it-run: current CLI value path ---------- */
-(function initCastCarousel() {
-  const root = document.querySelector("[data-carousel]");
-  if (!root) return;
+function stopClock() {
+  clearTimeout(timer);
+  playing = false;
+  updatePlayer();
+}
 
-  const CASTS = [
-    {
-      title: "specgate / approved artifact",
-      cap: { t: "Approve one snapshot.", d: "Publish to your local store, run readiness checks, then record the human decision." },
-      lines: [
-        { k: "cmd", t: "$ specgate artifact publish --file artifact.json --preview" },
-        { k: "out", t: "  Artifact publish preview:" },
-        { k: "out", t: "  docs/spec.md  spec  4821 bytes" },
-        { k: "dim", t: "  Preview only. Confirm before publishing to the Local store." },
-        { k: "cmd", t: "$ specgate artifact publish --file artifact.json" },
-        { k: "ok", t: "  Local snapshot created" },
-        { k: "cmd", t: "$ specgate gates check <artifact-id>" },
-        { k: "dim", t: "  If IDE readiness tasks are pending, complete them before approval." },
-        { k: "cmd", t: "$ specgate gates results <artifact-id>" },
-        { k: "ok", t: "  Spec quality: passed" },
-        { k: "cmd", t: "$ specgate --yes artifact approve <artifact-id>" },
-        { k: "pass", t: "  Human approval recorded (v1)" },
-      ],
-    },
-    {
-      title: "specgate / approved context",
-      cap: { t: "Resume the right work.", d: "A resumed session uses the same approved criteria and pinned documents." },
-      lines: [
-        { k: "cmd", t: "$ specgate --yes artifact promote <artifact-id>" },
-        { k: "cmd", t: "$ specgate work create --feature local-healthcheck --title \"Add health check\" --ac \"Unhealthy returns 503 @check:unit\"" },
-        { k: "cmd", t: "$ specgate work list --phase ready" },
-        { k: "out", t: "  Ready  Add health check" },
-        { k: "cmd", t: "$ specgate work resume <work-ref> --json" },
-        { k: "cmd", t: "$ specgate work context <work-ref> --document docs/spec.md --role spec --json" },
-        { k: "out", t: "  Source: approved Context Pack" },
-        { k: "out", t: "  Scope: health status function and unit tests" },
-        { k: "out", t: "  Non-goal: deployment or monitoring changes" },
-        { k: "pass", t: "  Implementation contract loaded" },
-        { k: "cmd", t: "$ specgate --yes work checkpoint <work-ref> --note handoff --json" },
-        { k: "dim", t: "  Keep the returned checkpoint ID for an explicit later comparison." },
-      ],
-    },
-    {
-      title: "specgate / delivery review",
-      cap: { t: "See which test ran.", d: "The suite exits zero while omitting the agreed unit test. After the agent adds it, inspect the new result before deciding." },
-      lines: [
-        { k: "dim", t: "# report-enabled Local pin configured; follow the linked walkthrough" },
-        { k: "cmd", t: "$ specgate delivery report <work-ref> --init --json" },
-        { k: "dim", t: "  Use the returned data.path as <completion-path>; fill in the evidence." },
-        { k: "cmd", t: "$ specgate change submit <work-ref> --file <completion-path> --run-checks --yes" },
-        { k: "out", t: "  State: implementation" },
-        { k: "out", t: "  Evidence: Evidence gaps found" },
-        { k: "warn", t: "  [unmet] Unhealthy returns 503" },
-        { k: "warn", t: "  selected testcase is missing" },
-        { k: "dim", t: "# Agent adds the unit test, updates the report, and keeps the reviewed pin." },
-        { k: "cmd", t: "$ specgate change submit <work-ref> --file <completion-path> --run-checks --yes" },
-        { k: "out", t: "  State: awaiting_acceptance" },
-        { k: "cmd", t: "$ specgate change status <work-ref> --checkpoint <checkpoint-id> --detail" },
-        { k: "pass", t: "  selected test: test/unhealthy returns 503 passed" },
-        { k: "warn", t: "  stale risk: watched input health.test.mjs changed" },
-        { k: "out", t: "  Next actor: human_reviewer" },
-        { k: "dim", t: "  Human approval remains required. Inspect the changed test before deciding." },
-        { k: "dim", t: "# Human action after review. Use the exact command returned by status." },
-        { k: "cmd", t: "$ specgate --yes change accept <work-ref> --review-id <review-id> --basis-digest <basis-digest> --checkpoint <checkpoint-id>" },
-      ],
-    },
-    {
-      title: "specgate / review handoff",
-      cap: { t: "Share a review request.", d: "For eligible reviews, a teammate can read the request beside the diff. The originating Local store records the decision." },
-      lines: [
-        { k: "dim", t: "# From the checkout with a reviewed delivery eligible for export:" },
-        { k: "cmd", t: "$ specgate delivery handoff export <work-ref> --file review.json" },
-        { k: "dim", t: "# Inspect the unsigned request before committing it alongside the change." },
-        { k: "cmd", t: "$ specgate delivery handoff show --file review.json" },
-        { k: "out", t: "  Read the work, completion evidence and recorded delivery review." },
-        { k: "dim", t: "  Record the human decision in the originating Local store." },
-      ],
-    },
-  ];
+function pause() {
+  if (playing) remaining = Math.max(0, remaining - (performance.now() - started));
+  stopClock();
+  pausedAnimations = scene.getAnimations({ subtree: true }).filter((animation) => animation.playState === "running");
+  for (const animation of pausedAnimations) animation.pause();
+}
 
-  const segs = Array.from(root.querySelectorAll("[data-cast-tab]"));
-  if (segs.length !== CASTS.length) return;
-
-  const titleEl = root.querySelector("[data-cast-title]");
-  const body = root.querySelector("[data-cast-body]");
-  const capEl = root.querySelector("[data-cast-caption]");
-  const N = CASTS.length;
-  if (!titleEl || !body || !capEl) return;
-
-  let timers = [];
-  let runId = 0;
-
-  const clear = () => {
-    timers.forEach(clearTimeout);
-    timers = [];
-  };
-
-  function buildLines(cast) {
-    body.replaceChildren();
-    return cast.lines.map((ln) => {
-      const span = document.createElement("span");
-      span.className = "tl show";
-      span.dataset.k = ln.k;
-      body.appendChild(span);
-      body.appendChild(document.createTextNode("\n"));
-      return { ...ln, span };
-    });
-  }
-
-  function setActive(idx) {
-    const cap = CASTS[idx].cap;
-    titleEl.textContent = CASTS[idx].title;
-    body.setAttribute("aria-labelledby", segs[idx].id);
-    capEl.style.opacity = "0";
-    timers.push(
-      setTimeout(() => {
-        const title = document.createElement("b");
-        title.textContent = cap.t;
-        const detail = document.createElement("span");
-        detail.textContent = cap.d;
-        capEl.replaceChildren(title, document.createTextNode(" "), detail);
-        capEl.style.opacity = "1";
-      }, 180),
-    );
-    segs.forEach((b, i) => {
-      b.setAttribute("aria-selected", String(i === idx));
-      b.setAttribute("tabindex", i === idx ? "0" : "-1");
-    });
-  }
-
-  function play(idx) {
-    clear();
-    const token = ++runId;
-    setActive(idx);
-    const cast = CASTS[idx];
-    const lines = buildLines(cast);
-
-    if (prefersReducedMotion) {
-      lines.forEach((l) => (l.span.textContent = l.t));
+function schedule() {
+  started = performance.now();
+  timer = setTimeout(() => {
+    if (at === 2) {
+      remaining = 0;
+      stopClock();
       return;
     }
+    showPhase(at + 1);
+    schedule();
+  }, remaining);
+}
 
-    let li = 0;
-    const next = () => {
-      if (token !== runId) return;
-      if (li >= lines.length) {
-        timers.push(
-          setTimeout(() => {
-            if (token === runId) play((idx + 1) % N);
-          }, 2400),
-        );
-        return;
-      }
-      const l = lines[li++];
-      if (l.k === "cmd") {
-        l.span.classList.add("cur");
-        let c = 0;
-        const type = () => {
-          if (token !== runId) return;
-          l.span.textContent = l.t.slice(0, c);
-          if (c < l.t.length) {
-            c++;
-            timers.push(setTimeout(type, 12));
-          } else {
-            l.span.classList.remove("cur");
-            timers.push(setTimeout(next, 220));
-          }
-        };
-        type();
-      } else {
-        l.span.textContent = l.t;
-        timers.push(setTimeout(next, 240));
-      }
-    };
-    timers.push(setTimeout(next, 220));
-  }
+function play(restart) {
+  stopClock();
+  if (restart || (at === 2 && remaining === 0)) showPhase(0);
+  for (const animation of pausedAnimations) animation.play();
+  pausedAnimations = [];
+  playing = true;
+  updatePlayer();
+  schedule();
+}
 
-  segs.forEach((button, i) => {
-    button.addEventListener("click", () => play(i));
-    button.addEventListener("keydown", (event) => {
-      const keys = { ArrowRight: 1, ArrowLeft: -1 };
-      let next = keys[event.key] === undefined ? i : (i + keys[event.key] + N) % N;
-      if (event.key === "Home") next = 0;
-      if (event.key === "End") next = N - 1;
-      if (next === i && !["Home", "End"].includes(event.key)) return;
-      event.preventDefault();
-      segs[next].focus();
-      play(next);
-    });
+player.addEventListener("click", () => {
+  if (playing) pause();
+  else play(false);
+});
+select("#replay").addEventListener("click", () => play(true));
+const stepList = select("#steps");
+stepList.addEventListener("focusin", () => { if (playing) pause(); });
+stepList.addEventListener("click", (event) => {
+  const step = event.target.closest("[data-step]");
+  if (!step) return;
+  stopClock();
+  showPhase(Number(step.dataset.step));
+});
+stepList.addEventListener("keydown", (event) => {
+  const next = { ArrowRight: (at + 1) % steps.length, ArrowLeft: (at + steps.length - 1) % steps.length, Home: 0, End: steps.length - 1 }[event.key];
+  if (next === undefined) return;
+  event.preventDefault();
+  stopClock();
+  showPhase(next);
+  steps[next].focus();
+});
+reducedMotion.addEventListener("change", ({ matches }) => {
+  if (!matches) return;
+  stopClock();
+  showPhase(2);
+  remaining = 0;
+});
+
+const installTabs = select("#ins-tabs");
+installTabs.addEventListener("click", (event) => {
+  const tab = event.target.closest("[data-ins]");
+  if (!tab) return;
+  for (const button of all("[data-ins]")) button.setAttribute("aria-pressed", String(button === tab));
+  for (const panel of all("[data-panel]")) panel.hidden = panel.dataset.panel !== tab.dataset.ins;
+  for (const note of all("[data-install-note]")) note.hidden = note.dataset.installNote !== tab.dataset.ins;
+});
+
+const copyStatus = select("#copy-status");
+const copyTimers = new WeakMap();
+for (const button of all("[data-copy]")) {
+  button.addEventListener("click", async () => {
+    clearTimeout(copyTimers.get(button));
+    const label = button.querySelector("span");
+    copyStatus.textContent = "";
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(document.getElementById(button.dataset.copy).textContent.trim());
+      copied = true;
+    } catch { /* The command remains selectable. */ }
+    label.textContent = string(copied ? "copy.done" : "copy.fail");
+    copyStatus.textContent = label.textContent;
+    button.classList.toggle("done", copied);
+    copyTimers.set(button, setTimeout(() => {
+      label.textContent = string("copy.copy") ?? "Copy";
+      button.classList.remove("done");
+    }, 1500));
   });
+  button.hidden = false;
+}
 
-  if (prefersReducedMotion) {
-    play(0);
-    return;
-  }
-  const io = new IntersectionObserver(
-    (entries, observer) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          if (runId === 0) play(0);
-          observer.disconnect();
-        }
-      });
-    },
-    { threshold: 0.4 },
-  );
-  io.observe(root);
-})();
+function openLinkedTour() {
+  if (location.hash === "#delivery-proof") select("#delivery-proof").open = true;
+}
+window.addEventListener("hashchange", openLinkedTour);
+openLinkedTour();
+
+if (!reducedMotion.matches && "IntersectionObserver" in window) {
+  root.classList.add("motion");
+  const observer = new IntersectionObserver((entries) => {
+    for (const { isIntersecting, target } of entries) {
+      if (!isIntersecting) continue;
+      target.classList.add("in");
+      observer.unobserve(target);
+    }
+  }, { rootMargin: "0px 0px -6% 0px" });
+  for (const section of all(".reveal, .workflow-block")) observer.observe(section);
+}
+
+for (const button of languageButtons) {
+  button.addEventListener("click", () => {
+    setLanguage(button.dataset.lang);
+    savePreference("specgate-landing-lang", root.lang);
+  });
+}
+setLanguage(readPreference("specgate-landing-lang"));
+select('[data-i18n-attr="aria-label:lang.aria"]').hidden = false;
+theme.hidden = false;
+installTabs.hidden = false;
+controls.hidden = false;
+scene.setAttribute("role", "tabpanel");
+scene.setAttribute("aria-labelledby", steps[at].id);
+scene.tabIndex = 0;
+if (!reducedMotion.matches) play(true);
