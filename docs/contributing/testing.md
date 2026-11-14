@@ -9,6 +9,7 @@ broaden only when the change crosses module or contract boundaries.
 | Layer | Use for | Command |
 |---|---|---|
 | CLI unit and harness tests | Commands, SQLite, and embedded review behavior | `make test` in the CLI module |
+| Landing and demo | Public pages, shared presentation, and sample decisions | `node scripts/build-landing-demo.mjs` then `node --test app/landing/landing.test.mjs app/landing/demo/demo.test.mjs` |
 | Release readiness | Packaging, public docs, installer, and pilot | `node --test docs/release-readiness.test.mjs scripts/install-cli.test.mjs scripts/local-review-notifications.test.mjs` |
 | Browser walkthrough | Local review UI and landing paths | Render desktop and narrow viewports and compare with CLI readback |
 
@@ -128,6 +129,10 @@ temporary Local configuration and state. Start the candidate `specgate ui`
 process, inspect the review, and compare stable IDs and authority with CLI
 status. Check desktop and narrow layout, keyboard focus, and action conflict
 behavior where relevant. A browser smoke validates rendering and routing.
+
+For the public demo, verify missing evidence and cited source in the example,
+try a sample decision, and reset it. Use desktop and narrow viewports, both
+languages and themes, keyboard navigation, and reduced motion.
 
 ## Related
 

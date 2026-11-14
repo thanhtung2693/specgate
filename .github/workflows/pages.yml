@@ -5,12 +5,14 @@ on:
     branches: ["main"]
     paths:
       - "app/landing/**"
-      - "media/specgate-promo/**"
+      - "app/cli/internal/command/local_ui_assets/**"
+      - "scripts/build-landing-demo.mjs"
       - ".github/workflows/pages.yml"
   pull_request:
     paths:
       - "app/landing/**"
-      - "media/specgate-promo/**"
+      - "app/cli/internal/command/local_ui_assets/**"
+      - "scripts/build-landing-demo.mjs"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -33,8 +35,8 @@ jobs:
 
       - name: Validate landing page
         run: |
-          node --test app/landing/landing.test.mjs
-          node --test media/specgate-promo/promo.test.mjs
+          node scripts/build-landing-demo.mjs
+          node --test app/landing/landing.test.mjs app/landing/demo/demo.test.mjs
           node -c app/landing/script.js
 
       - name: Upload GitHub Pages artifact

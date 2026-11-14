@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta name="description" content="Try a SpecGate Local review with sample evidence, code, and decisions.">
+    <title>SpecGate · Interactive demo</title>
+    <link rel="icon" href="../logo.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./shared/style.css">
+    <link rel="stylesheet" href="./demo.css">
+    <script defer src="./shared/core.js"></script>
+    <script defer src="./shared/locale.js"></script>
+    <script defer src="./shared/assets/vendor/marked/marked.umd.js"></script>
+    <script defer src="./shared/markdown.js"></script>
+    <script defer src="./shared/presentation.js"></script>
+    <script defer src="./shared/source-view.js"></script>
+    <script type="module" src="./demo.mjs"></script>
+  </head>
+  <body>
+    <a class="skip" href="#main" id="skip">Skip to content</a>
+    <header class="navbar">
+      <div class="navbar-inner wrap">
+        <a href="../" class="brand"><img src="../logo.svg" alt="" width="26" height="26">SpecGate</a>
+        <div class="nav-controls" id="controls"></div>
+      </div>
+      <aside aria-label="Demo">
+        <div class="wrap demo-banner" id="demo-banner">Demo · sample data · changes only affect this demo.</div>
+      </aside>
+    </header>
+    <main id="main" class="wrap" tabindex="-1">
+      <noscript><p>Enable JavaScript to explore the interactive demo. <a href="../">Return to SpecGate</a>.</p></noscript>
+    </main>
+    <dialog id="dialog" aria-labelledby="dialog-title"></dialog>
+    <div class="visually-hidden" role="status" id="feedback"></div>
+  </body>
+</html>

@@ -55,7 +55,9 @@ jobs:
         run: bash .github/scripts/check-legacy-cli.sh
 
       - name: Verify release-facing contracts
-        run: node --test docs/release-readiness.test.mjs .github/scripts/release-notes.test.mjs scripts/install-cli.test.mjs scripts/local-review-notifications.test.mjs app/cli/test/e2e/local-delivery-proof.test.mjs app/landing/landing.test.mjs media/specgate-promo/promo.test.mjs
+        run: |
+          node scripts/build-landing-demo.mjs
+          node --test docs/release-readiness.test.mjs .github/scripts/release-notes.test.mjs scripts/install-cli.test.mjs scripts/local-review-notifications.test.mjs app/cli/test/e2e/local-delivery-proof.test.mjs app/landing/landing.test.mjs app/landing/demo/demo.test.mjs
       - run: make check-plugins
 
   verify-windows-cli:

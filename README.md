@@ -17,13 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="https://thanhtung2693.github.io/specgate/#delivery-proof">
-    <img src="app/landing/media/specgate-promo-poster.jpg" alt="Watch the 15-second SpecGate product tour" width="960" />
-  </a>
-</p>
-
-<p align="center">
-  <a href="https://thanhtung2693.github.io/specgate/#delivery-proof"><strong>Watch 15s video</strong></a>
+  <a href="https://thanhtung2693.github.io/specgate/demo/"><strong>Try the UI demo</strong></a>
   · <a href="docs/using-specgate/guides/try-delivery-proof.md"><strong>Run the delivery proof locally</strong></a>
 </p>
 
@@ -36,7 +30,7 @@ human decision in a Local SQLite store.
 
 When several features move at once, a new agent session can pick up an older
 spec or miss a criterion. An agent can say the work is done when the existing
-name-normalization tests pass. In the delivery demo, the approved criterion
+name-normalization tests pass. In the local delivery proof, the approved criterion
 **Reject empty names after trimming** still has a skipped required check.
 SpecGate shows the evidence gap against that criterion. The agent adds the
 missing behavior and test, reruns the checks, and submits again. You decide

@@ -13,6 +13,10 @@ make test
 make lint
 ```
 
+Run `node scripts/build-landing-demo.mjs` before serving `app/landing` from
+the source checkout. This copies the current Local review presentation assets
+into the public demo. See the [landing preview instructions](../../app/landing/README.md).
+
 For isolated Local tests or dogfood, create a disposable Git checkout and use
 a separate temporary configuration file via `SPECGATE_CONFIG_PATH`. Initialize
 a separate Local store using `specgate init --local-dir`. See
