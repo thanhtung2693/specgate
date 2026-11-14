@@ -57,16 +57,18 @@ test("every localizable label has a Vietnamese translation", () => {
   for (const key of Object.keys(strings.en)) assert.ok(strings.vi[key], key);
 });
 
-test("the README tour remains playable at its Pages anchor", () => {
+test("the landing and README open the sample UI demo and keep real setup separate", () => {
   const rootReadme = read("../../README.md");
-  assert.match(rootReadme, /href="https:\/\/thanhtung2693\.github\.io\/specgate\/#delivery-proof"/);
-  assert.match(rootReadme, /src="app\/landing\/media\/specgate-promo-poster\.jpg"/);
+  assert.match(html, /<a href="demo\/" data-i18n="cta.demo">Try the UI demo<\/a>/);
+  assert.ok(existsSync(new URL("demo/index.html", here)));
+  assert.match(rootReadme, /href="https:\/\/thanhtung2693\.github\.io\/specgate\/demo\/"[^>]*><strong>Try the UI demo<\/strong>/);
   const details = html.match(/<details id="delivery-proof">([\s\S]*?)<\/details>/)?.[1];
   assert.ok(details);
-  assert.match(details, /try-delivery-proof\.md/);
-  assert.match(details, /<video\b[^>]*controls[^>]*muted[^>]*playsinline[^>]*preload="none"/);
-  assert.doesNotMatch(details, /\bautoplay\b/);
-  for (const file of ["media/specgate-promo-poster.jpg", "media/specgate-promo.mp4"]) assert.ok(existsSync(new URL(file, here)));
+  assert.match(details, /href="demo\/"[^>]+>Try the UI demo/);
+  assert.match(details, /guides\/local-review\.md/);
+  assert.match(rootReadme, /try-delivery-proof\.md/);
+  assert.match(read("README.md"), /node scripts\/build-landing-demo\.mjs/);
+  assert.doesNotMatch(html + js + css + rootReadme + read("README.md"), /<video\b|Watch 15s|specgate-promo|HyperFrames/i);
 });
 
 test("metadata keeps the deployed canonical URL and structured public copy", () => {
@@ -87,7 +89,7 @@ test("metadata keeps the deployed canonical URL and structured public copy", () 
   }
 });
 
-test("fonts, media and icons are bundled with no runtime network dependency", () => {
+test("fonts and icons are bundled with no runtime network dependency", () => {
   assert.doesNotMatch(html, /<(script|img|video|source|iframe)\b[^>]*src="https?:/);
   assert.doesNotMatch(css + js, /@import|url\(\s*["']?https?:|\bfetch\(|XMLHttpRequest|WebSocket|sendBeacon/);
   for (const [, ref] of html.matchAll(/(?:href|src|poster)="([^"#][^"]*)"/g)) {

@@ -27,7 +27,8 @@ and [IDE setup guide](../../docs/using-specgate/guides/install-ide-plugins.md).
 The CLI owns Local scope, evidence, and decisions. The
 [Local review guide](../../docs/using-specgate/guides/local-review.md) explains
 the optional browser opened by `specgate ui`. The public hero is an
-illustration and its CTAs lead to setup instructions and the review guide.
+illustration. The setup link starts with the CLI and the demo link opens a
+review with sample data.
 
 The four-step workflow below the tool lane links to project rubrics, work
 resume, selected-test verification, and optional whole-store Local transfer.
@@ -40,27 +41,32 @@ developer can accept or request changes. Keep the selected-test example
 consistent with the
 [selected-test walkthrough](../../docs/using-specgate/guides/observe-selected-tests.md).
 
-The repository README's `#delivery-proof` link opens the product tour inside
-the browser-review FAQ. Refresh the MP4 and poster by following the
-[HyperFrames render guide](../../media/specgate-promo/README.md).
+The public demo at `demo/` uses the Local review presentation with sample
+data. You can inspect evidence and try a decision or reset inside the demo.
+It runs in the browser without using a real repository, Local store, or
+account. The original `#delivery-proof` anchor opens the browser-review FAQ,
+which links to both the demo and the guide for real work.
 
 ## Preview and check
 
-Run from the repository root:
+Build the demo assets and serve the landing directory from the repository root:
 
 ```bash
+node scripts/build-landing-demo.mjs
 python3 -m http.server 4177 --directory app/landing
-node --test app/landing/landing.test.mjs docs/release-readiness.test.mjs
+node --test app/landing/landing.test.mjs app/landing/demo/demo.test.mjs docs/release-readiness.test.mjs
 node -c app/landing/script.js
 ```
 
-Open `http://127.0.0.1:4177`. Check desktop and narrow layouts in both
-languages, with light and dark themes. Test the player using the keyboard,
-then check reduced motion and a reload with JavaScript disabled.
+Open `http://127.0.0.1:4177` and follow **Try the UI demo**. Check desktop
+and narrow layouts in both languages, with light and dark themes. Test the
+landing player and demo using the keyboard, then check reduced motion. With
+JavaScript disabled, the landing shows the final review and CLI setup links.
 
 ## GitHub Pages
 
 The `pages` GitHub Actions workflow validates landing changes on pull
 requests. Matching `main` pushes upload `app/landing` to the
 `github-pages` environment. The manual workflow trigger redeploys the
-current landing files. The site has no build dependencies.
+current landing files. The demo build uses Node.js and repository assets.
+The published site is static.

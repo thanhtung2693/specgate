@@ -10,7 +10,7 @@ const strings = {
     "theme.aria": "Đổi giao diện sáng hoặc tối", "steps.aria": "Các bước minh họa",
     "story.aria": "Minh hoạ: phạm vi đã chốt, code của agent và kết quả test xếp chồng lên nhau; tờ kết quả xoay thẳng để bạn thấy test 503 còn thiếu, rồi hiện các lựa chọn để bạn quyết định.",
     "hero.h1": "Agent báo xong. <em>Xong những gì?</em>", "hero.lede": "Xem bản giao đáp ứng yêu cầu nào, còn thiếu bằng chứng gì.",
-    "cta.review": "Xem hướng dẫn duyệt", "cta.install": "Bắt đầu với CLI",
+    "cta.demo": "Thử UI demo", "cta.install": "Bắt đầu với CLI",
     "lg.tests": "Kết quả test", "lg.code": "Code của agent", "lg.scope": "Phạm vi đã chốt", "s.stamp": "Đã chốt",
     "l.claim": "Agent: done · exit 0", "l.met": "Agent báo đạt", "r.pass": "Test đạt", "r.miss": "Thiếu kết quả test", "r.none": "Chưa gắn test riêng",
     "c.inspect": "Bằng chứng từng tiêu chí", "c.head": "1 mục cần xem lại", "c.fix": "Gửi yêu cầu sửa", "c.ok": "Duyệt bản này",
@@ -31,7 +31,7 @@ const strings = {
     "faq.h": "Hỏi nhanh", "faq.1q": "Test xanh vẫn có thể sót yêu cầu?", "faq.1a": "Có. Cả bộ test có thể xanh dù ca 503 đã chốt vẫn chưa có kết quả.",
     "faq.2q": "SpecGate kiểm tra những gì?", "faq.2a": "Bạn xem được agent báo gì, mã thoát của các lệnh đã chạy và kết quả của những test đã chọn xuất hiện trong báo cáo. Bạn quyết định bằng chứng đã đủ chưa.",
     "faq.3q": "Có bắt buộc dùng trình duyệt không?", "faq.3a": "CLI Local ghi lại phạm vi, bằng chứng và quyết định. Nếu muốn xem và duyệt qua trình duyệt, chạy <code>specgate ui</code>.",
-    "faq.proof": "Tự chạy ví dụ về bằng chứng bàn giao", "faq.video": "Video giới thiệu SpecGate",
+    "faq.demo": " với dữ liệu mẫu.", "faq.guide": "Xem cách duyệt trên repo của bạn",
     "fin.h": "Thử với một thay đổi nhỏ xem.", "foot.aria": "Cuối trang", "foot.docs": "Tài liệu",
   },
 };
@@ -217,11 +217,11 @@ for (const button of all("[data-copy]")) {
   button.hidden = false;
 }
 
-function openLinkedTour() {
+function openLinkedFAQ() {
   if (location.hash === "#delivery-proof") select("#delivery-proof").open = true;
 }
-window.addEventListener("hashchange", openLinkedTour);
-openLinkedTour();
+window.addEventListener("hashchange", openLinkedFAQ);
+openLinkedFAQ();
 
 if (!reducedMotion.matches && "IntersectionObserver" in window) {
   root.classList.add("motion");

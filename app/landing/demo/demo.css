@@ -1,0 +1,20 @@
+.navbar > aside { border-top: 1px solid var(--line); background: var(--accent-soft); color: var(--ink); }
+.demo-banner { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 10px; padding-block: 6px; font-size: 13px; }
+.demo-banner .button { min-height: 30px; font-size: 13px; }
+.demo-note { margin-bottom: 8px; color: var(--muted); font-size: 13px; }
+.demo-fixture { padding-block: 5px; }
+.demo-tabs .button { min-width: 0; padding-inline: 12px; }
+.demo-tabs .button[aria-current="page"] { background: var(--surface); color: var(--ink); }
+.demo-criterion > summary { grid-template-columns: 18px minmax(0, 1fr) auto 16px; }
+.demo-criterion .criterion-observation { text-align: end; }
+.demo-after { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.demo-scope { max-width: 770px; }
+.demo-view { animation: rise .24s var(--ease) both; }
+@media (max-width: 540px) {
+  .demo-tabs .button { flex: 1; padding-inline: 4px; }
+  .demo-criterion > summary { grid-template-columns: 18px minmax(0, 1fr) 16px; }
+  .demo-criterion .criterion-observation { text-align: start; }
+}
+@media (pointer: coarse) {
+  .demo-banner .button { min-height: 44px; }
+}

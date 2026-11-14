@@ -234,7 +234,6 @@ code, pre, .mono { font-family: var(--f-mono); font-size: .9em; }
 .faq summary::-webkit-details-marker { display: none; }
 .faq summary .ic { color: var(--muted); transition: rotate .22s var(--ease); }
 .faq details[open] summary .ic { rotate: 90deg; }
-.faq video { display: block; height: auto; max-width: 100%; margin-bottom: 16px; }
 .faq details p { padding: 0 28px 16px 0; color: var(--muted); }
 
 .final { position: relative; overflow: clip; text-align: center; padding-block: 84px 72px; }

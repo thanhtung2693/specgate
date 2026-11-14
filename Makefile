@@ -12,7 +12,8 @@ build:
 
 test: check-plugins build
 	$(MAKE) -C app/cli test
-	node --test docs/release-readiness.test.mjs .github/scripts/release-notes.test.mjs scripts/install-cli.test.mjs scripts/local-review-notifications.test.mjs app/cli/test/e2e/local-delivery-proof.test.mjs app/landing/landing.test.mjs media/specgate-promo/promo.test.mjs
+	node scripts/build-landing-demo.mjs
+	node --test docs/release-readiness.test.mjs .github/scripts/release-notes.test.mjs scripts/install-cli.test.mjs scripts/local-review-notifications.test.mjs app/cli/test/e2e/local-delivery-proof.test.mjs app/landing/landing.test.mjs app/landing/demo/demo.test.mjs
 
 lint:
 	$(MAKE) -C app/cli lint

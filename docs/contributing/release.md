@@ -14,6 +14,9 @@ embedded in each binary. The foreground notification pilot is source-only.
   the published version in the README.
 - Run `make test`, `make lint`, the Local legacy compatibility gate, and the
   relevant native/browser checks from [Testing](testing.md).
+- Verify the public landing and interactive demo. The Pages workflow builds
+  the demo from the current Local review presentation before uploading the
+  site.
 - Create a local GoReleaser snapshot and check all five archives, their checksum
   entries, installer help, and the host binary's reported version. Run the
   [delivery proof](../using-specgate/guides/try-delivery-proof.md) using that

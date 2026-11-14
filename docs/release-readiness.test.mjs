@@ -605,6 +605,7 @@ test("release verification covers every module a release ships", () => {
     "make check-plugins",
     "node --test docs/release-readiness.test.mjs",
     "scripts/install-cli.test.mjs",
+    "app/landing/demo/demo.test.mjs",
   ]) {
     assert.ok(verifyJob.includes(command), `release verification does not run ${command}`);
   }
@@ -694,8 +695,21 @@ test("the release guide matches the automation it drives", () => {
   assert.match(guide, /native Windows/i);
 });
 
-test("Pages validates landing changes without redeploying unrelated main pushes", () => {
+test("Pages regenerates and tests the public demo before uploading the landing site", () => {
   const workflow = read(".github/workflows/pages.yml");
+  const events = workflow.slice(workflow.indexOf("\non:"), workflow.indexOf("\npermissions:"));
+  const push = events.slice(events.indexOf("  push:"), events.indexOf("  pull_request:"));
+  const pullRequest = events.slice(events.indexOf("  pull_request:"), events.indexOf("  workflow_dispatch:"));
+  const builder = "scripts/build-landing-demo.mjs";
+  for (const event of [push, pullRequest]) {
+    for (const path of ["app/landing/**", builder, "app/cli/internal/command/local_ui_assets/**"]) {
+      assert.ok(event.includes(`"${path}"`), `changes to ${path} must rebuild the public demo`);
+    }
+  }
+  const build = workflow.indexOf(`node ${builder}`);
+  const tests = workflow.indexOf("app/landing/demo/demo.test.mjs");
+  const upload = workflow.indexOf("actions/upload-pages-artifact@");
+  assert.ok(build >= 0 && build < tests && tests < upload, "Pages builds and tests the demo before it uploads");
 
   assert.match(workflow, /push:\s*\n\s+branches: \["main"\]\s*\n\s+paths:/);
   assert.match(workflow, /pull_request:\s*\n\s+paths:/);
