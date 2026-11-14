@@ -5,10 +5,10 @@ Briefly describe the change.
 Link the spec section or issue this maps to.
 
 ## Checks run
-- [ ] doc-registry: `make test`
-- [ ] agents: `uv run pytest` + `ruff check`
-- [ ] ui: `npm run lint` + `npm run build`
-- [ ] Not applicable (docs/infra only)
+- [ ] CLI: `make test` and `make lint` from `app/cli/`
+- [ ] Landing: `node --test app/landing/landing.test.mjs`
+- [ ] Plugins: `make check-plugins`
+- [ ] Release and docs: `node --test docs/release-readiness.test.mjs`
 
 ## Docs updated
 - [ ] Updated the nearest relevant doc in this change

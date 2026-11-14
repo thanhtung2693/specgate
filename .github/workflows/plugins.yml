@@ -2,9 +2,9 @@ name: plugins
 on:
   push:
     branches: ["main"]
-    paths: ["plugins/**", "Makefile", ".github/workflows/plugins.yml"]
+    paths: ["plugins/**", "app/cli/internal/command/local_plugin_assets/**", "scripts/*plugin*", "Makefile", ".github/workflows/plugins.yml"]
   pull_request:
-    paths: ["plugins/**", "Makefile", ".github/workflows/plugins.yml"]
+    paths: ["plugins/**", "app/cli/internal/command/local_plugin_assets/**", "scripts/*plugin*", "Makefile", ".github/workflows/plugins.yml"]
 
 permissions:
   contents: read

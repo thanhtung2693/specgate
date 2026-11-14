@@ -66,9 +66,7 @@ func TestLocalWorkspaceUnbindPreservesIdentityAndOtherProjects(t *testing.T) {
 	if len(loaded.Projects) != 1 || loaded.Workspace != workspace || loaded.Projects[other].Workspace != workspace {
 		t.Fatalf("unbind altered unrelated selection: %#v", loaded)
 	}
-	if deps.Client != nil {
-		t.Fatal("Local unbind created an HTTP client")
-	}
+
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "user", "current"); code != 0 {
 		t.Fatalf("identity lost: exit=%d output=%s", code, out.String())
 	}
@@ -104,9 +102,7 @@ func TestLocalNamedWorkspaceBindDoesNotChangeGlobalSelection(t *testing.T) {
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "workspace", "current"); code != 0 || !strings.Contains(out.String(), `"slug":"alpha"`) {
 		t.Fatalf("named bind changed global selection: exit=%d output=%s", code, out.String())
 	}
-	if deps.Client != nil {
-		t.Fatal("Local bind created an HTTP client")
-	}
+
 }
 
 func TestLocalArtifactStaleBaseIsConflictWithoutPublishing(t *testing.T) {

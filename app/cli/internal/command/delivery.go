@@ -16,7 +16,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/specgate/specgate/app/cli/internal/config"
-	"github.com/specgate/specgate/app/cli/internal/deploy"
+	"github.com/specgate/specgate/app/cli/internal/executil"
 	"github.com/specgate/specgate/app/cli/internal/fsutil"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
@@ -484,15 +484,7 @@ func confirmCompletionChecks(deps *Deps, operation string, body map[string]any) 
 	checks, _ := body["checks"].([]any)
 	for _, raw := range checks {
 		entry, _ := raw.(map[string]any)
-		if entry == nil {
-			continue
-		}
-		status, _ := entry["status"].(string)
-		if strings.TrimSpace(status) == "skipped" {
-			continue
-		}
-		command, _ := entry["command"].(string)
-		if command = strings.TrimSpace(command); command != "" {
+		if command := runnableCompletionCheckCommand(entry); command != "" {
 			commands = append(commands, command)
 		}
 	}
@@ -518,30 +510,6 @@ func confirmCompletionChecks(deps *Deps, operation string, body map[string]any) 
 		fmt.Fprintln(deps.Stdout, "Cancelled.")
 	}
 	return confirmed, nil
-}
-
-// normalizeCompletionChecksForSubmit ensures every command-only check also has
-// a display name. The command itself remains in the append-only receipt so an
-// independent reviewer can reproduce the reported check.
-func normalizeCompletionChecksForSubmit(body map[string]any) {
-	checks, _ := body["checks"].([]any)
-	for _, raw := range checks {
-		entry, _ := raw.(map[string]any)
-		if entry == nil {
-			continue
-		}
-		// claimed_status is a Local readback field; the Full completion contract
-		// does not carry it, and the server derives its own assurance.
-		delete(entry, "claimed_status")
-		name, _ := entry["name"].(string)
-		command, _ := entry["command"].(string)
-		if strings.TrimSpace(name) == "" && strings.TrimSpace(command) != "" {
-			entry["name"] = strings.TrimSpace(command)
-		}
-		if strings.TrimSpace(command) != "" {
-			entry["command"] = strings.TrimSpace(command)
-		}
-	}
 }
 
 // defaultRunCheckCommand runs a check command through the shell and returns
@@ -575,18 +543,6 @@ func lastOutputLine(combined string) string {
 		return line
 	}
 	return ""
-}
-
-// normalizeFeedbackBody fills the envelope fields the server requires but the
-// caller already expressed elsewhere: the work ref on the command line becomes
-// change_request_id, and severity defaults to "info". Explicit values win.
-func normalizeFeedbackBody(body map[string]any, changeRequestID string) {
-	if v, ok := body["change_request_id"].(string); !ok || strings.TrimSpace(v) == "" {
-		body["change_request_id"] = changeRequestID
-	}
-	if v, ok := body["severity"].(string); !ok || strings.TrimSpace(v) == "" {
-		body["severity"] = "info"
-	}
 }
 
 // deliveryWorkingDir returns the checkout used for local receipt collection.
@@ -627,9 +583,9 @@ func completionAffectedFiles(body map[string]any) []string {
 // checkout directory. A non-Git checkout falls back to an absolute working
 // directory so path handling remains deterministic without inventing a root.
 func deliveryReceiptRepoRoot(ctx context.Context, deps *Deps, dir string) string {
-	runner := deps.DeployRunner
+	runner := deps.CommandRunner
 	if runner == nil {
-		runner = deploy.ExecRunner{}
+		runner = executil.ExecRunner{}
 	}
 	root, err := gitOutput(ctx, runner, dir, "rev-parse", "--show-toplevel")
 	if err == nil && strings.TrimSpace(string(root)) != "" {
@@ -650,7 +606,7 @@ func deliveryReceiptRepoRoot(ctx context.Context, deps *Deps, dir string) string
 // are made repository-relative for comparison with Git's porcelain status paths;
 // the submitted affected_files field itself is left untouched for evidence
 // grounding and review context.
-func attachGitReceipt(ctx context.Context, deps *Deps, body map[string]any) gitReceipt {
+func attachGitReceipt(ctx context.Context, deps *Deps, body map[string]any, generation string) gitReceipt {
 	dir := deliveryWorkingDir(deps)
 	repoRoot := deliveryReceiptRepoRoot(ctx, deps, dir)
 	reported := completionAffectedFiles(body)
@@ -662,7 +618,7 @@ func attachGitReceipt(ctx context.Context, deps *Deps, body map[string]any) gitR
 			}
 		}
 	}
-	receipt := collectGitReceiptWithPriorBase(ctx, deps.DeployRunner, dir, reported, priorGitReceiptBase(body))
+	receipt := collectGitReceiptWithPriorBase(ctx, deps.CommandRunner, dir, reported, priorGitReceiptBase(body), generation)
 	body["git_receipt"] = gitReceiptPayload(receipt)
 	if deps.Printer != nil && deps.Printer.Mode() != output.ModeJSON {
 		for _, warning := range receipt.Warnings {

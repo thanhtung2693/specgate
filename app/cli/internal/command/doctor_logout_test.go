@@ -68,9 +68,7 @@ func TestLocalDoctorAfterLogoutDiagnosesWithoutSelectingIdentity(t *testing.T) {
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "user", "current"); code != 3 {
 		t.Fatalf("doctor silently restored selection: exit=%d %s", code, out.String())
 	}
-	if deps.Client != nil {
-		t.Fatal("Local doctor created a remote client")
-	}
+
 }
 
 func TestLocalDoctorDoesNotHideUnreadableStore(t *testing.T) {

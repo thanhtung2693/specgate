@@ -10,13 +10,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
+	"github.com/specgate/specgate/app/cli/internal/workflow"
 )
 
 func TestFocusedSkillReferenceLifecycle(t *testing.T) {
 	root := t.TempDir()
 	const source = "skills/specgate-work-preparation/references/preservation.md"
-	pkg := &client.PluginPackage{Version: "0.2.5", Skills: []string{"specgate-work-preparation"}, ServedFiles: []string{source}}
+	pkg := &workflow.PluginPackage{Version: "0.2.5", Skills: []string{"specgate-work-preparation"}, ServedFiles: []string{source}}
 	installer := &pluginInstaller{
 		ctx: context.Background(), home: root, pkg: pkg,
 		deps: &Deps{Stdout: io.Discard},
@@ -101,7 +101,7 @@ func TestPluginReferenceInventoryRejectsUnsafePaths(t *testing.T) {
 		"skills/specgate/references/name /note.md", "skills/specgate/references/*.md",
 		"skills/specgate/references/a|b.md", "skills/specgate/references/a\"b.md",
 	} {
-		pkg := &client.PluginPackage{Version: "0.2.5", Skills: []string{"specgate"}, ServedFiles: []string{file}}
+		pkg := &workflow.PluginPackage{Version: "0.2.5", Skills: []string{"specgate"}, ServedFiles: []string{file}}
 		if err := validatePluginPackage(pkg); err == nil {
 			t.Errorf("unsafe inventory path accepted: %q", file)
 		}
@@ -115,7 +115,7 @@ func TestPluginReferenceInventoryRejectsCaseAliases(t *testing.T) {
 		{"skills/specgate/references/A", "skills/specgate/references/a/note.md"},
 		{"skills/specgate/references/café.md", "skills/specgate/references/cafe\u0301.md"},
 	} {
-		pkg := &client.PluginPackage{Version: "0.2.5", Skills: []string{"specgate"}, ServedFiles: files}
+		pkg := &workflow.PluginPackage{Version: "0.2.5", Skills: []string{"specgate"}, ServedFiles: files}
 		if err := validatePluginPackage(pkg); err == nil {
 			t.Errorf("case-alias inventory accepted: %v", files)
 		}
@@ -127,7 +127,7 @@ func TestPluginReferenceInventoryPreservesValidNamesAndOlderPackages(t *testing.
 		nil,
 		{"skills/specgate/SKILL.md", "skills/specgate/references/COM10.md", "skills/specgate/references/café.md"},
 	} {
-		pkg := &client.PluginPackage{Version: "0.2.5", Skills: []string{"specgate"}, ServedFiles: files}
+		pkg := &workflow.PluginPackage{Version: "0.2.5", Skills: []string{"specgate"}, ServedFiles: files}
 		if err := validatePluginPackage(pkg); err != nil {
 			t.Fatalf("valid inventory refused: %v: %v", files, err)
 		}
@@ -159,7 +159,7 @@ func TestPluginReferenceUnicodeFilesystemAlias(t *testing.T) {
 	if err != nil || !os.SameFile(original, info) {
 		t.Fatalf("unexpected alias stat: %v", err)
 	}
-	pkg := &client.PluginPackage{Version: "0.2.5", Skills: []string{"specgate"}, ServedFiles: []string{
+	pkg := &workflow.PluginPackage{Version: "0.2.5", Skills: []string{"specgate"}, ServedFiles: []string{
 		"skills/specgate/references/café.md", "skills/specgate/references/cafe\u0301.md",
 	}}
 	if err := validatePluginPackage(pkg); err == nil {
@@ -189,7 +189,7 @@ func TestPluginReferencePreflightChecksOrphanMarker(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			installer := &pluginInstaller{home: root, pkg: &client.PluginPackage{
+			installer := &pluginInstaller{home: root, pkg: &workflow.PluginPackage{
 				Version: "0.2.5", Skills: []string{"specgate"}, ServedFiles: []string{"skills/specgate/references/preservation.md"},
 			}}
 			err := installer.validateFocusedSkills(dir)
@@ -245,7 +245,7 @@ func TestPluginReferencePreflightRefusesUnownedCollision(t *testing.T) {
 	if err := os.WriteFile(reference, []byte("user note\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	installer := &pluginInstaller{home: root, pkg: &client.PluginPackage{
+	installer := &pluginInstaller{home: root, pkg: &workflow.PluginPackage{
 		Version: "0.2.5", Skills: []string{"specgate"}, ServedFiles: []string{"skills/specgate/references/preservation.md"},
 	}}
 	if err := installer.validateFocusedSkills(dir); err == nil {

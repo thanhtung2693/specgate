@@ -261,6 +261,10 @@ func (s *Store) ContextPack(ctx context.Context, workspaceID, ref string) (Conte
 		}
 		markdown = contextMarkdown(work.Key, work.Title, artifact, work.AcceptanceCriteria)
 	}
+	return checkedContextPack(work, markdown)
+}
+
+func checkedContextPack(work WorkItem, markdown string) (ContextPack, error) {
 	digest := digestText(markdown)
 	if digest != work.ContextDigest {
 		return ContextPack{}, fmt.Errorf("stored Context Pack digest does not match its approved snapshot")

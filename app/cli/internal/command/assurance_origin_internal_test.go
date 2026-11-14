@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/local"
+	"github.com/specgate/specgate/app/cli/internal/workflow"
 )
 
 // `criteria[].why` is the line a human reads before accepting delivery. Because
@@ -17,32 +17,32 @@ func TestBoundCriterionOutcomeNamesWhoObservedTheCheck(t *testing.T) {
 
 	for _, tc := range []struct {
 		name    string
-		check   client.CheckResult
+		check   workflow.CheckResult
 		verdict string
 		reason  string
 	}{
 		{
 			name:    "agent-claimed pass says nothing re-ran it",
-			check:   client.CheckResult{Name: "unit", Status: "pass"},
+			check:   workflow.CheckResult{Name: "unit", Status: "pass"},
 			verdict: "met",
 			reason:  "reported by the coding agent, not re-run",
 		},
 		{
 			name:    "re-executed pass names the CLI",
-			check:   client.CheckResult{Name: "unit", Status: "pass", Source: "specgate_cli"},
+			check:   workflow.CheckResult{Name: "unit", Status: "pass", Source: "specgate_cli"},
 			verdict: "met",
 			reason:  "observed by the SpecGate CLI",
 		},
 		{
 			name:    "re-executed failure names the CLI",
-			check:   client.CheckResult{Name: "unit", Status: "fail", Source: "specgate_cli"},
+			check:   workflow.CheckResult{Name: "unit", Status: "fail", Source: "specgate_cli"},
 			verdict: "unmet",
 			reason:  "observed by the SpecGate CLI",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			verdict, why := boundCriterionOutcome("unit", []client.CheckResult{tc.check})
+			verdict, why := boundCriterionOutcome("unit", []workflow.CheckResult{tc.check})
 			if verdict != tc.verdict {
 				t.Fatalf("verdict = %q, want %q", verdict, tc.verdict)
 			}

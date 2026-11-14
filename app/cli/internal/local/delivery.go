@@ -199,6 +199,15 @@ func decideDeliveryTx(ctx context.Context, tx *sql.Tx, workspaceID, ref, decisio
 	if strings.TrimSpace(reviewID) == "" || reviewID != review.ID {
 		return fmt.Errorf("%w: read `specgate change status %s --json` and decide that review with --review-id", ErrReviewChanged, work.Key)
 	}
+	if len(options) > 0 && options[0].ExpectedCompletionID != "" {
+		latest, err := latestDeliveryReportQuery(ctx, tx, workspaceID, work.ID)
+		if err != nil {
+			return err
+		}
+		if latest.ID != options[0].ExpectedCompletionID || review.ReportID != options[0].ExpectedCompletionID {
+			return fmt.Errorf("%w: completion changed; review the current evidence before deciding", ErrReviewChanged)
+		}
+	}
 	requiresBasis, err := acceptanceBasisRequired(ctx, tx, workspaceID, work)
 	if err != nil {
 		return err
@@ -529,7 +538,7 @@ func DeliveryVerdict(body map[string]any, requiredCriteria []string) (string, st
 	checks, _ := body["checks"].([]any)
 	for _, raw := range checks {
 		check, _ := raw.(map[string]any)
-		if status := strings.TrimSpace(fmt.Sprint(check["status"])); status != "pass" && status != "skipped" {
+		if status := completionCheckStatus(check); status != "pass" && status != "skipped" {
 			return "failed", "one or more reported checks did not pass"
 		}
 	}
@@ -544,10 +553,8 @@ func DeliveryVerdict(body map[string]any, requiredCriteria []string) (string, st
 
 // unmetBoundCriteria reports the first acceptance criterion whose `@check:<name>`
 // binding is not backed by a passing check of that name, or "" when every bound
-// criterion is deterministically met. This mirrors the Full-mode deterministic
-// binding path: a bound check that failed, was skipped, or is absent must never
-// pass on the strength of a prose claim. Full mode routes the undecidable cases
-// to needs_human_review; Local has only passed/failed, so they fail here.
+// criterion is deterministically met. A bound check that failed, was skipped,
+// or is absent cannot pass on the strength of a prose claim.
 //
 // ponytail: enforcement is against skip/absence, not against a false `pass` —
 // `status` is agent-supplied unless the submission ran with --run-checks.
@@ -558,26 +565,31 @@ func unmetBoundCriteria(body map[string]any, requiredCriteria []string) string {
 		if binding == "" {
 			continue
 		}
-		status, found := boundCheckStatus(checks, binding)
-		switch {
-		case !found:
+		check := findBoundCheck(checks, binding)
+		if check == nil {
 			return fmt.Sprintf("criterion local-%d is bound to check %q, which the completion does not report", index+1, binding)
-		case status == "pass":
-		default:
+		}
+		if status := completionCheckStatus(check); status != "pass" {
 			return fmt.Sprintf("criterion local-%d is bound to check %q, which reported %q instead of pass", index+1, binding, status)
 		}
 	}
 	return ""
 }
 
-func boundCheckStatus(checks []any, binding string) (string, bool) {
+func completionCheckStatus(check map[string]any) string {
+	status, _ := check["status"].(string)
+	return strings.TrimSpace(status)
+}
+
+func findBoundCheck(checks []any, binding string) map[string]any {
 	for _, raw := range checks {
 		check, _ := raw.(map[string]any)
-		if strings.TrimSpace(fmt.Sprint(check["name"])) == binding {
-			return strings.TrimSpace(fmt.Sprint(check["status"])), true
+		name, _ := check["name"].(string)
+		if strings.TrimSpace(name) == binding {
+			return check
 		}
 	}
-	return "", false
+	return nil
 }
 
 func isLocalCriterionID(id string, count int) bool {

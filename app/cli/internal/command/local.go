@@ -9,6 +9,7 @@ import (
 
 	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/local"
+	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
 func openLocalStore(deps *Deps) (*local.Store, error) {
@@ -55,4 +56,10 @@ func localSelection(ctx context.Context, deps *Deps, store *local.Store) (local.
 	}
 	selection.Workspace = workspace
 	return selection, nil
+}
+
+func incompatibleCommand(deps *Deps, commandName, message string) error {
+	payload := output.ErrorPayload{Code: "incompatible", Message: message}
+	code := deps.Printer.Error(commandName, payload)
+	return &output.ExitError{Code: code}
 }

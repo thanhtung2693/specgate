@@ -7,76 +7,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/command"
-	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
-func TestChangeApproveApprovesThenPromotesWithOneDecision(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.artifactResult = &client.Artifact{ID: "artifact-1", Version: "v1", Status: "draft", SnapshotDigest: "sha256:approved"}
-	fc.updateStatusResult = &client.Artifact{ID: "artifact-1", Version: "v1", Status: "approved"}
-	fc.promoteResult = &client.Feature{ID: "feature-1", Key: "LOGIN", Version: 1, CanonicalArtifactID: "artifact-1"}
-	fc.createWorkItemResult = map[string]any{
-		"change_request_id": "cr-1", "change_request_key": "CR-1", "feature_key": "LOGIN",
-		"lead_artifact_id": "artifact-1", "acceptance_criteria": []any{"Login succeeds"},
-	}
-
-	code := command.ExecuteForCode(
-		command.NewRootCommand(deps),
-		"--json", "--yes", "change", "approve", "artifact-1", "--note", "scope approved",
-		"--title", "Implement login", "--ac", "Login succeeds",
-	)
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
-	}
-	if strings.Join(fc.callOrder, ",") != "artifact_status,artifact_promote,work_create,context_pack" {
-		t.Fatalf("call order = %v", fc.callOrder)
-	}
-	if fc.lastStatusInput.Status != "approved" || fc.lastStatusInput.Note != "scope approved" {
-		t.Fatalf("status input = %#v", fc.lastStatusInput)
-	}
-	if fc.lastPromoteID != "artifact-1" {
-		t.Fatalf("promoted artifact = %q", fc.lastPromoteID)
-	}
-	if fc.lastCreateWorkItem["feature"] != "LOGIN" || fc.lastCreateWorkItem["title"] != "Implement login" {
-		t.Fatalf("work create input = %#v", fc.lastCreateWorkItem)
-	}
-	var envelope struct {
-		Command string `json:"command"`
-		Data    struct {
-			ArtifactID      string `json:"artifact_id"`
-			ArtifactVersion string `json:"artifact_version"`
-			SnapshotDigest  string `json:"snapshot_digest"`
-			FeatureKey      string `json:"feature_key"`
-			WorkRef         string `json:"work_ref"`
-			ContextState    string `json:"context_state"`
-			Next            string `json:"next_command"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
-		t.Fatal(err)
-	}
-	if envelope.Command != "change.approve" || envelope.Data.ArtifactID != "artifact-1" ||
-		envelope.Data.ArtifactVersion != "v1" || envelope.Data.SnapshotDigest != "sha256:approved" ||
-		envelope.Data.FeatureKey != "LOGIN" || envelope.Data.WorkRef != "CR-1" ||
-		envelope.Data.ContextState != "assembled" || envelope.Data.Next != "specgate work context CR-1 --json" {
-		t.Fatalf("result = %#v, output = %s", envelope, out.String())
-	}
-}
-
 func TestChangeApproveRequiresExplicitWorkContractBeforeMutation(t *testing.T) {
 	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "change", "approve", "artifact-1")
 	if code != output.ExitUsage {
 		t.Fatalf("exit = %d, want usage; output = %s", code, out.String())
-	}
-	if len(fc.callOrder) != 0 || fc.lastCreateWorkItem != nil {
-		t.Fatalf("approval mutated state before a complete work contract: calls=%v create=%#v", fc.callOrder, fc.lastCreateWorkItem)
 	}
 	for _, want := range []string{"--title", "--ac"} {
 		if !strings.Contains(out.String(), want) {
@@ -85,59 +26,9 @@ func TestChangeApproveRequiresExplicitWorkContractBeforeMutation(t *testing.T) {
 	}
 }
 
-func TestChangeApproveRetryReusesExactArtifactWork(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.artifactResult = &client.Artifact{ID: "artifact-1", Version: "v1", Status: "approved", SnapshotDigest: "sha256:approved"}
-	fc.promoteResult = &client.Feature{ID: "feature-1", Key: "LOGIN", Version: 1, CanonicalArtifactID: "artifact-1"}
-	fc.workItems = []client.WorkItemSummary{{
-		ID: "cr-1", Key: "CR-1", Title: "Implement login", IntentMD: "Bound scope", Phase: "ready", LeadArtifactID: "artifact-1",
-	}}
-	fc.acceptanceCriteria = []client.AcceptanceCriterion{{ID: "ac-1", Text: "Login succeeds", VerificationBinding: "integration"}}
-
-	code := command.ExecuteForCode(
-		command.NewRootCommand(deps),
-		"--json", "--yes", "change", "approve", "artifact-1",
-		"--title", "Implement login", "--description", "Bound scope", "--ac", " Login succeeds   @check:integration ",
-	)
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
-	}
-	if fc.lastCreateWorkItem != nil {
-		t.Fatalf("retry created duplicate work: %#v", fc.lastCreateWorkItem)
-	}
-	if fc.lastContextID != "cr-1" || !strings.Contains(out.String(), `"work_ref":"CR-1"`) {
-		t.Fatalf("retry did not reuse and verify existing work: context=%q output=%s", fc.lastContextID, out.String())
-	}
-}
-
-func TestChangeApproveRetryDoesNotPresentDeliveredWorkAsNewImplementation(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.artifactResult = &client.Artifact{ID: "artifact-1", Version: "v1", Status: "approved", SnapshotDigest: "sha256:approved"}
-	fc.promoteResult = &client.Feature{ID: "feature-1", Key: "LOGIN", Version: 1, CanonicalArtifactID: "artifact-1"}
-	fc.workItems = []client.WorkItemSummary{{
-		ID: "cr-1", Key: "CR-1", Title: "Implement login", Phase: "delivered", LeadArtifactID: "artifact-1",
-	}}
-	fc.acceptanceCriteria = []client.AcceptanceCriterion{{ID: "ac-1", Text: "Login succeeds"}}
-
-	code := command.ExecuteForCode(
-		command.NewRootCommand(deps),
-		"--json", "--yes", "change", "approve", "artifact-1",
-		"--title", "Implement login", "--ac", "Login succeeds",
-	)
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
-	}
-	if !strings.Contains(out.String(), `"state":"already_delivered"`) ||
-		!strings.Contains(out.String(), `"next_command":"specgate change status CR-1"`) {
-		t.Fatalf("delivered retry is not terminal-aware: %s", out.String())
-	}
-}
-
 func TestChangeSubmitRunChecksMarksLocalAssuranceAsReproduced(t *testing.T) {
 	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir, store, _, work := newLocalChangeWork(t, deps)
 	closeLocalChangeStore(t, deps, stateDir, store)
 	deps.RunCheckCommand = func(_ context.Context, command string) (int, string) {
@@ -162,8 +53,8 @@ func TestChangeSubmitRunChecksMarksLocalAssuranceAsReproduced(t *testing.T) {
 	if code != output.ExitOK {
 		t.Fatalf("submit exit = %d, output = %s", code, out.String())
 	}
-	if fc.calls != 0 || !strings.Contains(out.String(), `"assurance":"Agent-reported; locally reproduced"`) {
-		t.Fatalf("submit assurance did not expose local reproduction: calls=%d output=%s", fc.calls, out.String())
+	if !strings.Contains(out.String(), `"assurance":"Agent-reported; locally reproduced"`) {
+		t.Fatalf("submit assurance did not expose local reproduction: output=%s", out.String())
 	}
 	for _, field := range []string{`"context_digest":"` + work.ContextDigest + `"`, `"completion_id":"`, `"criterion_evidence":`, `"risks":`} {
 		if !strings.Contains(out.String(), field) {
@@ -181,7 +72,7 @@ func TestChangeSubmitRunChecksMarksLocalAssuranceAsReproduced(t *testing.T) {
 // stored report so the delivery receipt reports what SpecGate corrected.
 func TestChangeSubmitRunChecksRecordsCorrectedClaimInAssurance(t *testing.T) {
 	t.Parallel()
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir, store, _, work := newLocalChangeWork(t, deps)
 	closeLocalChangeStore(t, deps, stateDir, store)
 	deps.RunCheckCommand = func(_ context.Context, _ string) (int, string) {
@@ -254,314 +145,9 @@ func runChangeStatusJSON(t *testing.T, deps *command.Deps, out *bytes.Buffer, re
 	return envelope.Data
 }
 
-func TestChangeStatusFullPassingAgentReviewAwaitsAcceptance(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.resolvedWork = &client.ResolvedWork{ChangeRequestID: "cr-1", ChangeRequestKey: "CR-101", Title: "Add change status"}
-	fc.deliveryStatusResult = &client.DeliveryStatusResult{
-		Found: true, Verdict: "pass", JudgeModel: "agent_attested", Executor: "platform",
-	}
-
-	got := runChangeStatusJSON(t, deps, out, "CR-101")
-	if got.State != "awaiting_acceptance" || got.NextActor != "human_reviewer" {
-		t.Fatalf("status = %#v", got)
-	}
-	if len(got.Missing) != 1 || got.Missing[0] != "Human acceptance" {
-		t.Fatalf("missing = %#v", got.Missing)
-	}
-	if got.NextCommand != "specgate change accept CR-101" {
-		t.Fatalf("next command = %q", got.NextCommand)
-	}
-	if !fc.lastDetailFlag || fc.lastGatesID != "cr-1" {
-		t.Fatalf("delivery query detail=%t id=%q, want true and cr-1", fc.lastDetailFlag, fc.lastGatesID)
-	}
-}
-
-func TestChangeStatusFullPolicyUnavailableIsBlocked(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.resolvedWork = &client.ResolvedWork{ChangeRequestID: "cr-1", ChangeRequestKey: "CR-101", Title: "Add change status"}
-	fc.deliveryStatusResult = &client.DeliveryStatusResult{
-		Found: true, Verdict: "needs_human_review", ReasonCode: "policy_unavailable",
-	}
-
-	got := runChangeStatusJSON(t, deps, out, "CR-101")
-	if got.State != "blocked" || got.NextActor != "maintainer" {
-		t.Fatalf("status = %#v", got)
-	}
-	if !strings.Contains(strings.ToLower(strings.Join(append(got.Missing, got.StaleReason), " ")), "policy unavailable") {
-		t.Fatalf("policy blocker not named: %#v", got)
-	}
-}
-
-func TestChangeStatusFullLatestCompletionAwaitingReview(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.resolvedWork = &client.ResolvedWork{
-		ChangeRequestID: "cr-1", ChangeRequestKey: "CR-101", Title: "Corrected completion",
-	}
-	fc.deliveryStatusResult = &client.DeliveryStatusResult{
-		Found: true, Verdict: "needs_human_review", ReasonCode: "delivery_review_outdated",
-	}
-
-	got := runChangeStatusJSON(t, deps, out, "CR-101")
-	if got.State != "review_pending" ||
-		got.NextActor != "implementing_agent" ||
-		got.NextCommand != "specgate delivery review CR-101" {
-		t.Fatalf("status = %#v, want actionable review_pending state", got)
-	}
-}
-
-func TestChangeStatusFullHumanOverrideOfUnavailablePolicyIsAccepted(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.resolvedWork = &client.ResolvedWork{ChangeRequestID: "cr-1", ChangeRequestKey: "CR-101", Title: "Human policy override"}
-	fc.deliveryStatusResult = &client.DeliveryStatusResult{
-		Found: true, Verdict: "pass", ReasonCode: "policy_unavailable", Executor: "human",
-	}
-
-	got := runChangeStatusJSON(t, deps, out, "CR-101")
-	if got.State != "accepted" || got.Decision != "Accepted" ||
-		got.Evidence != "Policy unavailable" || got.NextActor != "none" {
-		t.Fatalf("status = %#v, want accepted human authority with unavailable evidence disclosed", got)
-	}
-}
-
-func TestChangeStatusFullHumanReviewRoutesToReviewer(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.resolvedWork = &client.ResolvedWork{ChangeRequestID: "cr-1", ChangeRequestKey: "CR-101", Title: "Review the delivered UI"}
-	fc.deliveryStatusResult = &client.DeliveryStatusResult{
-		Found: true, Verdict: "needs_human_review", Hint: "One criterion needs visual confirmation", Executor: "platform",
-	}
-
-	got := runChangeStatusJSON(t, deps, out, "CR-101")
-	if got.State != "awaiting_review" || got.NextActor != "human_reviewer" {
-		t.Fatalf("status = %#v", got)
-	}
-	if len(got.Missing) != 1 || got.Missing[0] != "One criterion needs visual confirmation" {
-		t.Fatalf("missing = %#v", got.Missing)
-	}
-	if got.NextCommand != "specgate delivery status CR-101 --detail" {
-		t.Fatalf("next command = %q", got.NextCommand)
-	}
-}
-
-func TestChangeStatusFullHumanReviewDetailOffersDecisionCommands(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.resolvedWork = &client.ResolvedWork{ChangeRequestID: "cr-1", ChangeRequestKey: "CR-101", Title: "Review the delivered UI"}
-	fc.deliveryStatusResult = &client.DeliveryStatusResult{
-		ChangeRequestID: "cr-1",
-		Found:           true,
-		Verdict:         "needs_human_review",
-		Hint:            "One criterion needs visual confirmation",
-		Executor:        "platform",
-	}
-
-	status := runChangeStatusJSON(t, deps, out, "CR-101")
-	if status.NextCommand != "specgate delivery status CR-101 --detail" {
-		t.Fatalf("next command = %q", status.NextCommand)
-	}
-	out.Reset()
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "delivery", "status", "CR-101", "--detail")
-	if code != output.ExitOK {
-		t.Fatalf("delivery status exit = %d: %s", code, out.String())
-	}
-	for _, want := range []string{
-		"specgate change accept CR-101",
-		`specgate change request-changes CR-101 --note "<reason>"`,
-	} {
-		if !strings.Contains(out.String(), want) {
-			t.Fatalf("delivery detail missing resolving command %q:\n%s", want, out.String())
-		}
-	}
-}
-
-func TestChangeStatusFullStalePeerReviewDoesNotClaimReceiptCurrent(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.resolvedWork = &client.ResolvedWork{ChangeRequestID: "cr-1", ChangeRequestKey: "CR-101", Title: "Add change status"}
-	fc.deliveryStatusResult = &client.DeliveryStatusResult{
-		Found: true, Verdict: "pass", GitReceipt: &client.GitReceipt{HeadRevision: "abc123def456"},
-		PeerReview: client.PeerReviewState{State: "stale"},
-	}
-
-	got := runChangeStatusJSON(t, deps, out, "CR-101")
-	if !got.Stale {
-		t.Fatalf("stale = false: %#v", got)
-	}
-	if strings.Contains(strings.ToLower(got.Freshness), "is current") {
-		t.Fatalf("freshness incorrectly claims current receipt: %q", got.Freshness)
-	}
-}
-
-func TestChangeStatusFullPlainIncludesActionableTrustFields(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.resolvedWork = &client.ResolvedWork{ChangeRequestID: "cr-1", ChangeRequestKey: "CR-101", Title: "Add change status"}
-	fc.deliveryStatusResult = &client.DeliveryStatusResult{Found: true, Verdict: "pass", GitReceipt: &client.GitReceipt{HeadRevision: "abc123def456"}}
-
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "change", "status", "CR-101")
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
-	}
-	for _, field := range []string{"State:", "Evidence:", "Assurance:", "Decision:", "Receipt:", "Freshness:", "Next actor:", "Missing:", "Stale:", "Next:"} {
-		if !strings.Contains(out.String(), field) {
-			t.Fatalf("output missing %q:\n%s", field, out.String())
-		}
-	}
-}
-
-func TestChangeStatusFullDetectsStoredReceiptMismatchAgainstCheckout(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	dir := t.TempDir()
-	deps.WorkingDir = dir
-	deps.DeployRunner = deliveryGitRunner(dir, nil)
-	fc.resolvedWork = &client.ResolvedWork{ChangeRequestID: "cr-1", ChangeRequestKey: "CR-101", Title: "Add change status"}
-	fc.deliveryStatusResult = &client.DeliveryStatusResult{Found: true, Verdict: "pass", GitReceipt: &client.GitReceipt{HeadRevision: "abc123def456"}}
-
-	got := runChangeStatusJSON(t, deps, out, "CR-101")
-	if !got.Stale || !strings.Contains(strings.ToLower(got.Freshness), "differs from the stored receipt") ||
-		!strings.Contains(got.StaleReason, "Checkout differs") {
-		t.Fatalf("freshness = %q", got.Freshness)
-	}
-}
-
-func TestChangeStatusFullConfirmsStoredReceiptAgainstCheckout(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	dir := t.TempDir()
-	deps.WorkingDir = dir
-	deps.DeployRunner = deliveryGitRunner(dir, nil)
-	fc.resolvedWork = &client.ResolvedWork{ChangeRequestID: "cr-1", ChangeRequestKey: "CR-101", Title: "Add change status"}
-	fc.deliveryStatusResult = &client.DeliveryStatusResult{
-		Found: true, Verdict: "pass",
-		GitReceipt: &client.GitReceipt{
-			Availability: "available",
-			Repository:   "https://github.com/acme/project.git",
-			Branch:       "main",
-			BaseRevision: "base-revision",
-			HeadRevision: "head-revision",
-		},
-	}
-
-	got := runChangeStatusJSON(t, deps, out, "CR-101")
-	if got.Stale || got.StaleReason != "" || got.Freshness != "Stored receipt matches the current checkout." {
-		t.Fatalf("status = %#v, want confirmed current checkout", got)
-	}
-}
-
-func TestChangeStatusFullBlankReceiptIsNotRecorded(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.resolvedWork = &client.ResolvedWork{ChangeRequestID: "cr-1", ChangeRequestKey: "CR-101", Title: "Add change status"}
-	fc.deliveryStatusResult = &client.DeliveryStatusResult{Found: true, Verdict: "pass", GitReceipt: &client.GitReceipt{}}
-
-	got := runChangeStatusJSON(t, deps, out, "CR-101")
-	if got.Receipt != "No Git receipt recorded" || !strings.Contains(got.Freshness, "No stored receipt") {
-		t.Fatalf("blank receipt = %#v", got)
-	}
-}
-
-func TestChangeStatusFullReceiptSurfacesAvailabilityWarnings(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.resolvedWork = &client.ResolvedWork{
-		ChangeRequestID: "cr-1", ChangeRequestKey: "CR-101", Title: "Warn on partial receipt",
-	}
-	fc.deliveryStatusResult = &client.DeliveryStatusResult{
-		Found:   true,
-		Verdict: "pass",
-		GitReceipt: &client.GitReceipt{
-			Availability: "unavailable",
-			Warnings:     []string{"Git metadata could not be read"},
-		},
-	}
-
-	got := runChangeStatusJSON(t, deps, out, "CR-101")
-	if got.Receipt != "Git receipt unavailable; warning: Git metadata could not be read" ||
-		!strings.Contains(got.Freshness, "No stored receipt") {
-		t.Fatalf("status = %#v, want unavailable receipt kept out of freshness claim", got)
-	}
-}
-
-func TestChangeStatusFullAcceptedHasExplicitTerminalNextStep(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.resolvedWork = &client.ResolvedWork{ChangeRequestID: "cr-1", ChangeRequestKey: "CR-101", Title: "Add change status"}
-	fc.deliveryStatusResult = &client.DeliveryStatusResult{Found: true, Verdict: "pass", Executor: "human"}
-
-	got := runChangeStatusJSON(t, deps, out, "CR-101")
-	if got.State != "accepted" || got.NextActor != "none" || len(got.Missing) != 0 || got.NextCommand != "specgate audit CR-101" {
-		t.Fatalf("accepted status = %#v", got)
-	}
-}
-
-func TestChangeStatusFullHumanRejectionRequestsRework(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.resolvedWork = &client.ResolvedWork{ChangeRequestID: "cr-1", ChangeRequestKey: "CR-101", Title: "Add change status"}
-	fc.deliveryStatusResult = &client.DeliveryStatusResult{
-		Found: true, Verdict: "fail", Executor: "human",
-		Note: "Restore the missing rollback test.",
-	}
-
-	got := runChangeStatusJSON(t, deps, out, "CR-101")
-	if got.State != "rework_requested" || got.NextActor != "implementing_agent" ||
-		got.NextCommand != "specgate --yes change submit CR-101 --run-checks --json" ||
-		len(got.Missing) != 1 || got.Missing[0] != "Revised completion addressing requested changes" ||
-		got.Guidance != "Restore the missing rollback test." {
-		t.Fatalf("rework status = %#v", got)
-	}
-}
-
-func TestChangeStatusFullNeedsChangesReportsEvidenceGap(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.resolvedWork = &client.ResolvedWork{
-		ChangeRequestID: "cr-1", ChangeRequestKey: "CR-101", Title: "Address evidence gaps",
-	}
-	fc.deliveryStatusResult = &client.DeliveryStatusResult{
-		Found: true, Verdict: "needs_changes", Executor: "platform",
-	}
-
-	got := runChangeStatusJSON(t, deps, out, "CR-101")
-	if got.State != "implementation" || got.Evidence != "Evidence gaps found" ||
-		got.NextCommand != "specgate --yes change submit CR-101 --run-checks --json" {
-		t.Fatalf("status = %#v, want actionable evidence gap", got)
-	}
-}
-
-func TestChangeStatusFullResolveFailureUsesWorkRefEnvelope(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.resolveErr = &client.APIError{Kind: client.ErrorNotFound, Status: 404, Message: "no match"}
-
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "change", "status", "CR-404")
-	if code != output.ExitNotFound {
-		t.Fatalf("exit = %d, want %d; output = %s", code, output.ExitNotFound, out.String())
-	}
-	var envelope struct {
-		Command string `json:"command"`
-		OK      bool   `json:"ok"`
-		Error   struct {
-			Code    string `json:"code"`
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
-		t.Fatal(err)
-	}
-	if envelope.Command != "change.status" || envelope.OK || envelope.Error.Code != "not_found" || !strings.Contains(envelope.Error.Message, "work item \"CR-404\" not found") {
-		t.Fatalf("resolve error envelope = %#v", envelope)
-	}
-}
-
 func TestChangeStatusLocalWithoutReportShowsImplementationScaffold(t *testing.T) {
 	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir, store, _, work := newLocalChangeWork(t, deps)
 	closeLocalChangeStore(t, deps, stateDir, store)
 
@@ -573,14 +159,11 @@ func TestChangeStatusLocalWithoutReportShowsImplementationScaffold(t *testing.T)
 	if got.NextCommand != want {
 		t.Fatalf("next command = %q, want %q", got.NextCommand, want)
 	}
-	if fc.calls != 0 {
-		t.Fatalf("Local status made %d client calls, want 0", fc.calls)
-	}
 }
 
 func TestChangeStatusLocalPassingEvidenceAwaitsAcceptance(t *testing.T) {
 	t.Parallel()
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir, store, selection, work := newLocalChangeWork(t, deps)
 	submitLocalChangeDelivery(t, store, selection.Workspace.ID, work, "builder", "receipt-1")
 	reviewID := localReviewID(t, store, selection.Workspace.ID, work.Key)
@@ -597,7 +180,7 @@ func TestChangeStatusLocalPassingEvidenceAwaitsAcceptance(t *testing.T) {
 
 func TestChangeStatusPlainLocalAwaitingAcceptanceShowsRunnableDecision(t *testing.T) {
 	t.Parallel()
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir, store, selection, work := newLocalChangeWork(t, deps)
 	submitLocalChangeDelivery(t, store, selection.Workspace.ID, work, "builder", "receipt-1")
 	closeLocalChangeStore(t, deps, stateDir, store)
@@ -614,7 +197,7 @@ func TestChangeStatusPlainLocalAwaitingAcceptanceShowsRunnableDecision(t *testin
 
 func TestChangeStatusLocalApprovedDeliveryIsAccepted(t *testing.T) {
 	t.Parallel()
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir, store, selection, work := newLocalChangeWork(t, deps)
 	submitLocalChangeDelivery(t, store, selection.Workspace.ID, work, "builder", "receipt-1")
 	if err := store.DecideDeliveryWithBasis(t.Context(), selection.Workspace.ID, work.Key, "approve", "human", "accepted", localReviewID(t, store, selection.Workspace.ID, work.Key), ""); err != nil {
@@ -630,7 +213,7 @@ func TestChangeStatusLocalApprovedDeliveryIsAccepted(t *testing.T) {
 
 func TestChangeStatusLocalHumanCanAcceptEvidenceGapWithoutHidingIt(t *testing.T) {
 	t.Parallel()
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir, store, selection, work := newLocalChangeWork(t, deps)
 	review, err := store.SubmitDelivery(t.Context(), selection.Workspace.ID, work.Key, map[string]any{
 		"context_digest": work.ContextDigest,
@@ -660,7 +243,7 @@ func TestChangeStatusLocalHumanCanAcceptEvidenceGapWithoutHidingIt(t *testing.T)
 
 func TestChangeStatusLocalReceiptSurfacesAvailabilityWarnings(t *testing.T) {
 	t.Parallel()
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir, store, selection, work := newLocalChangeWork(t, deps)
 	_, err := store.SubmitDelivery(t.Context(), selection.Workspace.ID, work.Key, map[string]any{
 		"context_digest": work.ContextDigest,
@@ -689,7 +272,7 @@ func TestChangeStatusLocalReceiptSurfacesAvailabilityWarnings(t *testing.T) {
 
 func TestChangeStatusLocalHumanRejectionRequestsRework(t *testing.T) {
 	t.Parallel()
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir, store, selection, work := newLocalChangeWork(t, deps)
 	submitLocalChangeDelivery(t, store, selection.Workspace.ID, work, "builder", "receipt-1")
 	if err := store.DecideDeliveryWithBasis(t.Context(), selection.Workspace.ID, work.Key, "reject", "human", "rework", localReviewID(t, store, selection.Workspace.ID, work.Key), ""); err != nil {
@@ -706,26 +289,9 @@ func TestChangeStatusLocalHumanRejectionRequestsRework(t *testing.T) {
 	}
 }
 
-func TestChangeStatusPlainAcceptedShowsTerminalFields(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.resolvedWork = &client.ResolvedWork{ChangeRequestID: "cr-1", ChangeRequestKey: "CR-101", Title: "Add change status"}
-	fc.deliveryStatusResult = &client.DeliveryStatusResult{Found: true, Verdict: "pass", Executor: "human"}
-
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "change", "status", "CR-101")
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
-	}
-	for _, want := range []string{"Next actor: none", "Missing: none", "Next: specgate audit CR-101"} {
-		if !strings.Contains(out.String(), want) {
-			t.Fatalf("output missing %q:\n%s", want, out.String())
-		}
-	}
-}
-
 func TestChangeStatusLocalStalePeerEvidenceIsSeparateFromAuthority(t *testing.T) {
 	t.Parallel()
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir, store, selection, work := newLocalChangeWork(t, deps)
 	submitLocalChangeDelivery(t, store, selection.Workspace.ID, work, "builder", "receipt-1")
 	if _, err := store.PeerReviewDelivery(t.Context(), selection.Workspace.ID, work.Key, map[string]any{
@@ -746,160 +312,5 @@ func TestChangeStatusLocalStalePeerEvidenceIsSeparateFromAuthority(t *testing.T)
 	got := runChangeStatusJSON(t, deps, out, work.Key)
 	if !got.Stale || got.Decision != "Awaiting human acceptance" || got.State != "awaiting_acceptance" {
 		t.Fatalf("stale peer changed delivery authority: %#v", got)
-	}
-}
-
-func TestChangeAcceptPostsHumanDecisionWithFacadeEnvelope(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	if err := (config.Config{CurrentUser: config.CurrentUser{Username: "lead"}}).SaveTo(deps.ConfigPath); err != nil {
-		t.Fatal(err)
-	}
-
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "change", "accept", "CR-101", "--note", "reviewed and accepted")
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
-	}
-	if fc.lastDeliveryDecisionID != "cr-1" || fc.lastDeliveryDecision.Decision != "approve" || fc.lastDeliveryDecision.Actor != "lead" || fc.lastDeliveryDecision.Note != "reviewed and accepted" {
-		t.Fatalf("decision = id %q body %+v", fc.lastDeliveryDecisionID, fc.lastDeliveryDecision)
-	}
-	var envelope struct {
-		Command string `json:"command"`
-		OK      bool   `json:"ok"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
-		t.Fatal(err)
-	}
-	if envelope.Command != "change.accept" || !envelope.OK {
-		t.Fatalf("envelope = %#v", envelope)
-	}
-}
-
-func TestChangeRequestChangesPostsRejectWithFacadeEnvelope(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	if err := (config.Config{CurrentUser: config.CurrentUser{Username: "reviewer"}}).SaveTo(deps.ConfigPath); err != nil {
-		t.Fatal(err)
-	}
-
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "change", "request-changes", "CR-101", "--note", "criterion two is missing")
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
-	}
-	if fc.lastDeliveryDecision.Decision != "reject" || fc.lastDeliveryDecision.Actor != "reviewer" || fc.lastDeliveryDecision.Note != "criterion two is missing" {
-		t.Fatalf("decision = %+v", fc.lastDeliveryDecision)
-	}
-	var envelope struct {
-		Command string `json:"command"`
-		OK      bool   `json:"ok"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
-		t.Fatal(err)
-	}
-	if envelope.Command != "change.request-changes" || !envelope.OK {
-		t.Fatalf("envelope = %#v", envelope)
-	}
-}
-
-func TestChangeSubmitWithFileRunsFullTailWithFacadeEnvelope(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	f := writeDeliveryJSON(t, map[string]any{
-		"event_type": "coding_agent.completed",
-		"summary":    "All done",
-	})
-
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "change", "submit", "CR-101", "--file", f)
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
-	}
-	if fc.lastFeedbackBody == nil || fc.calls != 4 || !fc.lastDetailFlag {
-		t.Fatalf("feedback = %#v calls = %d detail = %t", fc.lastFeedbackBody, fc.calls, fc.lastDetailFlag)
-	}
-	var envelope struct {
-		Command string         `json:"command"`
-		OK      bool           `json:"ok"`
-		Data    map[string]any `json:"data"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
-		t.Fatal(err)
-	}
-	if envelope.Command != "change.submit" || !envelope.OK {
-		t.Fatalf("envelope = %#v", envelope)
-	}
-	if envelope.Data["state"] != "awaiting_acceptance" || envelope.Data["next_actor"] != "human_reviewer" || envelope.Data["next_command"] == "" {
-		t.Fatalf("facade result is not actionable: %#v", envelope.Data)
-	}
-	for _, internal := range []string{"gates", "report", "review", "status"} {
-		if _, leaked := envelope.Data[internal]; leaked {
-			t.Fatalf("facade leaked expert %q payload: %#v", internal, envelope.Data)
-		}
-	}
-}
-
-// TestChangeApproveHumanLineNamesVersionWithoutDigest guards the human-facing
-// surface of the single most important human decision. The line must name the
-// version that was approved; it must not label the version as the artifact, and
-// it must not spend a human's attention on a digest they cannot act on. The JSON
-// envelope keeps every identifier for callers that need them.
-func TestChangeApproveHumanLineNamesVersionWithoutDigest(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.artifactResult = &client.Artifact{ID: "artifact-1", Version: "v2", Status: "draft", SnapshotDigest: "sha256:deadbeef"}
-	fc.updateStatusResult = &client.Artifact{ID: "artifact-1", Version: "v2", Status: "approved"}
-	fc.promoteResult = &client.Feature{ID: "feature-1", Key: "LOGIN", Version: 3, CanonicalArtifactID: "artifact-1"}
-	fc.createWorkItemResult = map[string]any{
-		"change_request_id": "cr-1", "change_request_key": "CR-1", "feature_key": "LOGIN",
-		"lead_artifact_id": "artifact-1", "acceptance_criteria": []any{"Login succeeds"},
-	}
-
-	code := command.ExecuteForCode(
-		command.NewRootCommand(deps),
-		"--plain", "--yes", "change", "approve", "artifact-1",
-		"--title", "Implement login", "--ac", "Login succeeds",
-	)
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
-	}
-	got := out.String()
-	if !strings.Contains(got, "artifact-1 v2") {
-		t.Fatalf("approve line must name the approved version, got %q", got)
-	}
-	if strings.Contains(got, "deadbeef") {
-		t.Fatalf("approve line must not print a digest to a human, got %q", got)
-	}
-	if strings.Contains(got, "v3") {
-		t.Fatalf("approve line must not mix the feature counter into the approved version, got %q", got)
-	}
-}
-
-// TestChangeApproveStatesEnforcementAfterApproval pins that the approval output
-// reports how much of the criteria list review can enforce. The confirmation
-// prompt carries the same fact before the list locks; that string is covered by
-// TestApprovalCriteriaPromptNamesBoundCount, because a non-TTY test session
-// never reaches the prompt.
-func TestChangeApproveStatesEnforcementAfterApproval(t *testing.T) {
-	t.Parallel()
-	deps, fc, _, out := newFakeDeps(t)
-	fc.artifactResult = &client.Artifact{ID: "artifact-1", Version: "v2", Status: "draft", SnapshotDigest: "sha256:deadbeef"}
-	fc.updateStatusResult = &client.Artifact{ID: "artifact-1", Version: "v2", Status: "approved"}
-	fc.promoteResult = &client.Feature{ID: "feature-1", Key: "LOGIN", Version: 1, CanonicalArtifactID: "artifact-1"}
-	fc.createWorkItemResult = map[string]any{
-		"change_request_id": "cr-1", "change_request_key": "CR-1", "feature_key": "LOGIN",
-		"lead_artifact_id": "artifact-1", "acceptance_criteria": []any{"Login succeeds", "Errors read clearly"},
-	}
-
-	code := command.ExecuteForCode(
-		command.NewRootCommand(deps),
-		"--plain", "--yes", "change", "approve", "artifact-1",
-		"--title", "Implement login",
-		"--ac", "Login succeeds @check:unit",
-		"--ac", "Errors read clearly",
-	)
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
-	}
-	if got := out.String(); !strings.Contains(got, "1 of 2 criteria are bound to a check") {
-		t.Fatalf("output = %q, want the enforcement line after approval", got)
 	}
 }

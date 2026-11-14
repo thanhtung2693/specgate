@@ -67,17 +67,15 @@ None or several: ask the human.
 For other concept or troubleshooting questions, use the smallest relevant CLI
 read. Do not force a phase or mutate records.
 
-Before the first mode-dependent operation, run `specgate doctor --json`. Read
-`data.mode`; never infer the mode from Docker, URLs, or browser availability.
-Report an unsuccessful doctor result instead of guessing.
-Reuse that mode in this session until configuration, workspace, or repository
-changes, or a command reports a mode/setup error.
+Before the first workspace operation, run `specgate doctor --json`. Follow its
+reported recovery on failure. Reuse the result until configuration, workspace,
+or repository changes, or a command reports a setup error.
 
 ## Operating contract
 
 - The `specgate` CLI is the only product-state read and write surface. Never inspect
-  or edit SpecGate SQLite, Postgres, object storage, deployment volumes, or
-  `.specgate/local` directly. Repository source reads remain allowed.
+  or edit SpecGate SQLite or `.specgate/local` directly. Repository source
+  reads remain allowed.
 - Drafts and repository reads stay ephemeral until a CLI write persists them.
 - The originating authoring framework owns durable source documents: their
   paths, names, lifecycle, and Git policy. SpecGate snapshots them in place. It
@@ -91,9 +89,8 @@ changes, or a command reports a mode/setup error.
 - Follow `change status.data` (or Local `work resume.data.status`) fields
   `next_actor` and `next_command`. When the next actor
   is human, stop and hand off that command verbatim.
-- Local mode has no UI URL and never calls `specgate open`. In Full mode, use
-  only the URL returned by `specgate open ... --print --json`; never construct
-  one.
+- For human handoffs or requested views, use `specgate-human-handoff`.
+  Local browser review is opt-in. Only use CLI-returned URLs.
 
 For command syntax, run `specgate <command> --help` rather than reconstructing
 flags from memory.

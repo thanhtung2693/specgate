@@ -12,7 +12,7 @@ import (
 )
 
 func TestLargeAcceptanceAndRepeatedResumeRetainEveryObligationWithoutWrites(t *testing.T) {
-	deps, client, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	dir, store, sel, _ := newLocalChangeWork(t, deps)
 	criteria := make([]string, 150)
 	for i := range criteria {
@@ -85,7 +85,7 @@ func TestLargeAcceptanceAndRepeatedResumeRetainEveryObligationWithoutWrites(t *t
 			t.Fatal("rendering/read changed decision meaning")
 		}
 	}
-	if after := counts(); after != before || client.calls != 0 {
-		t.Fatalf("reads wrote rows or used HTTP: before=%v after=%v calls=%d", before, after, client.calls)
+	if after := counts(); after != before {
+		t.Fatalf("reads wrote rows: before=%v after=%v", before, after)
 	}
 }

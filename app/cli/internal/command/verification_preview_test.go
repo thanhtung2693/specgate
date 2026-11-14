@@ -15,7 +15,8 @@ import (
 func TestVerificationHumanPreviewIncludesSelectorsAndWatchedHashes(t *testing.T) {
 	for _, dryRun := range []bool{true, false} {
 		t.Run(fmt.Sprint(dryRun), func(t *testing.T) {
-			deps, _, prompt, out := newFakeDeps(t)
+			deps, prompt, out := newWorkflowTestDeps(t)
+			deps.Stderr = out
 			dir, store, sel, _ := newLocalChangeWork(t, deps)
 			work, err := store.CreateQuickWork(t.Context(), sel.Workspace.ID, local.QuickWorkInput{Title: "preview", AcceptanceCriteria: []string{"Works @check:unit"}})
 			if err != nil {

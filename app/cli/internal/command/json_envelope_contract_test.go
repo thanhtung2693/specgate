@@ -44,7 +44,7 @@ func TestJSONFailuresAlwaysEmitAnEnvelope(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			deps, _, _, out := newFakeDeps(t)
+			deps, out := newTestDeps(t)
 
 			code := command.ExecuteForCode(command.NewRootCommand(deps), tc.args...)
 			if code == output.ExitOK {

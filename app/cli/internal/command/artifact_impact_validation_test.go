@@ -59,7 +59,4 @@ func TestLocalCrossFeatureImpactIsValidationWithoutWrites(t *testing.T) {
 			t.Fatalf("impact changed store: %v", err)
 		}
 	}
-	if deps.Client != nil {
-		t.Fatal("Local impact created HTTP client")
-	}
 }

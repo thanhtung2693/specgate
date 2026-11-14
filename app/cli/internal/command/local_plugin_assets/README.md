@@ -33,9 +33,8 @@ pointer resolves the plugin source as `./plugins`:
 - `.claude-plugin/marketplace.json`
 - `.cursor-plugin/marketplace.json`
 
-The Go server cannot embed files outside its module, so `make sync-plugins`
-copies canonical assets into
-`app/doc-registry/internal/agentpackages/plugins/`. Do not edit that copy.
+`make sync-plugins` copies canonical assets into the CLI embed at
+`app/cli/internal/command/local_plugin_assets/`. Edit the canonical source.
 
 ## Skill invocation modes
 
@@ -52,6 +51,10 @@ Lifecycle skills stay focused:
   stops before implementation and human approval.
 - `specgate-work-delivery` picks up approved work, implements within the Context Pack,
   reports evidence, and completes delivery review.
+
+`specgate-human-handoff` presents the exact CLI next action for the human.
+In Local mode it adds a review link when the user chooses browser review
+and the UI is running.
 
 Keep frontmatter descriptions trigger-oriented. Put phase instructions only in
 the owning phase skill; do not expand the router into a second workflow.

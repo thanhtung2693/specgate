@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-
-	"github.com/specgate/specgate/app/cli/internal/client"
 )
 
 type checkoutReceiptComparison struct {
@@ -16,7 +14,12 @@ type checkoutReceiptComparison struct {
 	Reason  string
 }
 
-func compareCheckoutReceipt(ctx context.Context, deps *Deps, stored gitReceipt) checkoutReceiptComparison {
+func compareCheckoutReceipt(ctx context.Context, deps *Deps, stored gitReceipt, generation string) checkoutReceiptComparison {
+	historical := stored.CheckoutGeneration != generation
+	scope := receiptFreshnessScope(stored)
+	if historical && scope == "local_checkout" {
+		return checkoutReceiptComparison{Message: "Stored checkout receipt belongs to a different Local store generation and cannot be compared with this checkout."}
+	}
 	if stored.Availability != "" && stored.Availability != "available" {
 		return checkoutReceiptComparison{Message: "No stored receipt was checked against the current checkout because its Git metadata is unavailable."}
 	}
@@ -26,10 +29,11 @@ func compareCheckoutReceipt(ctx context.Context, deps *Deps, stored gitReceipt) 
 
 	current := collectGitReceiptWithPriorBase(
 		ctx,
-		deps.DeployRunner,
+		deps.CommandRunner,
 		deliveryWorkingDir(deps),
 		nil,
 		stored.BaseRevision,
+		generation,
 	)
 	if current.Availability != "available" || strings.TrimSpace(current.HeadRevision) == "" {
 		detail := "Git metadata is unavailable"
@@ -41,7 +45,6 @@ func compareCheckoutReceipt(ctx context.Context, deps *Deps, stored gitReceipt) 
 		}
 	}
 
-	scope := receiptFreshnessScope(stored)
 	if scope == "local_checkout" && (stored.CheckoutID == "" || current.CheckoutID == "" || stored.CheckoutID != current.CheckoutID) {
 		return checkoutReceiptComparison{Message: "Could not compare the stored receipt with this local checkout: checkout identity is missing or different."}
 	}
@@ -55,9 +58,26 @@ func compareCheckoutReceipt(ctx context.Context, deps *Deps, stored gitReceipt) 
 		compareReceiptField("repository", stored.Repository, current.Repository)
 		compareReceiptField("base revision", stored.BaseRevision, current.BaseRevision)
 	}
-	compareReceiptField("branch", stored.Branch, current.Branch)
+	if historical && (stored.Repository == "" || current.Repository == "" || stored.BaseRevision == "" || current.BaseRevision == "") {
+		return checkoutReceiptComparison{Message: "Shared-repository Git endpoint comparison is unavailable for the historical receipt."}
+	}
+	if historical && stored.Branch == "" && current.Branch != "" {
+		differences = append(differences, "branch")
+	} else {
+		compareReceiptField("branch", stored.Branch, current.Branch)
+	}
 	compareReceiptField("HEAD", stored.HeadRevision, current.HeadRevision)
-	compareReceiptField("working tree digest", stored.DiffDigest, current.DiffDigest)
+	if len(differences) == 0 {
+		if historical && (current.Dirty || stored.DiffDigest == "" || current.DiffDigest == "" || stored.DiffDigest != current.DiffDigest) {
+			return checkoutReceiptComparison{Message: "Shared-repository Git endpoints match the historical receipt. Working-tree comparability is unverified."}
+		}
+		if stored.DiffDigest == "" || current.DiffDigest == "" {
+			return checkoutReceiptComparison{Message: "Checkout freshness is unverified because a working-tree digest is unavailable."}
+		}
+	}
+	if stored.DiffDigest != "" && current.DiffDigest != "" {
+		compareReceiptField("working tree digest", stored.DiffDigest, current.DiffDigest)
+	}
 	matchMessage := "Stored receipt matches the current checkout."
 	differenceMessage := "Current checkout differs from the stored receipt: "
 	if scope == "local_checkout" {
@@ -65,6 +85,10 @@ func compareCheckoutReceipt(ctx context.Context, deps *Deps, stored gitReceipt) 
 		differenceMessage = "This local checkout differs from the stored receipt: "
 	}
 
+	if historical {
+		matchMessage = "Shared-repository Git endpoints and the working-tree digest match the historical receipt."
+		differenceMessage = "Shared-repository Git endpoints differ from the historical receipt: "
+	}
 	if len(differences) == 0 {
 		return checkoutReceiptComparison{
 			Checked: true,
@@ -87,19 +111,6 @@ func receiptFreshnessScope(receipt gitReceipt) string {
 	return "shared_repository"
 }
 
-func clientGitReceipt(receipt *client.GitReceipt) gitReceipt {
-	if receipt == nil {
-		return gitReceipt{}
-	}
-	return gitReceipt{
-		Repository: receipt.Repository, Availability: receipt.Availability,
-		FreshnessScope: receipt.FreshnessScope,
-		Branch:         receipt.Branch, BaseRevision: receipt.BaseRevision,
-		HeadRevision: receipt.HeadRevision, ChangedFiles: receipt.ChangedFiles,
-		DiffDigest: receipt.DiffDigest, Warnings: receipt.Warnings,
-	}
-}
-
 func mapGitReceipt(body map[string]any) gitReceipt {
 	raw, _ := body["git_receipt"].(map[string]any)
 	if raw == nil {
@@ -110,16 +121,17 @@ func mapGitReceipt(body map[string]any) gitReceipt {
 		return strings.TrimSpace(value)
 	}
 	return gitReceipt{
-		Repository:     text("repository"),
-		CheckoutID:     text("checkout_id"),
-		Availability:   text("availability"),
-		FreshnessScope: text("freshness_scope"),
-		Branch:         text("branch"),
-		BaseRevision:   text("base_revision"),
-		HeadRevision:   text("head_revision"),
-		ChangedFiles:   stringSlice(raw["changed_files"]),
-		DiffDigest:     text("diff_digest"),
-		Warnings:       stringSlice(raw["warnings"]),
+		Repository:         text("repository"),
+		CheckoutID:         text("checkout_id"),
+		CheckoutGeneration: text("checkout_generation"),
+		Availability:       text("availability"),
+		FreshnessScope:     text("freshness_scope"),
+		Branch:             text("branch"),
+		BaseRevision:       text("base_revision"),
+		HeadRevision:       text("head_revision"),
+		ChangedFiles:       stringSlice(raw["changed_files"]),
+		DiffDigest:         text("diff_digest"),
+		Warnings:           stringSlice(raw["warnings"]),
 	}
 }
 
@@ -128,10 +140,16 @@ func applyCheckoutFreshness(
 	deps *Deps,
 	result changeStatusResult,
 	stored gitReceipt,
+	generation string,
 ) changeStatusResult {
-	comparison := compareCheckoutReceipt(ctx, deps, stored)
+	comparison := compareCheckoutReceipt(ctx, deps, stored, generation)
 	result.FreshnessUnchecked = !comparison.Checked
 	result.Freshness = comparison.Message
+	result.HistoricalVerification = stored.CheckoutGeneration != generation
+	if result.HistoricalVerification {
+		result.Freshness += " Recorded verification is historical and belongs to another Local store generation."
+		result.Assurance = strings.Replace(result.Assurance, "locally reproduced", "reproduced by the source SpecGate CLI", 1)
+	}
 	if comparison.Stale {
 		if result.StaleReason == "" {
 			result.StaleReason = comparison.Reason

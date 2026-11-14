@@ -1,146 +1,35 @@
 # Trust and security
 
-SpecGate v0.1 is designed for local evaluation and trusted self-hosted
-networks. Do not expose the Doc Registry API, agents service, or web UI directly
-to the public internet without additional access control.
+SpecGate uses a Local SQLite store. Use it on a trusted machine. Local user
+names attribute decisions in the workflow. OS access controls protect the
+store and configuration.
 
-## Current posture
+## Browser review
 
-The v0.1 stack prioritizes local workflow validation:
+`specgate ui` binds to loopback. Local processes and accounts that can reach
+the listener are inside its trust boundary. A browser session cookie, exact
+Host and Origin checks, and a CSRF header protect actions from other browser
+origins. The listener does not authenticate an OS user. Review URLs contain no
+session credentials. Stop the foreground command to close the listener.
 
-- CLI-first setup;
-- trusted network assumption by default, with optional gateway credentials for a
-  shared appliance (see below);
-- no identity provider, sessions, or per-user roles;
-- local user and global/project workspace selection for attribution and
-  filtering;
-- optional API keys for model providers and external integrations.
+A browser decision carries the displayed work, review, completion, and
+applicable acceptance basis. The store rejects a stale decision and requires
+a fresh read. Source excerpts use recorded citations and bounded reads
+within the active checkout.
 
-Treat every service endpoint as internal unless you add your own boundary.
+## Evidence and sensitive data
 
-## Sharing one appliance with a few developers
+Agent-reported checks, CLI-observed results, checkout comparisons, and human
+decisions remain separate. Only run verification commands you trust. They
+run as the current OS user. A custom test runner can generate a misleading
+report, so review its inputs alongside observed results.
 
-A default appliance publishes one port on `127.0.0.1` and trusts whoever reaches
-it. That is right for one person on one machine. When two or three developers
-share an appliance, issue each of them a credential:
+Keep Local state and backups as private as the original specifications and
+evidence. Handoff files redact receipt credentials and grounding excerpts.
+They still contain work scope and evidence. Inspect an export before committing
+it. A handoff is an unsigned review request and cannot record an acceptance
+decision in another store.
 
-```bash
-specgate workspace credential mai
-```
-
-The appliance generates the secret and prints it once. On that developer's
-machine:
-
-```bash
-specgate config credential mai
-```
-
-Issuing the first credential turns authentication on for everything the gateway
-serves — the API, and the browser, which prompts once and remembers. The gateway
-then tells SpecGate who the caller is, so the name recorded on an approval or an
-acceptance is the one that authenticated rather than one the caller typed.
-Revoking the last credential returns the appliance to trusting its network.
-
-Access changes are recorded. Issuing or revoking a credential appends a row
-naming the member and whoever made the change, and `specgate workspace members`
-shows who currently holds one and who last changed it. The record is append-only
-but not hash-linked, so it shows what SpecGate recorded rather than proving the
-database was never edited underneath it.
-
-Two limits worth knowing before you rely on it:
-
-- **A credential identifies a credential, not a person.** Hand yours to a
-  teammate or paste it into an agent's configuration and the ledger will record
-  your name for their decisions.
-- **Credentials are reversible on the wire.** Beyond loopback, put the appliance
-  on a private overlay network (Tailscale, WireGuard) or terminate TLS in front
-  of it. For a small team the overlay is usually less work than certificates.
-
-Local mode has no gateway and no credentials: one binary, one file, one machine.
-
-## Trusted-network boundary
-
-Keep default services bound to your machine or private network. If you put
-SpecGate behind a reverse proxy, add:
-
-- TLS;
-- authentication;
-- request size limits;
-- log redaction;
-- secret management;
-- webhook signature verification.
-
-Do not publish a local evaluation stack directly on the public internet.
-
-## CLI and REST access
-
-The CLI stores a server URL and local user/workspace selection. This selection
-is not login. It controls attribution and default filtering. Workspace
-selection can be global or bound to a local Git checkout; both forms live in
-the user CLI config and do not grant access by themselves.
-
-REST endpoints in the v0.1 stack are intended for trusted local use. Production
-deployments should place them behind an auth gateway or service mesh.
-
-Do not commit model keys, webhook secrets, or OAuth credentials.
-
-## Evidence and integrations
-
-Delivery evidence can come from:
-
-- agent-submitted completion reports;
-- user-cited or externally supplied test and CI output;
-- selected-resource PR/MR observations and optional Linear signals;
-- human notes.
-
-SpecGate records evidence provenance. Policies can require corroborated evidence
-for stricter delivery review. It does not ingest provider CI state or create a
-delivery-assurance source from it.
-
-Optional Local selected-test receipts are observations from the same user and
-process boundary as the command they run. SpecGate bounds and normalizes the
-report, avoids retaining raw XML or command output, and records endpoint
-freshness limits, but it cannot attest test quality or defend against a hostile
-runner. An enhanced-store compatibility guard blocks pre-upgrade CLIs from
-writing the store; it is a data-loss safeguard, not hostile-agent isolation or
-authorization.
-
-## Data sensitivity
-
-Git origin authentication is not delivery evidence. New CLI receipts remove
-URL authentication, query and fragment data before persistence or submission.
-Local handoff and portable export project old receipt metadata without those
-credentials and leave the original database evidence unchanged. This applies
-only to known Git receipt fields; it is not a general secret scanner for
-arbitrary user-authored evidence, source text or already-shared artifacts.
-
-Artifact/spec data may include product plans, source paths, issue details, and
-implementation evidence. Treat the Full appliance's managed `specgate-data`
-volume with the same care as source code and tracker data when backing up or
-purging it.
-
-The artifact event log is tamper-evident: every `artifact_events` row hash-links
-to its predecessor, and `specgate audit <ref> --verify` recomputes the chain and
-reports the first broken link. This evidences direct database edits; it does not
-detect deletion of the newest events (no external anchor) and it does not defend
-against a compromised server binary.
-
-Use encrypted storage and OS-level disk encryption for Full-appliance data.
-Settings secrets (provider API keys) are additionally application-encrypted.
-Application-level, per-workspace artifact encryption is not yet available.
-
-## Safe deployment checklist
-
-- Keep services private.
-- Use TLS and authentication at the edge.
-- Store secrets outside git.
-- Back up the appliance and retain `SETTINGS_ENCRYPTION_KEY`.
-- Verify webhook signatures.
-- Redact logs before sharing.
-- Run `specgate doctor` after upgrades.
-
-## Related
-
-- [Operate SpecGate](../guides/operate-specgate.md)
-- [Configuration reference](../reference/configuration.md)
+- [Local operation and backups](../guides/operate-specgate.md)
+- [Local browser review](../guides/local-review.md)
 - [Evidence reference](../reference/evidence.md)

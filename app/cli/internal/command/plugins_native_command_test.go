@@ -37,7 +37,7 @@ func TestPluginsRejectAndReportNativeOwnership(t *testing.T) {
 			test.setup(t, home)
 
 			deps, out := newPluginDeps(home)
-			code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "--server", "http://127.0.0.1:1", "plugins", "install", "--agent", "cursor,"+test.agent, "--project-local")
+			code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--no-input", "plugins", "install", "--agent", "cursor,"+test.agent, "--project-local")
 			if code != output.ExitConflict || !strings.Contains(out.String(), `"owner":"native"`) || !strings.Contains(out.String(), `"marketplace":"team"`) {
 				t.Fatalf("native conflict missing: exit=%d output=%s", code, out.String())
 			}
@@ -46,7 +46,7 @@ func TestPluginsRejectAndReportNativeOwnership(t *testing.T) {
 			}
 
 			deps, out = newPluginDeps(home)
-			code = command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--server", registry.URL, "plugins", "doctor", "--agent", test.agent)
+			code = command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "plugins", "doctor", "--agent", test.agent)
 			if code != output.ExitOK || !strings.Contains(out.String(), "native marketplace team") {
 				t.Fatalf("native doctor missing: exit=%d output=%s", code, out.String())
 			}

@@ -6,8 +6,10 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/spf13/cobra"
@@ -31,7 +33,7 @@ func TestGitReceiptIncludesCommittedBracketFilename(t *testing.T) {
 		receiptCommand(dir, "merge-base", "HEAD", "origin/main"):   []byte("base"),
 		receiptCommand(dir, "diff", "--name-only", "base", "head"): []byte("[]\n"),
 	}}
-	receipt := collectGitReceipt(t.Context(), runner, dir, []string{"[]"})
+	receipt := collectGitReceipt(t.Context(), runner, dir, []string{"[]"}, "")
 	if len(receipt.ChangedFiles) != 1 || receipt.ChangedFiles[0] != "[]" {
 		t.Fatalf("valid committed filename disappeared: %v", receipt.ChangedFiles)
 	}
@@ -53,7 +55,7 @@ func TestGitReceiptReportedPathsUseRepositoryCoordinates(t *testing.T) {
 		runner := &gitReceiptRunner{outputs: map[string][]byte{
 			receiptCommand(dir, "rev-parse", "--show-toplevel"): []byte(root),
 		}}
-		got := collectGitReceipt(t.Context(), runner, dir, []string{"index.js", filepath.Join(dir, "other.js")})
+		got := collectGitReceipt(t.Context(), runner, dir, []string{"index.js", filepath.Join(dir, "other.js")}, "")
 		want := []string{sub + "/index.js", sub + "/other.js"}
 		if strings.Join(got.ReportedFiles, ",") != strings.Join(want, ",") {
 			t.Fatalf("reported files in %s: got=%v want=%v", sub, got.ReportedFiles, want)
@@ -92,7 +94,7 @@ func TestGitReceiptCleanCheckout(t *testing.T) {
 		},
 	}
 
-	receipt := collectGitReceipt(context.Background(), runner, dir, nil)
+	receipt := collectGitReceipt(context.Background(), runner, dir, nil, "")
 	if receipt.Availability != "available" {
 		t.Fatalf("availability = %q, want available", receipt.Availability)
 	}
@@ -111,7 +113,7 @@ func TestGitReceiptCleanCheckout(t *testing.T) {
 	if len(receipt.Warnings) != 0 {
 		t.Errorf("warnings = %#v, want none", receipt.Warnings)
 	}
-	if got := collectGitReceipt(context.Background(), runner, dir, nil).DiffDigest; got != receipt.DiffDigest {
+	if got := collectGitReceipt(context.Background(), runner, dir, nil, "").DiffDigest; got != receipt.DiffDigest {
 		t.Errorf("digest is not stable: first %q, second %q", receipt.DiffDigest, got)
 	}
 }
@@ -136,7 +138,7 @@ func TestGitReceiptIncludesCommittedFilesBetweenBaseAndHead(t *testing.T) {
 		},
 	}
 
-	receipt := collectGitReceipt(context.Background(), runner, dir, []string{"src/committed.go"})
+	receipt := collectGitReceipt(context.Background(), runner, dir, []string{"src/committed.go"}, "")
 	if len(receipt.ChangedFiles) != 1 || receipt.ChangedFiles[0] != "src/committed.go" {
 		t.Fatalf("changed files = %#v, want committed path", receipt.ChangedFiles)
 	}
@@ -163,7 +165,7 @@ func TestGitReceiptUsesPriorBaseForPushedCommitScope(t *testing.T) {
 		},
 	}
 
-	receipt := collectGitReceiptWithPriorBase(context.Background(), runner, dir, []string{"src/committed.go"}, "prior-base")
+	receipt := collectGitReceiptWithPriorBase(context.Background(), runner, dir, []string{"src/committed.go"}, "prior-base", "")
 	if receipt.BaseRevision != "prior-base" {
 		t.Fatalf("base revision = %q, want prior-base", receipt.BaseRevision)
 	}
@@ -198,8 +200,9 @@ func TestGitReceiptUsesPriorBaseForPushedCommitScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	cmd := &cobra.Command{}
+	cmd.SetContext(t.Context())
 	acceptanceSelectionFlags(cmd)
-	opts, _, err := acceptanceOptions(cmd, &Deps{WorkingDir: dir, DeployRunner: runner}, store, sel.Workspace.ID, work.Key)
+	opts, _, err := acceptanceOptions(cmd, &Deps{WorkingDir: dir, CommandRunner: runner}, store, sel.Workspace.ID, work.Key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +227,7 @@ func TestGitReceiptPriorBaseKeepsUnrelatedDirtyWarning(t *testing.T) {
 		},
 	}
 
-	receipt := collectGitReceiptWithPriorBase(context.Background(), runner, dir, []string{"src/committed.go"}, "prior-base")
+	receipt := collectGitReceiptWithPriorBase(context.Background(), runner, dir, []string{"src/committed.go"}, "prior-base", "")
 	if len(receipt.Warnings) != 1 || !strings.Contains(receipt.Warnings[0], "README.md") || strings.Contains(receipt.Warnings[0], "src/committed.go") {
 		t.Fatalf("warnings = %#v, want only unrelated README warning", receipt.Warnings)
 	}
@@ -245,7 +248,7 @@ func TestGitReceiptIgnoresPriorBaseOutsideHeadHistory(t *testing.T) {
 		errors: map[string]error{ancestorCheck: errors.New("not an ancestor")},
 	}
 
-	receipt := collectGitReceiptWithPriorBase(context.Background(), runner, dir, nil, "unrelated")
+	receipt := collectGitReceiptWithPriorBase(context.Background(), runner, dir, nil, "unrelated", "")
 	if receipt.BaseRevision != "head" {
 		t.Fatalf("base revision = %q, want current head", receipt.BaseRevision)
 	}
@@ -271,14 +274,14 @@ func TestGitReceiptDigestChangesWhenContentChanges(t *testing.T) {
 			receiptCommand(dir, "status", "--porcelain=v1", "-z", "--untracked-files=all"): []byte(" M tracked.txt\x00"),
 		},
 	}
-	first := collectGitReceipt(context.Background(), runner, dir, []string{"tracked.txt"}).DiffDigest
+	first := collectGitReceipt(context.Background(), runner, dir, []string{"tracked.txt"}, "").DiffDigest
 	if err := os.WriteFile(path, []byte("new"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chtimes(path, info.ModTime(), info.ModTime()); err != nil {
 		t.Fatal(err)
 	}
-	second := collectGitReceipt(context.Background(), runner, dir, []string{"tracked.txt"}).DiffDigest
+	second := collectGitReceipt(context.Background(), runner, dir, []string{"tracked.txt"}, "").DiffDigest
 	if first == second {
 		t.Fatalf("digest did not change after same-size content edit: %q", first)
 	}
@@ -308,14 +311,14 @@ func TestGitReceiptDigestReadsStatusPathsFromRepositoryRoot(t *testing.T) {
 			receiptCommand(dir, "status", "--porcelain=v1", "-z", "--untracked-files=all"): []byte(" M root.txt\x00"),
 		},
 	}
-	first := collectGitReceipt(context.Background(), runner, dir, []string{"root.txt"}).DiffDigest
+	first := collectGitReceipt(context.Background(), runner, dir, []string{"root.txt"}, "").DiffDigest
 	if err := os.WriteFile(path, []byte("new"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chtimes(path, info.ModTime(), info.ModTime()); err != nil {
 		t.Fatal(err)
 	}
-	second := collectGitReceipt(context.Background(), runner, dir, []string{"root.txt"}).DiffDigest
+	second := collectGitReceipt(context.Background(), runner, dir, []string{"root.txt"}, "").DiffDigest
 	if first == second {
 		t.Fatalf("digest did not include root-relative file content: %q", first)
 	}
@@ -339,7 +342,7 @@ func TestGitReceiptDirtyCheckoutSortsChangedFiles(t *testing.T) {
 		},
 	}
 
-	receipt := collectGitReceipt(context.Background(), runner, dir, []string{"z.go", "staged.go", "new.txt"})
+	receipt := collectGitReceipt(context.Background(), runner, dir, []string{"z.go", "staged.go", "new.txt"}, "")
 	want := []string{"new.txt", "staged.go", "z.go"}
 	if strings.Join(receipt.ChangedFiles, "\x00") != strings.Join(want, "\x00") {
 		t.Errorf("changed files = %#v, want %#v", receipt.ChangedFiles, want)
@@ -362,7 +365,7 @@ func TestGitReceiptWarnsOnReportedFileMismatch(t *testing.T) {
 		},
 	}
 
-	receipt := collectGitReceipt(context.Background(), runner, dir, []string{"reported.go"})
+	receipt := collectGitReceipt(context.Background(), runner, dir, []string{"reported.go"}, "")
 	if len(receipt.Warnings) == 0 || !strings.Contains(receipt.Warnings[0], "reported") || !strings.Contains(receipt.Warnings[0], "actual.go") {
 		t.Errorf("warnings = %#v, want reported-file mismatch warning", receipt.Warnings)
 	}
@@ -390,7 +393,7 @@ func TestGitReceiptWarnsWhenReportedFilesAreEmpty(t *testing.T) {
 			receiptCommand(dir, "status", "--porcelain=v1", "-z", "--untracked-files=all"): []byte(" M actual.go\x00"),
 		},
 	}
-	receipt := collectGitReceipt(context.Background(), runner, dir, []string{})
+	receipt := collectGitReceipt(context.Background(), runner, dir, []string{}, "")
 	if len(receipt.Warnings) == 0 || !strings.Contains(receipt.Warnings[0], "actual.go") {
 		t.Errorf("warnings = %#v, want empty-reported mismatch warning", receipt.Warnings)
 	}
@@ -408,7 +411,7 @@ func TestGitReceiptSkipsScopeComparisonWhenReportedFilesAreUnspecified(t *testin
 			receiptCommand(dir, "status", "--porcelain=v1", "-z", "--untracked-files=all"): []byte(" M actual.go\x00"),
 		},
 	}
-	receipt := collectGitReceipt(context.Background(), runner, dir, nil)
+	receipt := collectGitReceipt(context.Background(), runner, dir, nil, "")
 	if len(receipt.Warnings) != 0 {
 		t.Errorf("warnings = %#v, want none until delivery scope is supplied", receipt.Warnings)
 	}
@@ -422,7 +425,7 @@ func TestGitReceiptUnavailableOutsideGit(t *testing.T) {
 		},
 	}
 
-	receipt := collectGitReceipt(context.Background(), runner, dir, []string{"reported.go"})
+	receipt := collectGitReceipt(context.Background(), runner, dir, []string{"reported.go"}, "")
 	if receipt.Availability != "unavailable" {
 		t.Fatalf("availability = %q, want unavailable", receipt.Availability)
 	}
@@ -436,6 +439,9 @@ func TestGitReceiptUnavailableOutsideGit(t *testing.T) {
 
 func TestGitReceiptUsesLocalCheckoutScopeWithoutOrigin(t *testing.T) {
 	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "local.go"), []byte("fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	runner := &gitReceiptRunner{
 		outputs: map[string][]byte{
 			receiptCommand(dir, "rev-parse", "--show-toplevel"):                            []byte(dir + "\n"),
@@ -448,7 +454,7 @@ func TestGitReceiptUsesLocalCheckoutScopeWithoutOrigin(t *testing.T) {
 		},
 	}
 
-	receipt := collectGitReceipt(context.Background(), runner, dir, []string{"local.go"})
+	receipt := collectGitReceipt(context.Background(), runner, dir, []string{"local.go"}, "")
 	if receipt.Availability != "available" {
 		t.Fatalf("availability = %q, want available", receipt.Availability)
 	}
@@ -488,8 +494,68 @@ func TestGitReceiptDoesNotCompareCommittedScopeWithoutOriginBase(t *testing.T) {
 		},
 	}
 
-	receipt := collectGitReceipt(context.Background(), runner, dir, []string{"committed.go"})
+	receipt := collectGitReceipt(context.Background(), runner, dir, []string{"committed.go"}, "")
 	if len(receipt.Warnings) != 1 || !strings.Contains(receipt.Warnings[0], "no origin remote") {
 		t.Fatalf("warnings = %#v, want only the provenance warning", receipt.Warnings)
+	}
+}
+
+func TestGitReceiptDigestTracksSymlinkTargetWithoutReadingIt(t *testing.T) {
+	dir := t.TempDir()
+	link := filepath.Join(dir, "link")
+	modified := time.Unix(1_700_000_000, 0)
+	for _, name := range []string{"one", "two"} {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte("identical"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, modified, modified); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var digests []string
+	for _, target := range []string{"one", "two", "missing-one", "missing-two"} {
+		if len(digests) != 0 {
+			if err := os.Remove(link); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.Symlink(target, link); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		digest := gitStatusDigest(dir, "repo", "main", "base", "head", []gitStatusEntry{{status: "??", path: "link"}})
+		if digest == "" || slices.Contains(digests, digest) {
+			t.Fatalf("changed link target produced unavailable or duplicate digest: %q", digest)
+		}
+		digests = append(digests, digest)
+	}
+}
+
+func TestGitReceiptDigestUnavailableWhenReportedContentDisappears(t *testing.T) {
+	dir := t.TempDir()
+	for _, status := range []string{"??", " M"} {
+		if got := gitStatusDigest(dir, "repo", "main", "base", "head", []gitStatusEntry{{status: status, path: "absent"}}); got != "" {
+			t.Fatalf("status %q produced a digest without reading required content: %q", status, got)
+		}
+	}
+	if got := gitStatusDigest(dir, "repo", "main", "base", "head", []gitStatusEntry{{status: " D", path: "absent"}}); got == "" {
+		t.Fatal("observed deletion lost its digest")
+	}
+}
+
+func TestGitReceiptDigestRequiresCopyContent(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "copy"), []byte("fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	entries := parseGitStatus([]byte("C  copy\x00original\x00"))
+	if got := gitStatusDigest(dir, "repo", "main", "base", "head", entries); got != "" {
+		t.Fatalf("unavailable copy source produced a digest: %q", got)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "original"), []byte("fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitStatusDigest(dir, "repo", "main", "base", "head", entries); got == "" {
+		t.Fatal("copy with both paths did not produce a digest")
 	}
 }

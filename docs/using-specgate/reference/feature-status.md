@@ -1,76 +1,40 @@
 # SpecGate feature status
 
-Use this reference to see which SpecGate capabilities are established and which
-are newer. Both are usable; the newer group has had less real-world mileage, so
-its interfaces are the more likely to change.
+This reference describes the capabilities in the current source. See
+[release status](../../../README.md#release-status) for availability.
 
 ## Established paths
 
-- CLI install, Local CLI initialization, and Full appliance initialization with
-  `specgate init`.
-- Local user and per-project workspace selection for attribution and filtering.
-- One-command workspace overrides with `--workspace` or `SPECGATE_WORKSPACE`.
-- Local and Full quick work item creation with acceptance criteria.
-- Artifact publication, versioning, status, and Context Pack handoff.
-- Full-mode automatic governance resolution across `light`, `standard`, and
-  `enhanced`; Local artifact-backed work uses fixed Standard governance.
-- Delivery report scaffolding, deterministic check bindings enforced in both
-  Local and Full review, evidence-grounded citations, human delivery
-  approve/reject, and `delivery submit`.
-- Delivery-trust readback separates evidence, assurance source, human decision,
-  and recorded Git receipt; agent-reported evidence remains explicit whether or
-  not a platform model reviews the submitted claims.
-- Change facade: `change approve`, `change status`, `change submit`, `change
-  accept`, and `change request-changes` work against existing artifact, work,
-  and delivery records in Local and Full mode; they do not create a durable
-  Change entity.
-- Local and Full model-less semantic readiness through frozen IDE gate tasks;
-  results are `agent_attested` and human approval remains separate.
-- Workspace peer governance: local users/workspaces, workspace member readback,
-  same-agent delivery-approval guard, completion-bound human decisions, and
-  peer-reviewed delivery evidence.
-- Embedded Codex, Claude Code, and Cursor plugin install in Local mode without
-  a registry; the same IDE targets are available in Full mode.
-- Safe uninstall that keeps data by default.
-- Local resume packets and indexed reads of approved document snapshots.
-- Optional Local verification contracts that pin reviewed `@check` commands
-  before reporting; Local acceptance requires the exact `--review-id` from
-  reviewed status. Pinned contracts and source-criterion inventory cannot be
-  exported to Full mode.
-- Local-only optional delivery-assurance extensions: exact selected JUnit-case
-  observations, explicitly watched verification inputs, append-only checkpoints
-  and resume deltas, declared exact-pair source lineage impact, and an
-  acceptance basis bound to the human decision. They never infer tests,
-  requirements, or approval, and Full mode rejects their selection flags.
-- A first enhanced Local record upgrades the store's write compatibility after
-  confirmation and creates a disclosed pre-upgrade backup. Older CLIs cannot
-  write that upgraded store; portable and handoff v1 exports refuse records
-  they could not preserve.
-- `specgate stats` governance-value reporting from real gate and delivery
-  history in both modes, including first-pass yield, pre/post-build governance
-  signals, rework, and cycle time.
-- Full-mode GitHub/GitLab **Repositories** with selected-resource managed
-  webhooks and exact-head merged PR/MR observation.
-- Optional Full-mode Linear **Work tracking** handoff to one selected team;
-  direct IDE-agent Context Pack handoff remains available.
+- Initialize a Local store, select a user and workspace, and bind a checkout.
+- Create quick work with explicit criteria or publish and approve an exact
+  artifact version for an immutable Context Pack.
+- Run deterministic checks and frozen IDE readiness tasks. Store their
+  origin separately from a human approval.
+- Resume approved work, inspect pinned documents, submit criterion evidence, and
+  make the exact reviewed delivery decision through the Change facade.
+- Install or verify the embedded Codex, Claude Code, and Cursor packages.
+  Ordinary uninstall preserves Local data.
+- Review longer work with optional verification pins, selected JUnit cases,
+  watched inputs, checkpoints, source lineage, and an exact acceptance basis.
+  The first enhanced write creates a disclosed pre-upgrade backup.
+- Export or read an unsigned bounded delivery review request through Git. It
+  is separate from Local store backups and human decisions.
 
 ## Newer surfaces
 
-- Web UI review, workflow scanning, settings, workspace members, and artifact
-  inspection.
-- Governance chat for advisory help around gates, artifacts, and delivery
-  context.
-- Full-mode workspace-scoped Knowledge upload, queueable ingest, embedding-backed search,
-  citations, Context Pack Knowledge provenance, and
-  linked-Knowledge freshness warnings.
-- Platform-model readiness checks and delivery review.
-- Committable delivery handoffs: `delivery handoff export` writes a review
-  request into the repository and `delivery handoff show` renders it read-only
-  without a workspace or server. Reviewer decisions are not carried in the file,
-  and the bundle schema can still change.
+- Optional [Local browser review](../guides/local-review.md) for approved
+  scope, criterion evidence, human decisions, and Local installation maintenance.
+- [Local project rubrics](../guides/customize-governance.md#add-local-project-instructions)
+  add instructions to four existing semantic gates and freeze them at publication.
+- [Local store transfer](../guides/operate-specgate.md#move-a-local-store-to-another-checkout)
+  carries an entire selected store and a work bookmark into a fresh store.
+  Activate that store explicitly for the destination checkout.
 
-These surfaces work today. They have had less team mileage than the established
-paths, so their interfaces are the more likely to change.
+## Optional experiment
+
+The [Local notification pilot](../guides/local-notification-pilot.md) runs in the
+foreground from the source checkout using Node.js 26 or later. The participant
+study is pending.
 
 ## Deferred from the Change facade
 
@@ -79,12 +43,12 @@ prepare the exact snapshot and explicit work contract; `change approve` then
 coordinates approval, canonical promotion, work creation, and Context Pack
 verification.
 
-## Not goals for v0.1
+## Retired distribution features
 
-- Public multi-tenant hosting.
-- Full end-user authentication and authorization.
-- Replacement for CI, PR review, trackers, or authoring tools.
-- Guaranteed model judgment without human review.
+The Full appliance, remote service setup, governance chat, Knowledge,
+provider and tracker integrations, statistics reporting, and the previous
+portable workspace transfer are retired. See [previous installations](../guides/operate-specgate.md#previous-installations)
+for access to existing data.
 
 ## Related
 

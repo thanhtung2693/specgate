@@ -92,3 +92,18 @@ func TestPurgeLocalStateKeepsUnrelatedFiles(t *testing.T) {
 		}
 	}
 }
+
+func TestPurgeLocalStateKeepsEmptyDirWithoutManagedFiles(t *testing.T) {
+	t.Parallel()
+	store := filepath.Join(t.TempDir(), ".specgate", "local")
+	if err := os.MkdirAll(store, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := removeLocalSQLiteState(store)
+	if err != nil || len(removed) > 0 {
+		t.Errorf("purge reported %v removed from an unowned directory: %v", removed, err)
+	}
+	if _, err := os.Stat(store); err != nil {
+		t.Errorf("unowned directory did not survive: %v", err)
+	}
+}

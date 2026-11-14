@@ -14,7 +14,7 @@ import (
 )
 
 func TestLocalVerificationPinScaffoldAndRejectChangedCommand(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir, store, sel, _ := newLocalChangeWork(t, deps)
 	w, err := store.CreateQuickWork(t.Context(), sel.Workspace.ID, local.QuickWorkInput{Title: "Pinned", AcceptanceCriteria: []string{"Works @check:unit"}})
 	if err != nil {
@@ -97,7 +97,7 @@ func TestLocalVerificationPinScaffoldAndRejectChangedCommand(t *testing.T) {
 func TestLocalSubmitPreflightBeforeRunner(t *testing.T) {
 	for _, kind := range []string{"unknown", "context", "workspace", "delivered"} {
 		t.Run(kind, func(t *testing.T) {
-			deps, _, _, out := newFakeDeps(t)
+			deps, out := newTestDeps(t)
 			stateDir, store, selection, work := newLocalChangeWork(t, deps)
 			ref, digest, want := work.Key, work.ContextDigest, output.ExitUsage
 			if kind == "unknown" {
@@ -137,7 +137,7 @@ func TestLocalSubmitPreflightBeforeRunner(t *testing.T) {
 }
 
 func TestLocalReportEnabledCheckRequiresFreshSelectedJUnitEvidence(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir, store, selection, work := newLocalChangeWork(t, deps)
 	var err error
 	work, err = store.CreateQuickWork(t.Context(), selection.Workspace.ID, local.QuickWorkInput{Title: "JUnit", AcceptanceCriteria: []string{"selected test passes @check:unit"}})

@@ -21,8 +21,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/specgate/specgate/app/cli/internal/buildinfo"
-	"github.com/specgate/specgate/app/cli/internal/config"
-	"github.com/specgate/specgate/app/cli/internal/deploy"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
@@ -53,21 +51,12 @@ type progressEvent struct {
 
 // specgate update
 func newUpdateCmd(deps *Deps) *cobra.Command {
-	var (
-		deployDir string
-		version   string
-	)
+	var version string
 	cmd := &cobra.Command{
 		Use:   "update",
-		Short: "Update the SpecGate CLI, IDE setup, and Full appliance",
+		Short: "Update the SpecGate CLI and IDE setup",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
-			cfg, err := config.LoadFrom(deps.ConfigPath)
-			if err != nil {
-				code := deps.Printer.Error("update", output.ErrorPayload{Code: "unavailable", Message: err.Error()})
-				return &output.ExitError{Code: code, Err: err}
-			}
-			deps.Topology = config.ResolveMode(cfg)
 			resolvedVersion, versionErr := resolveUpdateVersion(ctx, deps, version)
 			if versionErr != nil {
 				err := fmt.Errorf("could not resolve update version: %v; retry or pass --version <release>", versionErr)
@@ -80,7 +69,7 @@ func newUpdateCmd(deps *Deps) *cobra.Command {
 				{ID: "detect_target", Label: "Detect install target", Status: "pending"},
 				{ID: "install_cli", Label: "Install CLI", Status: "pending"},
 				{ID: "update_plugins", Label: "Update IDE setup", Status: "pending"},
-				{ID: "update_stack", Label: "Update Full appliance", Status: "pending"},
+				{ID: "update_stack", Label: "Legacy update step", Status: "pending"},
 			}
 
 			steps[0].Status = "pass"
@@ -92,9 +81,9 @@ func newUpdateCmd(deps *Deps) *cobra.Command {
 			emitProgress(deps, "step_succeeded", steps[0].ID, steps[0].Message)
 
 			if deps.Printer.Mode() != output.ModeJSON {
-				fmt.Fprintf(deps.Stdout, "%s\n", title(deps, "Step 1/4 Detect install target"))
+				fmt.Fprintf(deps.Stdout, "%s\n", title(deps, "Step 1/3 Detect install target"))
 				fmt.Fprintf(deps.Stdout, "  %s %s\n\n", label(deps, "Using"), steps[0].Message)
-				fmt.Fprintf(deps.Stdout, "%s\n", title(deps, "Step 2/4 Install CLI"))
+				fmt.Fprintf(deps.Stdout, "%s\n", title(deps, "Step 2/3 Install CLI"))
 			}
 			emitProgress(deps, "step_started", steps[1].ID, steps[1].Label)
 			if err := updateCLI(ctx, deps, resolvedVersion, executablePath, executableErr, installArgs); err != nil {
@@ -116,7 +105,7 @@ func newUpdateCmd(deps *Deps) *cobra.Command {
 			emitProgress(deps, "step_succeeded", steps[1].ID, "")
 
 			if deps.Printer.Mode() != output.ModeJSON {
-				fmt.Fprintf(deps.Stdout, "\n%s\n", title(deps, "Step 3/4 Update IDE setup"))
+				fmt.Fprintf(deps.Stdout, "\n%s\n", title(deps, "Step 3/3 Update IDE setup"))
 			}
 			emitProgress(deps, "step_started", steps[2].ID, steps[2].Label)
 			home, homeErr := userHomeDir(deps)
@@ -132,12 +121,10 @@ func newUpdateCmd(deps *Deps) *cobra.Command {
 					fmt.Fprintf(deps.Stdout, "  %s %s\n", styled(deps, output.StyleWarning, "Skipped:"), steps[2].Message)
 				}
 			} else {
-				pluginDeps := *deps
-				pluginDeps.PluginRegistryURL = pluginRegistryURLForUpdate(deps, resolvedVersion)
-				if _, err := runPluginInstall(ctx, &pluginDeps, pluginInstallOptions{
-					Agent:       strings.Join(installedAgents, ","),
-					Registry:    pluginDeps.PluginRegistryURL,
-					useRegistry: true,
+				releaseSource := publicRegistryURLForVersion(deps, resolvedVersion)
+				if _, err := runPluginInstall(ctx, deps, pluginInstallOptions{
+					Agent:  strings.Join(installedAgents, ","),
+					source: releasePluginSource{base: releaseSource, timeout: deps.Timeout},
 				}); err != nil {
 					steps[2].Status = "fail"
 					steps[2].Message = err.Error()
@@ -152,55 +139,16 @@ func newUpdateCmd(deps *Deps) *cobra.Command {
 					return &output.ExitError{Code: code, Err: err}
 				}
 				if deps.Printer.Mode() != output.ModeJSON {
-					fmt.Fprintf(deps.Stdout, "  %s %s (%s)\n", styled(deps, output.StyleSuccess, "Updated SpecGate IDE setup from"), pluginDeps.PluginRegistryURL, strings.Join(installedAgents, ", "))
+					fmt.Fprintf(deps.Stdout, "  %s %s (%s)\n", styled(deps, output.StyleSuccess, "Updated SpecGate IDE setup from"), releaseSource, strings.Join(installedAgents, ", "))
 				}
 				steps[2].Status = "pass"
 				steps[2].Message = strings.Join(installedAgents, ",")
 				emitProgress(deps, "step_succeeded", steps[2].ID, steps[2].Message)
 			}
 
-			if deps.Printer.Mode() != output.ModeJSON {
-				fmt.Fprintf(deps.Stdout, "\n%s\n", title(deps, "Step 4/4 Update Full appliance"))
-			}
-			emitProgress(deps, "step_started", steps[3].ID, steps[3].Label)
-			if deps.Topology == config.ModeLocal {
-				steps[3].Status = "skipped"
-				steps[3].Message = "Local mode has no appliance to update"
-				emitProgress(deps, "step_skipped", steps[3].ID, steps[3].Message)
-				if deps.Printer.Mode() != output.ModeJSON {
-					fmt.Fprintf(deps.Stdout, "  %s %s\n", styled(deps, output.StyleWarning, "Skipped:"), steps[3].Message)
-				}
-			} else {
-				dir := deployDir
-				if dir == "" {
-					dir = resolveDeployDir(deps)
-				}
-				if _, err := os.Stat(filepath.Join(dir, "compose.yml")); err != nil {
-					steps[3].Status = "skipped"
-					steps[3].Message = "no CLI-managed deployment found in " + dir
-					emitProgress(deps, "step_skipped", steps[3].ID, steps[3].Message)
-					if deps.Printer.Mode() != output.ModeJSON {
-						fmt.Fprintf(deps.Stdout, "  %s %s\n", styled(deps, output.StyleWarning, "Skipped:"), steps[3].Message)
-					}
-				} else if err := makeDeployService(deps, dir).Update(ctx, deploy.UpdateOptions{BundleVersion: resolvedVersion, BundleBaseURL: deps.BundleBaseURL}); err != nil {
-					steps[3].Status = "fail"
-					steps[3].Message = err.Error()
-					emitProgress(deps, "step_failed", steps[3].ID, err.Error())
-					payload := output.ErrorPayload{Code: "unavailable", Message: err.Error()}
-					if deps.Printer.Mode() == output.ModeJSON {
-						payload.Details = map[string]any{"steps": steps}
-					}
-					code := deps.Printer.Error("update", payload)
-					return &output.ExitError{Code: code, Err: err}
-				} else {
-					steps[3].Status = "pass"
-					steps[3].Message = resolvedVersion
-					emitProgress(deps, "step_succeeded", steps[3].ID, resolvedVersion)
-					if deps.Printer.Mode() != output.ModeJSON {
-						fmt.Fprintf(deps.Stdout, "  %s %s to %s\n", styled(deps, output.StyleSuccess, "Updated Full appliance in"), dir, resolvedVersion)
-					}
-				}
-			}
+			// Keep the existing JSON step recognizable to Local automation.
+			steps[3].Status = "skipped"
+			steps[3].Message = "Local mode has no appliance to update"
 
 			if deps.Printer.Mode() == output.ModeJSON {
 				deps.Printer.Success("update", map[string]any{"steps": steps})
@@ -211,7 +159,6 @@ func newUpdateCmd(deps *Deps) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&version, "version", "", "Release version to install (default: latest GitHub release)")
-	cmd.Flags().StringVar(&deployDir, "dir", "", "Deployment directory to update (default: saved deployment dir or ~/.specgate)")
 	return cmd
 }
 
@@ -230,10 +177,6 @@ func publicRegistryURLForVersion(deps *Deps, version string) string {
 		return defaultPublicRegistryURL
 	}
 	return "https://raw.githubusercontent.com/thanhtung2693/specgate/" + strings.TrimSpace(version)
-}
-
-func pluginRegistryURLForUpdate(deps *Deps, version string) string {
-	return publicRegistryURLForVersion(deps, version)
 }
 
 func resolveUpdateVersion(ctx context.Context, deps *Deps, explicit string) (string, error) {
@@ -279,6 +222,9 @@ func fetchAndRunScript(ctx context.Context, deps *Deps, url string, extraArgs ..
 	sh.Stdin = bytes.NewReader(script)
 	sh.Stdout = deps.Stdout
 	sh.Stderr = deps.Stderr
+	if deps.Mode == output.ModeJSON {
+		sh.Stdout = deps.Stderr
+	}
 	return sh.Run()
 }
 

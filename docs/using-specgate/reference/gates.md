@@ -8,64 +8,37 @@ for what to do when one fails, see
 
 ## How to read this catalog
 
-- **Reads** names the context the checker receives. Model-judged gates read
+- **Reads** names the context the checker receives. Semantic readiness tasks read
   artifact documents grouped by role; deterministic gates read workflow state.
-- **Evaluator** is `deterministic` (code, no model), `model` (the server-side
-  ops model, or your IDE agent as an agent-attested fallback when no server
-  model is configured), or `review` (the delivery reviewer).
+- **Evaluator** identifies deterministic code, the IDE agent, or a delivery review.
 - Verdict states are shared across all gates: `pass`, `warn`, `fail`,
-  `pending`, `needs_human_review`, `not_applicable`, `not_run`. See
+  `needs_human_review`, `not_applicable`, `not_run`. See
   [Governance reference](governance.md#verdict-states).
 
-## Workflow gates (deterministic)
+## Readiness gates
 
-These run on every work item refresh and never call a model. On quick-route
-work (no lead artifact), the first five are persisted as `not_applicable`
-because quick work never grows a working spec.
-
-| Gate | Checks | Reads |
-|---|---|---|
-| `spec_drafted` | a working spec artifact is attached to the work item | work item's lead artifact link |
-| `spec_approved` | the attached spec version is human-approved | lead artifact status |
-| `no_conflicts` | the working spec has no unresolved conflict with the canonical spec | lead artifact conflict state |
-| `knowledge_fresh` | no newer linked knowledge contradicts the working spec | knowledge document timestamps |
-| `canonical_spec` | the approved spec has been promoted to the feature's canonical version | feature's canonical pointer |
-
-## Readiness Gates
-
-These run when readiness is checked on an artifact (or on a work item's lead
-artifact). The resolved automatic policy's `enabled_gates` list decides which of them
-run. Platform-model evaluations return a verdict, confidence, an actionable
-hint, and an evidence quote; low-confidence pass/fail verdicts are downgraded
-to `needs_human_review`. IDE-agent fallback results are agent-attested and use
-the same aggregate states.
-
-Local IDE gate tasks and Full model-less IDE gate tasks are frozen against the
-artifact snapshot and rubric before the IDE agent evaluates them. A successful
-readiness command stays `not_run` until required task results are submitted; it
-does not report a pass while semantic work is pending.
+The CLI runs structural checks on an artifact and dispatches semantic tasks
+to your coding agent. Each task uses the frozen artifact snapshot and rubric.
+While required tasks are open, readiness stays `not_run`. Semantic results
+are agent-attested. Quick work starts from explicit criteria and skips artifact
+readiness.
 
 | Gate | Checks | Reads |
 |---|---|---|
 | `scope_clear` | the change is bounded, with explicit non-goals | spec |
-| `spec_completeness` | the package covers its required topics (outcomes, acceptance criteria, risks, verification, and any policy-required topics); advisory — caps at `warn` | all documents |
+| `spec_completeness` | the package covers scope, outcomes, acceptance criteria, and verification | all mapped documents |
 | `acceptance_criteria_verifiable` | every criterion is an observable, testable outcome; vague criteria ("works well", "is fast") are named and restated as observable checks in the hint | spec + plan + optional verification |
-| `acceptance_criteria_edge_cases` | criteria cover failure and edge paths, not only the happy path | spec + plan + optional verification |
-| `success_metric_measurable` | the stated success metric can actually be measured | spec |
-| `rollback_plan_present` | a rollback or recovery path is stated | spec + reference |
-| `implementation_plan_traceable` | plan tasks trace to criteria and scope | spec + optional design + plan + optional verification |
 | `spec_repo_drift` | governed repo docs contradict the approved spec; IDE-agent-executed at pickup (needs repo checkout), warn-only, agent-attested | approved spec + governed repo docs |
-| `required_roles_present` | every document role the resolved policy's `required_roles` lists is present in the package; structural, no model. A document's identity is its `path` and `role` together, so one source may be mapped under several roles rather than a new document being written. Local fails this gate, which blocks approval; Full warns | file list |
+| `required_roles_present` | every document role the resolved policy's `required_roles` lists is present in the package; structural, no model. A document's identity is its `path` and `role` together, so one source may be mapped under several roles rather than a new document being written. Failure blocks approval | file list |
 | `has_documents` | the package contains at least one immutable document; structural, no model | file list |
 
-Feature attachments with the `gate` or `both` audience are appended to the
-acceptance-criteria and scope gates. The resolved automatic policy can bind a team Skill to any
-gate; the Skill's text is applied as additional policy.
+Add project instructions to the four semantic rubrics before publication
+with [Local project instructions](../guides/customize-governance.md#add-local-project-instructions).
 
 ### `spec_repo_drift` result contract
 
-A `spec_repo_drift` result submitted to `POST /api/v1/gate-tasks/{task_id}/result`
-must carry an evidence attestation, else the submission is rejected (`400`):
+A `spec_repo_drift` result passed to `specgate gates tasks submit-result`
+must carry an evidence attestation:
 
 - `evidence.examined_docs[]` — repo-relative doc paths the agent read (non-empty).
 - `evidence.repo_commit` — the checkout commit SHA the examination ran against.
@@ -74,10 +47,8 @@ must carry an evidence attestation, else the submission is rejected (`400`):
 The stored readiness run's `evidence_json` preserves both the evidence
 attestation and findings for later audit/readback.
 
-The verdict is mapped from the findings, not the submitted state: a valid
-attestation with zero findings → `pass`; one or more findings → `warn`. Drift
-never maps to `fail`/block — it is only knowable after pickup, so a blocking
-verdict would deadlock the flow.
+The CLI derives the verdict from the findings after approval. An empty list
+produces `pass`. One or more findings produces `warn`.
 
 ## Delivery review
 
@@ -85,13 +56,9 @@ verdict would deadlock the flow.
 |---|---|---|
 | `delivery_review` | each acceptance criterion against the coding agent's claims, evidence citations, and automated check results; overall verdict aggregated deterministically | acceptance criteria + completion report |
 
-The reviewer does not read the git diff; see
-[How verification works](../concepts/verification.md#honest-limits). Under
-the `corroborated_required` evidence policy, a pass without a matched
-merged PR/MR repository event whose `head_sha` matches the latest completion
-receipt's `head_revision`, or deterministic bindings for every criterion, is
-clamped to `needs_human_review`. CI results do not automatically become
-SpecGate-produced assurance.
+The automated review uses the submitted evidence and stored criteria. A human
+can also review the Git diff, CI output, and test scope before deciding.
+See [How verification works](../concepts/verification.md#observation-limits).
 
 ## Related
 

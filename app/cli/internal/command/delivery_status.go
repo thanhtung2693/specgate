@@ -8,7 +8,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
@@ -76,7 +75,11 @@ func printLocalDeliveryStatusWithUpgrade(cmd *cobra.Command, deps *Deps, ref, co
 		data["verification_contract"] = contract.Status
 		data["peer_review"] = peer
 		data["evidence_assessment"] = deliveryEvidenceLabel(review.Verdict, "")
-		data["assurance_source"] = localDeliveryAssuranceLabel(report.Body, peer)
+		data["assurance_source"] = status.Assurance
+		data["freshness"] = status.Freshness
+		if status.HistoricalVerification {
+			data["historical_verification"] = true
+		}
 		data["decision_state"] = localDeliveryDecisionLabel(review.HumanDecision)
 		data["receipt"] = receiptLabel
 		if status.BasisDigest != "" {
@@ -97,7 +100,8 @@ func printLocalDeliveryStatusWithUpgrade(cmd *cobra.Command, deps *Deps, ref, co
 	}
 	fmt.Fprintf(deps.Stdout, "Verification contract: %s\n", contract.Status)
 	fmt.Fprintf(deps.Stdout, "Evidence: %s\n", deliveryEvidenceLabel(review.Verdict, ""))
-	fmt.Fprintf(deps.Stdout, "Assurance: %s\n", localDeliveryAssuranceLabel(report.Body, peer))
+	fmt.Fprintf(deps.Stdout, "Assurance: %s\n", status.Assurance)
+	fmt.Fprintf(deps.Stdout, "Freshness: %s\n", status.Freshness)
 	fmt.Fprintf(deps.Stdout, "Decision: %s\n", localDeliveryDecisionLabel(review.HumanDecision))
 	fmt.Fprintf(deps.Stdout, "Receipt: %s\n", receiptLabel)
 	fmt.Fprintf(deps.Stdout, "Stored verdict: %s\n", review.Verdict)
@@ -106,7 +110,9 @@ func printLocalDeliveryStatusWithUpgrade(cmd *cobra.Command, deps *Deps, ref, co
 	if review.HumanDecision == "" && status.BasisDigest != "" {
 		printLocalBasisDecisionCommands(deps, work.Key, review.ID, status.AcceptanceBasis)
 	} else if review.HumanDecision == "" {
-		printDeliveryDecisionCommands(deps, work.Key, &client.DeliveryStatusResult{Found: true, Verdict: review.Verdict, Executor: "platform", GateRunID: review.ID}, true)
+		fmt.Fprintln(deps.Stdout, "\nDecision commands:")
+		fmt.Fprintf(deps.Stdout, "  specgate --yes change accept %s --review-id %s\n", work.Key, review.ID)
+		fmt.Fprintf(deps.Stdout, "  specgate --yes change request-changes %s --review-id %s --note \"<reason>\"\n", work.Key, review.ID)
 	}
 	return nil
 }
@@ -125,23 +131,6 @@ func printLocalBasisDecisionCommands(deps *Deps, ref, reviewID string, basis *lo
 	fmt.Fprintln(deps.Stdout, "\nDecision commands:")
 	fmt.Fprintf(deps.Stdout, "  specgate --yes change accept %s%s\n", ref, flags)
 	fmt.Fprintf(deps.Stdout, "  specgate --yes change request-changes %s%s --note \"<reason>\"\n", ref, flags)
-}
-
-func printDeliveryDecisionCommands(deps *Deps, ref string, ds *client.DeliveryStatusResult, localMode bool) {
-	if !ds.Found || strings.TrimSpace(ds.Executor) == "human" ||
-		strings.TrimSpace(ds.ReasonCode) == "policy_unavailable" ||
-		strings.TrimSpace(ds.ReasonCode) == "delivery_review_outdated" {
-		return
-	}
-	prefix := "specgate "
-	binding := ""
-	if localMode {
-		prefix = "specgate --yes "
-		binding = " --review-id " + ds.GateRunID
-	}
-	fmt.Fprintln(deps.Stdout, "\nDecision commands:")
-	fmt.Fprintf(deps.Stdout, "  %schange accept %s%s\n", prefix, ref, binding)
-	fmt.Fprintf(deps.Stdout, "  %schange request-changes %s%s --note \"<reason>\"\n", prefix, ref, binding)
 }
 
 func localDeliveryDecisionLabel(decision string) string {
@@ -203,139 +192,6 @@ func localDeliveryReceiptLabel(body map[string]any) string {
 	return "commit " + shortGitRevision(head) + suffix
 }
 
-// printDeliveryStatus renders a delivery status result for human/plain modes.
-// Shared by `delivery status` and `delivery submit`.
-func printDeliveryStatus(deps *Deps, ds *client.DeliveryStatusResult, detail bool) {
-	if !ds.Found {
-		fmt.Fprintln(deps.Stdout, "No delivery review found for this work item.")
-		return
-	}
-
-	if humanVisuals(deps) {
-		printDeliveryStatusDashboard(deps, ds, detail)
-		return
-	}
-	printDeliveryTrustSummary(deps, ds, "")
-	fmt.Fprintf(deps.Stdout, "%s %s\n", styled(deps, output.StyleMuted, "Stored verdict:"), styledStatus(deps, deliveryStoredVerdictLabel(ds)))
-	if warn := attestedWarning(ds); warn != "" {
-		fmt.Fprintf(deps.Stdout, "%s\n", warn)
-	}
-	fmt.Fprintf(deps.Stdout, "%s\n", styled(deps, output.StyleMuted, selfSelectedChecksNote))
-	if ds.Hint != "" {
-		fmt.Fprintf(deps.Stdout, "%s     %s\n", styled(deps, output.StyleMuted, "Hint:"), ds.Hint)
-	}
-	if ds.Summary != "" {
-		fmt.Fprintf(deps.Stdout, "%s %s\n", styled(deps, output.StyleMuted, "Review summary:"), ds.Summary)
-	}
-	if ds.ReviewedAt != "" {
-		fmt.Fprintf(deps.Stdout, "%s %s\n", styled(deps, output.StyleMuted, "Reviewed:"), ds.ReviewedAt)
-	}
-	if judge := deliveryJudgeLabel(ds); judge != "" {
-		fmt.Fprintf(deps.Stdout, "%s    %s\n", styled(deps, output.StyleMuted, "Judge:"), judge)
-	}
-	if detail {
-		fmt.Fprintf(deps.Stdout, "%s %s\n", styled(deps, output.StyleMuted, "Peer review:"), ds.PeerReview.State)
-	}
-	if ds.OutstandingMD != "" {
-		fmt.Fprintf(deps.Stdout, "\n%s\n", ds.OutstandingMD)
-	}
-	if detail && len(ds.PerCriterion) > 0 {
-		fmt.Fprintln(deps.Stdout, "\nPer criterion:")
-		for _, c := range ds.PerCriterion {
-			label := c.CriterionID
-			if label == "" {
-				label = c.Text
-			}
-			fmt.Fprintf(deps.Stdout, "  %-20s  %s\n", label, styledStatus(deps, c.Verdict))
-			if c.Why != "" {
-				fmt.Fprintf(deps.Stdout, "    %s\n", styled(deps, output.StyleMuted, c.Why))
-			}
-		}
-	}
-}
-
-func printDeliveryStatusDashboard(deps *Deps, ds *client.DeliveryStatusResult, detail bool) {
-	fmt.Fprintln(deps.Stdout, title(deps, "Delivery Review"))
-	fmt.Fprintln(deps.Stdout, visualRule(deps))
-	printDeliveryTrustSummary(deps, ds, "  ")
-	fmt.Fprintf(deps.Stdout, "%s %s %s\n",
-		statusIcon(deps, ds.Verdict),
-		styled(deps, output.StyleMuted, "Stored verdict:"),
-		styledStatus(deps, deliveryStoredVerdictLabel(ds)))
-	if warn := attestedWarning(ds); warn != "" {
-		fmt.Fprintf(deps.Stdout, "  %s\n", styled(deps, output.StyleWarning, warn))
-	}
-	fmt.Fprintf(deps.Stdout, "  %s\n", styled(deps, output.StyleMuted, selfSelectedChecksNote))
-	if ds.Hint != "" {
-		fmt.Fprintf(deps.Stdout, "  %s %s\n", styled(deps, output.StyleMuted, "Hint:"), ds.Hint)
-	}
-	if ds.Summary != "" {
-		fmt.Fprintf(deps.Stdout, "  %s %s\n", styled(deps, output.StyleMuted, "Review summary:"), ds.Summary)
-	}
-	if ds.ReviewedAt != "" {
-		fmt.Fprintf(deps.Stdout, "  %s %s\n", styled(deps, output.StyleMuted, "Reviewed:"), ds.ReviewedAt)
-	}
-	if judge := deliveryJudgeLabel(ds); judge != "" {
-		fmt.Fprintf(deps.Stdout, "  %s %s\n", styled(deps, output.StyleMuted, "Judge:"), judge)
-	}
-	if detail {
-		fmt.Fprintf(deps.Stdout, "  %s %s\n", styled(deps, output.StyleMuted, "Peer review:"), ds.PeerReview.State)
-	}
-	if ds.OutstandingMD != "" {
-		fmt.Fprintf(deps.Stdout, "\n%s\n", ds.OutstandingMD)
-	}
-	if detail && len(ds.PerCriterion) > 0 {
-		printCriterionDashboard(deps, ds.PerCriterion)
-	}
-}
-
-// selfSelectedChecksNote is a runtime belt-and-suspenders reminder: delivery
-// review judges only the checks the coding agent chose to report, so a
-// regression outside that self-selected scope can still pass. Surfacing this in
-// the status/review output keeps a human reviewer from over-trusting a narrow
-// check set.
-const selfSelectedChecksNote = "Checks are self-selected by the coding agent; delivery review judges only the reported checks."
-
-func deliveryStoredVerdictLabel(ds *client.DeliveryStatusResult) string {
-	switch strings.TrimSpace(ds.Verdict) {
-	case "pass", "passed":
-		if strings.TrimSpace(ds.Executor) == "human" {
-			return "Accepted"
-		}
-		return "Ready for human review"
-	case "fail", "failed":
-		return "Evidence gaps found"
-	case "needs_human_review":
-		switch strings.TrimSpace(ds.ReasonCode) {
-		case "policy_unavailable":
-			return "Policy unavailable"
-		case "delivery_review_outdated":
-			return "Evidence stale"
-		default:
-			return "Independent confirmation required"
-		}
-	default:
-		return ds.Verdict
-	}
-}
-
-func printDeliveryTrustSummary(deps *Deps, ds *client.DeliveryStatusResult, indent string) {
-	fmt.Fprintf(deps.Stdout, "%s%s %s\n", indent, styled(deps, output.StyleMuted, "Evidence:"), deliveryEvidenceLabel(deliveryEvidenceVerdict(ds), ds.ReasonCode))
-	fmt.Fprintf(deps.Stdout, "%s%s %s\n", indent, styled(deps, output.StyleMuted, "Assurance:"), deliveryAssuranceLabel(ds))
-	fmt.Fprintf(deps.Stdout, "%s%s %s\n", indent, styled(deps, output.StyleMuted, "Decision:"), deliveryDecisionLabel(ds))
-	fmt.Fprintf(deps.Stdout, "%s%s %s\n", indent, styled(deps, output.StyleMuted, "Receipt:"), deliveryReceiptLabel(ds.GitReceipt))
-}
-
-func deliveryEvidenceVerdict(ds *client.DeliveryStatusResult) string {
-	if verdict := strings.TrimSpace(ds.EvidenceVerdict); verdict != "" {
-		return verdict
-	}
-	if strings.TrimSpace(ds.Executor) == "human" {
-		return ""
-	}
-	return ds.Verdict
-}
-
 func deliveryEvidenceLabel(verdict, reasonCode string) string {
 	switch strings.TrimSpace(reasonCode) {
 	case "policy_unavailable":
@@ -353,72 +209,6 @@ func deliveryEvidenceLabel(verdict, reasonCode string) string {
 	default:
 		return "Not reviewed"
 	}
-}
-
-func deliveryAssuranceLabel(ds *client.DeliveryStatusResult) string {
-	labels := []string{"Agent-reported"}
-	seen := map[string]bool{"Agent-reported": true}
-	appendSource := func(source string) {
-		label := deliveryAssuranceSourceLabel(source)
-		if label != "" && !seen[label] {
-			labels = append(labels, label)
-			seen[label] = true
-		}
-	}
-	for _, source := range ds.AssuranceSources {
-		appendSource(source)
-	}
-	for _, criterion := range ds.PerCriterion {
-		appendSource(criterion.TrustTier)
-	}
-	return strings.Join(labels, "; ")
-}
-
-func deliveryAssuranceSourceLabel(source string) string {
-	switch strings.TrimSpace(source) {
-	case "grounded":
-		return "local citation captured"
-	case "deterministic":
-		// The `deterministic` trust tier means a bound check decided the
-		// criterion, not that anything re-ran. Reproduction is a separate fact,
-		// carried by `checks[].source == "specgate_cli"` and labelled above;
-		// contracts.md states that marker is the only thing that earns
-		// "locally reproduced".
-		return "bound deterministic check"
-	case "peer_reviewed":
-		return "second agent affirmed"
-	case "repository_observed":
-		return "Submitted commit observed on merged PR/MR"
-	default:
-		return ""
-	}
-}
-
-func deliveryDecisionLabel(ds *client.DeliveryStatusResult) string {
-	if strings.TrimSpace(ds.Executor) != "human" {
-		return "Awaiting human acceptance"
-	}
-	if passingStatus(ds.Verdict) {
-		return "Accepted"
-	}
-	return "Rejected"
-}
-
-func deliveryReceiptLabel(receipt *client.GitReceipt) string {
-	if receipt == nil {
-		return "No Git receipt recorded"
-	}
-	suffix := receiptWarningSuffix(receipt.Warnings)
-	if availability := strings.TrimSpace(receipt.Availability); availability != "" && availability != "available" {
-		return "Git receipt unavailable" + suffix
-	}
-	if strings.TrimSpace(receipt.HeadRevision) == "" {
-		return "No Git receipt recorded" + suffix
-	}
-	if strings.TrimSpace(receipt.FreshnessScope) == "local_checkout" {
-		return "local checkout commit " + shortGitRevision(receipt.HeadRevision) + suffix
-	}
-	return "commit " + shortGitRevision(receipt.HeadRevision) + suffix
 }
 
 func receiptWarningSuffix(warnings []string) string {
@@ -463,67 +253,9 @@ func shortGitRevision(revision string) string {
 	return revision[:12]
 }
 
-// attestedWarning flags verdicts the platform derived from the coding agent's
-// own claims (no governance model configured) — the delivery was not
-// independently reviewed, and a human should read the verdict accordingly.
-func attestedWarning(ds *client.DeliveryStatusResult) string {
-	if strings.TrimSpace(ds.JudgeModel) != "agent_attested" {
-		return ""
+func pluralize(n int, singular, plural string) string {
+	if n == 1 {
+		return singular
 	}
-	return "Agent-reported evidence: the implementing agent supplied these claims. " +
-		"A platform model can add another review of the submitted evidence; it does not verify the code or replace CI and human review."
-}
-
-func deliveryJudgeLabel(ds *client.DeliveryStatusResult) string {
-	if strings.TrimSpace(ds.JudgeModel) == "" {
-		return ""
-	}
-	label := strings.TrimSpace(ds.JudgeModel)
-	switch label {
-	case "agent_attested":
-		label = "Agent-reported"
-	case "deterministic_checks":
-		label = "Locally reproduced checks"
-	case "deterministic_policy_guard":
-		label = "Policy guard"
-	}
-	if strings.TrimSpace(ds.EvalSuite) != "" {
-		label += " / " + strings.TrimSpace(ds.EvalSuite)
-	}
-	return label
-}
-
-func printCriterionDashboard(deps *Deps, criteria []client.CriterionReview) {
-	met := 0
-	for _, c := range criteria {
-		if passingStatus(c.Verdict) {
-			met++
-		}
-	}
-	fmt.Fprintf(deps.Stdout, "\n%s %s %s %d/%d met (%d%%)\n",
-		coloredBullet(deps, output.StyleSuccess),
-		styled(deps, output.StyleMuted, "Criteria:"),
-		progressBar(deps, met, len(criteria), 18),
-		met,
-		len(criteria),
-		percent(met, len(criteria)))
-	fmt.Fprintln(deps.Stdout)
-	for _, c := range criteria {
-		label := c.CriterionID
-		if label == "" {
-			label = c.Text
-		}
-		status := styledStatus(deps, c.Verdict)
-		if c.VerificationBinding != "" {
-			// Deterministic verdict from a bound check.
-			status += styled(deps, output.StyleMuted, fmt.Sprintf(" (via check: %s)", c.VerificationBinding))
-		}
-		fmt.Fprintf(deps.Stdout, "  %s %-20s %s\n",
-			criterionBox(deps, c.Verdict),
-			label,
-			status)
-		if c.Why != "" {
-			fmt.Fprintf(deps.Stdout, "    %s\n", styled(deps, output.StyleMuted, c.Why))
-		}
-	}
+	return plural
 }

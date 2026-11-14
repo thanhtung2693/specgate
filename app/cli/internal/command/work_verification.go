@@ -23,9 +23,7 @@ func newWorkVerificationCmd(deps *Deps) *cobra.Command {
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			const op = "work.verification"
-			if deps.Topology != config.ModeLocal {
-				return incompatibleCommand(deps, op, "verification contracts are Local-only")
-			}
+
 			if dryRun && file == "" {
 				return completionValidationError(deps, op, "--dry-run requires --file")
 			}

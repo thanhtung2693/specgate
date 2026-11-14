@@ -51,17 +51,14 @@ release:
   github:
     owner: thanhtung2693
     name: specgate
-  # Keep assets private until image manifests, scans, bundle, and smoke pass.
+  # Keep assets private until checksums and the installed CLI smoke pass.
   draft: true
   # Re-running a version must reuse its draft and replace matching assets.
-  # Otherwise the CLI and appliance bundle can land on different draft records.
   use_existing_draft: true
   replace_existing_artifacts: true
   # Refresh release notes when reusing a draft.
   mode: replace
   name_template: "{{ .Tag }}"
-  # Publish the public installer alongside binary archives. The compose bundle
-  # (specgate-compose_<version>.tar.gz + checksums) is built and uploaded by
-  # `.github/workflows/release.yml` so `specgate init` can fetch + verify it.
+  # Publish the public installer alongside binary archives and checksums.
   extra_files:
     - glob: scripts/install-cli.sh

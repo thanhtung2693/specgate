@@ -1,246 +1,58 @@
 # Release guide
 
-This guide is for maintainers preparing or publishing a SpecGate release. The
-executable companion is
-[`../release-readiness.test.mjs`](../release-readiness.test.mjs).
+SpecGate releases the Local CLI. A tagged build ships Darwin and Linux tarballs
+for amd64 and arm64, a Windows amd64 ZIP, a SHA-256 checksum manifest, and the
+POSIX `install-cli.sh`. The optional browser UI and matching IDE files are
+embedded in each binary. The foreground notification pilot is source-only.
 
-## Go / No-Go
+## Prepare the candidate
 
-Release only when:
+- Add an authored changelog section for the candidate version. Update
+  `plugins/package.json` to the same version and run `make sync-plugins`
+  and `make check-plugins`. Keep user-facing setup, command and recovery
+  documentation aligned with the CLI, and distinguish the candidate from
+  the published version in the README.
+- Run `make test`, `make lint`, the Local legacy compatibility gate, and the
+  relevant native/browser checks from [Testing](testing.md).
+- Create a local GoReleaser snapshot and check all five archives, their checksum
+  entries, installer help, and the host binary's reported version. Run the
+  [delivery proof](../using-specgate/guides/try-delivery-proof.md) using that
+  executable and its disposable fixture. A repaired delivery still ends at
+  human review.
+- Validate a representative existing Local store in a copy, preserving the
+  original. Exercise Local transfer in both directions between disposable
+  bound checkouts with separate configurations. Verify that the receiving
+  store requires a transfer-capable CLI and that activation preserves the
+  source store. Check Local setup with a separate configuration when a
+  legacy remote configuration is present. Preserve old deployments and data.
 
-- release-readiness passes;
-- every release-facing module passes its test and static-analysis checks;
-- the native Windows CLI build, updater and browser-boundary regression tests
-  pass;
-- public install works from a clean machine or scratch `HOME`;
-- no secrets, local config, or generated machine files are staged;
-- release images and local appliance bundle match the tag.
+## Publish an approved version
 
-## Documentation
-
-Check that:
-
-- root README leads with the trusted-machine/private-network boundary, is CLI-first, and links to the changelog and compatibility guidance;
-- [Quickstart](../using-specgate/quickstart.md) works without a source checkout;
-- IDE plugin docs install the CLI first, then explain native Codex/Claude
-  marketplaces or CLI-managed IDE files, with one installation owner per IDE;
-- model setup is optional for core operation;
-- uninstall docs explain preserved data and purge behavior;
-- current docs are linked from [docs home](../README.md);
-- retired terminology and placeholder text are absent from public docs.
-
-Before tagging, move the reviewed `Unreleased` changelog into a dated section
-for the exact target version. Include new features, improvements, fixes, and
-upgrade limits. The release workflow extracts that section with
-`.github/scripts/release-notes.mjs` and passes it to GoReleaser; missing or empty
-version notes fail rather than falling back to a commit-only changelog.
-
-Run:
+Use a signed or annotated tag for the approved commit and confirm that the
+changelog has that version's notes. Publishing requires separate authorization.
 
 ```bash
-node --test docs/release-readiness.test.mjs .github/scripts/release-notes.test.mjs
-```
-
-## Source Hygiene
-
-Check:
-
-```bash
-git status --short
-git diff --check
-git diff --cached
-```
-
-Do not stage `.env` files, local deployment files, generated IDE
-rules, provider tokens, webhook secrets, JWTs, or credentials.
-
-## Module Verification
-
-Run the suites for modules touched by the release:
-
-```bash
-cd app/cli && make test
-cd app/doc-registry && make test
-cd app/agents && uv run pytest -q
-cd app/ui && npm run lint && npm run build && npm run test -- --run
-```
-
-For cross-module contract changes, also run release-readiness.
-
-The tag-triggered `release.yml` repeats the Doc Registry, CLI, governance
-operations, UI, and release-readiness checks in its `verify` job. No publishing
-job starts unless that verification gate succeeds; local results remain useful
-for iteration but never replace the tag's own evidence. A separate
-`windows-latest` job builds the native executable and runs the updater
-regressions before GoReleaser may publish CLI assets.
-
-The CLI packaging job pins GoReleaser 2.18.2 and checks the downloaded archive
-against its upstream SHA-256 file. Recheck `.goreleaser.yaml` with that version
-when changing packaging; configuration validation is not proof of publication.
-
-## Packaging
-
-Check that:
-
-- CLI installer prefers the latest stable GitHub Release and falls back to the
-  newest public prerelease only before a stable release exists;
-- CLI installer sends normal installs to `specgate init` and uses
-  `specgate config server` only for an explicit `--server` URL;
-- Local CLI packaging includes the complete tracked Codex, Claude Code, and
-  Cursor plugin package;
-- `deploy/local` contains one `specgate` service, one published
-  `SPECGATE_PORT`, and one `specgate-data` volume;
-- the appliance image is pinned to the release tag;
-- the gateway routes `/api/doc-registry/` and `/api/agents/` internally;
-- SpecGate-managed containers, volumes, networks, and images carry
-  `org.specgate.managed=true`.
-
-Validate Compose:
-
-```bash
-(
- set -e
- compose_check_dir=$(mktemp -d)
- trap 'rm -f -- "$compose_check_dir/compose.yml" "$compose_check_dir/.env.example" "$compose_check_dir/specgate.env"; rmdir "$compose_check_dir"' EXIT
- cp deploy/local/compose.yml deploy/local/.env.example "$compose_check_dir/"
- cp deploy/local/specgate.env.example "$compose_check_dir/specgate.env"
- docker compose --env-file "$compose_check_dir/.env.example" -f "$compose_check_dir/compose.yml" config --quiet
-)
-```
-
-Validation uses an isolated temporary bundle. It never overwrites or removes
-the generated `specgate.env` in `deploy/local/` or its encryption key, including when
-Compose fails. This command only validates configuration; it does not start
-services or touch deployment data.
-
-## Publish
-
-Start the release by pushing the version tag:
-
-```bash
-VERSION=vX.Y.Z
-git tag -a "$VERSION" -m "SpecGate $VERSION"
+git tag -a "$VERSION" -m "$VERSION"
 git push origin "$VERSION"
 ```
 
-Do not create or publish a GitHub Release before pushing the tag. GoReleaser
-creates the draft, and `release.yml` publishes it only after all release gates
-pass. Publishing through the GitHub UI first exposes unverified assets and
-causes the workflow preflight to stop the release.
+Do not create or publish a GitHub Release before the workflow. A published
+release for that tag fails preflight before building. GoReleaser creates or
+reuses exactly one draft, replacing matching assets on a retry. Linux smoke
+downloads the draft assets, checks all five archives, verifies the installer
+matches the tagged script, and runs the candidate through the Local delivery
+proof. The release waits for native Windows CLI and transfer verification and
+the draft smoke.
+On failure, inspect the existing draft and failed gate before retrying the
+same workflow. A prerelease tag stays a prerelease.
 
-Check:
+After successful publication, verify the public tag, asset names, checksums and
+release notes in GitHub Releases. Run the public installer only against an
+isolated install directory when validating a released version.
 
-- tag points at the intended commit;
-- `release.yml` succeeds for the tag;
-- confirm the final `release-publish` job succeeded and the release is public
-  (`isDraft: false`); a draft page or uploaded assets alone do not prove release;
-- the GitHub Release remains a draft until image manifests, the local bundle,
-  and the clean-install appliance smoke test all succeed;
-- GitHub Release contains CLI artifacts and the local appliance bundle;
-- the `specgate` appliance image exists for `linux/amd64` and `linux/arm64`;
-- each architecture-specific appliance image carries OCI provenance and SBOM
-  attestations;
-- each appliance digest passes the release vulnerability gate: fixed
-  vulnerabilities rated high or critical block publication;
-- image tags match the release tag.
-- the mutable `latest` image tag moves only for a stable release and only after
-  the clean-install appliance smoke test passes; prereleases never move it.
+## Uninstall validation
 
-The workflow publishes the draft only after those checks pass. A failed build,
-scan, bundle upload, or smoke test leaves the release private for maintainer
-inspection. Retrying the same version reuses that draft and replaces matching
-CLI assets; do not create another draft manually. The blocking scan is limited
-to fixed high and critical findings; lower-severity and currently unfixed
-findings are handled through routine base image and dependency upgrades.
-
-Workflow-level token access is read-only. Only the jobs that publish GitHub
-release assets or GHCR manifests receive the corresponding `contents: write`
-or `packages: write` permission.
-
-`.grype.yaml` contains temporary exceptions for Python `CVE-2026-15308`,
-`CVE-2026-11940`, and `CVE-2026-11972`. Their listed fixes require the
-unsupported Python 3.15 prerelease; the latter two affect `tarfile`, which the
-SpecGate Python runtime does not use. Remove each exception when a supported
-runtime ships its fix. Every other fixed high or critical finding continues to
-block a release.
-
-Because draft assets have no public download URL, the smoke job fetches the CLI
-and appliance bundle with the authenticated GitHub CLI, verifies the bundle
-checksum, and stages it exactly as `specgate init` would before starting the
-appliance. The CLI bounds both downloads and extracted bytes and accepts only
-canonical regular-file entries for the four top-level bundle contract files
-(`compose.yml`, `.env.example`,
-`specgate.env.example`, and `rollback-compatible`); extra, duplicate, linked,
-or traversal entries fail before startup.
-
-Keep the workflow URL, release asset list, image digests/platforms, and
-`specgate --version` output from a fresh install.
-
-## Fresh-User Validation
-
-Use an isolated `HOME` and a non-default appliance port when possible. Confirm
-the local bundle starts exactly one container and creates exactly one named
-volume.
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/scripts/install-cli.sh | sh
-specgate --version
-specgate init --mode full --no-seed --no-input
-specgate doctor
-specgate local-status
-specgate plugins install
-specgate plugins doctor
-specgate status
-specgate work list
-specgate artifact list
-specgate feature list
-specgate skill list
-```
-
-Then verify:
-
-- UI loads at `http://localhost:<SPECGATE_PORT>`;
-- CLI uses `http://localhost:<SPECGATE_PORT>/api/doc-registry`;
-- no Postgres, Doc Registry, or Agents port is published;
-- onboarding/user/workspace selection works;
-- optional model setup accepts provider, model, and key without printing the key;
-- quick, full, small-change, and bugfix workflows can create work, read Context
-  Packs, submit delivery evidence, and read delivery review status;
-- IDE-agent plugin flow can pick up SpecGate instructions and use the CLI.
-
-## Uninstall Validation
-
-Safe uninstall:
-
-```bash
-specgate uninstall
-```
-
-Confirm local data is preserved when data removal is not selected.
-
-Purge in a scratch deployment:
-
-```bash
-specgate uninstall --purge-data --yes
-docker ps -a --filter label=org.specgate.managed=true
-docker volume ls --filter label=org.specgate.managed=true
-docker network ls --filter label=org.specgate.managed=true
-docker image ls --filter label=org.specgate.managed=true
-```
-
-Expected result after purge: no SpecGate-managed appliance container, volume,
-or network remains. The downloaded appliance image stays in Docker's cache so a
-later reinstall does not need to pull it again; users may remove that cache
-separately with Docker tooling.
-
-## Blockers
-
-If validation finds a release blocker:
-
-1. Patch narrowly.
-2. Update docs and tests in the same change.
-3. Run relevant tests and release-readiness.
-4. Publish a new tag only when released assets must change.
-5. Repeat fresh-user validation against the new assets.
-
-Do not reuse evidence from a previous tag after republishing.
+The ordinary Local uninstall removes managed global setup and preserves the
+store. To test data purge, create an isolated fixture with unrelated files
+beside the database and verify those files survive. See
+[Local CLI uninstall](../using-specgate/reference/cli.md#local-cli-uninstall).

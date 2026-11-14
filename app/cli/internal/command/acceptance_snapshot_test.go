@@ -13,7 +13,7 @@ import (
 func TestAcceptanceStatusCannotMixConcurrentCompletionWithOldReview(t *testing.T) {
 	for _, family := range []string{"change", "delivery", "work"} {
 		t.Run(family, func(t *testing.T) {
-			deps, _, _, out := newFakeDeps(t)
+			deps, out := newTestDeps(t)
 			dir, store, sel, work := newLocalChangeWork(t, deps)
 			submitLocalChangeDelivery(t, store, sel.Workspace.ID, work, "first", "old-head")
 			if _, err := store.CreateCheckpointWithFiles(t.Context(), sel.Workspace.ID, work.Key, "old", nil, ""); err != nil {
@@ -21,7 +21,7 @@ func TestAcceptanceStatusCannotMixConcurrentCompletionWithOldReview(t *testing.T
 			}
 			closeLocalChangeStore(t, deps, dir, store)
 			var newest local.DeliveryReview
-			deps.DeployRunner = &fakeDeployRunner{Err: errors.New("no git"), OnCommand: func() {
+			deps.CommandRunner = &fakeCommandRunner{Err: errors.New("no git"), OnCommand: func() {
 				writer, err := local.Open(filepath.Join(dir, "state.db"))
 				if err != nil {
 					t.Fatal(err)
@@ -69,14 +69,14 @@ func TestAcceptanceStatusCannotMixConcurrentCompletionWithOldReview(t *testing.T
 }
 
 func TestAcceptanceStatusIncludesPeerWrittenDuringCheckoutRead(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	dir, store, sel, work := newLocalChangeWork(t, deps)
 	submitLocalChangeDelivery(t, store, sel.Workspace.ID, work, "builder", "head")
 	if _, err := store.CreateCheckpointWithFiles(t.Context(), sel.Workspace.ID, work.Key, "old", nil, ""); err != nil {
 		t.Fatal(err)
 	}
 	closeLocalChangeStore(t, deps, dir, store)
-	deps.DeployRunner = &fakeDeployRunner{Err: errors.New("no git"), OnCommand: func() {
+	deps.CommandRunner = &fakeCommandRunner{Err: errors.New("no git"), OnCommand: func() {
 		writer, err := local.Open(filepath.Join(dir, "state.db"))
 		if err != nil {
 			t.Fatal(err)

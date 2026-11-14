@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/command"
 	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/output"
@@ -14,7 +13,7 @@ import (
 func TestLocalInitBindsCurrentGitProject(t *testing.T) {
 	t.Parallel()
 	canonicalRepo, nested := commandGitRepo(t)
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	deps.WorkingDir = nested
 	stateDir := filepath.Join(t.TempDir(), "local")
 
@@ -48,41 +47,19 @@ func TestLocalInitBindsCurrentGitProject(t *testing.T) {
 	}
 }
 
-func TestFullInitBindsCurrentGitProject(t *testing.T) {
-	t.Parallel()
-	canonicalRepo, nested := commandGitRepo(t)
-	deployDir := t.TempDir()
-	setupTestBundle(t, deployDir)
-	deps, fc, _, out := newFakeDeps(t)
-	deps.WorkingDir = nested
-	deps.DeployRunner = &fakeDeployRunner{}
-	fc.identitySelection = &client.IdentitySelection{
-		User:      client.IdentityUser{ID: "user-1", Username: "human", DisplayName: "Human"},
-		Workspace: client.IdentityWorkspace{ID: "ws-1", Slug: "alpha", Name: "Alpha"},
-	}
-
-	code := command.ExecuteForCode(
-		command.NewRootCommand(deps),
-		"--json", "--no-input", "init", "--mode", "full", "--dir", deployDir,
-		"--workspace-name", "Alpha",
-		"--display-name", "Human",
-		"--username", "human",
-	)
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
-	}
-	cfg, err := config.LoadFrom(deps.ConfigPath)
-	if err != nil {
+func commandGitRepo(t *testing.T) (string, string) {
+	t.Helper()
+	repo := filepath.Join(t.TempDir(), "repo")
+	nested := filepath.Join(repo, "app")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	binding, ok := cfg.Projects[canonicalRepo]
+	if err := os.MkdirAll(nested, 0755); err != nil {
+		t.Fatal(err)
+	}
+	canonicalRepo, ok := config.FindProjectRoot(nested)
 	if !ok {
-		t.Fatalf("projects = %#v, want binding for %q", cfg.Projects, canonicalRepo)
+		t.Fatal("project root not found")
 	}
-	if binding.Workspace.ID != "ws-1" || binding.Workspace.Slug != "alpha" {
-		t.Fatalf("binding = %#v", binding.Workspace)
-	}
-	if _, err := os.Stat(filepath.Join(canonicalRepo, ".specgate", ".gitignore")); err != nil {
-		t.Fatalf("project working directory not prepared: %v", err)
-	}
+	return canonicalRepo, nested
 }

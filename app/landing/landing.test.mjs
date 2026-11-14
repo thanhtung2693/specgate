@@ -73,6 +73,41 @@ function contrastRatio(foreground, background) {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
+test("a passing suite leaves the missing required testcase visible after replay", () => {
+  const replay = { addEventListener(name, callback) { this[name] = callback; } };
+  const element = () => ({
+    attributes: {},
+    setAttribute(name, value) { this.attributes[name] = value; },
+  });
+  const chip = element();
+  const probe = element();
+  const outcomes = [...html.matchAll(/<li data-status="([^"]+)" data-result="([^"]+)"/g)];
+  const checks = outcomes.map(([, status, result]) => ({
+    ...element(), attributes: { "data-status": status }, dataset: { result },
+  }));
+  assert.deepEqual(checks.map((check) => check.attributes["data-status"]), ["met", "missing"]);
+  const pending = new Map();
+  runInNewContext(js, {
+    document: {
+      documentElement: { dataset: {} },
+      querySelector: (selector) => ({ "#verdict-chip": chip, "#console-replay": replay })[selector],
+      querySelectorAll: (selector) => ({
+        "#check-list li": checks, "#console-checks .chk": [probe],
+      })[selector] ?? [],
+    },
+    matchMedia: () => ({ matches: false }),
+    setTimeout: (callback, delay) => pending.set(delay, callback).size,
+    clearTimeout: () => pending.clear(),
+    IntersectionObserver: class {},
+  });
+  replay.click();
+  assert.equal(chip.attributes["data-state"], "run");
+  for (const callback of pending.values()) callback();
+  assert.equal(probe.attributes["data-on"], "1");
+  assert.deepEqual(checks.map((check) => check.attributes["data-status"]), ["met", "missing"]);
+  assert.equal(chip.attributes["data-state"], "gap");
+});
+
 test("navigation order matches the visible section order", () => {
   const navHtml = html.match(/<nav class="nav-links"[\s\S]*?<\/nav>/)?.[0] ?? "";
   const navOrder = [...navHtml.matchAll(/<a href="#([^"]+)">/g)]
@@ -104,7 +139,7 @@ test("interactive landing controls keep accessible names and roles valid", () =>
   assert.equal([...html.matchAll(/id="console-replay"/g)].length, 1);
 });
 
-test("small muted text colors meet contrast requirements in both themes", () => {
+test("muted text, warning, and success labels meet contrast requirements in both themes", () => {
   const root = cssBlock(":root");
   const light = cssBlock('html[data-theme="light"]');
   const darkCanvas = cssVar(root, "--canvas");
@@ -114,6 +149,12 @@ test("small muted text colors meet contrast requirements in both themes", () => 
   assert.ok(contrastRatio(cssVar(root, "--ink-faint"), darkCanvas) >= 4.5);
   assert.ok(contrastRatio(cssVar(root, "--ink-faint"), darkSurface) >= 4.5);
   assert.ok(contrastRatio(cssVar(light, "--ink-faint"), lightCanvas) >= 4.5);
+  for (const theme of [root, light]) {
+    for (const surface of ["--surface-1", "--surface-2"]) {
+      assert.ok(contrastRatio(cssVar(theme, "--warn"), cssVar(theme, surface)) >= 4.5);
+      assert.ok(contrastRatio(cssVar(theme, "--ok"), cssVar(theme, surface)) >= 4.5);
+    }
+  }
   assert.doesNotMatch(css, /\.wm-group-muted\s*\{[^}]*opacity:/s);
 });
 
@@ -130,13 +171,11 @@ test("terminal demo lines are plain text because the carousel types with textCon
   assert.doesNotMatch(html, /<strong>.*<\/strong>/);
 });
 
-test("stats copy calls unadjudicated events signals", () => {
-  assert.match(js, /# example workspace data/i);
-  assert.match(js, /pre-build signals/i);
-  assert.match(js, /blocked-ambiguity reports/i);
-  assert.match(js, /descriptive, not a quality score/i);
-  assert.doesNotMatch(js, /ambiguity saves/i);
-  assert.doesNotMatch(js, /caught by SpecGate/i);
+test("public examples advertise only Local CLI and bounded Git handoff", () => {
+  assert.doesNotMatch(html + js, /specgate stats|Full mode|Add the appliance|Linear|GitLab confirm|Configure one only/i);
+  assert.match(html, /specgate ui/);
+  assert.match(html, /unsigned review request/);
+  assert.match(js, /specgate delivery handoff show --file/);
 });
 
 test("landing copy stays aligned with current installation", () => {
@@ -145,11 +184,7 @@ test("landing copy stays aligned with current installation", () => {
   assert.match(html, /CLI and IDE handoff/);
   assert.match(html, /Install through the CLI/);
   assert.match(html, /Codex and Claude Code plugin managers/i);
-  assert.match(html, /Repositories/);
-  assert.match(html, /Work tracking/);
   assert.match(html, /GitHub/);
-  assert.match(html, /GitLab/);
-  assert.match(html, /Linear/);
   assert.doesNotMatch(html, /\bexperimental\s+(?:connectors?|integrations?|trackers?)\b/i);
   assert.doesNotMatch(html, /\b(?:connectors?|integrations?)\b[^.\n]{0,80}\bmirror(?:s|ed|ing)?\b[^.\n]{0,80}\btracker\b/i);
   assert.doesNotMatch(html, /official (?:Codex|Claude|plugin) marketplace/i);
@@ -162,9 +197,8 @@ test("tool compatibility is compact and explains the direct and team routes", ()
   assert.match(tools, /Your tools stay in the loop/);
   assert.equal([...tools.matchAll(/class="tool-route"/g)].length, 2);
   assert.match(tools, /Code where you already work/);
-  assert.match(tools, /Repositories and optional work tracking/);
-  assert.match(tools, /GitHub and GitLab confirm merged PRs and MRs at the submitted commit/);
-  assert.match(tools, /Linear can receive approved work without replacing direct IDE pickup/);
+  assert.match(tools, /Review in a browser or through Git/);
+  assert.match(tools, /unsigned review request/);
   assert.doesNotMatch(tools, /class="wm-group/);
   assert.doesNotMatch(tools, /supported v0\.1 path is CLI-first/);
 });
@@ -180,18 +214,16 @@ test("landing polish avoids repeated labels and decorative separators", () => {
 test("governed loop copy does not overpromise format parsing", () => {
   const loop = html.match(/<section class="band band-rail loop" id="how">(?<body>[\s\S]*?)<\/section>/)?.groups?.body ?? "";
 
-  assert.match(loop, /Bring any spec format/);
-  assert.match(loop, /OpenSpec, Spec Kit, Superpowers, a quick change note/);
-  assert.match(loop, /Approve one Context Pack/);
-  assert.match(loop, /Review delivery evidence/);
-  assert.doesNotMatch(loop, /can't misread/);
+  for (const framework of ["OpenSpec", "Spec Kit", "Superpowers", "Markdown"]) {
+    assert.ok(loop.includes(framework));
+  }
+  assert.doesNotMatch(loop, /can.t misread|auto(?:matically)? detect|detects any format/i);
 });
 
 test("product proof uses the published GitHub Pages media without autoplay", () => {
   const proof = html.match(/<section class="band proof" id="delivery-proof">(?<body>[\s\S]*?)<\/section>/)?.groups?.body ?? "";
   assert.match(proof, /<a class="accent" href="https:\/\/github\.com\/thanhtung2693\/specgate\/blob\/main\/docs\/using-specgate\/guides\/try-delivery-proof\.md">Run the delivery proof locally<\/a>/);
 
-  assert.match(proof, /When "done" is not delivered/);
   assert.match(proof, /<video[^>]+controls[^>]+muted[^>]+playsinline[^>]+preload="metadata"/);
   assert.match(proof, /poster="\.\/media\/specgate-promo-poster\.jpg"/);
   assert.match(proof, /<source src="\.\/media\/specgate-promo\.mp4" type="video\/mp4"/);
@@ -204,14 +236,10 @@ test("product proof uses the published GitHub Pages media without autoplay", () 
 });
 
 test("landing positions existing tools around the governed handoff", () => {
-  assert.match(html, /Keep your stack\. Add the governed handoff/);
   assert.match(html, /SPEC TOOLS/);
   assert.match(html, /SPECGATE/);
   assert.match(html, /TRACKER \+ IDE/);
-  assert.match(html, /Own the governed handoff/);
-  assert.match(html, /GitHub and GitLab confirm merged PRs and MRs at the submitted commit/);
-  assert.match(html, /Linear can receive approved work/);
-  assert.match(html, /without replacing direct IDE pickup/);
+  assert.match(html, /review request.*alongside the (?:Git )?diff/i);
   assert.doesNotMatch(html, /Own the contract/);
   assert.doesNotMatch(html, /Manual checklist steps only/);
   assert.doesNotMatch(html, /SpecGate sits/);
@@ -253,13 +281,11 @@ test("SEO metadata is canonical, crawlable, and structured", () => {
   assert.equal(graph.find((item) => item["@type"] === "WebPage").about["@id"], "https://thanhtung2693.github.io/specgate/#software");
 });
 
-test("polished hero uses the approved concise message and CTA labels", () => {
+test("hero keeps a concise lede and exposes both entry actions", () => {
   const hero = html.match(/<section class="hero">(?<body>[\s\S]*?)<\/section>/)?.groups?.body ?? "";
   const lede = hero.match(/<p class="lede[^\"]*"[^>]*>(?<body>[\s\S]*?)<\/p>/)?.groups?.body ?? "";
   const desktopHeadlineCap = Number(css.match(/\.hero-copy h1\s*\{[\s\S]*?font-size:\s*clamp\([^,]+,[^,]+,\s*(?<max>[\d.]+)rem\)/)?.groups?.max);
 
-  assert.match(hero, /Approve one version\./);
-  assert.match(hero, /Verify the build\./);
   assert.match(hero, />Run locally/);
   assert.match(hero, />View GitHub/);
   assert.ok(lede.trim().split(/\s+/).length <= 20);
@@ -267,31 +293,26 @@ test("polished hero uses the approved concise message and CTA labels", () => {
   assert.doesNotMatch(hero, /Run the local demo|Watch the CLI/);
 });
 
-test("primary CTA explains the offline Local default", () => {
+test("primary CTA explains the Local CLI path", () => {
   const cta = html.match(/<section class="cta" id="cta">(?<body>[\s\S]*?)<\/section>/)?.groups?.body ?? "";
 
-  assert.match(cta, /local-first/);
+  assert.match(cta, /Local CLI/);
   assert.match(cta, /no Docker or server/);
   assert.doesNotMatch(cta, /one container/);
 });
 
-test("FAQ is concise and JSON-LD matches the visible questions", () => {
+test("FAQ has six questions and JSON-LD matches the visible content", () => {
   const faq = html.match(/<section class="band faq" id="faq">(?<body>[\s\S]*?)<\/section>/)?.groups?.body ?? "";
   const visibleQuestions = [...faq.matchAll(/<summary><span>(?<question>[^<]+)<\/span><\/summary>/g)]
     .map((match) => match.groups.question);
   const jsonLd = html.match(/<script type="application\/ld\+json">\s*(?<json>[\s\S]*?)\s*<\/script>/)?.groups?.json;
   const faqPage = JSON.parse(jsonLd)["@graph"].find((item) => item["@type"] === "FAQPage");
-  const structuredQuestions = faqPage.mainEntity.map((item) => item.name);
+  const visibleAnswers = [...faq.matchAll(/<details[^>]+>[^]*?<p>(?<answer>[^]*?)<\/p>[^]*?<\/details>/g)]
+    .map((match) => match.groups.answer.replace(/<[^>]+>/g, ""));
 
-  assert.deepEqual(visibleQuestions, [
-    "How is this different from spec tools?",
-    "What spec formats do you accept?",
-    "Do we have to leave our coding agent?",
-    "Do I need an LLM API key?",
-    "What does the delivery review check?",
-    "How should we roll this out?",
-  ]);
-  assert.deepEqual(structuredQuestions, visibleQuestions);
+  assert.equal(visibleQuestions.length, 6);
+  assert.deepEqual(faqPage.mainEntity.map((item) => item.name), visibleQuestions);
+  assert.deepEqual(faqPage.mainEntity.map((item) => item.acceptedAnswer.text), visibleAnswers);
 });
 
 test("final CTA reuses approved intents without decorative steps", () => {
@@ -340,7 +361,7 @@ test("terminal presents the current four-part value path", () => {
   const tabs = [...html.matchAll(/<button[^>]+data-cast-tab[^>]*>(?<label>[^<]+)<\/button>/g)]
     .map((match) => match.groups.label.trim());
 
-  assert.deepEqual(tabs, ["Publish", "Context", "Verify", "Measure"]);
+  assert.deepEqual(tabs, ["Publish", "Context", "Verify", "Handoff"]);
   assert.match(js, /specgate artifact publish --file artifact\.json --preview/);
   assert.match(js, /specgate artifact publish --file artifact\.json/);
   assert.match(js, /specgate gates check <artifact-id>/);
@@ -359,7 +380,7 @@ test("terminal presents the current four-part value path", () => {
   assert.match(js, /specgate --yes change accept <work-ref> --review-id <review-id>/);
   assert.match(js, /Human approval remains required/);
   assert.doesNotMatch(js, /Delivery verdict: PASS/);
-  assert.match(js, /specgate stats --days 30/);
+  assert.match(js, /specgate delivery handoff export <work-ref> --file/);
   assert.doesNotMatch(js, /work create-quick|gates history|governance profile|Custom gates/);
 });
 

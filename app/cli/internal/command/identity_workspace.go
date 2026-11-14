@@ -9,9 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/config"
-	"github.com/specgate/specgate/app/cli/internal/interactive"
 	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
@@ -23,12 +21,11 @@ func newWorkspaceCmd(deps *Deps) *cobra.Command {
 		Example: strings.TrimSpace(`specgate workspace select platform
 specgate workspace bind platform
 specgate workspace current
-specgate workspace members
 specgate workspace unbind
 specgate --workspace platform status
 SPECGATE_WORKSPACE=platform specgate work list`),
 	}
-	cmd.AddCommand(newWorkspaceCreateCmd(deps), newWorkspaceListCmd(deps), newWorkspaceCurrentCmd(deps), newWorkspaceMembersCmd(deps), newWorkspaceSelectCmd(deps), newWorkspaceBindCmd(deps), newWorkspaceUnbindCmd(deps), newWorkspaceCredentialCmd(deps))
+	cmd.AddCommand(newWorkspaceCreateCmd(deps), newWorkspaceListCmd(deps), newWorkspaceCurrentCmd(deps), newWorkspaceSelectCmd(deps), newWorkspaceBindCmd(deps), newWorkspaceUnbindCmd(deps))
 	return cmd
 }
 
@@ -38,34 +35,20 @@ func newWorkspaceListCmd(deps *Deps) *cobra.Command {
 		Short: "List local workspaces",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if deps.Topology == config.ModeLocal {
-				store, err := openLocalStore(deps)
-				if err != nil {
-					return localExitError(deps, "workspace.list", err)
-				}
-				defer store.Close()
-				items, err := store.ListWorkspaces(cmd.Context())
-				if err != nil {
-					return localExitError(deps, "workspace.list", err)
-				}
-				if deps.Printer.Mode() == output.ModeJSON {
-					deps.Printer.Success("workspace.list", map[string]any{"items": items})
-					return nil
-				}
-				for _, workspace := range items {
-					fmt.Fprintf(deps.Stdout, "%s %s\n", styled(deps, output.StyleBold, fmt.Sprintf("%-24s", workspace.Slug)), workspace.Name)
-				}
-				return nil
-			}
-			workspaces, err := deps.Client.ListWorkspaces(cmd.Context())
+			store, err := openLocalStore(deps)
 			if err != nil {
-				return apiExitError(deps, "workspace.list", err)
+				return localExitError(deps, "workspace.list", err)
+			}
+			defer store.Close()
+			items, err := store.ListWorkspaces(cmd.Context())
+			if err != nil {
+				return localExitError(deps, "workspace.list", err)
 			}
 			if deps.Printer.Mode() == output.ModeJSON {
-				deps.Printer.Success("workspace.list", map[string]any{"items": workspaces})
+				deps.Printer.Success("workspace.list", map[string]any{"items": items})
 				return nil
 			}
-			for _, workspace := range workspaces {
+			for _, workspace := range items {
 				fmt.Fprintf(deps.Stdout, "%s %s\n", styled(deps, output.StyleBold, fmt.Sprintf("%-24s", workspace.Slug)), workspace.Name)
 			}
 			return nil
@@ -79,46 +62,30 @@ func newWorkspaceCurrentCmd(deps *Deps) *cobra.Command {
 		Short: "Show the selected workspace",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if deps.Topology == config.ModeLocal {
-				store, err := openLocalStore(deps)
-				if err != nil {
-					return localExitError(deps, "workspace.current", err)
-				}
-				defer store.Close()
-				selection, err := localSelection(cmd.Context(), deps, store)
-				if err != nil {
-					return localExitError(deps, "workspace.current", err)
-				}
-				workspace := localWorkspaceConfig(selection.Workspace)
-				resolved := currentWorkspaceSelection(deps)
-				if deps.Printer.Mode() == output.ModeJSON {
-					deps.Printer.Success("workspace.current", map[string]any{
-						"workspace":    workspace,
-						"source":       "local store",
-						"scope":        resolved.Source,
-						"project_root": resolved.ProjectRoot,
-					})
-					return nil
-				}
-				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "workspace:"), styled(deps, output.StyleBold, formatWorkspaceLabel(workspace)))
-				fmt.Fprintln(deps.Stdout, label(deps, "source: local store"))
-				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "scope:"), formatWorkspaceSource(resolved))
-				printWorkspaceProjectContext(deps, resolved)
-				return nil
+			store, err := openLocalStore(deps)
+			if err != nil {
+				return localExitError(deps, "workspace.current", err)
 			}
-			selection := currentWorkspaceSelection(deps)
-			if selection.Workspace.ID == "" && selection.Workspace.Slug == "" {
-				payload := output.ErrorPayload{Code: "not_found", Message: "no workspace selected"}
-				code := deps.Printer.Error("workspace.current", payload)
-				return &output.ExitError{Code: code}
+			defer store.Close()
+			selection, err := localSelection(cmd.Context(), deps, store)
+			if err != nil {
+				return localExitError(deps, "workspace.current", err)
 			}
+			workspace := localWorkspaceConfig(selection.Workspace)
+			resolved := currentWorkspaceSelection(deps)
 			if deps.Printer.Mode() == output.ModeJSON {
-				deps.Printer.Success("workspace.current", workspaceSelectionView(selection))
+				deps.Printer.Success("workspace.current", map[string]any{
+					"workspace":    workspace,
+					"source":       "local store",
+					"scope":        resolved.Source,
+					"project_root": resolved.ProjectRoot,
+				})
 				return nil
 			}
-			fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "workspace:"), styled(deps, output.StyleBold, formatWorkspaceLabel(selection.Workspace)))
-			fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "source:"), formatWorkspaceSource(selection))
-			printWorkspaceProjectContext(deps, selection)
+			fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "workspace:"), styled(deps, output.StyleBold, formatWorkspaceLabel(workspace)))
+			fmt.Fprintln(deps.Stdout, label(deps, "source: local store"))
+			fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "scope:"), formatWorkspaceSource(resolved))
+			printWorkspaceProjectContext(deps, resolved)
 			return nil
 		},
 	}
@@ -141,62 +108,6 @@ func printWorkspaceProjectContext(deps *Deps, selection config.ResolvedWorkspace
 		return
 	}
 	fmt.Fprintln(deps.Stdout, "next: run `specgate workspace bind` to use this workspace automatically in this checkout")
-}
-
-func newWorkspaceMembersCmd(deps *Deps) *cobra.Command {
-	return &cobra.Command{
-		Use:   "members",
-		Short: "List members in the selected workspace",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg, _ := config.LoadFrom(deps.ConfigPath)
-			selection := resolveWorkspaceSelection(deps, cfg)
-			if selection.Workspace.ID == "" && selection.Workspace.Slug == "" {
-				payload := output.ErrorPayload{Code: "not_found", Message: "no workspace selected"}
-				code := deps.Printer.Error("workspace.members", payload)
-				return &output.ExitError{Code: code}
-			}
-			workspaceID, err := workspaceIDForSelection(cmd.Context(), deps, selection)
-			if err != nil {
-				return apiExitError(deps, "workspace.members", err)
-			}
-			members, err := deps.Client.ListWorkspaceMembers(cmd.Context(), workspaceID, cfg.CurrentUser.ID, cfg.CurrentUser.Username)
-			if err != nil {
-				return apiExitError(deps, "workspace.members", err)
-			}
-			if deps.Printer.Mode() == output.ModeJSON {
-				deps.Printer.Success("workspace.members", members)
-				return nil
-			}
-			workspaceLabel := members.Workspace.Slug
-			if workspaceLabel == "" {
-				workspaceLabel = selection.Workspace.Slug
-			}
-			if workspaceLabel == "" {
-				workspaceLabel = workspaceID
-			}
-			fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "workspace:"), styled(deps, output.StyleBold, workspaceLabel))
-			for _, member := range members.Members {
-				marker := ""
-				if member.Current {
-					marker = " (you)"
-				}
-				fmt.Fprintf(deps.Stdout, "%s %-24s %s%s%s\n",
-					styled(deps, output.StyleBold, fmt.Sprintf("%-20s", member.Username)),
-					member.DisplayName, styledStatusPadded(deps, member.Role, 10), marker,
-					memberAccessNote(member))
-			}
-			return nil
-		},
-	}
-}
-
-func workspaceSelectionView(selection config.ResolvedWorkspace) map[string]any {
-	return map[string]any{
-		"workspace":    selection.Workspace,
-		"source":       selection.Source,
-		"project_root": selection.ProjectRoot,
-	}
 }
 
 func formatWorkspaceLabel(workspace config.CurrentWorkspace) string {
@@ -229,74 +140,32 @@ func newWorkspaceSelectCmd(deps *Deps) *cobra.Command {
 		Short: "Select the global or project workspace used by subsequent CLI commands",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if deps.Topology == config.ModeLocal {
-				if len(args) != 1 || strings.TrimSpace(args[0]) == "" {
-					payload := output.ErrorPayload{Code: "usage", Message: "workspace slug is required in Local mode; run `specgate workspace select <slug>`"}
-					code := deps.Printer.Error("workspace.select", payload)
-					return &output.ExitError{Code: code}
-				}
-				store, err := openLocalStore(deps)
-				if err != nil {
-					return localExitError(deps, "workspace.select", err)
-				}
-				defer store.Close()
-				if err := store.SelectWorkspace(cmd.Context(), strings.TrimSpace(args[0])); err != nil {
-					return localExitError(deps, "workspace.select", err)
-				}
-				selection, err := store.Current(cmd.Context())
-				if err != nil {
-					return localExitError(deps, "workspace.select", err)
-				}
-				workspace := localWorkspaceIdentity(selection.Workspace)
-				if err := saveWorkspaceSelection(deps, workspace, workspaceSaveScopeGlobal, ""); err != nil {
-					return localExitError(deps, "workspace.select", err)
-				}
-				if deps.Printer.Mode() == output.ModeJSON {
-					deps.Printer.Success("workspace.select", workspace)
-					return nil
-				}
-				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Workspace set to"), styled(deps, output.StyleAction, workspace.Slug))
-				return nil
-			}
-			var workspace *client.IdentityWorkspace
-			var err error
-			if len(args) == 0 {
-				if !canPrompt(deps) {
-					payload := output.ErrorPayload{Code: "validation", Message: "workspace slug is required when input is disabled"}
-					code := deps.Printer.Error("workspace.select", payload)
-					return &output.ExitError{Code: code}
-				}
-				workspace, err = promptWorkspaceSelection(cmd, deps)
-			} else {
-				slug := strings.TrimSpace(args[0])
-				if err := validateWorkspaceSlug(slug); err != nil {
-					payload := output.ErrorPayload{Code: "validation", Message: err.Error()}
-					code := deps.Printer.Error("workspace.select", payload)
-					return &output.ExitError{Code: code, Err: err}
-				}
-				workspace, err = deps.Client.GetWorkspace(cmd.Context(), slug)
-			}
-			if err != nil {
-				return apiExitError(deps, "workspace.select", err)
-			}
-			saveScope, projectRoot, err := selectWorkspaceSaveScope(deps)
-			if err != nil {
-				return err
-			}
-			if err := saveWorkspaceSelection(deps, *workspace, saveScope, projectRoot); err != nil {
-				payload := output.ErrorPayload{Code: "unavailable", Message: err.Error()}
+			if len(args) != 1 || strings.TrimSpace(args[0]) == "" {
+				payload := output.ErrorPayload{Code: "usage", Message: "workspace slug is required in Local mode; run `specgate workspace select <slug>`"}
 				code := deps.Printer.Error("workspace.select", payload)
-				return &output.ExitError{Code: code, Err: err}
+				return &output.ExitError{Code: code}
+			}
+			store, err := openLocalStore(deps)
+			if err != nil {
+				return localExitError(deps, "workspace.select", err)
+			}
+			defer store.Close()
+			if err := store.SelectWorkspace(cmd.Context(), strings.TrimSpace(args[0])); err != nil {
+				return localExitError(deps, "workspace.select", err)
+			}
+			selection, err := store.Current(cmd.Context())
+			if err != nil {
+				return localExitError(deps, "workspace.select", err)
+			}
+			workspace := selection.Workspace
+			if err := saveWorkspaceSelection(deps, workspace); err != nil {
+				return localExitError(deps, "workspace.select", err)
 			}
 			if deps.Printer.Mode() == output.ModeJSON {
 				deps.Printer.Success("workspace.select", workspace)
 				return nil
 			}
-			if saveScope == workspaceSaveScopeProject {
-				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Project workspace set to"), styled(deps, output.StyleAction, workspace.Slug))
-			} else {
-				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Workspace set to"), styled(deps, output.StyleAction, workspace.Slug))
-			}
+			fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Workspace set to"), styled(deps, output.StyleAction, workspace.Slug))
 			return nil
 		},
 	}
@@ -308,9 +177,6 @@ func newWorkspaceCreateCmd(deps *Deps) *cobra.Command {
 		Short: "Create a Local-mode workspace",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if deps.Topology != config.ModeLocal {
-				return localExitError(deps, "workspace.create", fmt.Errorf("workspace creation is available in Local mode; use your Full-mode team workspace instead"))
-			}
 			store, err := openLocalStore(deps)
 			if err != nil {
 				return localExitError(deps, "workspace.create", err)
@@ -332,18 +198,6 @@ func newWorkspaceCreateCmd(deps *Deps) *cobra.Command {
 
 func localWorkspaceConfig(workspace local.Workspace) config.CurrentWorkspace {
 	return config.CurrentWorkspace{ID: workspace.ID, Slug: workspace.Slug, Name: workspace.Name}
-}
-
-func localWorkspaceIdentity(workspace local.Workspace) client.IdentityWorkspace {
-	return client.IdentityWorkspace{ID: workspace.ID, Slug: workspace.Slug, Name: workspace.Name}
-}
-
-func localIdentityUser(user local.User) client.IdentityUser {
-	return client.IdentityUser{ID: user.ID, Username: user.Username, DisplayName: user.DisplayName, Email: user.Email}
-}
-
-func localIdentitySelection(selection local.Selection) client.IdentitySelection {
-	return client.IdentitySelection{User: localIdentityUser(selection.User), Workspace: localWorkspaceIdentity(selection.Workspace)}
 }
 
 func localExitError(deps *Deps, command string, err error) error {
@@ -391,97 +245,37 @@ func newWorkspaceBindCmd(deps *Deps) *cobra.Command {
 				code := deps.Printer.Error("workspace.bind", payload)
 				return &output.ExitError{Code: code}
 			}
-			if deps.Topology == config.ModeLocal {
-				store, err := openLocalStore(deps)
-				if err != nil {
-					return localExitError(deps, "workspace.bind", err)
-				}
-				defer store.Close()
-				selection, err := store.Current(cmd.Context())
-				if err == nil && len(args) == 1 {
-					selection.Workspace, err = store.Workspace(cmd.Context(), strings.TrimSpace(args[0]))
-				} else if err == nil {
-					selection, err = localSelection(cmd.Context(), deps, store)
-				}
-				if err != nil {
-					return localExitError(deps, "workspace.bind", err)
-				}
-				if err := config.EnsureSpecgateDirGitignore(filepath.Join(projectRoot, ".specgate")); err != nil {
-					return localExitError(deps, "workspace.bind", err)
-				}
-				cfg, _ := config.LoadFrom(deps.ConfigPath)
-				cfg.SetProjectWorkspace(projectRoot, localWorkspaceConfig(selection.Workspace))
-				if err := saveConfig(deps, cfg); err != nil {
-					return localExitError(deps, "workspace.bind", err)
-				}
-				if deps.Printer.Mode() == output.ModeJSON {
-					deps.Printer.Success("workspace.bind", map[string]any{"workspace": localWorkspaceIdentity(selection.Workspace), "source": config.WorkspaceSourceProject, "project_root": projectRoot})
-					return nil
-				}
-				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Project workspace set to"), styled(deps, output.StyleAction, selection.Workspace.Slug))
-				fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Project:"), projectRoot)
-				return nil
+			store, err := openLocalStore(deps)
+			if err != nil {
+				return localExitError(deps, "workspace.bind", err)
 			}
-
-			var workspace *client.IdentityWorkspace
-			var err error
-			if len(args) == 0 {
-				workspace, err = workspaceForProjectBind(cmd, deps)
-			} else {
-				slug := strings.TrimSpace(args[0])
-				if err := validateWorkspaceSlug(slug); err != nil {
-					payload := output.ErrorPayload{Code: "validation", Message: err.Error()}
-					code := deps.Printer.Error("workspace.bind", payload)
-					return &output.ExitError{Code: code, Err: err}
-				}
-				workspace, err = deps.Client.GetWorkspace(cmd.Context(), slug)
+			defer store.Close()
+			selection, err := store.Current(cmd.Context())
+			if err == nil && len(args) == 1 {
+				selection.Workspace, err = store.Workspace(cmd.Context(), strings.TrimSpace(args[0]))
+			} else if err == nil {
+				selection, err = localSelection(cmd.Context(), deps, store)
 			}
 			if err != nil {
-				if exitErr, ok := err.(*output.ExitError); ok {
-					return exitErr
-				}
-				return apiExitError(deps, "workspace.bind", err)
+				return localExitError(deps, "workspace.bind", err)
 			}
 			if err := config.EnsureSpecgateDirGitignore(filepath.Join(projectRoot, ".specgate")); err != nil {
-				payload := output.ErrorPayload{Code: "unavailable", Message: err.Error()}
-				code := deps.Printer.Error("workspace.bind", payload)
-				return &output.ExitError{Code: code, Err: err}
+				return localExitError(deps, "workspace.bind", err)
 			}
-			if err := saveWorkspaceSelection(deps, *workspace, workspaceSaveScopeProject, projectRoot); err != nil {
-				payload := output.ErrorPayload{Code: "unavailable", Message: err.Error()}
-				code := deps.Printer.Error("workspace.bind", payload)
-				return &output.ExitError{Code: code, Err: err}
+			cfg, _ := config.LoadFrom(deps.ConfigPath)
+			cfg.SetProjectWorkspace(projectRoot, localWorkspaceConfig(selection.Workspace))
+			if err := saveConfig(deps, cfg); err != nil {
+				return localExitError(deps, "workspace.bind", err)
 			}
 			if deps.Printer.Mode() == output.ModeJSON {
-				deps.Printer.Success("workspace.bind", map[string]any{
-					"workspace":    workspace,
-					"source":       config.WorkspaceSourceProject,
-					"project_root": projectRoot,
-				})
+				deps.Printer.Success("workspace.bind", map[string]any{"workspace": selection.Workspace, "source": config.WorkspaceSourceProject, "project_root": projectRoot})
 				return nil
 			}
-			fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Project workspace set to"), styled(deps, output.StyleAction, workspace.Slug))
+			fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Project workspace set to"), styled(deps, output.StyleAction, selection.Workspace.Slug))
 			fmt.Fprintf(deps.Stdout, "%s %s\n", label(deps, "Project:"), projectRoot)
 			return nil
 		},
 	}
-}
-
-func workspaceForProjectBind(cmd *cobra.Command, deps *Deps) (*client.IdentityWorkspace, error) {
-	selection := currentWorkspaceSelection(deps)
-	if selection.Workspace != (config.CurrentWorkspace{}) {
-		return &client.IdentityWorkspace{
-			ID:   selection.Workspace.ID,
-			Slug: selection.Workspace.Slug,
-			Name: selection.Workspace.Name,
-		}, nil
-	}
-	if !canPrompt(deps) {
-		payload := output.ErrorPayload{Code: "validation", Message: "workspace slug is required when no workspace is selected and input is disabled"}
-		code := deps.Printer.Error("workspace.bind", payload)
-		return nil, &output.ExitError{Code: code}
-	}
-	return promptWorkspaceSelection(cmd, deps)
 }
 
 func newWorkspaceUnbindCmd(deps *Deps) *cobra.Command {
@@ -517,59 +311,10 @@ func newWorkspaceUnbindCmd(deps *Deps) *cobra.Command {
 	}
 }
 
-func promptWorkspaceSelection(cmd *cobra.Command, deps *Deps) (*client.IdentityWorkspace, error) {
-	workspaces, err := deps.Client.ListWorkspaces(cmd.Context())
-	if err != nil {
-		return nil, err
-	}
-	if len(workspaces) == 0 {
-		return nil, fmt.Errorf("no workspaces found")
-	}
-	opts := make([]interactive.Option, 0, len(workspaces))
-	bySlug := make(map[string]client.IdentityWorkspace, len(workspaces))
-	for _, workspace := range workspaces {
-		label := workspace.Slug
-		if workspace.Name != "" && workspace.Name != workspace.Slug {
-			label = fmt.Sprintf("%s - %s", workspace.Slug, workspace.Name)
-		}
-		opts = append(opts, interactive.Option{Label: label, Value: workspace.Slug})
-		bySlug[workspace.Slug] = workspace
-	}
-	slug, err := deps.Prompter.Select("Select workspace", opts)
-	if err != nil {
-		return nil, err
-	}
-	workspace, ok := bySlug[slug]
-	if !ok {
-		return nil, fmt.Errorf("workspace %q not found", slug)
-	}
-	return &workspace, nil
-}
-
 // formatRequiredLoginFlags names the missing flags as flags, and agrees with its
 // own verb: one missing flag "is required", several "are required". The caller
 // used to append " are required" to a bare noun, which produced
 // "workspace are required".
-// memberAccessNote reports whether a member can authenticate to the gateway and
-// who last changed that. It stays silent on an appliance with no gateway
-// credentials, where nobody authenticates and the column would be noise.
-func memberAccessNote(member client.WorkspaceMember) string {
-	changed := ""
-	if by := strings.TrimSpace(member.CredentialChangedBy); by != "" {
-		changed = ", last changed by " + by
-	} else if strings.TrimSpace(member.CredentialChangedAt) != "" {
-		changed = ", last changed by an unauthenticated caller"
-	}
-	switch {
-	case member.CredentialSet:
-		return "  credential: set" + changed
-	case changed != "":
-		return "  credential: revoked" + changed
-	default:
-		return ""
-	}
-}
-
 func formatRequiredLoginFlags(workspaceName, displayName, username string) string {
 	missing := make([]string, 0, 3)
 	if strings.TrimSpace(workspaceName) == "" {

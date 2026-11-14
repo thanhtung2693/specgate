@@ -38,7 +38,7 @@ Completion criterion: the human-approved preview names every slice's contract an
 
 ## 2A. Create quick work
 
-Quick work is available in Local and Full mode. Create it with explicit criteria,
+Create quick work with explicit criteria,
 then read the approved contract back:
 
 ```bash
@@ -57,12 +57,12 @@ contract exactly. Quick work ends here; switch to `specgate-work-delivery`.
 ## 2B. Preview and publish an artifact
 
 The originating framework owns source paths, names, lifecycle, and Git policy.
-Never relocate, copy, rename, delete, commit, or change ignore rules; edit only
-with authorization.
+Never relocate, copy, rename, delete, commit, or change ignore rules; edit only with authorization.
 
 Roles are routing labels. Map each human-selected source explicitly; never
 detect a framework or manufacture documents. Reuse a path under a second role
 when policy requires it.
+Local `.specgate/rubrics/*.md` edits require authorization, preview and new publication; judge frozen task content, never working files.
 
 Keep the manifest at `.specgate/work/artifact.json`: unchanged relative `path`,
 explicit `role`, and one source. Use `content`, repository `repo_file`,
@@ -73,8 +73,7 @@ manifest-relative `source_file`, or external absolute `file_url`.
 For Local artifacts, propose inventory only for independent slices, deferrals,
 or requested source coverage; never infer it or add it to quick work. Preview
 each ID, text, unchanged path, slice, and deferral. The human confirms complete
-`source_criteria` for exact `@source:<id>` mappings. Inventory is Local-only;
-historical inventory blocks portable/v1 export. Local backup remains.
+`source_criteria` for exact `@source:<id>` mappings. Keep normal Local backups.
 
 Use the human-selected `feature_key`; `request_type` is `new_feature`,
 `change_request`, `bugfix`, or `unknown`:

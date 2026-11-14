@@ -15,7 +15,7 @@ import (
 // has to see which gates ran, which did not, and why — the same facts the JSON
 // already carries.
 func TestGatesCheckNamesEachGateStateAndPendingCount(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir := t.TempDir()
 	store, err := local.Open(filepath.Join(stateDir, "state.db"))
 	if err != nil {

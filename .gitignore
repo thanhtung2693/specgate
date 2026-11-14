@@ -1,6 +1,8 @@
 # Binaries
 /bin/
 /dist/
+# Preserve the retired module's existing contributor binary outside the source set.
+/app/doc-registry/bin/doc-registry
 node_modules/
 dist/
 dist-ssr/
@@ -54,10 +56,8 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Local runtime data (doc-registry stack)
+# Existing local runtime data
 data/
-!app/ui/src/data/
-!app/ui/src/data/**
 .minio-data/
 .redis-data/
 

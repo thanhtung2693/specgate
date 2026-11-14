@@ -1,26 +1,18 @@
 # Configuration
 
-Use this reference to find user-facing SpecGate settings and how they are
-applied. It covers the CLI, project configuration, the Full appliance, and
-workspace settings—not the internal environment of a source checkout.
-
-For task steps, use [Configure models](../guides/configure-models.md) or
-[Operate SpecGate](../guides/operate-specgate.md).
+This reference covers the Local CLI configuration and project settings.
+For operating and backup guidance, see [Operate SpecGate](../guides/operate-specgate.md).
 
 ## CLI
 
-`specgate init` has two topologies. Interactive init defaults to **Local CLI**:
-it stores state in SQLite on this machine and does not start Docker or contact a
-server. Choose **Full appliance** when you need the browser, governance chat,
-Knowledge, integrations, or shared server-backed workspaces. Scripted setup
-must state its topology explicitly:
+`specgate init` creates a Local user and workspace in SQLite and binds the
+current Git checkout. For unattended setup, supply explicit identity values:
 
 ```bash
-specgate init --mode local --no-input \
+specgate init --no-input \
   --workspace-name "My workspace" \
   --display-name "Jane Doe" \
   --username jane
-specgate init --mode full --no-input
 ```
 
 Local initialization can optionally install IDE integration files in the same
@@ -33,30 +25,20 @@ identity, workspace, store, and repository setup remain complete and the error
 provides the plugin install command to retry. Both retry and successful
 verification commands preserve `--project-local` when project scope was selected.
 
-### Gateway credentials (Full mode)
+Local artifact preview and publication also read optional project-owned
+`.specgate/rubrics/` Markdown instructions from the selected Git root, including
+when invoked in a subdirectory. Only the four existing semantic gate filenames
+are supported; no directory or files are created automatically. Effective text
+is frozen at publication, so edits require a fresh preview and new artifact
+version. See
+[Local project rubrics](../guides/customize-governance.md#add-local-project-instructions)
+for bounds, errors and source ownership.
 
-An appliance shared by several developers issues each of them a credential. The
-appliance generates the secret; you never invent one:
+### Previous installations
 
-```bash
-specgate workspace credential mai          # on the appliance operator's machine
-specgate config credential mai             # on that developer's machine
-specgate config credential --clear         # remove the stored credential
-```
-
-Credentials are stored per server URL in the per-user CLI config, written with
-owner-only permissions, so selecting a different server never sends one
-appliance's secret to another host. The secret is never printed back: human
-output and `--json` report only whether one is set. An appliance with no member
-credentials needs none, which is the default.
-
-Switching topology clears the other mode's server/deployment or Local-only
-identity and project bindings. Create or select an identity after setup in the
-new mode. It does not delete Local SQLite state; use a portable export before
-moving Local history into Full mode. Portable export refuses a workspace with
-pinned verification contracts or source criteria because Full mode cannot
-preserve their enforcement or proof. Back up that Local store instead;
-switching modes does not migrate its history or remove those Local records.
+A configuration that selects the retired remote setup is preserved. Use a prior
+compatible CLI to access that deployment. For independent Local
+initialization, follow [the recovery steps](../guides/operate-specgate.md#previous-installations).
 
 Local state defaults to the OS SpecGate config location. Use `--local-dir` at
 initialization to select another store, or `SPECGATE_LOCAL_DIR` for a
@@ -65,8 +47,8 @@ isolated CLI config file for automation and dogfood sessions. Local `doctor`
 reports the effective store directory, including environment or project-binding
 overrides, without persisting that selection to global configuration.
 
-Local mode has no Docker daemon, server, browser UI, governance chat, Knowledge,
-or integrations. Its Local governed route is:
+`specgate ui` optionally starts a loopback-only review listener inside the CLI
+process. Its Local governed route is:
 
 ```bash
 specgate artifact publish --file artifact.json
@@ -84,14 +66,12 @@ specgate change submit <work-ref> --file completion.json
 # Use review_id from the returned status (or change status --json).
 specgate --yes change accept <work-ref> --review-id <review-id>
 specgate audit <work-ref> --json
-specgate stats --json
 ```
 
 Artifact documents are immutable (1 MiB per document, 10 MiB per package).
 Local readiness combines deterministic checks with frozen Local IDE gate tasks;
 it remains `not_run` until required semantic results are submitted and is
-distinct from human approval. Full mode without a platform model uses the same
-task loop and `agent_attested` trust. The authoritative unfinished-task receipt
+distinct from human approval. Semantic task results are `agent_attested`. The authoritative unfinished-task receipt
 is `dispatched_to_ide_agent.pending_task_ids`; `created_task_ids` only says what
 the current dispatch created.
 Human artifact promotion and delivery decisions require `--yes` in noninteractive
@@ -110,31 +90,11 @@ plugin does not make CLI-only Local mode unhealthy. It reports repository
 binding, `sh` availability, and plugin-file health as distinct diagnostics.
 Plugin files on disk do not prove an already-running IDE session loaded them;
 restart the IDE and verify from a new session.
-Before `specgate init` selects a topology, plugin install and doctor also use
-that embedded package. This lets an IDE bootstrap finish on a clean machine
-without a running appliance. An explicit `--registry`, `--server`, or
-`SPECGATE_SERVER` still selects the remote package source.
+Plugin commands use their embedded package before initialization too.
 Use `--workspace <slug-or-id>` or `SPECGATE_WORKSPACE` for a one-command Local
 workspace override; neither changes the stored selection.
 
-Full-mode server precedence:
-
-1. `--server`;
-2. `SPECGATE_SERVER`;
-3. repo `.specgate/config` (committed, optional — see below);
-4. global user config file;
-5. `http://localhost:3000/api/doc-registry`.
-
-`plugins install` and `plugins doctor` intentionally skip the repository
-server value: executable IDE packages come from `--registry`, then the user
-server (`--server`, `SPECGATE_SERVER`, or global config).
-
-```bash
-specgate config server http://localhost:3000/api/doc-registry
-```
-
-CLI config stores connection preferences and the selected local user/workspace,
-not general product credentials. It may also store project-scoped workspace
+CLI config stores the selected Local user and workspace. It may also store project-scoped workspace
 bindings keyed by a local Git root path. `specgate init` creates the binding
 for the Git checkout where initialization runs. When a command runs from a bound
 checkout, that workspace overrides the global workspace for attribution and
@@ -142,7 +102,7 @@ default filtering. In a different Git checkout, workspace-scoped commands stop
 until it is bound, given a repo default, or run with an explicit workspace
 override. Outside Git checkouts, the global workspace remains available. A
 malformed global config fails closed before operational commands
-contact a server or modify local state; repair or move that file aside and run
+modify local state; repair or move that file aside and run
 `specgate init` again. `specgate version` and help remain available for
 diagnosis. Use `specgate workspace bind` from a checkout to bind the currently
 selected workspace, or `specgate workspace bind <slug>` to bind a named
@@ -166,32 +126,28 @@ status` and `specgate workspace current` show the source as `.specgate/config`.
 
 Project bindings are stored under canonical Git root paths so they can be
 removed cleanly when a checkout-specific selection is cleared. `specgate
-workspace select <slug>` in non-interactive mode saves the global workspace;
-Local selection preserves existing project bindings, while Full global
-selection clears the current checkout's binding only. Local selection always
-requires an explicit slug and never opens the Full-mode save-scope prompt.
+workspace select <slug>` saves the global workspace using an explicit slug
+while preserving project bindings.
 Use `workspace bind` when automation should bind a project. `specgate user
 logout` clears both the global workspace and project-scoped workspace bindings.
 `specgate user login` records the user and global workspace and leaves existing
 project bindings alone, so signing in never unbinds other checkouts; a binding
 whose workspace no longer resolves fails in that project with its own recovery
 command.
-Full appliance `specgate init` writes the deployment directory and saves the
-gateway API URL inferred from `SPECGATE_PORT`, so the next CLI command targets the appliance it
-just started. Supply `SPECGATE_PORT` or `SPECGATE_COMPOSE_PROJECT` before the
-first `init`; the CLI records nonempty overrides in the deployment `.env` so
-later `up`, `update`, `doctor`, and uninstall commands address the same
-appliance. `update` makes the same repair for an existing deployment when an
-override is supplied. The CLI preserves the `/api/doc-registry` base path when
-building request URLs. It refreshes a derived `http://localhost:<port>` URL
-when the configured port changes, while an explicit custom or remote server
-remains untouched.
-
+`specgate transfer inspect` and `transfer receive` work without resolving
+an active config. `transfer activate` uses the explicitly selected config
+file and the supplied Git root. It changes only that root's Local store and
+workspace binding, preserving global settings, other project bindings and
+legacy field values. It can initialize an empty Local config. A selected
+Full config or malformed config requires repair or selection of a separate
+Local config. A store or workspace override that points elsewhere blocks
+activation. When `SPECGATE_LOCAL_DIR` is set, supply the receiving directory's
+absolute path without symlink components. Activation compares the config with the preview before saving it
+atomically. Concurrent writes from unrelated tools remain possible.
 CLI environment variables:
 
 | Variable | Purpose |
 |---|---|
-| `SPECGATE_SERVER` | Overrides the saved server URL. |
 | `SPECGATE_WORKSPACE` | Overrides the project/global workspace selection for one command when `--workspace` is omitted. |
 | `SPECGATE_LOCAL_DIR` | Overrides the selected Local SQLite state directory for one command session. |
 | `SPECGATE_CONFIG_PATH` | Overrides the per-user CLI config path for an isolated session. |
@@ -218,20 +174,16 @@ distinct layers:
   specific file elsewhere.
 - **Shared config (committed, optional).** A single `.specgate/config` file
   (JSON) holds team defaults and slots into the precedence chains above,
-  **between `SPECGATE_*` env and the global user config**. It supports exactly
-  two keys:
+  after explicit overrides and the per-user binding.
 
   ```json
   {
-    "server": "https://specgate.internal",
     "workspace": "platform"
   }
   ```
 
-**What stays out of `.specgate/config`.** Secrets, API keys, and per-user
-identity (which local user you are) are **never** read from the committed file —
-they stay in environment variables, the deployment `.env`, or the global user
-config. Any credential or identity keys added to `.specgate/config` are ignored.
+This file can supply a workspace default. Legacy remote fields have no
+active transport. Keep secrets and per-user identity out of committed config.
 The repo default `workspace` is honored only when you have no per-user project
 binding; your binding always wins.
 
@@ -241,77 +193,7 @@ To commit the shared config, force-add it past the `.specgate/` ignore rule:
 git add -f .specgate/config
 ```
 
-## Full appliance
-
-The CLI-managed local deployment exposes one port and persists one volume:
-
-| Variable | Default | Purpose |
-|---|---:|---|
-| `SPECGATE_PORT` | `3000` | Public gateway port for the UI and APIs |
-| `SPECGATE_COMPOSE_PROJECT` | `specgate` for the default deployment; path-scoped for a new custom `--dir` | Names the local Compose project; an explicit value overrides automatic isolation |
-
-If `specgate up` reports that its host port is in use, choose an unused port in
-the deployment `.env` (for example `SPECGATE_PORT=3010`) and run `specgate up`
-again. `up` updates the derived local review URL and saved CLI gateway to match
-that port. Set both values before the first `specgate init` when you need a
-non-default port or Compose project; those selections are then durable in
-`.env`. The CLI names the conflicting port; it never exposes internal service
-ports for this recovery.
-
-The appliance keeps its implementation services private to the container. Its
-data and credentials are managed by `specgate init`, `specgate update`, and the
-Settings UI. Do not add database, storage, queue, or service-runtime variables
-to project configuration. Those source-checkout concerns belong to the
-[contributor setup guide](../../contributing/setup.md).
-
-## Models and embeddings
-
-The Web UI stores the server-side model that powers platform readiness and
-delivery review. Settings include:
-
-- server-side model provider and model (defaults to `openai` / `gpt-5.4-mini`);
-- default reasoning effort;
-- embedding provider and model for Knowledge;
-- OpenAI, Google, Anthropic, and OpenRouter API keys.
-
-Keys are encrypted at rest and masked on normal reads. Governance chat is a
-separate Full-appliance capability; ask the appliance operator to configure it
-when it is unavailable.
-
-## Governance thresholds and retention
-
-Settings include:
-
-- quality-gate confidence threshold;
-- governance model reasoning effort (`low`, `medium`, `high`);
-- `governance.registry_timeout_seconds`, the request timeout governance
-  operations use when calling Doc Registry (default `30`, maximum `600`);
-- work-item lifecycle behavior;
-- governance file retention.
-
-An explicit human delivery approval moves a work item into the derived
-`Delivered` phase but does not remove it from history. `specgate work list`
-stays uncluttered (it is attention-scoped), while archived work remains
-inspectable through an explicit ref. Clear completed work with
-`specgate work archive <ref>`, or enable
-`governance.auto_archive_on_delivery_pass` (default `false`; editable in the UI
-General settings) to archive a work item automatically once its delivery review
-is accepted by a human. SpecGate may then best-effort move the one linked Linear
-issue to Done. A platform delivery pass is ready for human review and triggers
-neither terminal effect.
-
-These are workspace-wide behavior where indicated by the UI. Review the
-Settings consequence note before changing them.
-
-## Integrations
-
-Integrations are Full-mode only. Connect a provider in the browser UI, choose
-the repository or work-tracking resource it may manage, and let SpecGate create
-the resource-specific webhook credential. See [Connect delivery
-integrations](../guides/connect-integrations.md) for the workflow.
-
 ## Related
 
 - [Operate SpecGate](../guides/operate-specgate.md)
-- [Configure models](../guides/configure-models.md)
 - [Trust and security](../concepts/trust-and-security.md)

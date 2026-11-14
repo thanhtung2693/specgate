@@ -21,13 +21,10 @@ rules for this repository.
 
 | Path | Stack | Responsibility | Contributor docs |
 | --- | --- | --- | --- |
-| `app/doc-registry/` | Go 1.26+ | REST API, governance state, Postgres, and object storage | `app/doc-registry/AGENTS.md`, `app/doc-registry/docs/` |
-| `app/agents/` | Python 3.12+ / LangGraph | Governance chat and model-backed governance operations | `app/agents/AGENTS.md`, `app/agents/docs/` |
-| `app/ui/` | Vite / React / TypeScript | Web application | `app/ui/AGENTS.md`, `app/ui/docs/` |
-| `app/cli/` | Go 1.26+ / Cobra | Human- and IDE-agent-facing CLI, Local mode, and installers | `app/cli/AGENTS.md`, `docs/using-specgate/reference/cli.md` |
+| `app/cli/` | Go 1.26+ / Cobra | Local state, CLI, embedded review UI, and installers | `app/cli/AGENTS.md`, `docs/using-specgate/reference/cli.md` |
 | `app/landing/` | Static HTML/CSS/JS | Public landing page | `app/landing/README.md` |
 | `plugins/` | Markdown, scripts, manifests | Canonical IDE plugin assets | `plugins/README.md` |
-| `deploy/`, `docker/` | Compose / Docker | Released and contributor deployment packaging | `deploy/README.md`, `docs/contributing/setup.md` |
+| `scripts/` | Shell, Node.js, Python | CLI installation, source-only pilot, and package tooling | `docs/contributing/setup.md` |
 
 Contributor architecture, contracts, setup, testing, and release guidance live
 in [`docs/contributing/`](docs/contributing/README.md). Product documentation
@@ -47,24 +44,12 @@ lives in `docs/using-specgate/`.
   them, unless a documented compatibility constraint requires a pin.
 - Preserve unrelated work in a dirty worktree.
 
-## Frozen surfaces
+## Product scope
 
-These surfaces are maintained, not extended. Fix defects, keep them building,
-and apply security-driven dependency updates; do not add features, options, or
-new workflows to them, and do not delete them either.
-
-| Surface | Status |
-| --- | --- |
-| Governance chat (`app/agents` chat graph, UI chat) | advisory only; no new tools or transports |
-| Knowledge / retrieval | no new providers or ranking work |
-| Linear work-tracking handoff | no new trackers or fields |
-| `delivery handoff export` bundles | no new formats |
-| `specgate stats` | report existing data; no new metrics |
-| Web UI | inspection and review surface; no UI-first workflows |
-
-Investment goes to per-criterion delivery verification, the approved-snapshot
-pin, and the acceptance record. If a request would add capability to a frozen
-surface, say so and propose the equivalent in those three areas instead.
+The supported distribution is Local. Keep the CLI as the owner of Local work,
+artifact, evidence, and decision state. The browser UI supports inspection and
+human review. Delivery handoff export/show keeps its existing bounded format.
+Full services and remote commands are retired.
 
 ## Spec-driven changes
 
@@ -76,7 +61,7 @@ the correct layer in the same change.
 | --- | --- |
 | Product intent, goals, or non-goals | Owning module PRD |
 | API, state, event, policy, retention, or behavior contract | Owning module `docs/spec.md` |
-| Cross-module vocabulary or behavior | `docs/contributing/contracts.md` |
+| Public workflow vocabulary or behavior | `docs/contributing/contracts.md` |
 | Architecture decision or trust boundary | `docs/contributing/architecture.md` or an ADR |
 | Contributor setup, testing, or release process | `docs/contributing/` |
 | Product installation or user workflow | `docs/using-specgate/` |
@@ -118,23 +103,19 @@ checks are:
 | Module | Commands |
 | --- | --- |
 | CLI | `cd app/cli && make test && make lint` |
-| Doc Registry | `cd app/doc-registry && make test && make lint` |
-| Governance operations | `cd app/agents && uv run pytest -q && uv run ruff check src tests` |
-| UI | `cd app/ui && npm run test -- --run && npm run lint && npm run build` |
 | Landing page | `node --test app/landing/landing.test.mjs && node -c app/landing/script.js` |
 | Release-facing or cross-module change | `node --test docs/release-readiness.test.mjs` |
 
 ## Cross-module and generated assets
 
-- Communicate across modules through documented REST/event contracts. Do not
-  import another module's internals or couple directly to its database/object
-  store.
+- Keep SQLite access in the CLI store. Use the documented projections at CLI
+  and browser entry points.
 - Update `docs/contributing/contracts.md` when shared statuses, event shapes,
   endpoints, or names change.
 - Canonical plugin assets live under `plugins/`. After changing them, run
   `make sync-plugins` and `make check-plugins`, then include synchronized
   generated copies in the same change.
-- Do not hand-edit generated plugin copies under CLI or Doc Registry packages.
+- Do not hand-edit generated plugin copies under the CLI package.
 
 ## Safety and data protection
 
@@ -168,12 +149,3 @@ checks are:
 - Never amend a published commit. Never skip hooks.
 - Before completion, review the diff, run the appropriate checks, and report
   evidence rather than assuming success.
-
-## Governance-chat regression discipline
-
-For real-backend governance-chat streaming failures, diagnose the live path
-before editing UI code. Compare browser assistant state with the matching
-LangSmith trace for the same `thread_id`, probe `/runs/stream`, and follow the
-container reload procedure in
-[`docs/contributing/testing.md`](docs/contributing/testing.md#langgraph-streaming-probe).
-Do not hide real streaming failures behind scenario-specific UI mocks.

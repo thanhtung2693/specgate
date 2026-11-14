@@ -8,45 +8,24 @@ definitions, use the [gate catalog](gates.md).
 
 ## Governance levels
 
-| Level | Control strength |
-|---|---|
-| `light` | minimum contract and focused evidence |
-| `standard` | normal readiness, AC evidence, and human approval |
-| `enhanced` | expanded readiness, stronger evidence, and independent review |
-
-| Level | Required documents | Required content |
-|---|---|---|
-| `light` | spec | outcomes, scope, acceptance criteria, verification method |
-| `standard` | spec and plan | outcomes, scope, acceptance criteria, verification method |
-| `enhanced` | spec and plan | Standard content plus non-goals, constraints, and rollout/rollback |
-
-Roles route explicitly mapped content to the relevant gate. They do not require
-one file per concern: design or verification material may live in the spec or
-plan, or use the optional `design` and `verification` roles.
-
-Resolution inputs include work type, impact level, requested level, rollback
-complexity, blast radius, data/schema impact, external contracts, affected
-systems, and protected domains.
-
-Unknown protected-domain status fails safe to enhanced governance.
+Artifact-backed Local work uses Standard. Its required roles are `spec`
+and `plan`, with outcomes, scope, acceptance criteria and verification method.
+Design and verification material can use their optional roles.
 
 ## Policy resolution
-
-SpecGate recommends a built-in level from the request type, impact declaration,
-protected-domain status, and requested governance level. A requested level can
-raise that recommendation, but cannot lower it.
 
 Every artifact version stores an immutable policy snapshot and digest. The
 snapshot names the exact gates, approval policy, and evidence policy that apply
 to that version. Gate dispatch and artifact approval fail closed when the
 snapshot is missing, changed, or unsupported.
 
-Full mode selects Light, Standard, or Enhanced from declared impact. Local
-artifact-backed work always uses fixed Standard governance; Quick work remains
-its lighter route. New Local and built-in Full Standard policies share required
-roles, topics, gates, human approval, and evidence meaning. Local embeds the
-default rubrics and has no rubric editor; a Full workspace may intentionally
-diverge after its team changes a bound Skill.
+Local embeds the
+default rubrics and optionally appends project-owned Markdown instructions from
+the four fixed `.specgate/rubrics/<gate-key>.md` files at publication. The
+effective text and relative source are frozen into that version; absent files
+preserve the exact default policy and digest. Local has no UI rubric editor.
+See [Customize governance](../guides/customize-governance.md#add-local-project-instructions)
+for names, validation and Git ownership.
 
 ## Gate identity
 
@@ -60,9 +39,8 @@ its task carries a frozen gate digest. Results with a stale digest are rejected.
 |---|---|
 | `structural` | deterministic platform records |
 | `semantic` | bounded content with a versioned rubric |
-| `evidence_policy` | evidence and server-stamped provenance |
+| `evidence_policy` | evidence and recorded provenance |
 | `human_decision` | explicit human outcome |
-| `external_assertion` | signed or server-observed external result |
 
 ## Executors
 
@@ -70,21 +48,12 @@ its task carries a frozen gate digest. Results with a stale digest are rejected.
 |---|---|
 | `deterministic` | SpecGate |
 | `ide_agent` | coding or verifier IDE |
-| `platform_llm` | configured SpecGate model |
 | `human` | governed human action |
-| `external` | external producer |
 
 Evaluation mode describes what a gate means. Executor describes where a
 non-deterministic evaluation runs.
 
-The built-in model-judged readiness gates resolve their executor from
-deployment state: a gate runs on `platform_llm` when a server-side model is
-configured, and is dispatched to `ide_agent` (the developer's coding agent)
-when none is. Either way the verdict feeds the same readiness aggregation;
-`ide_agent` results are stamped `agent_attested` and `platform_llm` results
-`platform_evaluated`.
-
-Local IDE gate tasks and Full model-less IDE gate tasks bind the artifact
+Local semantic tasks bind the artifact
 snapshot, gate digest, frozen rubric, workspace, executor, and expiry. A
 successful `gates check` remains `not_run` until every required IDE result is
 submitted; that pending state is not readiness approval.
@@ -110,15 +79,12 @@ A GateResult records:
 - policy and input digest;
 - phase;
 - state and summary;
-- findings and evidence references (confidence, when an evaluator reports one,
-  rides inside `findings` — it is not a top-level field the submit endpoint
-  accepts);
+- findings and evidence references;
 - evaluator mode, executor, name, version, run ID, and role;
 - start and finish times;
 - failure category when execution did not produce a valid judgment.
 
-Timeout, unavailable model, corrupt input, or internal error produces
-`not_run`, not a semantic `fail`.
+Pending Local task results are reported as `not_run`.
 
 ## Skills
 
@@ -127,8 +93,7 @@ Skills have explicit consumers:
 - evaluation rubric;
 - agent instruction.
 
-Skill content and digest are frozen into the resolved policy. A pointer to the
-current registry Skill is navigation metadata, not runtime authority.
+The rubric text and digest are frozen into the artifact policy.
 
 ## Acceptance-criteria minimum
 

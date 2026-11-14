@@ -5,63 +5,15 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/specgate/specgate/app/cli/internal/client"
 )
-
-type timeoutStubErr struct{}
-
-func (timeoutStubErr) Error() string { return "i/o timeout" }
-func (timeoutStubErr) Timeout() bool { return true }
-
-func TestMapAPIError_DistinguishesTimeoutFromUnreachable(t *testing.T) {
-	t.Parallel()
-	const u = "http://localhost:18080/api/v1/gates"
-
-	timeout := mapAPIError(&url.Error{Op: "Post", URL: u, Err: timeoutStubErr{}})
-	if !strings.Contains(timeout.Message, "timed out") {
-		t.Fatalf("timeout message = %q, want it to mention a timeout", timeout.Message)
-	}
-	if !timeout.Transient {
-		t.Fatal("timeout must be marked transient")
-	}
-	if strings.Contains(timeout.Message, "is the stack running") {
-		t.Fatalf("a timeout must not misdirect to stack-down: %q", timeout.Message)
-	}
-
-	refused := mapAPIError(&url.Error{Op: "Post", URL: u, Err: errors.New("connection refused")})
-	if !strings.Contains(refused.Message, "rerun it with local-network access") {
-		t.Fatalf("a connection failure should explain the sandbox recovery path: %q", refused.Message)
-	}
-	if strings.Contains(refused.Message, "`specgate up`") {
-		t.Fatalf("a connection failure must not suggest starting the stack: %q", refused.Message)
-	}
-	if !refused.Transient {
-		t.Fatal("connection failure must be marked transient")
-	}
-}
-
-func TestMapAPIErrorMarksServiceUnavailableTransient(t *testing.T) {
-	t.Parallel()
-	payload := mapAPIError(&client.APIError{
-		Kind:    client.ErrorUnavailable,
-		Status:  http.StatusServiceUnavailable,
-		Message: "service unavailable",
-	})
-	if !payload.Transient {
-		t.Fatal("service unavailable must be marked transient")
-	}
-}
 
 func TestFetchAndRunScriptPassesAllArgs(t *testing.T) {
 	t.Parallel()

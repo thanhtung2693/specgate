@@ -9,7 +9,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
+	"github.com/specgate/specgate/app/cli/internal/workflow"
 )
 
 //go:embed all:local_plugin_assets
@@ -17,12 +17,12 @@ var localPluginAssets embed.FS
 
 type embeddedLocalPlugin struct{}
 
-func (embeddedLocalPlugin) PluginPackage(context.Context) (*client.PluginPackage, error) {
+func (embeddedLocalPlugin) PluginPackage(context.Context) (*workflow.PluginPackage, error) {
 	body, err := fs.ReadFile(localPluginAssets, "local_plugin_assets/package.json")
 	if err != nil {
 		return nil, fmt.Errorf("read embedded Local plugin package: %w", err)
 	}
-	var pkg client.PluginPackage
+	var pkg workflow.PluginPackage
 	if err := json.Unmarshal(body, &pkg); err != nil {
 		return nil, fmt.Errorf("parse embedded Local plugin package: %w", err)
 	}

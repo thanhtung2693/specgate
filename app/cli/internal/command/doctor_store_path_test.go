@@ -81,9 +81,7 @@ func TestLocalDoctorReportsTheStoreItOpened(t *testing.T) {
 			if err != nil || !bytes.Equal(before, after) {
 				t.Fatalf("doctor persisted its override: %v", err)
 			}
-			if deps.Client != nil {
-				t.Fatal("Local doctor created a remote client")
-			}
+
 		})
 	}
 }

@@ -1,94 +1,71 @@
 # Customize governance
 
-Use this guide to tune automatic governance through artifact metadata and team
-rubrics. The resolved policy ends up frozen into each artifact version's
-snapshot, so changes apply to new versions, not retroactively.
+Use this guide to add project-specific instructions to Local readiness gates.
 
-## Raise the governance level
+## Add Local project instructions
 
-The level (`light`, `standard`, `enhanced`) resolves from work and artifact
-metadata — most directly from the declared impact. Declare impact honestly at
-publish time:
+Ask your coding agent to edit ordinary Markdown files in your repository's
+`.specgate/rubrics/` directory. The four supported filenames extend existing
+Local semantic gates:
 
-```json
-{
-  "impact_level": "high",
-  "impact_declaration": {
-    "protected_domains_status": "yes",
-    "data_or_schema_change": "yes"
-  }
-}
+| Filename | Additional instructions for |
+| --- | --- |
+| `scope_clear.md` | Product intent, scope and boundaries |
+| `spec_completeness.md` | Required readiness topics |
+| `acceptance_criteria_verifiable.md` | Observable outcomes and verification |
+| `spec_repo_drift.md` | Approved artifact versus governed repository documentation |
+
+For example, put this text in `.specgate/rubrics/scope_clear.md`:
+
+```markdown
+Require an explicit rollback boundary for changes affecting persisted data.
+Cite the exact approved source passage supporting that boundary.
 ```
 
-Higher impact resolves a stronger policy: more required topics, stronger
-evidence expectations, human approval. The exact resolution and raise-only rules
-are in the [Governance reference](../reference/governance.md#policy-resolution).
-Verify what applied to a specific work item:
+The CLI appends this text to the embedded gate rubric; it does not replace the
+base instructions. Missing files retain their exact defaults. Each active file
+must contain nonempty UTF-8 text, at most 64 KiB, without binary control
+characters. Files and their `.specgate/rubrics/` directories must be regular
+non-symlink paths inside the selected Git project. Use the exact lowercase
+filenames above. Unknown Markdown names and case variants such as
+`scope_clear.MD` are errors on all filesystems. Unrelated non-Markdown files
+are ignored and preserved. Invalid active files fail both preview and
+publication with the affected path.
+
+Preview through your normal artifact manifest:
 
 ```bash
-specgate work policy <work-ref>
+specgate artifact publish --file .specgate/work/artifact.json --preview --json
 ```
 
-## Apply team standards to a gate (Skill rubrics)
+Inspect `policy.rubrics`: `source` identifies the project-relative file or
+`embedded_default`, and `digest` hashes the effective base-plus-project text.
+`policy_digest` identifies the whole resolved policy. Preview writes no state.
+After human confirmation, publish the same manifest. Publication reads the
+current files again, so preview again if you edit them before publishing.
 
-A Skill is a reusable team instruction. When automatic policy binds one to a
-gate, the Skill's text is appended to that gate's prompt as policy, so the
-checker judges by your standards.
+Publication freezes the effective text and source in the immutable artifact
+policy. Your coding agent reads tasks from
+`specgate gates tasks list <artifact-id> --json` and judges only their frozen
+`skill_content`, copying the returned digests exactly. Edits or removal affect
+future previews and new artifact versions; existing artifacts, approved work,
+tasks, evidence and acceptance history keep their original policy.
 
-1. Create or update the named Skill in the web UI under Settings → Governance → Skills (the
-   CLI reads them: `specgate skill list`, `specgate skill show <name>`).
-2. Use the fixed Skill names that automatic policy tiers already bind, such as
-   `spec-review`, `prd-review`, `acceptance-criteria`, `task-breakdown`,
-   `rollout-risk`, and `review-impl`.
-3. Re-run readiness on a draft artifact and confirm the hint reflects your
-   rubric: `specgate gates check <artifact-id>`.
+Rubric text adds judgment instructions only. It cannot add gates, change
+deterministic checks, reduce approval or evidence requirements, or grant human
+acceptance. Contradictory instructions remain reviewable policy text. No scripts,
+hooks, providers, model runner or UI editor are introduced. Your existing
+authoring framework and coding agent keep ownership of specs and implementation.
 
-Treat rubric text as policy code: a vague or contradictory rubric degrades
-the gate that carries it.
+Rubrics are user-owned sources: SpecGate never creates, rewrites or deletes
+them, and `cleanup --work` preserves them. Choose their Git policy yourself;
+if you want them versioned, explicitly include them according to your project's
+ignore rules. SpecGate preserves them.
 
-Each artifact version freezes the automatically resolved policy snapshot. You
-do not edit that snapshot directly. To change future behavior, update the
-underlying fixed-name Skill rubric or publish a new artifact version with a
-different impact declaration so automatic policy resolves again.
+A supporting CLI is required to read frozen project rubrics.
 
-## Require corroborated delivery evidence
-
-The resolved policy's `evidence_policy` controls how much an authoritative delivery
-review pass may rest on the agent's own report:
-
-- `attested_ok` (default) — a platform-model review of an evidence-backed
-  report plus green checks can pass. Without a platform model, an
-  agent-attested pass still needs a bound peer review or human decision.
-- `corroborated_required` — a pass additionally requires independent evidence:
-  either a merged PR/MR repository event whose `head_sha` matches the latest
-  completion receipt's `head_revision`, or every criterion resolved through
-  canonical deterministic check bindings. Without that, the verdict is clamped
-  to `needs_human_review`. CI results do not automatically become
-  SpecGate-produced assurance.
-
-Use `corroborated_required` once a git integration or deterministic check
-bindings are available and you want no delivery accepted on self-reported
-evidence alone.
-
-## Give gates more grounding
-
-Two inputs improve gate judgment without any configuration:
-
-- **Attachments** — pin bug reproductions, examples, or design links to the
-  feature with the `gate` (or `both`) audience; the acceptance-criteria and
-  scope gates receive them.
-- **Verification material** — acceptance-criteria gates read the spec, plan,
-  and optional `verification` role. Keep the verification method in the
-  framework document where it naturally belongs; map a separate test plan only
-  when one already exists.
-
-## Verify a customization end to end
-
-```bash
-specgate gates check <artifact-id>       # readiness with the resolved policy
-specgate work policy <work-ref>          # confirm the resolved policy
-specgate delivery status <work-ref> --detail
-```
+Make a [complete Local backup](operate-specgate.md#operate-local-cli) before
+switching to an earlier CLI.
 
 ## Related
 

@@ -9,7 +9,7 @@ import (
 
 func TestAgentWorkflowHelpIncludesRunnableExamples(t *testing.T) {
 	t.Parallel()
-	deps, _, _, _ := newFakeDeps(t)
+	deps, _ := newTestDeps(t)
 	root := command.NewRootCommand(deps)
 
 	tests := []struct {
@@ -37,7 +37,7 @@ func TestAgentWorkflowHelpIncludesRunnableExamples(t *testing.T) {
 
 func TestRootHelpDescribesGovernedDelivery(t *testing.T) {
 	t.Parallel()
-	deps, _, _, _ := newFakeDeps(t)
+	deps, _ := newTestDeps(t)
 	root := command.NewRootCommand(deps)
 
 	if !strings.Contains(root.Short, "govern") || !strings.Contains(root.Short, "delivery") {
@@ -46,7 +46,7 @@ func TestRootHelpDescribesGovernedDelivery(t *testing.T) {
 }
 
 func TestChangeHelpShowsTheCompleteRunnableFacade(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	root := command.NewRootCommand(deps)
 	root.SetOut(out)
 	root.SetErr(out)
@@ -60,9 +60,9 @@ func TestChangeHelpShowsTheCompleteRunnableFacade(t *testing.T) {
 		"request-changes",
 		"status",
 		"submit",
-		"specgate change status CR-123",
-		"\n  specgate change submit CR-123\n",
-		"specgate change submit CR-123 --file .specgate/completion-CR-123.json",
+		"specgate change status LOCAL-123",
+		"\n  specgate change submit LOCAL-123\n",
+		"specgate change submit LOCAL-123 --file .specgate/completion-LOCAL-123.json",
 		"specgate --yes change accept LOCAL-123 --review-id <review-id>",
 		"specgate --yes change request-changes LOCAL-123 --review-id <review-id>",
 	} {
@@ -80,8 +80,8 @@ func TestChangeHelpShowsTheCompleteRunnableFacade(t *testing.T) {
 		"Default completion file: .specgate/completion-<ref>.json",
 		"letters, digits, hyphens (-), and underscores (_)",
 		"--file is required when the ref is not file-safe",
-		"specgate change submit CR-123",
-		"specgate change submit CR-123 --file .specgate/completion-CR-123.json",
+		"specgate change submit LOCAL-123",
+		"specgate change submit LOCAL-123 --file .specgate/completion-LOCAL-123.json",
 	} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("change submit help missing %q:\n%s", want, out.String())
@@ -91,7 +91,7 @@ func TestChangeHelpShowsTheCompleteRunnableFacade(t *testing.T) {
 
 func TestInitHelpShowsRunnableOnboardingExamples(t *testing.T) {
 	t.Parallel()
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	root := command.NewRootCommand(deps)
 	root.SetOut(out)
 	root.SetErr(out)
@@ -103,7 +103,6 @@ func TestInitHelpShowsRunnableOnboardingExamples(t *testing.T) {
 	for _, want := range []string{
 		"specgate init",
 		"specgate init --mode local --no-input",
-		"specgate init --mode full",
 		"--workspace-name",
 		"--display-name",
 		"--username",
@@ -114,9 +113,9 @@ func TestInitHelpShowsRunnableOnboardingExamples(t *testing.T) {
 	}
 }
 
-func TestInitHelpLabelsFullOnlyFlags(t *testing.T) {
+func TestInitHelpOmitsRetiredApplianceFlags(t *testing.T) {
 	t.Parallel()
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	root := command.NewRootCommand(deps)
 	root.SetOut(out)
 	root.SetErr(out)
@@ -133,8 +132,8 @@ func TestInitHelpLabelsFullOnlyFlags(t *testing.T) {
 				break
 			}
 		}
-		if !strings.Contains(line, "Full mode only") {
-			t.Errorf("%s help line = %q, want Full mode scope", flag, line)
+		if line != "" {
+			t.Errorf("%s help line = %q, want omitted retired flag", flag, line)
 		}
 	}
 }

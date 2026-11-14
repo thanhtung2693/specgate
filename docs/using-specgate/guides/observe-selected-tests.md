@@ -18,7 +18,7 @@ its environment overrides; keep the directory if you want the evidence later.
 ```sh
 TUTORIAL_DIR=$(mktemp -d)
 cd "$TUTORIAL_DIR"
-unset SPECGATE_SERVER SPECGATE_LOCAL_DIR SPECGATE_WORKSPACE
+unset SPECGATE_LOCAL_DIR SPECGATE_WORKSPACE SPECGATE_SERVER
 export SPECGATE_CONFIG_PATH="$TUTORIAL_DIR/.specgate/tutorial-config.json"
 git init -q
 ```
@@ -111,7 +111,7 @@ specgate work verification "$WORK_REF" --file .specgate/work/checks.json \
 
 Review the command, directory, selector, watched hashes, and `store_upgrade`.
 The first enhanced write backs up and upgrades the **entire scratch store**;
-old CLIs cannot write it afterward, and v1 portable/handoff exports cannot
+old CLIs cannot write it afterward, and v1 handoff export cannot
 carry these records. Commands run through an unsandboxed shell. If you agree
 to this tutorial pin, confirm it and record a pickup point:
 
@@ -139,7 +139,7 @@ check `pending`; execution will replace it with the observed outcome. For its
 first criterion, keep `claim: "not_done"` and set `evidence` to:
 
 ```json
-{"kind":"code","path":"health.mjs","line":1}
+{"kind":"file","path":"health.mjs","line":1}
 ```
 
 ```sh

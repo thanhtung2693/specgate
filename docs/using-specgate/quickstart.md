@@ -1,291 +1,127 @@
 # Quickstart
 
-This tutorial takes the default Local CLI path through one governed work item.
-Your IDE agent prepares the specification and delivery evidence. You keep the
-two decisions that matter: approving the exact artifact version and approving
-the final delivery.
+Complete one Local work item with your coding agent and the CLI. You approve the
+scope, the agent submits evidence, and you accept the delivery or request
+changes. The whole loop runs through the CLI.
 
-## Before you start
+## 1. Set up the CLI and coding agent
 
-- macOS, Linux, WSL2, or native Windows.
-- Network access for installation.
-- A repository with an IDE agent you can restart.
-
-You do not need Docker, a source checkout of SpecGate, or a model API key. After
-installation, Local mode works without a server or network connection.
-
-> **Native Windows:** download the `windows_amd64.zip` asset from the
-> [latest GitHub release](https://github.com/thanhtung2693/specgate/releases/latest),
-> extract `specgate.exe` into a directory on `PATH`, and run
-> `specgate --version`. The shell installer below is for macOS, Linux, and WSL2.
-
-## 1. Install
+On macOS, Linux, or WSL2, install the CLI:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/scripts/install-cli.sh | sh
-specgate --version
 ```
 
-If `specgate` is not found, add the install directory printed by the installer
-to your `PATH`. The default is usually `~/.local/bin`.
+On native Windows, extract `specgate.exe` from `windows_amd64.zip` in the
+[latest release](https://github.com/thanhtung2693/specgate/releases/latest) to a
+folder on `PATH`. Install a POSIX `sh` on `PATH` to rerun delivery checks.
+If the shell cannot find `specgate`, add the installer's
+printed directory to `PATH` (typically `~/.local/bin` on macOS and Linux).
 
-## 2. Initialize Local mode
-
-From your repository:
+From the Git repository root, run:
 
 ```bash
-specgate init
+specgate init --mode local
+specgate doctor
 ```
 
-Choose **Local CLI**, the default. The prompts create a local user and workspace
-and bind the current repository to that workspace. You can optionally select
-IDE plugins and choose a global or project install during the same setup.
-
-Local state uses SQLite on your machine; no Docker container, browser, or TCP
-service starts.
-
-| Capability | Local CLI (default) | Full appliance |
-| --- | --- | --- |
-| Best for | One person using a terminal and IDE agent | Teams and browser-based workflows |
-| Runtime | CLI only; no Docker, server, browser, or TCP service | One local Docker appliance container |
-| Durable state | SQLite on this machine | Appliance-managed durable data; Governance-chat threads reset when the appliance restarts |
-| Core workflow | Immutable artifacts, readiness tasks, Context Packs, delivery evidence, and human decisions | The same core delivery loop, backed by shared services and a browser UI |
-| Local-specific tools | Resume packets, indexed snapshot reads, and optional pinned verification contracts | These Local-specific contracts and commands are not available |
-| Additional capabilities | Local users, workspaces, and Codex, Claude Code, or Cursor plugins | Governance chat, Knowledge, integrations, model-backed checks, and shared workspaces |
-
-For automated Local setup:
-
-```bash
-specgate init --mode local --no-input \
-  --workspace-name "My workspace" \
-  --display-name "Jane Doe" \
-  --username jane
-```
-
-Email is optional: add `--email jane@example.com` when needed.
-
-To include an IDE plugin in the same automated setup, name both the target and
-scope. Global remains the default for compatibility:
-
-```bash
-specgate init --mode local --no-input \
-  --workspace-name "My workspace" --display-name "Jane Doe" --username jane \
-  --install-plugins --plugin-agent codex --plugin-scope global
-```
-
-The initializer previews and validates plugin ownership before creating Local
-state. Project scope must be invoked at the Git repository root; from a nested
-directory, follow the exact `cd` command printed by the CLI and retry.
-
-When you start using SpecGate in another repository, bind that checkout before
-running its workflow:
-
-```bash
-specgate workspace bind
-```
-
-## 3. Install the IDE plugin
-
-For Codex:
+Setup creates a Local user and workspace and binds the repository. If you
+skipped IDE integration during setup, install it now. For Codex:
 
 ```bash
 specgate plugins install --agent codex --project-local
 specgate plugins doctor --agent codex --project-local
 ```
 
-Restart the IDE agent so it loads the installed skills and rules. Claude Code
-and Cursor use the same commands with `--agent claude` or `--agent cursor`.
-Codex and Claude Code also support native installation; see
-[Install IDE plugins](guides/install-ide-plugins.md). Use one method per IDE.
+Restart the coding agent so it loads the skills. See [Install IDE plugins](guides/install-ide-plugins.md)
+for Claude Code, Cursor and other installation options. Local works with SQLite
+on this machine and needs no Docker, server, or model API key. For scripted
+setup, see [Configuration](reference/configuration.md#cli).
 
-`specgate doctor` reports repository binding, the required `sh` executable,
-and optional plugin files separately. Finding files does not prove that the
-current IDE session loaded them; restart the IDE and verify in a new session.
+## 2. Prepare and approve the scope
 
-Check the Local setup:
+Ask your coding agent for a small, testable change:
 
-```bash
-specgate doctor
-specgate status
-```
+> Use SpecGate to prepare a change that adds a healthcheck. It must return
+> HTTP 200 at `/healthz` and have an automated test. Show me the artifact
+> preview before publishing. Stop for approval before implementing.
 
-## 4. Ask the agent to prepare the work
-
-Give your IDE agent a bounded request with acceptance criteria. For example:
-
-> Use SpecGate to prepare a governed change that adds a `/healthz` endpoint.
-> It must return 200 while the service is healthy and have an automated test.
-> Show me the artifact preview before publishing anything.
-
-The installed plugin tells the agent how to inspect the repository, prepare an
-artifact package, and pause for your confirmation. Your IDE agent prepares and
-publishes through this sequence:
-
-```bash
-specgate artifact publish --file artifact.json --preview --json
-# The agent shows the preview and waits for your confirmation.
-specgate artifact publish --file artifact.json --json
-specgate gates check <artifact-id> --json --summary
-specgate gates tasks list <artifact-id> --json
-specgate gates tasks submit-result <task-id> \
-  --file .specgate/work/gate-<task-id>.json --json
-specgate gates results <artifact-id> --json
-```
-
-`gates check` may report `aggregate=not_run` while semantic IDE tasks are still
-pending. That is not a readiness pass. The agent must submit the frozen tasks
-and read the final gate results.
-
-## 5. Approve the artifact
-
-Inspect what was stored:
-
-```bash
-specgate artifact show <artifact-id> --json
-specgate gates results <artifact-id> --json
-```
-
-You approve the exact artifact version and the explicit implementation handoff
-as the human user with one resumable decision:
+The agent prepares the specification, previews and publishes the exact version
+with your confirmation, and completes the readiness tasks. Review that version
+and its criteria. The agent can supply the approval command, or you can run:
 
 ```bash
 specgate --yes change approve <artifact-id> \
   --title "Add healthcheck endpoint" \
-  --ac "GET /healthz returns 200 while the service is healthy" \
-  --ac "The endpoint has an automated test @check:tests" \
-  --json
+  --ac "GET /healthz returns HTTP 200" \
+  --ac "An automated test checks the healthcheck response @check:tests"
 ```
 
-Approval is separate from readiness. If the artifact is wrong, ask the agent to
-publish a corrected immutable version instead of editing the approved body.
+Readiness results inform your approval. Use the work reference from the approval
+receipt for the rest of the loop. See [Use the SpecGate CLI](guides/cli-workflow.md)
+for artifact and gate commands or the smaller quick-work route.
 
-The receipt returns `<work-ref>` for work bound to the canonical version and
-confirms its Context Pack is assembled. Tell the agent to continue by reading
-that exact handoff:
+## 3. Let the agent implement and submit evidence
+
+Give the agent the exact reference. For example, “Implement SpecGate work
+`LOCAL-123`. Submit evidence and stop when a human decision is needed.” The
+agent starts with:
 
 ```bash
-specgate work resume <work-ref> --json
+specgate work resume LOCAL-123 --json
 ```
 
-The resume packet includes the work scope, criteria, approved document index,
-and next action. The agent reads the relevant approved documents using the
-exact path and role from that index:
+The agent reads the approved scope and criteria, implements the change, runs
+checks, and prepares one evidence claim per criterion. It initializes the
+report with `specgate delivery report LOCAL-123 --init --json` and passes the
+returned report path to `specgate change submit`. Review the check commands
+before authorizing `--run-checks`, which runs them as your OS user. Ask for
+the receipt with the work reference, criterion evidence, and exact next command. See
+[Use SpecGate with a coding agent](guides/coding-agent-workflow.md) for the full
+agent sequence.
+
+## 4. Review the evidence and decide
+
+Read the receipt and the current work status. Use `--json` for structured
+criterion evidence and the decision identifiers.
 
 ```bash
-specgate work context <work-ref> --document <path> --role <role> --json
+specgate change status LOCAL-123
 ```
 
-Read scope and non-goals before editing. The agent should stop if it cannot
-retrieve that approved context. Before the first completion report, you may
-optionally [pin the check commands](reference/cli.md#local-resume-and-verification-contracts)
-for `@check` criteria. Without a pin, verification setup remains `unconfigured`.
-After this first workflow, try the optional
-[selected-test walkthrough](guides/observe-selected-tests.md) to observe a
-missing test, checkpoint delta, and exact acceptance basis in a scratch repo.
-
-## 6. Let the agent implement and submit evidence
-
-The IDE agent implements only the bounded Context Pack, runs the repository
-checks, and prepares one evidence claim per acceptance criterion:
+When status shows `awaiting_acceptance`, copy its exact next command to accept
+a delivery you have reviewed. The default form is
+`specgate --yes change accept LOCAL-123 --review-id <review-id>`. To request
+changes, use the review ID from that same status:
 
 ```bash
-specgate delivery report <work-ref> --init --json
-COMPLETION_PATH="<exact data.path from the preceding response>"
-specgate change submit <work-ref> \
-  --file "$COMPLETION_PATH" \
-  --run-checks --yes --json
-specgate change status <work-ref>
+specgate --yes change request-changes LOCAL-123 --review-id <review-id> --note "<what needs fixing>"
 ```
 
-Use the scaffold command's exact `data.path` value in `--file`; do not build a
-filename from a URL or another arbitrary work reference.
+If the status includes a basis digest, include its exact value and any selected
+comparison flags from the next command in your decision. After a request for
+changes, give the agent the same work reference and review its new submission
+before deciding again.
 
-If review reports a gap, the agent fixes that gap, reruns the relevant checks,
-updates the evidence, and submits again. A passing readiness check or agent
-review is evidence; neither is human approval. Use
-`specgate delivery status <work-ref> --detail` only when you need the expert
-evidence breakdown.
+## Optional browser review
 
-## 7. Make the final decision
+With a build that includes Local browser review, run `specgate ui LOCAL-123`
+to inspect a handoff. Stop the foreground command to close the session, then
+continue with `specgate change status LOCAL-123` in the same repository.
+See [Local review](guides/local-review.md) and the [changelog](../../CHANGELOG.md).
 
-Review the submitted files, checks, criterion evidence, and verdict:
+## Where to go next
 
-```bash
-specgate change status <work-ref>
-specgate verify <work-ref>
-```
-
-You make the final delivery decision:
-
-```bash
-specgate --yes change accept <work-ref> --review-id <review-id>
-```
-
-Use `specgate --yes change request-changes <work-ref> --review-id <review-id>` instead if the evidence
-or result is not acceptable. Then inspect the durable trail:
-
-```bash
-specgate audit <work-ref> --json
-specgate stats --json
-```
-
-Restarting your terminal or IDE does not remove Local artifacts, approvals, work
-items, evidence, or audit history.
-
-## Full appliance
-
-Choose Full when you need the browser UI, Governance chat, Knowledge,
-integrations, model-backed platform checks, or shared server-backed workspaces:
-
-```bash
-specgate init --mode full
-```
-
-For the Full appliance workflow, see [Operate SpecGate](guides/operate-specgate.md).
-Model setup is covered in [Configure models](guides/configure-models.md).
-
-## Safe removal
-
-`specgate uninstall` removes CLI configuration and globally installed managed
-plugin files but keeps Local SQLite state:
-
-```bash
-specgate uninstall
-```
-
-To delete SpecGate's Local SQLite state too:
-
-```bash
-specgate uninstall --purge-data --yes
-```
-
-The purge warns first and preserves repositories, project specifications, and
-unrelated files in the selected directory. It does not start or require Docker.
-Project-local plugin files in this repository are preserved; review and remove
-them through normal repository file cleanup when you no longer want them.
-
-## Troubleshooting
-
-Start with:
-
-```bash
-specgate doctor
-specgate status
-```
-
-Errors include a recovery command where SpecGate can determine one. For plugin
-problems, rerun:
-
-```bash
-specgate plugins doctor --agent codex --project-local
-```
-
-For Full appliance health, use `specgate local-status` and the
-[operations guide](guides/operate-specgate.md).
-
-## Next steps
-
-- [Use SpecGate with a coding agent](guides/coding-agent-workflow.md)
-- [How verification works](concepts/verification.md)
-- [Artifacts and Context Packs](concepts/artifacts-and-context-packs.md)
-- [CLI reference](reference/cli.md)
+- [Advanced Local verification](reference/cli.md#advanced-local) covers optional
+  verification pins, JUnit observations, checkpoints, and lineage.
+- [Try a delivery evidence gap](guides/try-delivery-proof.md) walks through
+  a skipped required check, an agent repair, and a fresh review.
+- [Local for small teams](concepts/who-specgate-is-for.md#for-teams-names-on-decisions)
+  explains Git/PR collaboration with per-machine stores.
+- [Try Local review notifications](guides/local-notification-pilot.md) describes
+  the optional foreground pilot from the source checkout. The participant study
+  is pending.
+- [Operate SpecGate](guides/operate-specgate.md) covers backups and recovery for previous installations.
+- [Local CLI uninstall](reference/cli.md#local-cli-uninstall) explains
+  how to remove the CLI and when Local state is kept.
+- [CLI reference](reference/cli.md) lists the commands by purpose.

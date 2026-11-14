@@ -38,7 +38,7 @@ func TestAcceptanceRisksExposeUncheckedLegacyFreshness(t *testing.T) {
 			AcceptanceBasis:   basis,
 		}
 		// Observe a real non-Git directory, not a manually authored message.
-		status = applyCheckoutFreshness(context.Background(), &Deps{WorkingDir: t.TempDir()}, status, gitReceipt{Availability: "available", HeadRevision: "head-1"})
+		status = applyCheckoutFreshness(context.Background(), &Deps{WorkingDir: t.TempDir()}, status, gitReceipt{Availability: "available", HeadRevision: "head-1"}, "")
 		for _, risk := range acceptanceRisks(status) {
 			if risk.Category == "unknown" && risk.Count != 1 {
 				t.Fatalf("basis %#v, unchecked observation %q: %#v", basis, status.Freshness, risk)

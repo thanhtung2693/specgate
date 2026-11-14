@@ -24,7 +24,7 @@ func localReviewID(t *testing.T, store *local.Store, workspaceID, ref string) st
 func TestLocalSubmitDoesNotTrustCallerCheckProvenance(t *testing.T) {
 	for _, runChecks := range []bool{false, true} {
 		t.Run(map[bool]string{false: "reported", true: "skipped"}[runChecks], func(t *testing.T) {
-			deps, _, _, out := newFakeDeps(t)
+			deps, out := newTestDeps(t)
 			stateDir, store, _, work := newLocalChangeWork(t, deps)
 			closeLocalChangeStore(t, deps, stateDir, store)
 			status := "pass"
@@ -53,7 +53,7 @@ func TestLocalSubmitDoesNotTrustCallerCheckProvenance(t *testing.T) {
 }
 
 func TestLocalWorkListAcceptsMultiplePhases(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir, store, _, work := newLocalChangeWork(t, deps)
 	closeLocalChangeStore(t, deps, stateDir, store)
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "work", "list", "--phase", " DELIVERED, "+strings.ToUpper(work.Phase))
@@ -75,20 +75,10 @@ func TestLocalWorkListAcceptsMultiplePhases(t *testing.T) {
 	}
 }
 
-func TestLocalWorkListDoesNotSilentlyIgnoreAllWorkspaces(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
-	stateDir, store, _, _ := newLocalChangeWork(t, deps)
-	closeLocalChangeStore(t, deps, stateDir, store)
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "work", "list", "--all-workspaces")
-	if code != output.ExitIncompatible {
-		t.Fatalf("unsupported aggregate = %d: %s", code, out.String())
-	}
-}
-
 func TestLocalDecisionRejectsUnseenReplacementReview(t *testing.T) {
 	for _, verb := range []string{"accept", "request-changes"} {
 		t.Run(verb, func(t *testing.T) {
-			deps, _, _, out := newFakeDeps(t)
+			deps, out := newTestDeps(t)
 			stateDir, store, selection, work := newLocalChangeWork(t, deps)
 			submitLocalChangeDelivery(t, store, selection.Workspace.ID, work, "builder", "head-a")
 			first, err := store.DeliveryStatus(t.Context(), selection.Workspace.ID, work.Key)

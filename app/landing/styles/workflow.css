@@ -89,15 +89,8 @@
   opacity: 1;
   transform: translateY(-3px) scale(var(--mark-scale));
 }
-.tool-team-marks {
-  display: flex;
-  align-items: center;
-  gap: 1.4rem;
-}
-.tool-team-marks .tool-mark-group + .tool-mark-group {
-  padding-left: 1.4rem;
-  border-left: 1px solid var(--hairline-strong);
-}
+
+
 html[data-theme="light"] .tool-marks img {
   filter: brightness(0);
   opacity: 0.68;
@@ -122,9 +115,7 @@ html[data-theme="light"] .tool-marks img:hover {
   .tool-mark-group {
     justify-items: start;
   }
-  .tool-team-marks {
-    justify-content: flex-start;
-  }
+
 }
 
 /* ---------- Bands + the governance rail ----------

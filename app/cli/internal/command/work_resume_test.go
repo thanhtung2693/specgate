@@ -14,7 +14,7 @@ import (
 )
 
 func TestLocalResumeAndContextProjection(t *testing.T) {
-	deps, fc, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir, store, sel, w := newLocalChangeWork(t, deps)
 	other, err := store.CreateWork(t.Context(), sel.Workspace.ID, local.WorkInput{FeatureRef: w.FeatureKey, Title: "Separate work", Description: "Keep scope separate", AcceptanceCriteria: []string{"Other criterion"}})
 	if err != nil {
@@ -131,13 +131,10 @@ func TestLocalResumeAndContextProjection(t *testing.T) {
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "work", "resume"); code != 2 {
 		t.Fatalf("ambiguous resume %d: %s", code, out.String())
 	}
-	if fc.calls != 0 {
-		t.Fatal("Local projection used HTTP")
-	}
 }
 
 func TestPlainResumeDetailShowsChangedPaths(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	root := t.TempDir()
 	deps.WorkingDir = root
 	for _, args := range [][]string{{"init", "-q"}, {"config", "user.email", "fixture@example.test"}, {"config", "user.name", "Fixture"}} {
@@ -172,7 +169,7 @@ func TestPlainResumeDetailShowsChangedPaths(t *testing.T) {
 }
 
 func TestPlainArtifactImpactShowsDocumentAndWorkIdentity(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	dir, store, sel, work := newLocalChangeWork(t, deps)
 	target, err := store.PublishArtifact(t.Context(), sel.Workspace.ID, local.ArtifactInput{
 		FeatureKey: "CHANGE", RequestType: "change_request", BaseVersion: "v1",
@@ -192,7 +189,7 @@ func TestPlainArtifactImpactShowsDocumentAndWorkIdentity(t *testing.T) {
 }
 
 func TestLocalPublishPreviewIncludesValidatedImpact(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	dir, store, sel, _ := newLocalChangeWork(t, deps)
 	base, err := store.PublishArtifact(t.Context(), sel.Workspace.ID, local.ArtifactInput{
 		FeatureKey: "CHANGE", RequestType: "change_request", BaseVersion: "v1",
@@ -250,7 +247,7 @@ func TestLocalPublishPreviewIncludesValidatedImpact(t *testing.T) {
 func TestResumeShowsNewerArtifactWithoutChangingPinnedScope(t *testing.T) {
 	for _, state := range []string{"draft", "approved", "promoted"} {
 		t.Run(state, func(t *testing.T) {
-			deps, fc, _, out := newFakeDeps(t)
+			deps, out := newTestDeps(t)
 			dir, store, sel, work := newLocalChangeWork(t, deps)
 			before, err := store.ContextPack(t.Context(), sel.Workspace.ID, work.Key)
 			if err != nil {
@@ -337,15 +334,12 @@ func TestResumeShowsNewerArtifactWithoutChangingPinnedScope(t *testing.T) {
 			if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "work", "context", work.Key, "--document", "plan.md", "--role", "plan"); code != 0 || !strings.Contains(out.String(), "Implement and verify.") || strings.Contains(out.String(), "replacement plan") {
 				t.Fatalf("selected document did not retain the approved snapshot: %d %s", code, out.String())
 			}
-			if fc.calls != 0 {
-				t.Fatal("Local snapshot reads used HTTP")
-			}
 		})
 	}
 }
 
 func TestLocalChangeStatusShowsAcceptanceMaterial(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	dir, store, sel, work := newLocalChangeWork(t, deps)
 	submitLocalChangeDelivery(t, store, sel.Workspace.ID, work, "builder", "head")
 	base, err := store.GetArtifact(t.Context(), sel.Workspace.ID, work.ArtifactID)

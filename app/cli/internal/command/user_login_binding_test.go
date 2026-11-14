@@ -13,7 +13,7 @@ import (
 // refuse to run in an unbound project, so discarding the bindings would leave
 // every checkout on the machine broken until each one is bound again.
 func TestUserLoginKeepsExistingProjectWorkspaceBindings(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	stateDir := t.TempDir()
 	otherProject := filepath.Join(t.TempDir(), "other-repo")
 

@@ -15,9 +15,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/specgate/specgate/app/cli/internal/buildinfo"
-	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/config"
-	"github.com/specgate/specgate/app/cli/internal/deploy"
+	"github.com/specgate/specgate/app/cli/internal/executil"
 	"github.com/specgate/specgate/app/cli/internal/interactive"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
@@ -27,86 +26,10 @@ const defaultTimeout = 180 * time.Second
 const requestedJSONAnnotation = "specgate.io/requested-json"
 
 const (
-	commandGroupStart = "start"
-	commandGroupCore  = "core"
-	commandGroupSetup = "setup"
-	commandGroupFull  = "full"
+	commandGroupStart    = "start"
+	commandGroupBrowser  = "browser"
+	commandGroupAdvanced = "advanced"
 )
-
-// APIClient is satisfied by *client.Client and test fakes.
-// Methods are added here as commands are implemented.
-type APIClient interface {
-	Meta(ctx context.Context) (*client.Meta, error)
-	Status(ctx context.Context, workspaceID string) (*client.GovernanceStatus, error)
-	ListWorkItems(ctx context.Context, workspaceID string) ([]client.WorkItemSummary, error)
-	ListWorkItemsIncludingArchived(ctx context.Context, workspaceID string) ([]client.WorkItemSummary, error)
-	Stats(ctx context.Context, workspaceID string, days int) (*client.StatsResult, error)
-	Healthz(ctx context.Context) error
-	ResolveWorkRef(ctx context.Context, ref string) (*client.ResolvedWork, error)
-	ContextPack(ctx context.Context, id string) (*client.ContextPackResult, error)
-	AuditTrail(ctx context.Context, ref string, verify bool) (*client.AuditTrail, error)
-	CreateQuickWorkItem(ctx context.Context, in map[string]any) (map[string]any, error)
-	CreateWorkItem(ctx context.Context, in map[string]any) (map[string]any, error)
-	ArchiveWorkItem(ctx context.Context, id string, reason string, actor string) (map[string]any, error)
-	// Artifact commands
-	ListArtifacts(ctx context.Context, filter client.ArtifactFilter) (*client.ArtifactList, error)
-	GetArtifact(ctx context.Context, id string) (*client.Artifact, error)
-	ListArtifactFiles(ctx context.Context, id string) ([]client.ArtifactFile, error)
-	GetArtifactFile(ctx context.Context, id, filePath string) (*client.ArtifactFileContent, error)
-	UpdateArtifactStatus(ctx context.Context, id string, in client.UpdateArtifactStatusInput) (*client.Artifact, error)
-	PromoteArtifactCanonical(ctx context.Context, artifactID, approvedBy string) (*client.Feature, error)
-	// Skill commands
-	ListSkills(ctx context.Context, nameFilter string) ([]client.Skill, error)
-	GetSkill(ctx context.Context, id string) (*client.Skill, error)
-	// Feature commands
-	ListFeatures(ctx context.Context, search string) ([]client.Feature, error)
-	GetFeature(ctx context.Context, ref string) (*client.Feature, error)
-	UpdateFeatureStatus(ctx context.Context, id, status string) (*client.Feature, error)
-	// Knowledge commands
-	ListKnowledgeDocuments(ctx context.Context, filter client.KnowledgeListFilter) (*client.KnowledgeDocumentList, error)
-	GetKnowledgeDocument(ctx context.Context, id, version string) (*client.KnowledgeDocumentDetail, error)
-	CreateTextKnowledgeDocument(ctx context.Context, in client.KnowledgeCreateTextInput) (*client.KnowledgeDocument, error)
-	CurateKnowledgeLinks(ctx context.Context, id string, in client.KnowledgeCurateLinksInput) (*client.KnowledgeDocument, error)
-	SearchKnowledge(ctx context.Context, in client.KnowledgeSearchInput) ([]client.KnowledgeSearchResult, error)
-	// Artifact publish / readiness
-	PublishArtifact(ctx context.Context, body map[string]any) (map[string]any, error)
-	RunArtifactReadiness(ctx context.Context, artifactID string) (map[string]any, error)
-	ListArtifactReadinessRuns(ctx context.Context, artifactID string) (map[string]any, error)
-	// Gates commands
-	RunLLMGates(ctx context.Context, id string) (map[string]any, error)
-	GatesStatus(ctx context.Context, id string) (*client.GatesStatusResult, error)
-	GateHistory(ctx context.Context, id, gate string, limit int) (*client.GateHistoryResult, error)
-	// Delivery commands
-	ReportFeedback(ctx context.Context, id string, body map[string]any) (map[string]any, error)
-	ListGovernanceFeedbackEvents(ctx context.Context, changeRequestID string) ([]client.GovernanceFeedbackEvent, error)
-	TriggerDeliveryReview(ctx context.Context, id string) (map[string]any, error)
-	DecideDelivery(ctx context.Context, id string, in client.DeliveryDecisionInput) (*client.DeliveryDecisionResult, error)
-	DeliveryStatus(ctx context.Context, id string, detail bool) (*client.DeliveryStatusResult, error)
-	ListAcceptanceCriteria(ctx context.Context, id string) ([]client.AcceptanceCriterion, error)
-	// Policy commands
-	ListGovernanceLevels(ctx context.Context) ([]client.GovernanceLevel, error)
-	ResolveGovernancePolicy(ctx context.Context, in client.ResolveGovernancePolicyInput) (*client.PolicyProjection, error)
-	WorkPolicy(ctx context.Context, ref string) (*client.PolicyExplanation, error)
-	// Gate task commands
-	ListGateTasks(ctx context.Context, artifactID string) ([]client.GateTask, error)
-	GetGateTask(ctx context.Context, taskID string) (*client.GateTask, error)
-	SubmitGateResult(ctx context.Context, taskID string, body any) (*client.GateResultResponse, error)
-	DispatchGateTasks(ctx context.Context, artifactID string) (*client.DispatchGateTasksResult, error)
-	// Settings (model configuration)
-	GetSettings(ctx context.Context) (map[string]string, error)
-	UpdateSettings(ctx context.Context, settings map[string]string) (map[string]string, error)
-	// Maintenance
-	MaintenanceCleanup(ctx context.Context) (map[string]any, error)
-	RemoveDemo(ctx context.Context) (map[string]any, error)
-	// Identity commands
-	BootstrapIdentity(ctx context.Context, in client.IdentityBootstrapInput) (*client.IdentitySelection, error)
-	ListUsers(ctx context.Context) ([]client.IdentityUser, error)
-	GetUser(ctx context.Context, id string) (*client.IdentityUser, error)
-	ListWorkspaces(ctx context.Context) ([]client.IdentityWorkspace, error)
-	GetWorkspace(ctx context.Context, id string) (*client.IdentityWorkspace, error)
-	ListWorkspaceMembers(ctx context.Context, id, currentUserID, currentUsername string) (*client.WorkspaceMembersResult, error)
-	IssueGatewayCredential(ctx context.Context, username string, revoke bool) (*client.GatewayCredentialResult, error)
-}
 
 // Deps carries injectable dependencies shared by all commands.
 type Deps struct {
@@ -147,17 +70,12 @@ type Deps struct {
 	// real TTY detection on os.Stderr; tests inject a fixed answer.
 	StderrIsTTY func() bool
 
-	// OpenRouterModelOptions returns filterable OpenRouter model picker options.
-	// Nil uses the public OpenRouter catalog.
-	OpenRouterModelOptions func(ctx context.Context) ([]interactive.Option, error)
-
 	// PluginAgentDefaults returns preselected IDE agents for interactive plugin
 	// prompts. Nil detects installed tools from the local machine.
 	PluginAgentDefaults func() []string
 
-	// DeployRunner executes docker / docker compose commands. Injected for tests;
-	// nil uses the production deploy.ExecRunner.
-	DeployRunner deploy.CommandRunner
+	// CommandRunner captures Git command output. Nil uses executil.ExecRunner.
+	CommandRunner executil.CommandRunner
 
 	// RunCheckCommand executes one completion-report check command locally for
 	// `delivery submit --run-checks`, returning the exit code and combined
@@ -170,9 +88,7 @@ type Deps struct {
 	UpdateCheckCachePath string
 	CLIInstallURL        string
 	CLIReleaseBaseURL    string
-	PluginRegistryURL    string
 	PublicRegistryURL    string
-	BundleBaseURL        string
 
 	// RuntimeGOOS and ExecutablePath isolate the platform-specific updater in
 	// tests. Empty/nil values use runtime.GOOS and os.Executable.
@@ -183,19 +99,18 @@ type Deps struct {
 	// checksum-verified GitHub release updater.
 	SelfUpdateCLI func(ctx context.Context, version, executablePath string) error
 
+	// Local UI maintenance hooks isolate release checks and installation in tests.
+	// Nil uses the official release API and the existing Local update command.
+	LocalUICheckUpdate func(ctx context.Context) (string, error)
+	LocalUIUpdate      func(ctx context.Context, version string) error
+
 	// Resolved by PersistentPreRunE; safe to read in any subcommand RunE.
 	Printer      *output.Printer
-	Client       APIClient
-	Topology     config.Mode
-	ServerURL    string
 	Mode         output.Mode
 	JSONProgress bool
 	NoInput      bool
 	Yes          bool
 	Timeout      time.Duration
-
-	useEmbeddedPlugins  bool // no topology or configured server before init
-	versionWarningShown bool
 }
 
 // DefaultDeps returns production-ready Deps backed by OS standard streams.
@@ -215,14 +130,27 @@ func NewRootCommand(deps *Deps) *cobra.Command {
 	var (
 		jsonMode          bool
 		plainMode         bool
-		serverURL         string
 		workspaceOverride string
 		timeout           time.Duration
 	)
 
 	root := &cobra.Command{
-		Use:           "specgate",
-		Short:         "SpecGate CLI — govern the handoff from specs to delivery",
+		Use:   "specgate",
+		Short: "SpecGate CLI — govern the handoff from specs to delivery",
+		Long: `SpecGate governs the handoff from approved specs to delivery evidence.
+
+specgate init sets up Local mode by default. Work with your coding agent without Docker, a model API key, or a server.
+Approve the scope, give the work reference to your agent, and have it submit evidence.
+Review the evidence and follow the next command from change status to record your decision.
+
+Use specgate ui when you want to inspect a delivery in your browser.`,
+		Example: `  specgate init
+  specgate doctor
+
+  # Give the approved work reference to your agent.
+  specgate work resume LOCAL-123 --json
+  # When the agent hands back evidence:
+  specgate change status LOCAL-123`,
 		Version:       buildinfo.Version,
 		SilenceErrors: true,
 		SilenceUsage:  true,
@@ -248,9 +176,8 @@ func NewRootCommand(deps *Deps) *cobra.Command {
 	root.SetFlagErrorFunc(renderUsageError)
 	root.AddGroup(
 		&cobra.Group{ID: commandGroupStart, Title: "Start here"},
-		&cobra.Group{ID: commandGroupCore, Title: "Core workflow commands"},
-		&cobra.Group{ID: commandGroupSetup, Title: "Setup and identity commands"},
-		&cobra.Group{ID: commandGroupFull, Title: "Full appliance commands"},
+		&cobra.Group{ID: commandGroupBrowser, Title: "Optional browser review"},
+		&cobra.Group{ID: commandGroupAdvanced, Title: "Advanced and maintenance commands"},
 	)
 
 	f := root.PersistentFlags()
@@ -259,7 +186,6 @@ func NewRootCommand(deps *Deps) *cobra.Command {
 	f.BoolVar(&plainMode, "plain", false, "Plain text; no colour or interactive prompts")
 	f.BoolVar(&deps.NoInput, "no-input", false, "Disable interactive prompts; error if a prompt would be required")
 	f.BoolVar(&deps.Yes, "yes", false, "Auto-confirm all prompts")
-	f.StringVar(&serverURL, "server", "", "SpecGate server URL (overrides SPECGATE_SERVER)")
 	f.StringVar(&workspaceOverride, "workspace", "", "Workspace slug or ID for this command (overrides project/global selection and SPECGATE_WORKSPACE)")
 	f.DurationVar(&timeout, "timeout", defaultTimeout, "Request timeout (default 3 min)")
 
@@ -288,9 +214,16 @@ func NewRootCommand(deps *Deps) *cobra.Command {
 		if timeout > 0 {
 			deps.Timeout = timeout
 		}
+		if deps.Prompter == nil {
+			deps.Prompter = interactive.NewHuhPrompter()
+		}
+		switch commandOutputName(cmd) {
+		case "version", "completion", "delivery.handoff.show", "transfer.inspect", "transfer.receive", "transfer.activate":
+			return nil
+		}
 
 		cfg, err := config.LoadFrom(deps.ConfigPath)
-		if err != nil && cmd.Name() != "version" && cmd.Name() != "completion" {
+		if err != nil {
 			payload := output.ErrorPayload{
 				Code:    "unavailable",
 				Message: fmt.Sprintf("cannot load SpecGate config: %v; repair or move the config file aside, then run `specgate init`", err),
@@ -298,129 +231,37 @@ func NewRootCommand(deps *Deps) *cobra.Command {
 			code := deps.Printer.Error(commandOutputName(cmd), payload)
 			return &output.ExitError{Code: code, Err: err}
 		}
-		deps.useEmbeddedPlugins = cfg.Mode == "" &&
-			strings.TrimSpace(serverURL) == "" &&
-			strings.TrimSpace(os.Getenv("SPECGATE_SERVER")) == "" &&
-			strings.TrimSpace(cfg.Server) == ""
+		mode, _ := cmd.Flags().GetString("mode")
+		if cfg.LegacyFull() || mode == "full" ||
+			(cfg.Mode == "" && (strings.TrimSpace(os.Getenv("SPECGATE_SERVER")) != "" ||
+				strings.TrimSpace(config.LoadRepoConfig(deps.WorkingDir).Server) != "")) {
+			return incompatibleCommand(deps, commandOutputName(cmd), "Full mode is retired. Keep the existing configuration and appliance data for recovery with a previous compatible release. For a separate Local setup, select a new file with SPECGATE_CONFIG_PATH, unset SPECGATE_SERVER, and run specgate init outside the legacy repository. You can then return to the checkout and bind it to a Local workspace.")
+		}
 		deps.WorkspaceOverride = ""
 		if trimmed := strings.TrimSpace(workspaceOverride); trimmed != "" {
 			deps.WorkspaceOverride = trimmed
 		} else if trimmed := strings.TrimSpace(os.Getenv("SPECGATE_WORKSPACE")); trimmed != "" {
 			deps.WorkspaceOverride = trimmed
 		}
-		initMode := ""
-		if cmd.Name() == "init" {
-			writeInitWelcome(deps)
-			initMode, _ = cmd.Flags().GetString("mode")
-			if initMode == "" && canPrompt(deps) {
-				if deps.Prompter == nil {
-					deps.Prompter = interactive.NewHuhPrompter()
-				}
-				selected, err := deps.Prompter.Select("Choose setup mode", []interactive.Option{
-					{Label: "Local — personal workflow, no Docker or server", Value: "local"},
-					{Label: "Full — team workspace, browser UI, chat, and integrations", Value: "full"},
-				})
-				if err != nil {
-					return err
-				}
-				if err := cmd.Flags().Set("mode", selected); err != nil {
-					return err
-				}
-				initMode = selected
-			}
-		}
-		if cmd.Name() == "init" && (initMode == "local" || initMode == "") {
-			deps.Topology = config.ModeLocal
-			if strings.TrimSpace(serverURL) != "" {
-				payload := output.ErrorPayload{Code: "incompatible", Message: "--server cannot be used with Local mode; run `specgate init --mode full` for a server-backed setup"}
-				code := deps.Printer.Error(commandOutputName(cmd), payload)
-				return &output.ExitError{Code: code}
-			}
-			if deps.Prompter == nil {
-				deps.Prompter = interactive.NewHuhPrompter()
-			}
-			return nil
-		}
-		if cmd.Name() == "init" && initMode == "full" {
-			deps.Topology = config.ModeFull
-			deps.useEmbeddedPlugins = false
-		} else {
-			deps.Topology = config.ResolveMode(cfg)
-		}
 		if err := enforceProjectWorkspaceBoundary(cmd, deps, cfg); err != nil {
 			return err
 		}
-		if deps.Topology == config.ModeLocal {
-			if strings.TrimSpace(serverURL) != "" {
-				payload := output.ErrorPayload{Code: "incompatible", Message: "--server cannot be used with Local mode; run `specgate init --mode full` for a server-backed setup"}
-				code := deps.Printer.Error(commandOutputName(cmd), payload)
-				return &output.ExitError{Code: code}
-			}
-			if !localCommandSupported(cmd) {
-				payload := output.ErrorPayload{Code: "incompatible", Message: fmt.Sprintf("`%s` requires Full mode; run `specgate init --mode full` to use the server-backed workflow", cmd.CommandPath())}
-				code := deps.Printer.Error(commandOutputName(cmd), payload)
-				return &output.ExitError{Code: code}
-			}
-			if deps.Prompter == nil {
-				deps.Prompter = interactive.NewHuhPrompter()
-			}
-			return nil
-		}
-		repoCfg := config.LoadRepoConfig(deps.WorkingDir)
-		if commandRequiresTrustedServer(cmd) {
-			repoCfg.Server = ""
-		}
-		deps.ServerURL = config.ResolveServer(serverURL, repoCfg, cfg)
-		if strings.TrimSpace(deps.PluginRegistryURL) == "" {
-			deps.PluginRegistryURL = config.ResolvePluginRegistry(serverURL, cfg)
-		}
-		// Create the HTTP client if one has not been injected (e.g. in tests).
-		if deps.Client == nil {
-			api := client.New(deps.ServerURL, deps.Timeout)
-			// A credential is stored per server, so switching servers cannot send one
-			// appliance's secret to another host.
-			if credential, ok := cfg.CredentialFor(deps.ServerURL); ok {
-				api = api.WithGatewayCredential(credential.Username, credential.Secret)
-			}
-			deps.Client = api
-		}
-		if commandUsesSelectedWorkspace(cmd) {
-			workspaceID, err := workspaceIDForSelection(cmd.Context(), deps, resolveWorkspaceSelection(deps, cfg))
-			if err != nil {
-				return apiExitError(deps, commandOutputName(cmd), err)
-			}
-			if workspaceID != "" {
-				cmd.SetContext(client.WithWorkspace(cmd.Context(), workspaceID))
-			}
-		}
-		// Create the prompter if one has not been injected (e.g. in tests).
-		if deps.Prompter == nil {
-			deps.Prompter = interactive.NewHuhPrompter()
-		}
-
-		warnIfCLIUpdateRecommended(cmd.Context(), deps, cmd)
-
 		return nil
 	}
 
 	registerSystemCommands(root, deps)
-	registerStatsCommands(root, deps)
 	registerAuditCommands(root, deps)
 	registerWorkCommands(root, deps)
 	registerArtifactCommands(root, deps)
-	registerSkillCommands(root, deps)
 	registerFeatureCommands(root, deps)
-	registerKnowledgeCommands(root, deps)
 	registerGatesCommands(root, deps)
 	registerDeliveryCommands(root, deps)
+	root.AddCommand(newTransferCmd(deps))
 	root.AddCommand(newChangeCmd(deps))
-	registerPolicyCommands(root, deps)
-	registerModelCommands(root, deps)
 	registerIdentityCommands(root, deps)
 	registerPluginCommands(root, deps)
 	root.AddCommand(newCapabilitiesCmd(deps))
 	root.AddCommand(newCoverageCmd(deps))
-	root.AddCommand(newPortableCmd(deps))
 	root.AddCommand(newVerifyCmd(deps))
 	defaultArgumentPolicies(root)
 	wrapArgumentErrors(root, renderUsageError)
@@ -459,10 +300,6 @@ func defaultArgumentPolicies(cmd *cobra.Command) {
 	for _, child := range children {
 		defaultArgumentPolicies(child)
 	}
-}
-
-func commandRequiresTrustedServer(cmd *cobra.Command) bool {
-	return cmd.Name() == "set" && cmd.Parent() != nil && cmd.Parent().Name() == "model"
 }
 
 func wrapArgumentErrors(cmd *cobra.Command, render func(*cobra.Command, error) error) {
@@ -519,26 +356,6 @@ func stderrIsTTY(deps *Deps) bool {
 	return isatty.IsTerminal(f.Fd()) || isatty.IsCygwinTerminal(f.Fd())
 }
 
-func localCommandSupported(cmd *cobra.Command) bool {
-	path := strings.Fields(cmd.CommandPath())
-	if len(path) < 2 {
-		return true
-	}
-	if path[1] == "cleanup" {
-		return fileCleanupRequested(cmd)
-	}
-	commandPath := strings.Join(path[1:], " ")
-	if _, ok := localCommandCapabilities[commandPath]; ok {
-		return true
-	}
-	for supported := range localCommandCapabilities {
-		if strings.HasPrefix(supported, commandPath+" ") {
-			return true
-		}
-	}
-	return false
-}
-
 func commandOutputName(cmd *cobra.Command) string {
 	path := strings.Fields(cmd.CommandPath())
 	if len(path) <= 1 {
@@ -559,12 +376,12 @@ func commandUsesSelectedWorkspace(cmd *cobra.Command) bool {
 		return false
 	}
 	switch path[1] {
-	case "cleanup":
-		return !fileCleanupRequested(cmd)
-	case "status", "stats", "audit", "coverage", "verify", "portable", "gates", "delivery", "change", "feature", "knowledge", "skill", "open", "demo":
+	case "status", "audit", "coverage", "verify", "gates", "delivery", "change", "feature", "open", "ui":
 		return true
 	case "work":
 		return len(path) < 3 || (path[2] != "create" && path[2] != "create-quick")
+	case "transfer":
+		return len(path) == 3 && path[2] == "prepare"
 	case "artifact":
 		return len(path) < 3 || path[2] != "publish"
 	default:
@@ -575,36 +392,27 @@ func commandUsesSelectedWorkspace(cmd *cobra.Command) bool {
 func assignRootCommandGroups(root *cobra.Command) {
 	groups := map[string]string{
 		"change":       commandGroupStart,
-		"audit":        commandGroupCore,
-		"artifact":     commandGroupCore,
-		"capabilities": commandGroupCore,
-		"coverage":     commandGroupCore,
-		"delivery":     commandGroupCore,
-		"feature":      commandGroupCore,
-		"gates":        commandGroupCore,
-		"stats":        commandGroupCore,
-		"status":       commandGroupCore,
-		"work":         commandGroupCore,
-		"verify":       commandGroupCore,
-		"config":       commandGroupSetup,
-		"cleanup":      commandGroupSetup,
-		"doctor":       commandGroupSetup,
-		"init":         commandGroupSetup,
-		"plugins":      commandGroupSetup,
-		"portable":     commandGroupSetup,
-		"uninstall":    commandGroupSetup,
-		"update":       commandGroupSetup,
-		"user":         commandGroupSetup,
-		"workspace":    commandGroupSetup,
-		"demo":         commandGroupFull,
-		"down":         commandGroupFull,
-		"knowledge":    commandGroupFull,
-		"local-status": commandGroupFull,
-		"model":        commandGroupFull,
-		"open":         commandGroupFull,
-		"policy":       commandGroupFull,
-		"skill":        commandGroupFull,
-		"up":           commandGroupFull,
+		"doctor":       commandGroupStart,
+		"init":         commandGroupStart,
+		"plugins":      commandGroupStart,
+		"status":       commandGroupStart,
+		"work":         commandGroupStart,
+		"open":         commandGroupBrowser,
+		"ui":           commandGroupBrowser,
+		"audit":        commandGroupAdvanced,
+		"artifact":     commandGroupAdvanced,
+		"capabilities": commandGroupAdvanced,
+		"cleanup":      commandGroupAdvanced,
+		"coverage":     commandGroupAdvanced,
+		"delivery":     commandGroupAdvanced,
+		"feature":      commandGroupAdvanced,
+		"gates":        commandGroupAdvanced,
+		"transfer":     commandGroupAdvanced,
+		"uninstall":    commandGroupAdvanced,
+		"update":       commandGroupAdvanced,
+		"user":         commandGroupAdvanced,
+		"verify":       commandGroupAdvanced,
+		"workspace":    commandGroupAdvanced,
 	}
 	for _, cmd := range root.Commands() {
 		if groupID, ok := groups[cmd.Name()]; ok {

@@ -1,143 +1,50 @@
 # Who SpecGate is for
 
-Your coding agent is brilliant, fast, tireless — and grades its own homework.
-SpecGate is the part of the workflow that says: *lovely summary, now show me
-each criterion.*
-
-That's the whole product. Solo, it plays the reviewer you don't have. In a
-team, it ends the "wait, which version did we approve?" argument before it
-starts. The core delivery loop runs in Local mode: one binary, no Docker, no
-server, and no model API key. Shared gateway credentials and hash-linked event
-verification require Full mode.
+SpecGate is a Local CLI for solo developers and small teams using coding
+agents. It keeps approved scope, criterion evidence, and human decisions
+together as features, spec files, and agent sessions change.
 
 ## The problem: diffs don't show what's missing
 
-Hand an agent eight acceptance criteria. It implements six, writes tests for
-those six, and announces success with total confidence.
+You ask an agent to trim names, convert them to lowercase, and reject empty
+names after trimming. The agent reports that the work is done, and both
+existing tests pass. The third criterion requires check `@check:reject-empty`.
+The missing test leaves that check skipped, so the review shows an evidence
+gap for that exact criterion.
 
-Now you do the responsible thing. You read the diff — looks great. You run the
-tests — all green. Ship it?
+The agent adds the validation and test, reruns the commands, and submits
+fresh evidence for the same approved work. You inspect the new review and
+record your decision. [Run the delivery proof locally](../guides/try-delivery-proof.md).
 
-The two missing criteria are *absent code*. There is no red line in a diff for
-code that was never written. You just reviewed what the agent did, and the
-agent — who wrote both the code *and* the summary you checked it against — did
-not bring up what it skipped. Funny how that works.
-
-What SpecGate does about it:
-
-- Review walks your criteria **one by one**. No single "looks good ✅" is
-  accepted on behalf of eight separate promises.
-- A criterion tied to a check (`@check:<name>`) takes its verdict from the
-  check result. The agent's opinion of its own test run is noted, then
-  re-verified.
-- With `--run-checks`, SpecGate **reruns non-skipped checks that have commands**.
-  The installed delivery skill uses this path. Claims that don't reproduce get
-  corrected, on the record; checks without execution remain reported evidence. Every verdict says
-  whether a human-visible result was *observed* or merely *reported*.
-- Citing a test that doesn't exist gets flagged. (Yes, agents do this. With
-  citations. It's very convincing.)
-- And if you typo a check name, SpecGate refuses right there instead of
-  quietly skipping the check and letting you find out in production.
-
-## The pin: "whatever the file says right now" is not an approval
-
-You had an idea at 1pm. The agent started at noon. The spec file changed under
-it, the agent re-read it, and now you're reviewing an implementation of one
-and a half specs.
-
-SpecGate freezes the version you approve. The context the agent receives is
-generated *from that frozen copy*, and review is keyed to the criteria saved
-*at approval*. Editing the file mid-flight can't move the goalposts, because
-the goalposts were confiscated at approval time.
-
-Nice side effect: the spec file in your repo can stay uncommitted, get
-mangled, or be deleted in a fit of tidiness — the approved snapshot survives.
-SpecGate never touches your files. Not even to help.
+Review can surface gaps in the criteria and checks you supplied. A command exit
+code, an observed selected JUnit case, and a test of the real end-to-end or
+provider path answer different questions. See [How verification works](verification.md).
 
 ## For solo developers: several specs, one explicit work reference
 
-For a solo developer juggling several specs or plans, hand the agent one work
-reference and start with `specgate work resume <ref> --json`. It returns the
-scope, criteria, pinned document index, and next action. The agent reads the
-relevant approved documents on demand; each work item remains separate even
-when several share a spec. This reduces repeated context loading without
-relying on the agent to remember a previous conversation.
+Hand the agent one work reference and start with
+`specgate work resume <ref> --json`. It returns the scope, criteria, approved
+document index, and next action. The agent reads the relevant frozen documents
+on demand. After you edit a spec, publish and approve a new version if the work
+should use it. Existing work retains the criteria and snapshot it started with.
+
+You can approve the scope and review the delivery yourself. Your agent uses
+its own reporting identity. Peer review is optional.
 
 ## For teams: names on decisions
 
-Somewhere out there, a spec is "approved" as a 👍 on a Slack link to a Notion
-page that has changed twice since. Three weeks later: "I approved v2." "You
-approved v3." Nobody can prove anything, and the rebuild costs a sprint.
+SpecGate records who approved an exact artifact version and who decided on an
+exact delivery review. Local names provide cooperative attribution on a
+trusted machine. See [Trust and security](trust-and-security.md).
 
-SpecGate records a **named approval against one frozen version** and a
-**named acceptance against one exact completion**, and `specgate audit` replays
-that trail in order: who decided what, against which version, when. In Full
-mode each event hash-links to the one before it, so `audit --verify` can tell
-you the record was not rewritten underneath you — and names the first event that
-was, if it happens.
-
-Fair's fair, though — if your team already reviews specs as pull requests with
-branch protection, GitHub does named approvals and no-self-approval very well
-for anything that becomes a PR. SpecGate covers the part that never does: the
-intent you approved *before* code existed, and the agent's account of itself
-in between.
-
-## Things your existing tools already do well
-
-We're not here to reinvent your stack. Keep all of it:
-
-- **Git** freezes files. It's rather famous for it. Commit the specs you love.
-- **Branch protection + PR review** handle approval of *code*.
-- **CI** reruns your suite on the exact commit, every push, without being asked.
-- **"Fixes #123"** links PRs to issues just fine.
-- **CLAUDE.md, plan files, session resume** carry context between chats well
-  enough for most days.
-- **TDD** deserves special mention: a failing test *is* a red line for absent
-  code, which closes half of the missing-criteria problem. The other half
-  moves up a floor — the same agent writes the tests, so given eight criteria
-  it can write six tests, implement six, and hand you a suite that is 100%
-  green and 75% complete. A green checklist written by the party under review
-  is still the same checklist. SpecGate pins the criteria list at approval
-  (the agent can't edit what it's graded against) and shows you which
-  criteria have no test standing behind them at all. Best of both: TDD gives
-  each criterion its own test, `@check:` binds each criterion to it.
-
-The gap in that stack is small but load-bearing: between "a human approved
-this intent" and "the code merged", the only account of what happened is
-written by the agent itself. That account is the thing SpecGate verifies.
-
-## Limits, before you find them yourself
-
-- **Local names are cooperative attribution.** Local user selection records
-  a name without authenticating the person at the keyboard. Same-agent review
-  and acceptance guards do not isolate a hostile agent running as your OS user.
-  Full mode can require gateway credentials and record the authenticated caller;
-  without credentials it trusts its network. See
-  [Trust and security](trust-and-security.md) for the exact boundary.
-- **The Local trail has no chain.** One laptop, one SQLite file: the trail
-  replays, but `--verify` has nothing to recompute and says so rather than
-  answering.
-- **Freshness has a checkout boundary.** A Git remote is not required to
-  compare a receipt with the same Local checkout. Missing Git metadata or a
-  different originless checkout is unverified. These endpoint observations do
-  not prove the files stayed unchanged throughout a test run.
-- **Local mode is one machine.** Local stores do not sync between laptops.
-  Portable transfer to Full refuses enhanced pins, checkpoints, lineage, and
-  acceptance bases that its v1 format cannot preserve. Keep a Local backup;
-  see [Operate SpecGate](../guides/operate-specgate.md#operate-local-cli).
-
-## Who should close this tab
-
-- Weekend prototypes. If a shipped bug costs you nothing, every ceremony
-  costs you something. Go build the thing.
-- Work with no testable acceptance criteria — design spikes, exploratory
-  refactors. SpecGate verifies criteria; no criteria, nothing to verify.
-- One-file fixes. The loop is bigger than the task. Just read the diff — for
-  one file, that actually works.
+Each developer keeps a separate SQLite store and coordinates through Git and
+their usual PR workflow. A teammate can read an optional unsigned, read-only
+[delivery handoff](../reference/cli.md#hand-a-review-to-a-teammate-through-the-repository)
+next to the diff. The human decision belongs to the originating store; stores
+and decisions do not sync.
 
 ## Related
 
 - [Quickstart](../quickstart.md)
 - [How SpecGate works](how-specgate-works.md)
 - [Feature status](../reference/feature-status.md)
-- [Trust and security](trust-and-security.md)

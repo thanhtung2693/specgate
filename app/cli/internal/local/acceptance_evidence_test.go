@@ -34,6 +34,25 @@ func TestAcceptanceEvidenceKeepsMissingAndFailedCategories(t *testing.T) {
 	}
 }
 
+func TestAcceptanceEvidenceResolvesPaddedCheckWithoutRewritingReport(t *testing.T) {
+	check := map[string]any{"name": " trim ", "status": " pass "}
+	body := map[string]any{
+		"criteria": []any{map[string]any{"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"kind": "file"}}},
+		"checks":   []any{check},
+	}
+	criteria := []string{"Preserves raw values @check:trim"}
+	if verdict, _ := local.DeliveryVerdict(body, criteria); verdict != "passed" {
+		t.Fatalf("fixture verdict = %q, want passed", verdict)
+	}
+	rows, gaps := local.ProjectAcceptanceEvidence(criteria, body)
+	if len(rows) != 1 || rows[0].CheckName != "trim" || rows[0].CheckStatus != "pass" || len(gaps) != 0 {
+		t.Fatalf("evidence disagrees with verdict: rows=%#v gaps=%#v", rows, gaps)
+	}
+	if check["name"] != " trim " || check["status"] != " pass " {
+		t.Fatalf("projection rewrote historical row: %#v", check)
+	}
+}
+
 func TestAcceptanceEvidenceFlagsSatisfiedClaimWithoutEvidence(t *testing.T) {
 	rows, gaps := local.ProjectAcceptanceEvidence([]string{"The manual behavior works"}, map[string]any{
 		"criteria": []any{map[string]any{"criterion_id": "local-1", "claim": "satisfied"}},

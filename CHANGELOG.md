@@ -5,6 +5,74 @@ versioning.
 
 ## Unreleased
 
+## [0.3.0] - 2026-11-14
+
+This version packages SpecGate as a Local-only CLI, with optional loopback
+browser review and private transfer of a Local store between checkouts.
+
+### Added
+
+- Move the entire selected Local store between your own checkouts with
+  `specgate transfer prepare`, `inspect`, `receive`, and `activate`.
+  The private archive carries Local history and an explicit work bookmark.
+  Move Git working files and external evidence separately.
+- Open the optional Local browser review with `specgate ui`. Inspect approved
+  scope, criterion evidence, and cited source and diffs from the current
+  checkout. Accept or request changes against the review you inspected. The
+  interface supports English and Vietnamese and light and dark themes.
+- Local review settings show the running version, let you preview and confirm
+  CLI updates, and preview cleanup of eligible update-check cache files.
+  Cleanup preserves specifications, work, evidence, decisions, and backups.
+- Add project Markdown rubrics for the four existing Local semantic gates.
+  Artifact preview shows the resolved rubric sources, and publication freezes
+  the effective instructions for the artifact version.
+- Try an optional [Local notification pilot](docs/using-specgate/guides/local-notification-pilot.md)
+  from the source checkout using Node.js 26 or later. Run it in the foreground
+  to learn when a reviewer or maintainer is needed. The participant study is pending.
+
+### Improved
+
+- Root help and the Quickstart lead with the Local CLI and coding-agent
+  workflow. Browser review stays optional and advanced Local commands remain
+  discoverable.
+- The human handoff skill presents the exact CLI next action and adds a
+  Local review link when you choose browser review and the UI is running.
+- The review attention count tracks work waiting on you. CLI updates have a
+  separate indicator in Settings.
+- Local browser review highlights evidence gaps, shows recorded checks with
+  their provenance and selected test results, and compares the current delivery
+  with the latest earlier human-decided review when available.
+
+### Fixed
+
+- CLI updates keep installer progress separate from JSON output. The installer
+  refuses a directory at the binary destination and preserves unrelated files.
+- Data purge during uninstall requires explicit confirmation and refuses
+  conflicting Local store selections.
+- Verification shows the current authoritative next action. Delivery readback
+  resolves check names and statuses consistently, and observed checks detect
+  changes to pinned watched files even when Git ignores them.
+- Local transfer rejects surrounding whitespace in store paths before the
+  operating system resolves them.
+
+### Removed
+
+- Retire the Full appliance, remote commands, governance chat, Knowledge,
+  provider and tracker integrations, statistics reporting, and the previous
+  portable workspace transfer. Existing deployments, configuration, databases,
+  backups, IDE data, and Docker volumes stay in place. Read the
+  [recovery guidance](docs/using-specgate/guides/operate-specgate.md#previous-installations)
+  if your saved configuration selects a prior deployment.
+
+### Upgrade notes
+
+- Received stores have a fresh checkout generation and require a supporting
+  CLI. Older CLIs reject the receiving store. Transfer leaves the source
+  SQLite database and earlier stores in place.
+- Back up the complete Local store before changing CLI versions. A supporting
+  CLI is required to read frozen
+  [project rubrics](docs/using-specgate/guides/customize-governance.md#add-local-project-instructions).
+
 ## [0.2.6] - 2026-10-25
 
 Reissued with delivery-evidence clarity and launch-readiness fixes. This

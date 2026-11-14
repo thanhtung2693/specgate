@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -14,12 +15,6 @@ import (
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
-// executeCompletionChecks re-runs each checks[].command locally and replaces the
-// claimed status with the observed result, converting narrated checks into
-// executed checks. Skipped checks and checks without an explicit command are
-// untouched. The corrected body is submitted either way — an observed failure
-// is honest data for the delivery review, which already fails the verdict on any
-// failed check.
 // Observation metadata belongs to this execution, never to the input file.
 // Clear it once at ingress, not during validation after --run-checks.
 func clearCheckObservations(body map[string]any) {
@@ -33,23 +28,18 @@ func clearCheckObservations(body map[string]any) {
 	}
 }
 
-func rejectFullCheckExtensions(deps *Deps, op string, body map[string]any) error {
-	if deps.Topology == config.ModeLocal {
-		return nil
+// The confirmation preview and executor must agree on which commands will run.
+func runnableCompletionCheckCommand(entry map[string]any) string {
+	status, _ := entry["status"].(string)
+	if strings.TrimSpace(status) == "skipped" {
+		return ""
 	}
-	checks, _ := body["checks"].([]any)
-	for _, raw := range checks {
-		check, _ := raw.(map[string]any)
-		for _, field := range []string{"test_report", "test_observation", "test_run"} {
-			if _, found := check[field]; found {
-				return incompatibleCommand(deps, op, field+" is Local-only")
-			}
-		}
-	}
-	return nil
+	command, _ := entry["command"].(string)
+	return strings.TrimSpace(command)
 }
 
-func executeCompletionChecks(ctx context.Context, deps *Deps, body map[string]any, contract *local.VerificationContract, repoRoots ...string) {
+// executeCompletionChecks runs each confirmed command and records its observed result.
+func executeCompletionChecks(ctx context.Context, deps *Deps, body map[string]any, contract *local.VerificationContract, generation string, repoRoots ...string) {
 	runner := deps.RunCheckCommand
 	if runner == nil {
 		runner = defaultRunCheckCommand
@@ -57,15 +47,12 @@ func executeCompletionChecks(ctx context.Context, deps *Deps, body map[string]an
 	checks, _ := body["checks"].([]any)
 	for _, raw := range checks {
 		entry, _ := raw.(map[string]any)
-		if entry == nil {
+		command := runnableCompletionCheckCommand(entry)
+		if command == "" {
 			continue
 		}
-		command, _ := entry["command"].(string)
 		claimed, _ := entry["status"].(string)
-		command = strings.TrimSpace(command)
-		if command == "" || claimed == "skipped" {
-			continue
-		}
+		claimed = strings.TrimSpace(claimed)
 		executable := command
 		var report *local.JUnitTestReport
 		if contract != nil {
@@ -107,7 +94,7 @@ func executeCompletionChecks(ctx context.Context, deps *Deps, body map[string]an
 		}
 		var run local.ObservedRun
 		if report != nil {
-			run = local.ObservedRun{Version: 1, ID: filepath.Base(runDir), WorkID: contract.WorkID, ContextDigest: contract.ContextDigest, VerificationDigest: contract.Digest, CheckName: fmt.Sprint(entry["name"]), StartedAt: time.Now().UTC().Format(time.RFC3339Nano), Before: captureCheckout(ctx, deps)}
+			run = local.ObservedRun{Version: 1, ID: filepath.Base(runDir), WorkID: contract.WorkID, ContextDigest: contract.ContextDigest, VerificationDigest: contract.Digest, CheckName: fmt.Sprint(entry["name"]), StartedAt: time.Now().UTC().Format(time.RFC3339Nano), Before: captureCheckout(ctx, deps, generation)}
 			if len(repoRoots) > 0 {
 				run.WatchedBefore = local.WatchedPathDriftFor(repoRoots[0], contract.WatchedPaths)
 			}
@@ -127,16 +114,22 @@ func executeCompletionChecks(ctx context.Context, deps *Deps, body map[string]an
 		if report != nil {
 			run.ExitCode = exitCode
 			run.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
-			run.After = captureCheckout(ctx, deps)
+			run.After = captureCheckout(ctx, deps, generation)
 			run.Freshness = "unavailable"
 			if len(repoRoots) > 0 {
 				run.WatchedAfter = local.WatchedPathDriftFor(repoRoots[0], contract.WatchedPaths)
 			}
 			if run.Before.State == "available" && run.After.State == "available" {
-				run.Freshness = "matching_endpoints"
-				if run.Before.Fingerprint != run.After.Fingerprint {
+				switch {
+				case run.Before.Fingerprint != run.After.Fingerprint:
 					run.Freshness = "changed"
+				case !slices.ContainsFunc(run.WatchedAfter, func(path local.WatchedPathDrift) bool { return path.State == "unavailable" }):
+					run.Freshness = "matching_endpoints"
 				}
+			}
+			watchedChanged := !slices.Equal(run.WatchedBefore, run.WatchedAfter)
+			if watchedChanged {
+				run.Freshness = "changed"
 			}
 			if run.Before.Reason == "checkout changed during capture" || run.After.Reason == "checkout changed during capture" {
 				run.Freshness = "changed"
@@ -145,7 +138,11 @@ func executeCompletionChecks(ctx context.Context, deps *Deps, body map[string]an
 			if run.Freshness == "changed" {
 				observed = "fail"
 				entry["status"] = "fail"
-				entry["detail"] = detail + " — checkout changed during verification"
+				reason := "checkout changed during verification"
+				if watchedChanged {
+					reason = "watched input changed during verification"
+				}
+				entry["detail"] = detail + " — " + reason
 			}
 			observation, err := local.ObserveJUnitReportFromRoot(runRoot, "report.xml", junitSelectorsForCheck(report))
 			_ = runRoot.Remove("report.xml")
@@ -166,7 +163,7 @@ func executeCompletionChecks(ctx context.Context, deps *Deps, body map[string]an
 		}
 		// Keep the superseded claim so the stored report — and the delivery
 		// receipt read back from it — shows what re-execution corrected.
-		if claimed = strings.TrimSpace(claimed); claimed != "" && observed != claimed {
+		if claimed != "" && observed != claimed {
 			entry["claimed_status"] = claimed
 		}
 		if deps.Printer.Mode() != output.ModeJSON {

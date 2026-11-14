@@ -1,7 +1,6 @@
 package command
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strconv"
@@ -9,7 +8,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
@@ -91,16 +89,9 @@ func newCoverageCmd(deps *Deps) *cobra.Command {
 				result workspaceCoverage
 				err    error
 			)
-			if deps.Topology == config.ModeLocal {
-				result, err = localWorkspaceCoverage(cmd, deps)
-				if err != nil {
-					return localExitError(deps, "coverage", err)
-				}
-			} else {
-				result, err = fullWorkspaceCoverage(cmd, deps)
-				if err != nil {
-					return apiExitError(deps, "coverage", err)
-				}
+			result, err = localWorkspaceCoverage(cmd, deps)
+			if err != nil {
+				return localExitError(deps, "coverage", err)
 			}
 			if deps.Printer.Mode() == output.ModeJSON {
 				deps.Printer.Success("coverage", result)
@@ -151,64 +142,6 @@ func localWorkspaceCoverage(cmd *cobra.Command, deps *Deps) (workspaceCoverage, 
 		work = append(work, coverageWork{Key: item.Key, Title: item.Title, Phase: item.Phase, ArtifactID: item.ArtifactID, AcceptanceCriteria: item.AcceptanceCriteria})
 	}
 	return buildWorkspaceCoverage(config.ModeLocal, selection.Workspace.ID, selection.Workspace.Slug, features, artifacts, work), nil
-}
-
-func fullWorkspaceCoverage(cmd *cobra.Command, deps *Deps) (workspaceCoverage, error) {
-	workspaceID, err := currentWorkspaceID(cmd.Context(), deps)
-	if err != nil {
-		return workspaceCoverage{}, err
-	}
-	fullFeatures, err := listFeaturesForWorkspace(cmd.Context(), deps, workspaceID, "")
-	if err != nil {
-		return workspaceCoverage{}, err
-	}
-	fullArtifacts, err := listAllArtifacts(cmd.Context(), deps, client.ArtifactFilter{WorkspaceID: workspaceID})
-	if err != nil {
-		return workspaceCoverage{}, err
-	}
-	fullWork, err := deps.Client.ListWorkItemsIncludingArchived(cmd.Context(), workspaceID)
-	if err != nil {
-		return workspaceCoverage{}, err
-	}
-	features := make([]coverageFeature, 0, len(fullFeatures))
-	for _, feature := range fullFeatures {
-		if strings.TrimSpace(feature.CanonicalArtifactID) == "" {
-			continue
-		}
-		features = append(features, coverageFeature{
-			ID: feature.ID, Key: feature.Key, Name: feature.Name, CanonicalArtifactID: feature.CanonicalArtifactID,
-		})
-	}
-	artifacts := make([]coverageArtifact, 0, len(fullArtifacts))
-	for _, artifact := range fullArtifacts {
-		artifacts = append(artifacts, coverageArtifact{
-			ID: artifact.ID, FeatureID: artifact.FeatureID, Version: artifact.Version,
-		})
-	}
-	work := make([]coverageWork, 0, len(fullWork))
-	for _, item := range fullWork {
-		work = append(work, coverageWork{Key: item.Key, Title: item.Title, Phase: item.Phase, ArtifactID: item.LeadArtifactID})
-	}
-	selection := currentWorkspaceSelection(deps)
-	return buildWorkspaceCoverage(config.ModeFull, workspaceID, selection.Workspace.Slug, features, artifacts, work), nil
-}
-
-func listAllArtifacts(ctx context.Context, deps *Deps, filter client.ArtifactFilter) ([]client.Artifact, error) {
-	const pageSize = 200
-	filter.Limit = pageSize
-	filter.Offset = 0
-	result := make([]client.Artifact, 0)
-	for {
-		page, err := deps.Client.ListArtifacts(ctx, filter)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, page.Items...)
-		if len(result) >= page.Total || len(page.Items) == 0 {
-			return result, nil
-		}
-		filter.Offset += len(page.Items)
-	}
 }
 
 func buildWorkspaceCoverage(mode config.Mode, workspaceID, workspace string, features []coverageFeature, artifacts []coverageArtifact, work []coverageWork) workspaceCoverage {

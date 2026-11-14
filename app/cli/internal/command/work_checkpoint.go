@@ -6,7 +6,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
@@ -33,9 +32,7 @@ func newWorkCheckpointCmd(deps *Deps) *cobra.Command {
 	var note string
 	cmd := &cobra.Command{Use: "checkpoint <ref>", Short: "Record an explicit Local pickup baseline", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		const op = "work.checkpoint"
-		if deps.Topology != config.ModeLocal {
-			return incompatibleCommand(deps, op, "checkpoints are Local-only")
-		}
+
 		store, err := openLocalStore(deps)
 		if err != nil {
 			return localExitError(deps, op, err)
@@ -45,7 +42,11 @@ func newWorkCheckpointCmd(deps *Deps) *cobra.Command {
 		if err != nil {
 			return localExitError(deps, op, err)
 		}
-		receipt := collectGitReceipt(cmd.Context(), deps.DeployRunner, deliveryWorkingDir(deps), nil)
+		generation, err := store.CheckoutGeneration(cmd.Context())
+		if err != nil {
+			return localExitError(deps, op, err)
+		}
+		receipt := collectGitReceipt(cmd.Context(), deps.CommandRunner, deliveryWorkingDir(deps), nil, generation)
 		upgrade, err := store.PendingStoreUpgrade(cmd.Context())
 		if err != nil {
 			return localExitError(deps, op, err)
@@ -54,7 +55,7 @@ func newWorkCheckpointCmd(deps *Deps) *cobra.Command {
 		if err != nil || !proceed {
 			return err
 		}
-		snapshot := captureCheckout(cmd.Context(), deps)
+		snapshot := captureCheckout(cmd.Context(), deps, generation)
 		if snapshot.State != "available" {
 			return localExitError(deps, op, fmt.Errorf("cannot record checkpoint: %s", snapshot.Reason))
 		}

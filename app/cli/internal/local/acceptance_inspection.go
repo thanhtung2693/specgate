@@ -21,6 +21,20 @@ type AcceptanceInspection struct {
 	Recorded  *AcceptanceBasis
 }
 
+// PreviousDecidedReview reads a predecessor of the displayed review. The
+// anchor keeps concurrent submissions from becoming part of the comparison.
+func (s *Store) PreviousDecidedReview(ctx context.Context, workspaceID string, current DeliveryReview) (DeliveryReview, error) {
+	var review DeliveryReview
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, work_id, report_id, verdict, summary, human_decision, note, created_at
+		FROM delivery_reviews
+		WHERE workspace_id = ? AND work_id = ? AND human_decision IN ('approve', 'reject')
+		AND (created_at, id) < (SELECT created_at, id FROM delivery_reviews WHERE workspace_id = ? AND work_id = ? AND id = ?)
+		ORDER BY created_at DESC, id DESC LIMIT 1`, workspaceID, current.WorkID, workspaceID, current.WorkID, current.ID).
+		Scan(&review.ID, &review.WorkID, &review.ReportID, &review.Verdict, &review.Summary, &review.HumanDecision, &review.Note, &review.CreatedAt)
+	return review, err
+}
+
 func (s *Store) InspectAcceptance(ctx context.Context, workspaceID, ref string, opts AcceptanceOptions) (AcceptanceInspection, error) {
 	var view AcceptanceInspection
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})

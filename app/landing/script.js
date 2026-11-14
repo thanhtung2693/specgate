@@ -46,44 +46,28 @@ const replayBtn = document.querySelector("#console-replay");
 let consoleTimers = [];
 const prefersReducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-function resetConsole() {
-  consoleTimers.forEach(clearTimeout);
-  consoleTimers = [];
-  checks.forEach((li) => li.setAttribute("data-status", "pending"));
-  probes.forEach((p) => p.setAttribute("data-on", "0"));
-  if (chip) {
-    chip.setAttribute("data-state", "run");
-    chip.textContent = "Reviewing…";
-  }
+function showConsoleState(state, label) {
+  chip.setAttribute("data-state", state);
+  chip.textContent = label;
 }
 
 function runConsole() {
-  resetConsole();
-  if (prefersReducedMotion) {
-    checks.forEach((li) => li.setAttribute("data-status", "met"));
-    probes.forEach((p) => p.setAttribute("data-on", "1"));
-    if (chip) {
-      chip.setAttribute("data-state", "pass");
-      chip.textContent = "Pass 3/3";
-    }
-    return;
-  }
+  consoleTimers.forEach(clearTimeout);
+  consoleTimers = [];
+  if (!chip || prefersReducedMotion) return;
+
+  showConsoleState("run", "Agent says done");
+  checks.forEach((li) => li.setAttribute("data-status", "pending"));
+  probes.forEach((probe) => probe.setAttribute("data-on", "0"));
   const stepIn = (fn, delay) => consoleTimers.push(setTimeout(fn, delay));
-  let t = 520;
-  checks.forEach((li, i) => {
-    stepIn(() => li.setAttribute("data-status", "met"), t + i * 620);
-  });
-  t += checks.length * 620 + 180;
-  probes.forEach((p, i) => {
-    stepIn(() => p.setAttribute("data-on", "1"), t + i * 260);
-  });
-  t += probes.length * 260 + 240;
   stepIn(() => {
-    if (chip) {
-      chip.setAttribute("data-state", "pass");
-      chip.textContent = "Pass 3/3";
-    }
-  }, t);
+    showConsoleState("run", "Reading report");
+    probes.forEach((probe) => probe.setAttribute("data-on", "1"));
+  }, 500);
+  checks.forEach((li, i) => {
+    stepIn(() => li.setAttribute("data-status", li.dataset.result), 800 + i * 430);
+  });
+  stepIn(() => showConsoleState("gap", "Evidence gap"), 1330);
 }
 
 replayBtn?.addEventListener("click", runConsole);
@@ -141,34 +125,34 @@ if (spyTargets.length) {
   const CASTS = [
     {
       title: "specgate / approved artifact",
-      cap: { t: "Approve the contract.", d: "Publish immutable documents, run readiness, then record the human decision." },
+      cap: { t: "Approve one snapshot.", d: "Publish to your local store, run readiness checks, then record the human decision." },
       lines: [
         { k: "cmd", t: "$ specgate artifact publish --file artifact.json --preview" },
         { k: "out", t: "  Artifact publish preview:" },
         { k: "out", t: "  docs/spec.md  spec  4821 bytes" },
-        { k: "dim", t: "  No publication performed: Human confirmation required before publishing." },
+        { k: "dim", t: "  Preview only. Confirm before publishing to the Local store." },
         { k: "cmd", t: "$ specgate artifact publish --file artifact.json" },
-        { k: "ok", t: "  Published 8a42…" },
+        { k: "ok", t: "  Local snapshot created" },
         { k: "cmd", t: "$ specgate gates check <artifact-id>" },
         { k: "dim", t: "  If IDE readiness tasks are pending, complete them before approval." },
         { k: "cmd", t: "$ specgate gates results <artifact-id>" },
         { k: "ok", t: "  Spec quality: passed" },
         { k: "cmd", t: "$ specgate --yes artifact approve <artifact-id>" },
-        { k: "pass", t: "  Approved 8a42… (v1)" },
+        { k: "pass", t: "  Human approval recorded (v1)" },
       ],
     },
     {
       title: "specgate / approved context",
-      cap: { t: "Resume the right work.", d: "Load the Local resume packet, then read the relevant pinned documents before editing." },
+      cap: { t: "Resume the right work.", d: "A resumed session uses the same approved criteria and pinned documents." },
       lines: [
-		{ k: "cmd", t: "$ specgate --yes artifact promote <artifact-id>" },
-		{ k: "cmd", t: "$ specgate work create --feature local-healthcheck --title \"Add healthcheck\" --ac \"GET /healthz returns 200\"" },
+        { k: "cmd", t: "$ specgate --yes artifact promote <artifact-id>" },
+        { k: "cmd", t: "$ specgate work create --feature local-healthcheck --title \"Add health check\" --ac \"Unhealthy returns 503 @check:unit\"" },
         { k: "cmd", t: "$ specgate work list --phase ready" },
-        { k: "out", t: "  CR-7A31D0C2  ready  Add healthcheck endpoint" },
+        { k: "out", t: "  Ready  Add health check" },
         { k: "cmd", t: "$ specgate work resume <work-ref> --json" },
         { k: "cmd", t: "$ specgate work context <work-ref> --document docs/spec.md --role spec --json" },
         { k: "out", t: "  Source: approved Context Pack" },
-        { k: "out", t: "  Scope: healthcheck endpoint and automated test" },
+        { k: "out", t: "  Scope: health status function and unit tests" },
         { k: "out", t: "  Non-goal: deployment or monitoring changes" },
         { k: "pass", t: "  Implementation contract loaded" },
         { k: "cmd", t: "$ specgate --yes work checkpoint <work-ref> --note handoff --json" },
@@ -177,7 +161,7 @@ if (spyTargets.length) {
     },
     {
       title: "specgate / delivery review",
-      cap: { t: "Find the missing evidence.", d: "A green command can omit the agreed testcase. Inspect the observed gap, rerun, then review the exact acceptance basis." },
+      cap: { t: "See which test ran.", d: "The suite exits zero while omitting the agreed unit test. After the agent adds it, inspect the new result before deciding." },
       lines: [
         { k: "dim", t: "# report-enabled Local pin configured; follow the linked walkthrough" },
         { k: "cmd", t: "$ specgate delivery report <work-ref> --init --json" },
@@ -185,9 +169,9 @@ if (spyTargets.length) {
         { k: "cmd", t: "$ specgate change submit <work-ref> --file <completion-path> --run-checks --yes" },
         { k: "out", t: "  State: implementation" },
         { k: "out", t: "  Evidence: Evidence gaps found" },
-        { k: "warn", t: "  [unmet] Unhealthy requests return 503" },
+        { k: "warn", t: "  [unmet] Unhealthy returns 503" },
         { k: "warn", t: "  selected testcase is missing" },
-        { k: "dim", t: "# Add the missing test and update the completion draft; keep the reviewed pin." },
+        { k: "dim", t: "# Agent adds the unit test, updates the report, and keeps the reviewed pin." },
         { k: "cmd", t: "$ specgate change submit <work-ref> --file <completion-path> --run-checks --yes" },
         { k: "out", t: "  State: awaiting_acceptance" },
         { k: "cmd", t: "$ specgate change status <work-ref> --checkpoint <checkpoint-id> --detail" },
@@ -195,22 +179,20 @@ if (spyTargets.length) {
         { k: "warn", t: "  stale risk: watched input health.test.mjs changed" },
         { k: "out", t: "  Next actor: human_reviewer" },
         { k: "dim", t: "  Human approval remains required. Inspect the changed test before deciding." },
-        { k: "dim", t: "# Only the human may choose the exact next command from reviewed status:" },
+        { k: "dim", t: "# Human action after review. Use the exact command returned by status." },
         { k: "cmd", t: "$ specgate --yes change accept <work-ref> --review-id <review-id> --basis-digest <basis-digest> --checkpoint <checkpoint-id>" },
       ],
     },
     {
-      title: "specgate / governance signals",
-      cap: { t: "Measure the loop.", d: "Read observed workflow signals from real gate and delivery history." },
+      title: "specgate / review handoff",
+      cap: { t: "Share a review request.", d: "For eligible reviews, a teammate can read the request beside the diff. The originating Local store records the decision." },
       lines: [
-        { k: "dim", t: "# example workspace data" },
-        { k: "cmd", t: "$ specgate stats --days 30" },
-        { k: "out", t: "  First-pass yield          10 / 12 reviewed" },
-        { k: "out", t: "  Pre-build signals         4" },
-        { k: "out", t: "  Post-build signals        3" },
-        { k: "out", t: "  Rework runs               2" },
-        { k: "out", t: "  Blocked-ambiguity reports 2" },
-        { k: "pass", t: "  Signals are descriptive, not a quality score" },
+        { k: "dim", t: "# From the checkout with a reviewed delivery eligible for export:" },
+        { k: "cmd", t: "$ specgate delivery handoff export <work-ref> --file review.json" },
+        { k: "dim", t: "# Inspect the unsigned request before committing it alongside the change." },
+        { k: "cmd", t: "$ specgate delivery handoff show --file review.json" },
+        { k: "out", t: "  Read the work, completion evidence and recorded delivery review." },
+        { k: "dim", t: "  Record the human decision in the originating Local store." },
       ],
     },
   ];

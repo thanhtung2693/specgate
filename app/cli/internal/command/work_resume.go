@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
 	"github.com/spf13/cobra"
@@ -112,9 +111,7 @@ func newWorkResumeCmd(deps *Deps) *cobra.Command {
 	var detail bool
 	cmd := &cobra.Command{Use: "resume <ref>", Short: "Read a Local work's scope, pinned document index and next action", Example: "  specgate work resume LOCAL-123 --json", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		const op = "work.resume"
-		if deps.Topology != config.ModeLocal {
-			return incompatibleCommand(deps, op, "work resume is Local-only; use work show, work context and change status in Full mode")
-		}
+
 		store, err := openLocalStore(deps)
 		if err != nil {
 			return localExitError(deps, op, err)
@@ -163,8 +160,11 @@ func newWorkResumeCmd(deps *Deps) *cobra.Command {
 			}
 		}
 		status.Risks = acceptanceRisks(status)
-		currentSnapshot := captureCheckout(cmd.Context(), deps)
-		currentReceipt := collectGitReceipt(cmd.Context(), deps.DeployRunner, deliveryWorkingDir(deps), nil)
+		generation, err := store.CheckoutGeneration(cmd.Context())
+		if err != nil {
+			return localExitError(deps, op, err)
+		}
+		currentSnapshot := captureCheckout(cmd.Context(), deps, generation)
 		checkpoint, err := selectedCheckpoint(store, cmd, sel.Workspace.ID, args[0], since, currentSnapshot.CheckoutID)
 		if err != nil {
 			return localExitError(deps, op, err)
@@ -177,10 +177,15 @@ func newWorkResumeCmd(deps *Deps) *cobra.Command {
 				delta.BaselineKind, delta.BaselineID = "checkpoint", checkpoint.ID
 			}
 		} else if since == "" && report != nil {
-			if baseline, ok := completionReceiptBaseline(mapGitReceipt(report.Body), currentReceipt, currentSnapshot); ok {
+			storedReceipt := mapGitReceipt(report.Body)
+			currentReceipt := collectGitReceipt(cmd.Context(), deps.CommandRunner, deliveryWorkingDir(deps), nil, generation)
+			if baseline, ok := completionReceiptBaseline(storedReceipt, currentReceipt, currentSnapshot); ok {
 				delta = compareCommittedTrees(cmd.Context(), deps, baseline, currentSnapshot)
 				delta.BaselineKind, delta.BaselineID = "last_completion_receipt", report.ID
-				const receiptLimit = "last completion receipt has no dirty-file manifest; only committed Git-tree paths are listed"
+				receiptLimit := "last completion receipt has no dirty-file manifest; only committed Git-tree paths are listed"
+				if storedReceipt.CheckoutGeneration != generation {
+					receiptLimit += ". The receipt and its verification evidence are historical and come from another Local store generation"
+				}
 				if delta.Limit == "" {
 					delta.Limit = receiptLimit
 				} else {
@@ -209,6 +214,9 @@ func newWorkResumeCmd(deps *Deps) *cobra.Command {
 		printChangeStatus(deps, status)
 		if checkpoint != nil {
 			fmt.Fprintf(deps.Stdout, "Checkpoint baseline: %s (%s)\n", checkpoint.ID, checkpoint.CreatedAt)
+			if checkpoint.Note != "" {
+				fmt.Fprintf(deps.Stdout, "Checkpoint note: %s\n", checkpoint.Note)
+			}
 		}
 		if newer != nil {
 			fmt.Fprintf(deps.Stdout, "Newer artifact available: %s v%d (%s); informational only, pinned scope unchanged\n", newer.ID, newer.Version, newer.Status)

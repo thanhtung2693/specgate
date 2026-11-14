@@ -46,16 +46,14 @@ func TestCommandsRejectMalformedConfigBeforeCallingServer(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte("{broken"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	deps, fc, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "status", "--all-workspaces")
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "status")
 	if code != output.ExitUnavailable {
 		t.Fatalf("exit = %d, want unavailable; output = %s", code, out.String())
 	}
-	if fc.calls != 0 {
-		t.Fatalf("server called %d time(s) with malformed config", fc.calls)
-	}
+
 	if !strings.Contains(out.String(), "config") {
 		t.Fatalf("output lacks config recovery context: %s", out.String())
 	}
@@ -66,17 +64,15 @@ func TestCommandsRejectUnknownConfigModeBeforeCallingServer(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte(`{"mode":"locla"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	deps, fc, _, out := newFakeDeps(t)
+	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "status", "--all-workspaces")
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "status")
 	if code != output.ExitUnavailable {
 		t.Fatalf("exit = %d, want unavailable; output = %s", code, out.String())
 	}
-	if fc.calls != 0 {
-		t.Fatalf("server called %d time(s) with unknown config mode", fc.calls)
-	}
-	if !strings.Contains(out.String(), "local or full") {
+
+	if !strings.Contains(out.String(), "expected local") {
 		t.Fatalf("output lacks mode recovery context: %s", out.String())
 	}
 }

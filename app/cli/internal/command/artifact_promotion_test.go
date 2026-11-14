@@ -62,7 +62,4 @@ func TestLocalDraftPromotionIsGovernanceRefusalWithoutWrites(t *testing.T) {
 			t.Fatalf("rejected promotion changed store: err=%v", err)
 		}
 	}
-	if deps.Client != nil {
-		t.Fatal("Local refusal created HTTP client")
-	}
 }

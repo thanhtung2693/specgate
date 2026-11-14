@@ -1,56 +1,34 @@
 # Respond to gate failures
 
-Use this guide when a gate needs attention. Start by asking SpecGate what
-happened and what changed over time:
+Read the saved readiness results for the artifact you are preparing:
 
 ```bash
-specgate gates status <work-ref>     # current state per gate
-specgate gates history <work-ref>    # past runs with hints
+specgate gates results <artifact-id> --json
 ```
 
 Read the hint on the latest warning or failure first; it should tell you what to
 do next. To look up the inputs and purpose of a gate, see the
 [gate catalog](../reference/gates.md).
 
-## A workflow gate is `pending`
-
-`spec_drafted`, `spec_approved`, `no_conflicts`, `knowledge_fresh`,
-`canonical_spec` is a deterministic workflow step, not
-quality judgments. `pending` means the step has not happened yet:
-
-- `spec_drafted` pending — attach or publish a working spec for the item.
-- `spec_approved` pending — a human approves the spec and explicit work handoff
-  (`specgate --yes change approve <artifact-id> --title <title> --ac <criterion>`),
-  or uses the Reviews page for the expert artifact-only decision.
-On quick-route work the first five show `not_applicable` — that is correct,
-not a failure; quick work never grows a working spec.
-
 ## A readiness gate is `warn` or `fail`
 
-The hint names the problem and, for the acceptance-criteria gate, restates
-the offending criterion as an observable check. To fix:
+Use the recorded hint and affected document to prepare a revision:
 
 1. Revise the relevant document (the [catalog](../reference/gates.md) shows
    which documents each gate reads).
 2. Publish the revision as a new artifact version.
-3. Re-run: `specgate gates run <work-ref> --yes` (or
-   `specgate gates check <artifact-id>` for an artifact).
-
-`spec_completeness` never exceeds `warn`: treat it as a checklist of thin
-topics, not a blocker.
+3. Run `specgate gates check <artifact-id>` on the new version and have your
+   coding agent complete the resulting [readiness tasks](cli-workflow.md).
 
 ## A gate says `needs_human_review`
 
-The checker was not confident enough to decide (below the 0.7 threshold), or
-the evidence policy required independent evidence that is missing. This is an
-intentional stop, not a broken gate. Read the hint and evidence, then revise the
-artifact or make the approval decision yourself.
+Read the rubric result for unresolved scope or the review for evidence
+that needs human judgment.
 
 For delivery review, `reason_code: policy_unavailable` means SpecGate could not
-load or interpret the frozen governing policy. Restore the approved artifact
-and policy snapshot, then retry. Do not treat this as an ordinary failed
-criterion or work around it by configuring a model; the review stopped before
-model judgment.
+load or interpret the frozen governing policy. Check that your CLI supports
+the artifact's policy and use a compatible Local backup if recovery is needed.
+See [Operate SpecGate](operate-specgate.md#operate-local-cli).
 
 `reason_code: delivery_review_outdated` means a newer completion was stored
 after the displayed review. Run `specgate delivery review <work-ref>` before a
@@ -75,9 +53,8 @@ missing.
   path returned by `specgate delivery report <work-ref> --init --json`, then run
   `specgate change submit <work-ref> --file "$COMPLETION_PATH"` after assigning
   that path to `COMPLETION_PATH`.
-- **`unclear` criteria** — the report under-claimed: no claim for the
-  criterion, or evidence too thin to judge. Improve the completion report
-  (one claim per criterion, concrete evidence paths) rather than the code.
+- **`unclear` criteria** — inspect the reported gap. Supply the missing
+  criterion claim, concrete evidence path, or bound check as appropriate.
   If the review echoes criterion ids such as `ac-0`, reuse those ids in the
   next report so claims match criteria.
 - **A check failed** — any failing automated check (tests, types, lint)
@@ -103,16 +80,6 @@ correct work-local checkpoint or continue without a baseline. Export refusal
 means the v1 format would lose Local assurance records; keep using the Local
 store or restore its disclosed pre-upgrade backup in a separately chosen
 location.
-
-## The verdict passed but was clamped to `needs_human_review`
-
-Under the `corroborated_required` evidence policy, a pass needs a matched
-merged PR/MR repository event whose `head_sha` matches the latest completion
-receipt's `head_revision`, or deterministic bindings for every criterion.
-Either merge the submitted commit (the event arrives through the git
-integration), add canonical check bindings and re-run the review, or have a
-human approve on the strength of the existing evidence. CI results do not
-automatically become SpecGate-produced assurance.
 
 ## Related
 

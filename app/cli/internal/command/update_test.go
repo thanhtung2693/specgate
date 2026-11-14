@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,42 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/specgate/specgate/app/cli/internal/buildinfo"
 	"github.com/specgate/specgate/app/cli/internal/command"
 	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
-
-func TestJSONModeSuppressesCLIUpdateWarning(t *testing.T) {
-	oldVersion := buildinfo.Version
-	buildinfo.Version = "v9.9.0-rc.1"
-	t.Cleanup(func() { buildinfo.Version = oldVersion })
-
-	var stderr bytes.Buffer
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v1/meta", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"body": map[string]any{
-				"api_version":             "specgate.api/v1",
-				"recommended_cli_version": "v9.9.0-rc.2",
-				"capabilities":            map[string]bool{"agents": true},
-			},
-		})
-	})
-	mux.HandleFunc("/api/v1/status", jsonStatus(1, 0))
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	deps, _ := newTestDeps(t)
-	deps.Stderr = &stderr
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--server", srv.URL, "status", "--all-workspaces")
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d", code)
-	}
-	if got := stderr.String(); got != "" {
-		t.Fatalf("json mode should not emit warning, got %q", got)
-	}
-}
 
 func TestUpdateUsesResolvedExecutableDirectory(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "install target")
@@ -144,19 +111,21 @@ func TestUpdateWindowsUsesNativeSelfUpdaterWithoutShell(t *testing.T) {
 func TestUpdateJSONProgressEmitsEventsAndFinalEnvelope(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/cli/install.sh", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, "#!/usr/bin/env sh\nexit 0\n")
+		_, _ = io.WriteString(w, "#!/usr/bin/env sh\necho 'installer progress'\n")
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 	plugins := newPluginRegistry(t)
 
 	deps, out := newTestDeps(t)
+	var stderr bytes.Buffer
+	deps.Stderr = &stderr
 	deps.CLIInstallURL = srv.URL + "/cli/install.sh"
 	deps.PublicRegistryURL = plugins.URL
-	deps.PluginRegistryURL = srv.URL
+
 	home := t.TempDir()
 	deps.UserHomeDir = func() (string, error) { return home, nil }
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--json-progress", "--server", srv.URL, "update", "--version", "v9.9.9")
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--json-progress", "update", "--version", "v9.9.9")
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
 	}
@@ -166,12 +135,17 @@ func TestUpdateJSONProgressEmitsEventsAndFinalEnvelope(t *testing.T) {
 		t.Fatalf("expected progress lines plus final envelope, got %d lines: %s", len(lines), out.String())
 	}
 
-	var first map[string]any
-	if err := json.Unmarshal([]byte(lines[0]), &first); err != nil {
-		t.Fatalf("first line unmarshal: %v", err)
+	for _, line := range lines[:len(lines)-1] {
+		var event map[string]any
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			t.Fatalf("progress line %q is not JSON: %v", line, err)
+		}
+		if event["event"] == nil {
+			t.Fatalf("progress line missing event: %s", line)
+		}
 	}
-	if first["event"] == nil {
-		t.Fatalf("first line missing event: %s", lines[0])
+	if !strings.Contains(stderr.String(), "installer progress") {
+		t.Fatalf("installer output missing from stderr: %s", &stderr)
 	}
 
 	var final struct {
@@ -196,15 +170,14 @@ func TestUpdateJSONProgressEmitsEventsAndFinalEnvelope(t *testing.T) {
 
 func TestLocalUpdateRefreshesCLIWithoutInspectingOrUpdatingAppliance(t *testing.T) {
 	cliSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, "#!/usr/bin/env sh\nexit 0\n")
+		_, _ = io.WriteString(w, "#!/usr/bin/env sh\necho 'installer progress'\n")
 	}))
 	defer cliSrv.Close()
-	deployDir := t.TempDir()
-	setupTestBundle(t, deployDir)
-	runner := &fakeDeployRunner{}
+
+	runner := &fakeCommandRunner{}
 	deps, out := newTestDeps(t)
 	deps.CLIInstallURL = cliSrv.URL
-	deps.DeployRunner = runner
+	deps.CommandRunner = runner
 	deps.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
 	if err := (config.Config{Mode: config.ModeLocal, Local: config.LocalStore{Path: t.TempDir()}}).SaveTo(deps.ConfigPath); err != nil {
 		t.Fatal(err)
@@ -212,7 +185,7 @@ func TestLocalUpdateRefreshesCLIWithoutInspectingOrUpdatingAppliance(t *testing.
 
 	code := command.ExecuteForCode(
 		command.NewRootCommand(deps),
-		"--json", "update", "--version", "v9.9.9", "--dir", deployDir,
+		"--json", "update", "--version", "v9.9.9",
 	)
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
@@ -238,52 +211,6 @@ func TestLocalUpdateRefreshesCLIWithoutInspectingOrUpdatingAppliance(t *testing.
 	}
 }
 
-func TestUpdateVersionResolutionFailurePrecedesMutationInEveryMode(t *testing.T) {
-	for _, mode := range []config.Mode{config.ModeLocal, config.ModeFull} {
-		t.Run(string(mode), func(t *testing.T) {
-			installerHits := 0
-			cliSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				installerHits++
-				_, _ = io.WriteString(w, "#!/usr/bin/env sh\nexit 0\n")
-			}))
-			defer cliSrv.Close()
-
-			deployDir := t.TempDir()
-			setupTestBundle(t, deployDir)
-			cfg := config.Config{Mode: mode, DeploymentDir: deployDir}
-			if mode == config.ModeLocal {
-				cfg.Local.Path = t.TempDir()
-				cfg.DeploymentDir = ""
-			}
-			deps, out := newTestDeps(t)
-			if err := cfg.SaveTo(deps.ConfigPath); err != nil {
-				t.Fatal(err)
-			}
-			runner := &fakeDeployRunner{}
-			deps.CLIInstallURL = cliSrv.URL
-			deps.DeployRunner = runner
-			deps.CheckLatestRelease = func(context.Context, time.Duration, string) (string, error) {
-				return "", errors.New("release lookup failed")
-			}
-
-			code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "update")
-			if code != output.ExitUnavailable {
-				t.Fatalf("exit = %d, want unavailable; output = %s", code, out.String())
-			}
-			if installerHits != 0 {
-				t.Fatalf("CLI installer ran %d time(s) after version lookup failed", installerHits)
-			}
-			if len(runner.Commands) != 0 {
-				t.Fatalf("appliance commands ran after version lookup failed: %#v", runner.Commands)
-			}
-			if !strings.Contains(out.String(), "--version") {
-				t.Fatalf("missing actionable explicit-version recovery: %s", out.String())
-			}
-		})
-	}
-}
-
-// fakeDeployRunner implements deploy.CommandRunner for command-layer tests.
 func TestUpdateRejectsMalformedConfigBeforeAnyMutation(t *testing.T) {
 	installerHits := 0
 	cliSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -297,7 +224,7 @@ func TestUpdateRejectsMalformedConfigBeforeAnyMutation(t *testing.T) {
 		t.Fatal(err)
 	}
 	deployDir := t.TempDir()
-	setupTestBundle(t, deployDir)
+
 	deploySentinel := filepath.Join(deployDir, "keep.txt")
 	if err := os.WriteFile(deploySentinel, []byte("keep"), 0o600); err != nil {
 		t.Fatal(err)
@@ -305,14 +232,14 @@ func TestUpdateRejectsMalformedConfigBeforeAnyMutation(t *testing.T) {
 	home := t.TempDir()
 	pluginMarker := filepath.Join(home, ".codex", "plugins", "specgate", ".specgate-owned")
 	writeTestFile(t, pluginMarker, "specgate-plugin-v1\n")
-	runner := &fakeDeployRunner{}
+	runner := &fakeCommandRunner{}
 	deps, out := newTestDeps(t)
 	deps.ConfigPath = cfgPath
 	deps.CLIInstallURL = cliSrv.URL
 	deps.UserHomeDir = func() (string, error) { return home, nil }
-	deps.DeployRunner = runner
+	deps.CommandRunner = runner
 
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "update", "--version", "v9.9.9", "--dir", deployDir)
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "update", "--version", "v9.9.9")
 	if code != output.ExitUnavailable {
 		t.Fatalf("exit = %d, want unavailable; output=%s", code, out.String())
 	}
@@ -336,29 +263,28 @@ func TestUpdateHumanShowsStepLabels(t *testing.T) {
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	plugins := newPluginRegistry(t)
 
 	deps, out := newTestDeps(t)
 	deps.CLIInstallURL = srv.URL + "/cli/install.sh"
-	deps.PluginRegistryURL = plugins.URL
+
 	home := t.TempDir()
 	deps.UserHomeDir = func() (string, error) { return home, nil }
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--server", srv.URL, "update", "--version", "v9.9.9")
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "update", "--version", "v9.9.9")
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
 	}
 	got := out.String()
-	if !strings.Contains(got, "Step 1/4 Detect install target") {
+	if !strings.Contains(got, "Step 1/3 Detect install target") {
 		t.Fatalf("missing step 1: %s", got)
 	}
-	if !strings.Contains(got, "Step 2/4 Install CLI") {
+	if !strings.Contains(got, "Step 2/3 Install CLI") {
 		t.Fatalf("missing step 2: %s", got)
 	}
-	if !strings.Contains(got, "Step 3/4 Update IDE setup") {
+	if !strings.Contains(got, "Step 3/3 Update IDE setup") {
 		t.Fatalf("missing step 3: %s", got)
 	}
-	if !strings.Contains(got, "Step 4/4 Update Full appliance") {
-		t.Fatalf("missing step 4: %s", got)
+	if strings.Contains(got, "Update Full appliance") {
+		t.Fatalf("retired appliance step: %s", got)
 	}
 }
 
@@ -377,9 +303,9 @@ func TestUpdateRefreshesInstalledIDEPluginsFromPublicRegistry(t *testing.T) {
 	deps, out := newTestDeps(t)
 	deps.CLIInstallURL = srv.URL + "/cli/install.sh"
 	deps.PublicRegistryURL = plugins.URL
-	deps.PluginRegistryURL = srv.URL
+
 	deps.UserHomeDir = func() (string, error) { return home, nil }
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--server", srv.URL, "update", "--version", "v9.9.9")
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "update", "--version", "v9.9.9")
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
 	}
@@ -398,12 +324,12 @@ func TestUpdateDoesNotCreateIDEFilesWhenNoneAreInstalled(t *testing.T) {
 		_, _ = io.WriteString(w, "#!/usr/bin/env sh\nexit 0\n")
 	}))
 	defer cliSrv.Close()
-	plugins := newPluginRegistry(t)
+
 	home := t.TempDir()
 
 	deps, out := newTestDeps(t)
 	deps.CLIInstallURL = cliSrv.URL
-	deps.PluginRegistryURL = plugins.URL
+
 	deps.UserHomeDir = func() (string, error) { return home, nil }
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "update", "--version", "v9.9.9")
 	if code != output.ExitOK {
@@ -428,15 +354,14 @@ func TestUpdateFetchHonorsTimeout(t *testing.T) {
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	plugins := newPluginRegistry(t)
 
-	for _, mode := range []config.Mode{config.ModeLocal, config.ModeFull} {
+	for _, mode := range []config.Mode{config.ModeLocal} {
 		t.Run(string(mode), func(t *testing.T) {
 			deps, out := newTestDeps(t)
 			var stderr bytes.Buffer
 			deps.Stderr = &stderr
 			deps.CLIInstallURL = srv.URL + "/cli/install.sh"
-			deps.PluginRegistryURL = plugins.URL
+
 			home := t.TempDir()
 			deps.UserHomeDir = func() (string, error) { return home, nil }
 			if err := (config.Config{Mode: mode, Server: srv.URL}).SaveTo(deps.ConfigPath); err != nil {
@@ -482,118 +407,20 @@ func TestUpdateUsesPublicCLIInstallerInsteadOfConnectedServer(t *testing.T) {
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	plugins := newPluginRegistry(t)
 
 	deps, out := newTestDeps(t)
 	deps.CLIInstallURL = cliSrv.URL
-	deps.PluginRegistryURL = plugins.URL
+	if err := (config.Config{Mode: config.ModeLocal, Server: srv.URL}).SaveTo(deps.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+
 	home := t.TempDir()
 	deps.UserHomeDir = func() (string, error) { return home, nil }
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--server", srv.URL, "update", "--version", "v9.9.9")
+	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "update", "--version", "v9.9.9")
 	if code != output.ExitOK {
 		t.Fatalf("exit = %d, output = %s", code, out.String())
 	}
 	if serverCLIHit {
 		t.Fatal("update fetched CLI installer from connected server")
-	}
-}
-
-func TestUpdateRefreshesInstalledIDEPluginWhenConnectedServerUnavailable(t *testing.T) {
-	cliSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, "#!/usr/bin/env sh\nexit 0\n")
-	}))
-	defer cliSrv.Close()
-	plugins := newPluginRegistry(t)
-	home := t.TempDir()
-	writeTestFile(t, filepath.Join(home, ".claude", "skills", "specgate", ".claude-plugin", "plugin.json"), "{}")
-	writeTestFile(t, filepath.Join(home, ".claude", "skills", "specgate", ".specgate-owned"), "specgate-plugin-v1\n")
-
-	srv := httptest.NewServer(http.NotFoundHandler())
-	defer srv.Close()
-
-	deps, out := newTestDeps(t)
-	deps.CLIInstallURL = cliSrv.URL
-	deps.PublicRegistryURL = plugins.URL
-	deps.PluginRegistryURL = srv.URL
-	deps.UserHomeDir = func() (string, error) { return home, nil }
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "--server", srv.URL, "update", "--version", "v9.9.9")
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, want OK; output = %s", code, out.String())
-	}
-	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "specgate", ".claude-plugin", "plugin.json")); err != nil {
-		t.Fatalf("claude plugin not installed from public registry: %v\n%s", err, out.String())
-	}
-}
-
-func TestUpdateRefreshesLocalDeploymentBundleAndImages(t *testing.T) {
-	cliSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, "#!/usr/bin/env sh\nexit 0\n")
-	}))
-	defer cliSrv.Close()
-	plugins := newPluginRegistry(t)
-	bundles := newComposeBundleRegistry(t, "v9.9.9")
-	deployDir := t.TempDir()
-	setupTestBundle(t, deployDir)
-	if err := os.WriteFile(filepath.Join(deployDir, "specgate.env"), []byte("SETTINGS_ENCRYPTION_KEY=secret\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(deployDir, ".env"), []byte("SPECGATE_VERSION=v9.9.0-rc.1\nSPECGATE_PORT=13000\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	runner := &fakeDeployRunner{OutputData: localBackupPayload(t)}
-	deps, out := newTestDeps(t)
-	deps.CLIInstallURL = cliSrv.URL
-	deps.PluginRegistryURL = plugins.URL
-	deps.BundleBaseURL = bundles.URL + "/v9.9.9"
-	deps.DeployRunner = runner
-	home := t.TempDir()
-	deps.UserHomeDir = func() (string, error) { return home, nil }
-
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--plain", "update", "--version", "v9.9.9", "--dir", deployDir)
-	if code != output.ExitOK {
-		t.Fatalf("exit = %d, output = %s", code, out.String())
-	}
-	env, err := os.ReadFile(filepath.Join(deployDir, ".env"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(env), "SPECGATE_VERSION=v9.9.9") ||
-		!strings.Contains(string(env), "SPECGATE_PORT=13000") {
-		t.Fatalf(".env not updated/preserved: %s", env)
-	}
-	compose, err := os.ReadFile(filepath.Join(deployDir, "compose.yml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(compose), "# bundle v9.9.9") {
-		t.Fatalf("compose bundle not refreshed: %s", compose)
-	}
-	gotCommands := strings.Join(runner.Commands, "\n")
-	for _, want := range []string{
-		"docker version",
-		"docker compose version",
-		" pull",
-		"docker compose -f " + filepath.Join(deployDir, "compose.yml") + " exec -T specgate /usr/local/bin/specgate-backup",
-		"docker compose -f " + filepath.Join(deployDir, "compose.yml") + " up -d",
-		"docker compose -f " + filepath.Join(deployDir, "compose.yml") + " down",
-		"docker compose -f " + filepath.Join(deployDir, "compose.yml") + " up -d --wait",
-		"http://127.0.0.1:3000/api/doc-registry/api/v1/meta",
-		"http://127.0.0.1:3000/api/agents/openapi.json",
-	} {
-		if !strings.Contains(gotCommands, want) {
-			t.Fatalf("missing command %q in:\n%s", want, gotCommands)
-		}
-	}
-	backupAt := strings.Index(gotCommands, "/usr/local/bin/specgate-backup")
-	startAt := strings.Index(gotCommands, " up -d\n")
-	downAt := strings.Index(gotCommands, " down")
-	upAt := strings.LastIndex(gotCommands, " up -d --wait")
-	if startAt < 0 || backupAt < startAt || downAt < backupAt || upAt < downAt {
-		t.Fatalf("update must start for backup, back up, stop, then replace the appliance:\n%s", gotCommands)
-	}
-	backups, err := filepath.Glob(filepath.Join(deployDir, "backups", "specgate-before-9.9.9-*.tar.gz"))
-	if err != nil || len(backups) != 1 {
-		t.Fatalf("backup files = %#v, err = %v", backups, err)
 	}
 }

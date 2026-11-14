@@ -16,9 +16,9 @@ What you expected instead.
 2.
 
 **Environment**
-- Module(s): doc-registry / agents / ui
-- How you're running it: `make setup` (compose) / local dev
-- OS + Docker version:
+- Surface (CLI, Local review UI, IDE plugin, installer, or landing page)
+- CLI version and installation method
+- OS, browser, or IDE version as relevant
 
 **Logs / screenshots**
-Relevant `docker compose logs <svc>` output or screenshots.
+Relevant CLI output or screenshots. Redact private work or configuration details.

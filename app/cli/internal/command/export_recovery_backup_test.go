@@ -12,8 +12,8 @@ import (
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
-func TestExportsPreservePreEnhancedRecoveryBackup(t *testing.T) {
-	deps, _, _, out := newFakeDeps(t)
+func TestHandoffPreservesPreEnhancedRecoveryBackup(t *testing.T) {
+	deps, out := newTestDeps(t)
 	dir := t.TempDir()
 	store, err := local.Open(filepath.Join(dir, "state.db"))
 	if err != nil {
@@ -38,7 +38,7 @@ func TestExportsPreservePreEnhancedRecoveryBackup(t *testing.T) {
 	if err := store.SelectWorkspace(t.Context(), other.ID); err != nil {
 		t.Fatal(err)
 	}
-	work, err = store.CreateQuickWork(t.Context(), other.ID, local.QuickWorkInput{Title: "Portable work", AcceptanceCriteria: []string{"Export without losing recovery"}})
+	work, err = store.CreateQuickWork(t.Context(), other.ID, local.QuickWorkInput{Title: "Handoff work", AcceptanceCriteria: []string{"Export without losing recovery"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,6 @@ func TestExportsPreservePreEnhancedRecoveryBackup(t *testing.T) {
 	}
 	for _, destination := range []string{backup, alias, hardlink} {
 		for _, args := range [][]string{
-			{"portable", "export"},
 			{"delivery", "handoff", "export", work.Key},
 		} {
 			out.Reset()

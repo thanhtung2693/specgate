@@ -15,11 +15,11 @@ Each document has:
 - `path`: its identity inside the package, such as `spec.md`;
 - `role`: its governance purpose, such as `spec`, `design`, `plan`,
   `verification`, `research`, `reference`, or `custom:*`;
-- content supplied by the CLI, API, or authoring tool.
+- content supplied to the CLI as inline text or an explicitly mapped file.
 
 When a local package is selected, `path` is its normalized repository-relative
 POSIX path. SpecGate preserves nested paths; it does not flatten framework
-directories. Local and Full modes reject absolute, traversal, backslash, and
+directories. SpecGate rejects absolute, traversal, backslash, and
 NUL-containing paths with the same rules. Roles are lowercased; unknown roles
 become `unspecified`. The selected store snapshots bytes and computes per-file SHA-256
 plus a deterministic package manifest digest.
@@ -39,7 +39,7 @@ Documents are flexible, but the artifact envelope is stable. It records:
 
 - feature linkage;
 - source kind and source revision;
-- author or service metadata;
+- author metadata;
 - impact and requested governance level;
 - policy snapshot;
 - artifact status;
@@ -105,13 +105,13 @@ of the same spec distinct; switching branches does not select the intended work.
 
 ## Quick and artifact-backed routes
 
-The quick route in either mode creates a lightweight work item from title, description, and
+The quick route creates a lightweight work item from title, description, and
 acceptance criteria. `work context` derives its Context Pack from that persisted
 work item; it is not a separately stored artifact. It is useful for small
 changes and bugfixes.
 
-The artifact-backed route works in either mode and starts from an artifact
-package. It is useful when work needs an approved spec, design, plan, or
+The artifact-backed route starts from an artifact package. It is useful when
+work needs an approved spec, design, plan, or
 verification document before implementation. After human approval, the artifact
 is promoted, feature-backed work is created against that exact canonical
 artifact, and `work context` assembles the Context Pack. Each step is a separate
@@ -125,10 +125,6 @@ Local CLI keeps artifacts, work, decisions, and pinned verification contracts
 in its selected SQLite store. The repository's `.specgate/` receipts and report
 scaffolds are not a backup of that store. Stop writers before taking a complete
 store backup; see [Operate SpecGate](../guides/operate-specgate.md#operate-local-cli).
-
-The Full appliance keeps artifact metadata and immutable document contents in
-its managed `specgate-data` volume. Purging local data deletes both; back up
-the appliance before destructive cleanup.
 
 ## Publishing updates
 

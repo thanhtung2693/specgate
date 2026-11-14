@@ -14,32 +14,33 @@ import (
 // deliberately part of the basis and a human may still record the existing
 // accept/reject decision.
 type AcceptanceBasis struct {
-	Version            int                           `json:"version"`
-	Digest             string                        `json:"digest"`
-	WorkID             string                        `json:"work_id"`
-	ContextDigest      string                        `json:"context_digest"`
-	ReviewID           string                        `json:"review_id"`
-	CompletionID       string                        `json:"completion_id"`
-	CompletionDigest   string                        `json:"completion_digest"`
-	VerificationDigest string                        `json:"verification_digest,omitempty"`
-	CheckpointID       string                        `json:"checkpoint_id,omitempty"`
-	CheckpointDigest   string                        `json:"checkpoint_digest,omitempty"`
-	Selections         AcceptanceOptions             `json:"selections"`
-	Watched            []WatchedPathDrift            `json:"watched_inputs,omitempty"`
-	PeerDigest         string                        `json:"peer_digest"`
-	PeerReview         PeerReviewStatus              `json:"peer_review"`
-	Freshness          string                        `json:"freshness"`
-	ScopeDigest        string                        `json:"scope_digest"`
-	ImpactDigest       string                        `json:"impact_digest,omitempty"`
-	SelectedImpact     *ArtifactImpact               `json:"selected_impact,omitempty"`
-	CheckpointState    string                        `json:"checkpoint_state"`
-	CheckpointCompare  *AcceptanceCheckpointCompare  `json:"checkpoint_comparison,omitempty"`
-	CriterionEvidence  []AcceptanceCriterionEvidence `json:"criterion_evidence,omitempty"`
-	Gaps               []string                      `json:"gaps,omitempty"`
-	ObservedAt         string                        `json:"observed_at,omitempty"`
-	Actor              string                        `json:"actor,omitempty"`
-	Note               string                        `json:"note,omitempty"`
-	Decision           string                        `json:"decision,omitempty"`
+	Version                int                           `json:"version"`
+	Digest                 string                        `json:"digest"`
+	WorkID                 string                        `json:"work_id"`
+	ContextDigest          string                        `json:"context_digest"`
+	ReviewID               string                        `json:"review_id"`
+	CompletionID           string                        `json:"completion_id"`
+	CompletionDigest       string                        `json:"completion_digest"`
+	VerificationDigest     string                        `json:"verification_digest,omitempty"`
+	CheckpointID           string                        `json:"checkpoint_id,omitempty"`
+	CheckpointDigest       string                        `json:"checkpoint_digest,omitempty"`
+	Selections             AcceptanceOptions             `json:"selections"`
+	Watched                []WatchedPathDrift            `json:"watched_inputs,omitempty"`
+	PeerDigest             string                        `json:"peer_digest"`
+	PeerReview             PeerReviewStatus              `json:"peer_review"`
+	Freshness              string                        `json:"freshness"`
+	HistoricalVerification bool                          `json:"historical_verification,omitempty"`
+	ScopeDigest            string                        `json:"scope_digest"`
+	ImpactDigest           string                        `json:"impact_digest,omitempty"`
+	SelectedImpact         *ArtifactImpact               `json:"selected_impact,omitempty"`
+	CheckpointState        string                        `json:"checkpoint_state"`
+	CheckpointCompare      *AcceptanceCheckpointCompare  `json:"checkpoint_comparison,omitempty"`
+	CriterionEvidence      []AcceptanceCriterionEvidence `json:"criterion_evidence,omitempty"`
+	Gaps                   []string                      `json:"gaps,omitempty"`
+	ObservedAt             string                        `json:"observed_at,omitempty"`
+	Actor                  string                        `json:"actor,omitempty"`
+	Note                   string                        `json:"note,omitempty"`
+	Decision               string                        `json:"decision,omitempty"`
 }
 
 type AcceptanceCriterionEvidence struct {
@@ -61,15 +62,20 @@ type AcceptanceCriterionEvidence struct {
 }
 
 type AcceptanceOptions struct {
-	RepoRoot            string                                                              `json:"-"`
-	CheckoutFingerprint string                                                              `json:"checkout_fingerprint"`
-	CheckoutID          string                                                              `json:"checkout_id,omitempty"`
-	CheckoutRepository  string                                                              `json:"checkout_repository,omitempty"`
-	CheckpointID        string                                                              `json:"checkpoint_id,omitempty"`
-	ImpactBase          string                                                              `json:"impact_base,omitempty"`
-	ImpactTarget        string                                                              `json:"impact_target,omitempty"`
-	CheckpointCompare   *AcceptanceCheckpointCompare                                        `json:"-"`
-	ObserveCheckout     func(priorBase string) (checkoutID, repository, fingerprint string) `json:"-"`
+	ExpectedCompletionID string                                                                                        `json:"-"`
+	RepoRoot             string                                                                                        `json:"-"`
+	CheckoutFingerprint  string                                                                                        `json:"checkout_fingerprint"`
+	CheckoutID           string                                                                                        `json:"checkout_id,omitempty"`
+	CheckoutGeneration   string                                                                                        `json:"checkout_generation,omitempty"`
+	CheckoutRepository   string                                                                                        `json:"checkout_repository,omitempty"`
+	CheckoutBranch       string                                                                                        `json:"-"`
+	CheckoutDirty        bool                                                                                          `json:"-"`
+	CheckoutBaseRevision string                                                                                        `json:"-"`
+	CheckpointID         string                                                                                        `json:"checkpoint_id,omitempty"`
+	ImpactBase           string                                                                                        `json:"impact_base,omitempty"`
+	ImpactTarget         string                                                                                        `json:"impact_target,omitempty"`
+	CheckpointCompare    *AcceptanceCheckpointCompare                                                                  `json:"-"`
+	ObserveCheckout      func(priorBase string) (checkoutID, repository, fingerprint, branch, base string, dirty bool) `json:"-"`
 }
 
 type AcceptanceCheckpointCompare struct {
@@ -108,6 +114,13 @@ func acceptanceBasis(ctx context.Context, q artifactQueryer, workspaceID string,
 	if len(options) > 0 {
 		opts = options[0]
 	}
+	_, generation, err := enhancedStoreFormat(ctx, q)
+	if err != nil {
+		return AcceptanceBasis{}, err
+	}
+	if opts.CheckoutGeneration != generation {
+		return AcceptanceBasis{}, fmt.Errorf("%w: checkout observation belongs to a different Local store generation", ErrReviewChanged)
+	}
 	if (opts.ImpactBase == "") != (opts.ImpactTarget == "") {
 		return AcceptanceBasis{}, fmt.Errorf("%w: impact base and target must be supplied together", ErrVerificationInvalid)
 	}
@@ -132,10 +145,16 @@ func acceptanceBasis(ctx context.Context, q artifactQueryer, workspaceID string,
 	if opts.ObserveCheckout != nil {
 		receipt, _ := completion["git_receipt"].(map[string]any)
 		priorBase, _ := receipt["base_revision"].(string)
-		opts.CheckoutID, opts.CheckoutRepository, opts.CheckoutFingerprint = opts.ObserveCheckout(priorBase)
+		opts.CheckoutID, opts.CheckoutRepository, opts.CheckoutFingerprint, opts.CheckoutBranch, opts.CheckoutBaseRevision, opts.CheckoutDirty = opts.ObserveCheckout(priorBase)
 		basis.Selections = opts
 	}
 	basis.Freshness = acceptanceCheckoutFreshness(completion, opts)
+	receipt, _ := completion["git_receipt"].(map[string]any)
+	receiptGeneration, _ := receipt["checkout_generation"].(string)
+	basis.HistoricalVerification = receiptGeneration != generation
+	if basis.HistoricalVerification {
+		basis.Gaps = append(basis.Gaps, "recorded verification belongs to another Local store generation")
+	}
 	if basis.Freshness != "matching_endpoints" {
 		basis.Gaps = append(basis.Gaps, "current checkout freshness: "+basis.Freshness)
 	}
@@ -202,7 +221,7 @@ func acceptanceBasis(ctx context.Context, q artifactQueryer, workspaceID string,
 		}
 		comparison := *opts.CheckpointCompare
 		validState := comparison.State == "changed" || comparison.State == "unchanged"
-		if checkpoint.Snapshot == nil || checkpoint.Snapshot.State != "available" || opts.CheckoutID == "" || checkpoint.Snapshot.CheckoutID != opts.CheckoutID {
+		if checkpoint.Snapshot == nil || checkpoint.Snapshot.State != "available" || opts.CheckoutID == "" || checkpoint.Snapshot.CheckoutID != opts.CheckoutID || checkpoint.Snapshot.CheckoutGeneration != generation {
 			return AcceptanceBasis{}, fmt.Errorf("%w: selected checkpoint requires the same comparable checkout", ErrVerificationInvalid)
 		}
 		if !validState || comparison.BaselineKind != "checkpoint" || comparison.BaselineID != checkpoint.ID {
@@ -232,9 +251,10 @@ func acceptanceCheckoutFreshness(completion map[string]any, opts AcceptanceOptio
 		return "unavailable"
 	}
 	scope, _ := receipt["freshness_scope"].(string)
+	receiptGeneration, _ := receipt["checkout_generation"].(string)
 	if scope == "local_checkout" {
 		checkoutID, _ := receipt["checkout_id"].(string)
-		if checkoutID == "" || opts.CheckoutID == "" || checkoutID != opts.CheckoutID {
+		if checkoutID == "" || opts.CheckoutID == "" || checkoutID != opts.CheckoutID || receiptGeneration != opts.CheckoutGeneration {
 			return "noncomparable"
 		}
 	} else {
@@ -246,6 +266,19 @@ func acceptanceCheckoutFreshness(completion map[string]any, opts AcceptanceOptio
 			return "noncomparable"
 		}
 	}
+	if scope != "local_checkout" && receiptGeneration != opts.CheckoutGeneration {
+		base, _ := receipt["base_revision"].(string)
+		branch, _ := receipt["branch"].(string)
+		if base == "" || opts.CheckoutBaseRevision == "" {
+			return "unavailable"
+		}
+		if base != opts.CheckoutBaseRevision || branch != opts.CheckoutBranch || current[1] != head {
+			return "stale"
+		}
+		if opts.CheckoutDirty || current[2] != digest {
+			return "noncomparable"
+		}
+	}
 	if current[1] != head || current[2] != digest {
 		return "stale"
 	}
@@ -253,6 +286,10 @@ func acceptanceCheckoutFreshness(completion map[string]any, opts AcceptanceOptio
 }
 
 func acceptanceBasisRequired(ctx context.Context, q verificationQuerier, workspaceID string, work WorkItem) (bool, error) {
+	_, generation, err := enhancedStoreFormat(ctx, q)
+	if err != nil || generation != "" {
+		return generation != "", err
+	}
 	contract, err := getVerificationContract(ctx, q, work)
 	if err != nil {
 		return false, err

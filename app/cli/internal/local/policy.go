@@ -18,6 +18,7 @@ type localGateDefinition struct {
 	Key          string `json:"key"`
 	Version      string `json:"version"`
 	SkillContent string `json:"skill_content"`
+	Source       string `json:"source,omitempty"`
 }
 
 type localPolicyDocument struct {
@@ -75,7 +76,7 @@ func localSkillNameForGate(gate string) string {
 	}
 }
 
-func localPolicySnapshot() (string, string, error) {
+func localPolicySnapshot(rubrics ...ProjectRubric) (string, string, error) {
 	policy := localPolicyDocument{
 		SchemaVersion:    localPolicySchemaVersion,
 		PolicyVersion:    localPolicyVersion,
@@ -87,6 +88,23 @@ func localPolicySnapshot() (string, string, error) {
 		GateDefinitions:  append([]localGateDefinition(nil), localSemanticGates...),
 		Approval:         localApprovalPolicy,
 		Evidence:         localEvidencePolicy,
+	}
+	seen := map[string]bool{}
+	for _, rubric := range rubrics {
+		if err := validateProjectRubric(rubric); err != nil {
+			return "", "", err
+		}
+		if seen[rubric.Gate] {
+			return "", "", fmt.Errorf("%s: duplicate project rubric", projectRubricPath(rubric.Gate))
+		}
+		seen[rubric.Gate] = true
+		for i := range policy.GateDefinitions {
+			gate := &policy.GateDefinitions[i]
+			if gate.Key == rubric.Gate {
+				gate.Source = projectRubricPath(rubric.Gate)
+				gate.SkillContent += "\n\n## Additional project instructions (" + gate.Source + ")\n" + rubric.Content
+			}
+		}
 	}
 	for _, gate := range policy.GateDefinitions {
 		policy.EnabledGates = append(policy.EnabledGates, gate.Key)
@@ -112,9 +130,9 @@ func localPolicySnapshot() (string, string, error) {
 	return text, digestText(text), nil
 }
 
-// PreviewPolicy returns the exact fixed policy Local mode freezes on publish.
-func PreviewPolicy() (PolicyProjection, error) {
-	snapshot, digest, err := localPolicySnapshot()
+// PreviewPolicy returns the exact policy Local mode freezes on publish.
+func PreviewPolicy(projectRubrics ...ProjectRubric) (PolicyProjection, error) {
+	snapshot, digest, err := localPolicySnapshot(projectRubrics...)
 	if err != nil {
 		return PolicyProjection{}, err
 	}
@@ -124,9 +142,13 @@ func PreviewPolicy() (PolicyProjection, error) {
 	}
 	rubrics := make([]PolicyRubricProjection, 0, len(policy.GateDefinitions))
 	for _, gate := range policy.GateDefinitions {
+		source := gate.Source
+		if source == "" {
+			source = "embedded_default"
+		}
 		rubrics = append(rubrics, PolicyRubricProjection{
 			Gate: gate.Key, Skill: policy.GateSkills[gate.Key],
-			Digest: digestText(gate.SkillContent), Source: "embedded_default",
+			Digest: digestText(gate.SkillContent), Source: source,
 		})
 	}
 	return PolicyProjection{

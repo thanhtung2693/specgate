@@ -51,7 +51,7 @@ func TestObservedRunDoesNotDetectWatchedChangeRevertedDuringCommand(t *testing.T
 	}
 	check := map[string]any{"name": "unit", "command": contract.Checks[0].Command, "cwd": ".", "status": "pass"}
 	body := map[string]any{"checks": []any{check}}
-	executeCompletionChecks(t.Context(), deps, body, &contract, root)
+	executeCompletionChecks(t.Context(), deps, body, &contract, "", root)
 	run, ok := check["test_run"].(local.ObservedRun)
 	if !ok || run.Freshness != "matching_endpoints" || run.Before.Fingerprint != run.After.Fingerprint {
 		t.Fatalf("reverted edit escaped endpoint limitation: %#v", check["test_run"])
@@ -81,13 +81,72 @@ func TestObservedRunFailsChangedEndpointsAndPreservesUnrelatedOutput(t *testing.
 	command := `printf '%s' '<testsuite><testcase classname="p" name="test"/></testsuite>' > "$SPECGATE_TEST_REPORT"; printf keep > "$(dirname "$SPECGATE_TEST_REPORT")/keep.txt"; printf changed > source.txt`
 	contract := local.VerificationContract{Version: 2, WorkID: "w", ContextDigest: "c", Digest: "v", Checks: []local.VerificationCheck{{Name: "unit", Command: command, Cwd: ".", TestReport: &local.JUnitTestReport{Format: "junit", Selectors: map[string][]local.SelectedTestCase{"local-1": {{ClassName: "p", Name: "test"}}}}}}}
 	check := map[string]any{"name": "unit", "command": command, "cwd": ".", "status": "pass"}
-	executeCompletionChecks(context.Background(), deps, map[string]any{"checks": []any{check}}, &contract, root)
+	executeCompletionChecks(context.Background(), deps, map[string]any{"checks": []any{check}}, &contract, "", root)
 	if check["status"] != "fail" {
 		t.Fatalf("changed endpoint passed: %#v", check)
 	}
 	files, err := filepath.Glob(filepath.Join(root, ".specgate", "junit-run-*", "keep.txt"))
 	if err != nil || len(files) != 1 {
 		t.Fatalf("unrelated output removed: %v %v", files, err)
+	}
+}
+
+func TestObservedRunComparesIgnoredWatchedEndpoints(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("/watched-*\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"init", "-q"}, {"config", "user.email", "fixture@example.test"}, {"config", "user.name", "Fixture"}, {"add", ".gitignore"}, {"commit", "-qm", "baseline"}} {
+		if out, err := exec.Command("git", append([]string{"-C", root}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	for _, tt := range []struct {
+		name, initial, command, before, after, freshness, status string
+	}{
+		{"edits", "original", "printf edited > watched-edits", "unchanged", "changed", "changed", "fail"},
+		{"different-drift", "already changed", "printf edited > watched-different-drift", "changed", "changed", "changed", "fail"},
+		{"removed", "original", "rm watched-removed", "unchanged", "missing", "changed", "fail"},
+		{"read-error", "original", "rm watched-read-error && mkdir watched-read-error", "unchanged", "unavailable", "changed", "fail"},
+		{"same-read-error", "", "true", "unavailable", "unavailable", "unavailable", "pass"},
+		{"same-drift", "already changed", "true", "changed", "changed", "matching_endpoints", "pass"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			name := "watched-" + tt.name
+			path := filepath.Join(root, name)
+			var err error
+			if tt.initial == "" {
+				err = os.Mkdir(path, 0700)
+			} else {
+				err = os.WriteFile(path, []byte(tt.initial), 0600)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			deps := &Deps{WorkingDir: root, Printer: output.NewWithColor(io.Discard, io.Discard, output.ModeJSON, false), Stderr: io.Discard}
+			command := tt.command + ` && printf '%s' '<testsuite><testcase classname="p" name="test"/></testsuite>' > "$SPECGATE_TEST_REPORT"`
+			digest := sha256.Sum256([]byte("original"))
+			contract := local.VerificationContract{
+				Version: 2, WorkID: "w", ContextDigest: "c", Digest: "v",
+				WatchedPaths: []local.WatchedPath{{Path: name, Digest: hex.EncodeToString(digest[:])}},
+				Checks: []local.VerificationCheck{{
+					Name: "unit", Command: command, Cwd: ".",
+					TestReport: &local.JUnitTestReport{Format: "junit", Selectors: map[string][]local.SelectedTestCase{"local-1": {{ClassName: "p", Name: "test"}}}},
+				}},
+			}
+			check := map[string]any{"name": "unit", "command": command, "cwd": ".", "status": "pass"}
+			executeCompletionChecks(t.Context(), deps, map[string]any{"checks": []any{check}}, &contract, "", root)
+			run, ok := check["test_run"].(local.ObservedRun)
+			if !ok || run.Before.State != "available" || run.After.State != "available" || run.Before.Fingerprint != run.After.Fingerprint {
+				t.Fatalf("fixture should keep Git endpoints available and unchanged: %#v", check["test_run"])
+			}
+			if len(run.WatchedBefore) != 1 || len(run.WatchedAfter) != 1 || run.WatchedBefore[0].State != tt.before || run.WatchedAfter[0].State != tt.after {
+				t.Fatalf("wrong watched observations: %#v -> %#v", run.WatchedBefore, run.WatchedAfter)
+			}
+			if run.Freshness != tt.freshness || check["status"] != tt.status || check["test_observation"] == nil {
+				t.Fatalf("wrong run freshness/status: freshness=%q check=%#v", run.Freshness, check)
+			}
+		})
 	}
 }
 
@@ -117,7 +176,7 @@ func TestJUnitRunCannotReadOrDeleteReportThroughSwappedDirectory(t *testing.T) {
 	}
 	contract := local.VerificationContract{Version: 2, WorkID: "w", ContextDigest: "c", Digest: "v", Checks: []local.VerificationCheck{{Name: "unit", Command: "true", Cwd: ".", TestReport: &local.JUnitTestReport{Format: "junit", Selectors: map[string][]local.SelectedTestCase{"local-1": {{ClassName: "p", Name: "test"}}}}}}}
 	check := map[string]any{"name": "unit", "command": "true", "cwd": ".", "status": "pass"}
-	executeCompletionChecks(t.Context(), deps, map[string]any{"checks": []any{check}}, &contract, root)
+	executeCompletionChecks(t.Context(), deps, map[string]any{"checks": []any{check}}, &contract, "", root)
 	if check["status"] != "fail" || check["test_observation"] != nil {
 		t.Fatalf("outside report was accepted: %#v", check)
 	}
@@ -149,15 +208,15 @@ func TestCheckpointDeltaComparesBytesNotDirtyMembership(t *testing.T) {
 	git("commit", "-qm", "baseline")
 	deps := &Deps{WorkingDir: root}
 	write("dirty baseline")
-	before := captureCheckout(t.Context(), deps)
+	before := captureCheckout(t.Context(), deps, "")
 	write("original")
-	after := captureCheckout(t.Context(), deps)
+	after := captureCheckout(t.Context(), deps, "")
 	delta := compareCheckout(t.Context(), deps, before, after)
 	if delta.State != "changed" || len(delta.Modified) != 1 || delta.Modified[0] != "file.txt" || len(delta.Removed) != 0 {
 		t.Fatalf("dirty->clean delta: %#v", delta)
 	}
 	git("commit", "--allow-empty", "-qm", "same bytes")
-	clean := captureCheckout(t.Context(), deps)
+	clean := captureCheckout(t.Context(), deps, "")
 	delta = compareCheckout(t.Context(), deps, after, clean)
 	if len(delta.Modified) != 0 || len(delta.Added) != 0 || len(delta.Removed) != 0 {
 		t.Fatalf("same content commit invents changes: %#v", delta)
@@ -189,7 +248,7 @@ func TestCheckpointDeltaIgnoresMtimeOnlyChange(t *testing.T) {
 	if err := os.WriteFile(path, []byte("same dirty bytes"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	before := captureCheckout(t.Context(), deps)
+	before := captureCheckout(t.Context(), deps, "")
 	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)
@@ -198,7 +257,7 @@ func TestCheckpointDeltaIgnoresMtimeOnlyChange(t *testing.T) {
 	if err := os.Chtimes(path, mtime, mtime); err != nil {
 		t.Fatal(err)
 	}
-	after := captureCheckout(t.Context(), deps)
+	after := captureCheckout(t.Context(), deps, "")
 	if before.Fingerprint == after.Fingerprint {
 		t.Fatal("fixture did not change the checkout fingerprint")
 	}
@@ -226,7 +285,7 @@ func TestCheckpointCapturesDirtyFileReplacedByDirectory(t *testing.T) {
 	git("add", "node")
 	git("commit", "-qm", "baseline")
 	deps := &Deps{WorkingDir: root}
-	before := captureCheckout(t.Context(), deps)
+	before := captureCheckout(t.Context(), deps, "")
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +295,7 @@ func TestCheckpointCapturesDirtyFileReplacedByDirectory(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(path, "child"), []byte("new"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	after := captureCheckout(t.Context(), deps)
+	after := captureCheckout(t.Context(), deps, "")
 	if after.State != "available" || after.Files["node"] != "" || after.Files["node/child"] == "" {
 		t.Fatalf("dirty file-to-directory snapshot: %#v", after)
 	}
@@ -287,9 +346,9 @@ func TestCheckpointDeltaFromNestedDirectoryAndCommittedRename(t *testing.T) {
 	git("add", ".")
 	git("commit", "-qm", "baseline")
 	deps := &Deps{WorkingDir: nested}
-	clean := captureCheckout(t.Context(), deps)
+	clean := captureCheckout(t.Context(), deps, "")
 	write("changed")
-	dirty := captureCheckout(t.Context(), deps)
+	dirty := captureCheckout(t.Context(), deps, "")
 	for _, pair := range [][2]local.CheckoutSnapshot{{clean, dirty}, {dirty, clean}} {
 		got := compareCheckout(t.Context(), deps, pair[0], pair[1])
 		if len(got.Modified) != 1 || got.Modified[0] != "nested/old.txt" || len(got.Added) != 0 || len(got.Removed) != 0 {
@@ -298,14 +357,18 @@ func TestCheckpointDeltaFromNestedDirectoryAndCommittedRename(t *testing.T) {
 	}
 	git("add", ".")
 	git("commit", "-qm", "modify")
-	committed := captureCheckout(t.Context(), deps)
+	committed := captureCheckout(t.Context(), deps, "")
 	got := compareCheckout(t.Context(), deps, clean, committed)
 	if len(got.Modified) != 1 || got.Modified[0] != "nested/old.txt" {
 		t.Errorf("committed modification: %#v", got)
 	}
 	git("mv", "nested/old.txt", "nested/new.txt")
+	stagedRename := captureCheckout(t.Context(), deps, "")
+	if stagedRename.State != "available" || stagedRename.Files["nested/old.txt"] != "" || stagedRename.Files["nested/new.txt"] == "" {
+		t.Fatalf("staged rename snapshot: %+v", stagedRename)
+	}
 	git("commit", "-qm", "rename")
-	renamed := captureCheckout(t.Context(), deps)
+	renamed := captureCheckout(t.Context(), deps, "")
 	got = compareCheckout(t.Context(), &Deps{WorkingDir: root}, committed, renamed)
 	if len(got.Added) != 1 || got.Added[0] != "nested/new.txt" || len(got.Removed) != 1 || got.Removed[0] != "nested/old.txt" {
 		t.Errorf("rename delta: %#v", got)
@@ -321,7 +384,7 @@ func TestCheckpointDeltaFromNestedDirectoryAndCommittedRename(t *testing.T) {
 	}
 	git("add", "-A")
 	git("commit", "-qm", "file to directory")
-	directory := captureCheckout(t.Context(), &Deps{WorkingDir: root})
+	directory := captureCheckout(t.Context(), &Deps{WorkingDir: root}, "")
 	got = compareCheckout(t.Context(), &Deps{WorkingDir: root}, renamed, directory)
 	if len(got.Removed) != 1 || got.Removed[0] != "nested/new.txt" || len(got.Added) != 1 || got.Added[0] != "nested/new.txt/child.txt" || len(got.Modified) != 0 {
 		t.Errorf("file to directory delta: %#v", got)
@@ -345,14 +408,14 @@ func TestReceiptTreeDeltaIgnoresUnchangedDirtyFiles(t *testing.T) {
 	git("add", ".")
 	git("commit", "-qm", "baseline")
 	deps := &Deps{WorkingDir: root}
-	before := captureCheckout(t.Context(), deps)
+	before := captureCheckout(t.Context(), deps, "")
 	if err := os.WriteFile(filepath.Join(root, "tracked.txt"), []byte("dirty"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "untracked.txt"), []byte("dirty"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	after := captureCheckout(t.Context(), deps)
+	after := captureCheckout(t.Context(), deps, "")
 	got := compareCommittedTrees(t.Context(), deps, before, after)
 	if got.State != "unchanged" || len(got.Added) != 0 || len(got.Removed) != 0 || len(got.Modified) != 0 {
 		t.Fatalf("receipt tree delta included dirty checkout state: %#v", got)
@@ -377,8 +440,8 @@ func TestCompletionReceiptBaselineUsesOnlyComparableGitTree(t *testing.T) {
 	git("add", ".")
 	git("commit", "-qm", "baseline")
 	deps := &Deps{WorkingDir: root}
-	stored := collectGitReceipt(t.Context(), nil, root, nil)
-	current := captureCheckout(t.Context(), deps)
+	stored := collectGitReceipt(t.Context(), nil, root, nil, "")
+	current := captureCheckout(t.Context(), deps, "")
 	baseline, ok := completionReceiptBaseline(stored, stored, current)
 	if !ok || baseline.State != "available" || baseline.Head != stored.HeadRevision || baseline.CheckoutID != current.CheckoutID {
 		t.Fatalf("baseline = %#v, ok=%t", baseline, ok)

@@ -10,21 +10,20 @@
 | Context Pack | Derived implementation brief for a coding agent; artifact-backed work includes approved artifact context, while quick work uses persisted intent and acceptance criteria. |
 | Delivery evidence | Checks, claims, files, links, or external observations mapped to delivery. |
 | Delivery review | Post-implementation review of evidence against acceptance criteria and policy. |
-| Executor | Actor or system that runs a gate: deterministic code, IDE agent, platform model, human, or integration. |
+| Executor | Actor or system that runs a gate: deterministic code, an IDE agent, or a human. |
 | Feature | Product capability with linked work and an optional canonical artifact. |
-| Artifact-backed route | Planning route based on a reviewed artifact package in Local or Full mode. |
+| Artifact-backed route | Planning route based on a reviewed artifact package. |
 | Gate | Versioned governance check that returns a common verdict and evidence. |
 | Governance level | Resolved control strength: `light`, `standard`, or `enhanced`. |
 | Governance policy | Versioned configuration for levels, gates, evidence, approval, and executors. |
 | Handoff | Point where approved context becomes available for implementation. |
 | Impact declaration | Structured author signal about risk, blast radius, rollback, and protected domains. |
-| Knowledge document | Reusable material indexed for governance assistance without becoming product source of truth. |
 | Quick route | Lightweight route for small, understood work with direct acceptance criteria. |
 | Readiness | Pre-implementation assessment of whether intent is clear enough to hand off. |
 | Resolved governance policy | Immutable policy snapshot stored with an artifact version. |
 | Skill | Reusable rubric or agent instruction used by gates or workflows. |
 | Stale handoff | Context Pack or approval based on a previous source version. |
-| Trust tier | Server-stamped evidence provenance; not proof of semantic correctness. |
+| Trust tier | Recorded origin of delivery evidence. |
 | Verdict | Gate state such as `pass`, `warn`, `fail`, `needs_human_review`, `not_applicable`, or `not_run`. |
 
 ## Related

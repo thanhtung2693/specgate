@@ -10,7 +10,7 @@ Implement approved scope; stop at next actor; never decide for humans.
 
 ## 1. Load the exact contract
 
-Local: read scope/criteria, verification, document index, status:
+Read scope/criteria, verification, document index, and status:
 
 ```bash
 specgate work resume "$WORK_REF" --json
@@ -18,8 +18,7 @@ specgate work resume "$WORK_REF" --json
 
 Pins are optional; for one, show work/digest/bindings/literal command/cwd.
 They freeze commands/cwd, exact selectors, and watched paths;
-scripts remain mutable/untrusted, shell is unsandboxed, and portable/v1
-export is blocked. JUnit selectors are exact;
+scripts remain mutable/untrusted and shell is unsandboxed. JUnit selectors are exact;
 `--run-checks` observes a fresh ignored report, not a trustworthy runner.
 
 Preserve drafts. Choose an unused work-specific `$CHECKS_PATH` under
@@ -42,13 +41,6 @@ specgate work context "$WORK_REF" --document "$DOCUMENT_PATH" --role "$ROLE" --j
 
 Copy path/role from `data.documents`. Reuse matching-digest content; the
 index cannot replace it. Quick work uses persisted scope/criteria.
-
-Full mode: read these; status is `change status.data`:
-
-```bash
-specgate work context "$WORK_REF" --json
-specgate change status "$WORK_REF" --json
-```
 
 Stop for missing approval/criteria, placeholder criteria, or stale context.
 Missing approved artifact: hand to human or `specgate-work-preparation`.
@@ -75,10 +67,21 @@ For `next_actor=implementing_agent` in `implementation` or `rework_requested`,
 inspect edits, rerun checks, submit fresh evidence. Otherwise require
 `freshness`; stop if unavailable.
 
+For a machine handoff, let the user review the entire-store scope from
+`specgate transfer prepare`. Receive into a new directory and let the user
+confirm activation for the receiving Git checkout. After activation, use
+the returned `resume_command` as written, including any `--since`
+checkpoint. Its source observations are historical. Preserve pinned check
+commands and paths, and check destination tools and paths before running
+anything. Follow the returned `next_actor` and `next_command` for human
+decisions. Git working files and external evidence travel separately.
+
 ## 3. Check artifact drift
 
-Skip when no artifact exists. Otherwise dispatch tasks, locate
-`spec_repo_drift`, and follow its frozen `skill_content`:
+Local `.specgate/rubrics/` adds project instructions at publication. Judge frozen tasks, never current files.
+Authorized rubric edits require preparation preview/new publication; existing work keeps its policy.
+
+Skip when no artifact exists. Otherwise dispatch tasks and follow `spec_repo_drift`'s frozen `skill_content`:
 
 ```bash
 specgate gates tasks dispatch "$ARTIFACT_ID" --json
@@ -163,35 +166,8 @@ bundle never reaches the reviewer. Never commit or decide.
 
 ## 7. Show the delivery handoff
 
-Use the latest status payload. If an action returns none, run
-`specgate change status "$WORK_REF" --json`.
-For `awaiting_acceptance`, render:
-
-```text
-SpecGate delivery receipt — <title> (<ref>)
-Evidence: <evidence>
-Assurance: <assurance>
-Decision: <decision>
-Receipt: <receipt>
-Freshness: <freshness>
-Acceptance criteria: <total> total · <met> met · <unmet> unmet · <unclear> unclear
-[<verdict>] <criterion text> — <why>   (one line per data.criteria entry)
-[Stale: <stale_reason> — only when stale]
-Next (<next_actor>): <next_command>
-```
-
-Count `data.criteria` verdicts. If empty, list canonical Context Pack criteria
-as `Acceptance criteria: <total> total · <total> not reviewed` followed by
-`[not reviewed] <criterion text>`. `unclear` and unreviewed are never `unmet`.
-
-Preserve values verbatim, including every criterion line. Stale is a warning,
-not a state override. For any other state, show a `SpecGate delivery handoff`
-with state, missing, `next_actor`, `next_command`, and the same
-acceptance-criteria summary and lines; never success wording. Report a failed
-status as failure. Echo `accepted` without claiming this agent accepted it.
-
-Full mode: use the URL from
-`specgate open "$WORK_REF" --print --json`. In Local mode, never call `open`.
-Never reread the completion file, call stats or audit, or claim cleanup
-eligibility, bugs prevented, time saved, accepted, or delivered without
-authoritative status.
+Read and follow [the delivery receipt format](../specgate-human-handoff/references/delivery-receipt.md)
+using the latest authoritative status. Use `specgate-human-handoff` for the
+exact CLI next action and optional Local browser review. Never reread the
+completion file, call stats or audit, or claim cleanup eligibility, bugs
+prevented, time saved, accepted, or delivered without authoritative status.

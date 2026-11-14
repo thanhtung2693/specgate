@@ -1,5 +1,8 @@
 # ADR: Artifact encryption at rest for the hosted tier
 
+> Historical record for the retired Full distribution. See the
+> [current architecture](../architecture.md) for Local behavior.
+
 **Date:** 2026-07-10
 **Status:** Accepted (direction); implementation deferred until a hosted tier exists
 

@@ -2,23 +2,26 @@ package command
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
-	"github.com/specgate/specgate/app/cli/internal/client"
 	"github.com/specgate/specgate/app/cli/internal/config"
-	"github.com/specgate/specgate/app/cli/internal/deploy"
+	"github.com/specgate/specgate/app/cli/internal/executil"
 	"github.com/specgate/specgate/app/cli/internal/fsutil"
 	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
 	"github.com/specgate/specgate/app/cli/internal/provenance"
+	"github.com/specgate/specgate/app/cli/internal/workflow"
 )
 
 const deliveryHandoffSchemaVersion = "specgate.delivery-handoff/v1"
@@ -65,11 +68,9 @@ func newDeliveryHandoffExportCmd(deps *Deps) *cobra.Command {
 			"  specgate delivery handoff export LOCAL-1a2b --file review.json --json",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if deps.Topology != config.ModeLocal {
-				return incompatibleCommand(deps, "delivery.handoff.export", "delivery handoff export is available only in Local mode")
-			}
+
 			if strings.TrimSpace(filePath) != "" {
-				if err := rejectPortableStateDestination(deps, filePath); err != nil {
+				if err := rejectHandoffStateDestination(deps, filePath); err != nil {
 					return completionValidationError(deps, "delivery.handoff.export", err.Error())
 				}
 			}
@@ -125,7 +126,7 @@ func newDeliveryHandoffExportCmd(deps *Deps) *cobra.Command {
 				filePath = filepath.Join(dir, work.Key+".json")
 			}
 			// The default path needs the same state-alias guard as an explicit file.
-			if err := rejectPortableStateDestination(deps, filePath); err != nil {
+			if err := rejectHandoffStateDestination(deps, filePath); err != nil {
 				return completionValidationError(deps, "delivery.handoff.export", err.Error())
 			}
 			if err := validateRegularFileOrMissing(filePath); err != nil {
@@ -224,7 +225,9 @@ func newDeliveryHandoffShowCmd(deps *Deps) *cobra.Command {
 			disagrees := verdict != bundle.Review.Verdict
 			criteria, checks := localReportEvidence(bundle.Work.AcceptanceCriteria, bundle.Report)
 			status := deriveLocalChangeStatus(bundle.Work, &bundle.Review, &bundle.Report, bundle.PeerReview)
-			status = applyCheckoutFreshness(cmd.Context(), deps, status, mapGitReceipt(bundle.Report.Body))
+			status = applyCheckoutFreshness(cmd.Context(), deps, status, mapGitReceipt(bundle.Report.Body), "")
+			status.Assurance = strings.Replace(status.Assurance, "locally reproduced", "reproduced by the source SpecGate CLI", 1)
+			status.NextCommand = "specgate change status " + shellQuote(bundle.Work.Key) + " --json"
 
 			if deps.Printer.Mode() == output.ModeJSON {
 				deps.Printer.Success("delivery.handoff.show", map[string]any{
@@ -250,8 +253,8 @@ func newDeliveryHandoffShowCmd(deps *Deps) *cobra.Command {
 func printDeliveryHandoff(
 	deps *Deps,
 	bundle deliveryHandoffBundle,
-	criteria []client.CriterionReview,
-	checks []client.CheckResult,
+	criteria []workflow.CriterionReview,
+	checks []workflow.CheckResult,
 	status changeStatusResult,
 	verdict string,
 	summary string,
@@ -278,9 +281,7 @@ func printDeliveryHandoff(
 			"Warning: the recorded verdict %q and this evidence disagree (recomputed %q). Ask for a fresh export from a current SpecGate CLI.\n",
 			bundle.Review.Verdict, verdict)
 	}
-	fmt.Fprintf(deps.Stdout, "\nThis view is read-only. The author records the decision with:\n")
-	fmt.Fprintf(deps.Stdout, "  specgate --yes change accept %s --review-id %s\n", bundle.Work.Key, bundle.Review.ID)
-	fmt.Fprintf(deps.Stdout, "  specgate --yes change request-changes %s --review-id %s --note \"<reason>\"\n", bundle.Work.Key, bundle.Review.ID)
+	fmt.Fprintf(deps.Stdout, "\nThe author should review current status in the owning Local store and follow its next action.\n  %s\n", status.NextCommand)
 }
 
 func deliveryHandoffAgent(bundle deliveryHandoffBundle) string {
@@ -306,6 +307,9 @@ func redactHandoffEvidence(report local.DeliveryReport) (local.DeliveryReport, e
 		return local.DeliveryReport{}, err
 	}
 	body = provenance.Receipts(body)
+	if receipt, ok := body["git_receipt"].(map[string]any); ok {
+		delete(receipt, "checkout_generation")
+	}
 	criteria, _ := body["criteria"].([]any)
 	for _, raw := range criteria {
 		criterion, _ := raw.(map[string]any)
@@ -318,19 +322,81 @@ func redactHandoffEvidence(report local.DeliveryReport) (local.DeliveryReport, e
 	return local.DeliveryReport{ID: report.ID, Body: body}, nil
 }
 
-// deliveryHandoffChecksum digests the bundle with its own checksum field
-// cleared, so recording the result never changes it.
+func rejectHandoffStateDestination(deps *Deps, destination string) error {
+	statePath, err := localStatePath(deps)
+	if err != nil {
+		return err
+	}
+	target, err := canonicalComparisonPath(destination)
+	if err != nil {
+		return err
+	}
+	for _, suffix := range []string{"", "-wal", "-shm", "-journal", ".pre-enhanced.bak"} {
+		protectedPath := statePath + suffix
+		protected, err := canonicalComparisonPath(protectedPath)
+		if err != nil {
+			return err
+		}
+		samePath := target == protected
+		if runtime.GOOS == "windows" {
+			samePath = strings.EqualFold(target, protected)
+		}
+		if samePath || sameExistingFile(destination, protectedPath) {
+			return fmt.Errorf("export destination cannot be a Local SQLite state or recovery file %s; choose a different --file path", protectedPath)
+		}
+	}
+	return nil
+}
+
+func canonicalComparisonPath(path string) (string, error) {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	current := filepath.Clean(absolute)
+	var suffix []string
+	for {
+		if _, err := os.Lstat(current); err == nil {
+			real, err := filepath.EvalSymlinks(current)
+			if err != nil {
+				return "", err
+			}
+			for index := len(suffix) - 1; index >= 0; index-- {
+				real = filepath.Join(real, suffix[index])
+			}
+			return filepath.Clean(real), nil
+		} else if !os.IsNotExist(err) {
+			return "", err
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return filepath.Clean(absolute), nil
+		}
+		suffix = append(suffix, filepath.Base(current))
+		current = parent
+	}
+}
+
+func sameExistingFile(left, right string) bool {
+	leftInfo, leftErr := os.Stat(left)
+	rightInfo, rightErr := os.Stat(right)
+	return leftErr == nil && rightErr == nil && os.SameFile(leftInfo, rightInfo)
+}
+
+// deliveryHandoffChecksum digests the bundle with its own checksum field cleared.
 func deliveryHandoffChecksum(bundle deliveryHandoffBundle) string {
 	bundle.Checksum = ""
-	return jsonChecksum(bundle)
+	data, _ := json.Marshal(bundle)
+	sum := sha256.Sum256(data)
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 // gitIgnoresPath reports whether Git would ignore path. A directory that is not
 // a repository is not a warning: the author may be exporting outside a checkout.
 func gitIgnoresPath(ctx context.Context, deps *Deps, path string) bool {
-	runner := deps.DeployRunner
+	runner := deps.CommandRunner
 	if runner == nil {
-		runner = deploy.ExecRunner{}
+		runner = executil.ExecRunner{}
 	}
 	dir := filepath.Dir(path)
 	if strings.TrimSpace(dir) == "" {

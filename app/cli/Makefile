@@ -13,6 +13,7 @@ build:
 
 test:
 	go test -race -count=1 ./...
+	node --test internal/command/local_ui_assets_test.cjs internal/command/local_ui_evidence.test.cjs internal/command/local_ui_navigation.test.cjs
 
 lint:
 	go vet ./...

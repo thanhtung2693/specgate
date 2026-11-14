@@ -7,7 +7,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/specgate/specgate/app/cli/internal/config"
 	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
@@ -48,59 +47,33 @@ acceptance criterion explicitly with a repeated --ac flag.`,
 			if len(criteria) > 0 {
 				body["acceptance_criteria"] = criteria
 			}
-			if deps.Topology == config.ModeLocal {
-				input, err := localWorkInput(body)
-				if err != nil {
-					code := deps.Printer.Error("work.create", output.ErrorPayload{Code: "validation", Message: err.Error()})
-					return &output.ExitError{Code: code, Err: err}
-				}
-				store, err := openLocalStore(deps)
-				if err != nil {
-					return localExitError(deps, "work.create", err)
-				}
-				defer store.Close()
-				selection, err := localSelection(cmd.Context(), deps, store)
-				if err != nil {
-					return localExitError(deps, "work.create", err)
-				}
-				work, err := store.CreateWork(cmd.Context(), selection.Workspace.ID, local.WorkInput{FeatureRef: feature, Title: input.Title, Description: input.Description, AcceptanceCriteria: input.AcceptanceCriteria})
-				if err != nil {
-					return localExitError(deps, "work.create", err)
-				}
-				if deps.Printer.Mode() == output.ModeJSON {
-					deps.Printer.Success("work.create", localWorkView(work))
-					return nil
-				}
-				fmt.Fprintln(deps.Stdout, notice(deps, output.StyleSuccess, "Created", work.Key))
-				if line := criteriaEnforcementNotice(work.AcceptanceCriteria); line != "" {
-					fmt.Fprintln(deps.Stdout, line)
-				}
-				fmt.Fprintln(deps.Stdout, nextStep(deps, "Read the implementation contract with", "specgate work context "+work.Key))
-				return nil
-			}
-			if err := annotateBodyWithCurrentSelection(cmd.Context(), deps, body); err != nil {
-				return apiExitError(deps, "work.create", err)
-			}
-			result, err := deps.Client.CreateWorkItem(requestContextForBody(cmd.Context(), body), body)
+			input, err := localWorkInput(body)
 			if err != nil {
-				return apiExitError(deps, "work.create", err)
+				code := deps.Printer.Error("work.create", output.ErrorPayload{Code: "validation", Message: err.Error()})
+				return &output.ExitError{Code: code, Err: err}
+			}
+			store, err := openLocalStore(deps)
+			if err != nil {
+				return localExitError(deps, "work.create", err)
+			}
+			defer store.Close()
+			selection, err := localSelection(cmd.Context(), deps, store)
+			if err != nil {
+				return localExitError(deps, "work.create", err)
+			}
+			work, err := store.CreateWork(cmd.Context(), selection.Workspace.ID, local.WorkInput{FeatureRef: feature, Title: input.Title, Description: input.Description, AcceptanceCriteria: input.AcceptanceCriteria})
+			if err != nil {
+				return localExitError(deps, "work.create", err)
 			}
 			if deps.Printer.Mode() == output.ModeJSON {
-				deps.Printer.Success("work.create", result)
+				deps.Printer.Success("work.create", localWorkView(work))
 				return nil
 			}
-			key, _ := result["change_request_key"].(string)
-			featKey, _ := result["feature_key"].(string)
-			lead, _ := result["lead_artifact_id"].(string)
-			total, bound := criteriaCounts(result["acceptance_criteria"])
-			if total == 0 {
-				total, bound = criteriaCounts(body["acceptance_criteria"])
-			}
-			fmt.Fprintf(deps.Stdout, "%s %s — feature %s, implementing %s\n", styled(deps, output.StyleSuccess, "Created"), styled(deps, output.StyleBold, key), featKey, lead)
-			if line := criteriaEnforcementLine(total, bound); line != "" {
+			fmt.Fprintln(deps.Stdout, notice(deps, output.StyleSuccess, "Created", work.Key))
+			if line := criteriaEnforcementNotice(work.AcceptanceCriteria); line != "" {
 				fmt.Fprintln(deps.Stdout, line)
 			}
-			fmt.Fprintln(deps.Stdout, nextStep(deps, "Read the implementation contract with", "specgate work context "+key))
+			fmt.Fprintln(deps.Stdout, nextStep(deps, "Read the implementation contract with", "specgate work context "+work.Key))
 			return nil
 		},
 	}
@@ -111,7 +84,7 @@ acceptance criterion explicitly with a repeated --ac flag.`,
 	return cmd
 }
 
-// localWorkView renders one Local work item. The Full-mode aliases belong here
+// localWorkView renders one Local work item. The legacy JSON aliases belong here
 // rather than in individual handlers: they were added only by `work create`, so
 // `work show` and `work list` omitted `lead_artifact_id` and an agent following
 // the preparation skill could not verify the approved artifact in Local mode.
@@ -202,76 +175,36 @@ func newWorkCreateQuickCmd(deps *Deps) *cobra.Command {
 					body["acceptance_criteria"] = acceptanceCriteriaBody(acs)
 				}
 			}
-			if deps.Topology == config.ModeLocal {
-				input, err := localWorkInput(body)
-				if err != nil {
-					code := deps.Printer.Error("work.create-quick", output.ErrorPayload{Code: "validation", Message: err.Error()})
-					return &output.ExitError{Code: code, Err: err}
-				}
-				store, err := openLocalStore(deps)
-				if err != nil {
-					return localExitError(deps, "work.create-quick", err)
-				}
-				defer store.Close()
-				selection, err := localSelection(cmd.Context(), deps, store)
-				if err != nil {
-					return localExitError(deps, "work.create-quick", err)
-				}
-				work, err := store.CreateQuickWork(cmd.Context(), selection.Workspace.ID, input)
-				if err != nil {
-					return localExitError(deps, "work.create-quick", err)
-				}
-				result := localWorkView(work)
-				result["acceptance_count"] = len(work.AcceptanceCriteria)
-				result["acceptance_criteria_bound"] = boundCriteriaCount(work.AcceptanceCriteria)
-				if deps.Printer.Mode() == output.ModeJSON {
-					deps.Printer.Success("work.create-quick", result)
-					return nil
-				}
-				fmt.Fprintf(deps.Stdout, "%s %s\n", styled(deps, output.StyleSuccess, "Created"), styled(deps, output.StyleBold, work.Key))
-				if notice := criteriaEnforcementNotice(work.AcceptanceCriteria); notice != "" {
-					fmt.Fprintln(deps.Stdout, notice)
-				}
-				fmt.Fprintln(deps.Stdout, nextStep(deps, "Read the implementation contract with", "specgate work context "+work.Key))
-				return nil
-			}
-			if err := annotateBodyWithCurrentSelection(cmd.Context(), deps, body); err != nil {
-				return apiExitError(deps, "work.create-quick", err)
-			}
-
-			result, err := deps.Client.CreateQuickWorkItem(requestContextForBody(cmd.Context(), body), body)
+			input, err := localWorkInput(body)
 			if err != nil {
-				return apiExitError(deps, "work.create-quick", err)
+				code := deps.Printer.Error("work.create-quick", output.ErrorPayload{Code: "validation", Message: err.Error()})
+				return &output.ExitError{Code: code, Err: err}
 			}
-
+			store, err := openLocalStore(deps)
+			if err != nil {
+				return localExitError(deps, "work.create-quick", err)
+			}
+			defer store.Close()
+			selection, err := localSelection(cmd.Context(), deps, store)
+			if err != nil {
+				return localExitError(deps, "work.create-quick", err)
+			}
+			work, err := store.CreateQuickWork(cmd.Context(), selection.Workspace.ID, input)
+			if err != nil {
+				return localExitError(deps, "work.create-quick", err)
+			}
+			result := localWorkView(work)
+			result["acceptance_count"] = len(work.AcceptanceCriteria)
+			result["acceptance_criteria_bound"] = boundCriteriaCount(work.AcceptanceCriteria)
 			if deps.Printer.Mode() == output.ModeJSON {
 				deps.Printer.Success("work.create-quick", result)
 				return nil
 			}
-
-			criteriaTotal, criteriaBound := criteriaCounts(result["acceptance_criteria"])
-			if criteriaTotal == 0 {
-				criteriaTotal, criteriaBound = criteriaCounts(body["acceptance_criteria"])
-			}
-			key, _ := result["change_request_key"].(string)
-			id, _ := result["change_request_id"].(string)
-			ref := key
-			if ref == "" {
-				ref = id
-			}
-			if ref == "" {
-				fmt.Fprintln(deps.Stdout, "Created work item")
-				return nil
-			}
-			fmt.Fprintf(deps.Stdout, "%s %s", styled(deps, output.StyleSuccess, "Created"), styled(deps, output.StyleBold, ref))
-			if key != "" && id != "" {
-				fmt.Fprintf(deps.Stdout, " (%s)", id)
-			}
-			fmt.Fprintln(deps.Stdout)
-			if notice := criteriaEnforcementLine(criteriaTotal, criteriaBound); notice != "" {
+			fmt.Fprintf(deps.Stdout, "%s %s\n", styled(deps, output.StyleSuccess, "Created"), styled(deps, output.StyleBold, work.Key))
+			if notice := criteriaEnforcementNotice(work.AcceptanceCriteria); notice != "" {
 				fmt.Fprintln(deps.Stdout, notice)
 			}
-			fmt.Fprintln(deps.Stdout, nextStep(deps, "Read the implementation contract with", "specgate work context "+ref))
+			fmt.Fprintln(deps.Stdout, nextStep(deps, "Read the implementation contract with", "specgate work context "+work.Key))
 			return nil
 		},
 	}
@@ -374,8 +307,7 @@ func acceptanceCriteriaBody(criteria []string) any {
 	}
 	out := make([]map[string]string, 0, len(parsed))
 	for _, ac := range parsed {
-		// Quick-work requests carry text and binding only. The service records
-		// supplied criteria as human-authored and model-drafted criteria as llm.
+		// Quick-work rows carry text and the optional check binding.
 		row := map[string]string{"text": ac.Text}
 		if ac.VerificationBinding != "" {
 			row["verification_binding"] = ac.VerificationBinding
@@ -390,53 +322,6 @@ func acceptanceCriteriaBody(criteria []string) any {
 // package because Local delivery review resolves bound criteria against it.
 func parseAcceptanceCriterionBinding(raw string) (string, string) {
 	return local.ParseAcceptanceCriterionBinding(raw)
-}
-
-// criteriaEnforcementNotice reports how many acceptance criteria have a check
-// standing behind them. This is a derived count, not a judgement about criterion
-// prose: a bound criterion takes its verdict from the check result, while an
-// unbound one can only ever be graded on the agent's claim. Saying so at the
-// moment the list is created is the honest equivalent of the artifact route's
-// verifiability gate, which quick work never runs.
-//
-// ponytail: a count, not a linter — no vague-wording heuristics, no new ceremony.
-//
-// boundCriteriaCount is the single source for both the human line and the
-// machine envelope: the IDE agent runs create-quick in machine mode, so the
-// signal has to travel in the envelope or the default path never sees it. An
-// unresolvable or ambiguous binding counts as unbound, because review will fall
-// back to the agent's claim for it.
-// criteriaCounts reports total and bound criteria from a persisted acceptance
-// list. Full mode counts the server's response rather than the request body: the
-// body is what was asked for, and reporting enforcement from it would state a
-// count for criteria the server may have normalized or refused.
-//
-// Both stored shapes are accepted — the request shape built by
-// acceptanceCriteriaBody and the API's returned rows — because each already
-// carries the `@check:` binding in its own field, so no criterion text is
-// re-parsed here.
-func criteriaCounts(raw any) (total, bound int) {
-	binding := func(row map[string]any) bool {
-		value, _ := row["verification_binding"].(string)
-		return strings.TrimSpace(value) != ""
-	}
-	switch rows := raw.(type) {
-	case []map[string]string:
-		for _, row := range rows {
-			total++
-			if strings.TrimSpace(row["verification_binding"]) != "" {
-				bound++
-			}
-		}
-	case []any:
-		for _, item := range rows {
-			total++
-			if row, ok := item.(map[string]any); ok && binding(row) {
-				bound++
-			}
-		}
-	}
-	return total, bound
 }
 
 func boundCriteriaCount(criteria []string) int {

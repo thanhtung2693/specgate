@@ -631,13 +631,7 @@ func TestDeliveryEvidenceBindsContextAndNeedsHumanApproval(t *testing.T) {
 	if len(events) != 3 || events[0].Action != "artifact.approved" || events[1].Action != "delivery.reviewed" || events[2].Action != "delivery.approve" || !strings.Contains(events[2].Detail, "human") || !strings.Contains(events[2].Detail, "looks good") {
 		t.Fatalf("events = %#v", events)
 	}
-	stats, err := store.Stats(context.Background(), selection.Workspace.ID, 30)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stats.WorkItems != 1 || stats.Delivered != 1 || stats.DeliveryReviews != 1 {
-		t.Fatalf("stats = %#v", stats)
-	}
+
 }
 
 func TestSubmitDeliveryRejectsMissingCompletionAgent(t *testing.T) {

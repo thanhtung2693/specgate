@@ -3,21 +3,15 @@
 #
 # Usage:
 #   sh scripts/install-cli.sh
-#   sh scripts/install-cli.sh --version v1.2.3 --server https://my.specgate.example
-#
-# This source copy is embedded into the instance-aware `/cli/install.sh` route.
+#   sh scripts/install-cli.sh --version v1.2.3
 #
 # Flags:
 #   --version <tag>       CLI version to install (default: latest stable public release)
 #   --install-dir <path>  Installation directory (default: current specgate dir, else ~/.local/bin, else /usr/local/bin)
-#   --server <url>        SpecGate server URL to configure after install
-#   --no-config           Skip post-install server configuration
 set -e
 
 SPECGATE_VERSION=""
 INSTALL_DIR=""
-SERVER_URL=""
-NO_CONFIG=0
 GITHUB_REPO="thanhtung2693/specgate"
 BINARY_NAME="specgate"
 
@@ -28,8 +22,6 @@ Usage: install-cli.sh [options]
 Options:
   --version <tag>       CLI version to install (default: latest stable public release)
   --install-dir <path>  Installation directory (default: current specgate dir, else ~/.local/bin, else /usr/local/bin)
-  --server <url>        SpecGate server URL to configure after install
-  --no-config           Skip post-install server configuration
   -h, --help            Show this help
 EOF
 }
@@ -56,15 +48,6 @@ while [ $# -gt 0 ]; do
       require_value "$@"
       INSTALL_DIR="$2"
       shift 2
-      ;;
-    --server)
-      require_value "$@"
-      SERVER_URL="$2"
-      shift 2
-      ;;
-    --no-config)
-      NO_CONFIG=1
-      shift
       ;;
     -h|--help)
       usage
@@ -175,8 +158,8 @@ fi
 
 CHECKSUMS_FILE="specgate_${SPECGATE_VERSION#v}_checksums.txt"
 TMPDIR="$(mktemp -d)"
-# shellcheck disable=SC2064
-trap "rm -rf '$TMPDIR'" EXIT
+TMP_DEST=""
+trap 'rm -rf "$TMPDIR"; if [ -n "$TMP_DEST" ]; then rm -f "$TMP_DEST"; fi' EXIT
 
 echo "Step 3/5 Download release"
 curl -fsSL "${BASE_URL}/${CHECKSUMS_FILE}" -o "${TMPDIR}/${CHECKSUMS_FILE}"
@@ -222,31 +205,23 @@ else
   BINARY="${TMPDIR}/${BINARY_NAME}"
 fi
 
-chmod +x "$BINARY"
-
 # Atomic install: write to a temp file beside the target, then rename.
 mkdir -p "$INSTALL_DIR"
 DEST="${INSTALL_DIR}/${BINARY_NAME}"
 if [ "$OS_NAME" = "windows" ]; then
   DEST="${INSTALL_DIR}/${BINARY_NAME}.exe"
 fi
-TMP_DEST="${DEST}.tmp.$$"
+TMP_DEST="$(mktemp "${DEST}.tmp.XXXXXXXX")"
 cp "$BINARY" "$TMP_DEST"
-mv "$TMP_DEST" "$DEST"
+chmod 0755 "$TMP_DEST"
+if [ -d "$DEST" ]; then
+  echo "Cannot install SpecGate binary: ${DEST} is a directory." >&2
+  exit 1
+fi
+mv -f "$TMP_DEST" "$DEST"
 
 echo "Installed: ${DEST}"
 
-# ---------------------------------------------------------------------------
-# Post-install configuration
-# ---------------------------------------------------------------------------
-if [ "$NO_CONFIG" -eq 0 ] && [ -n "$SERVER_URL" ]; then
-  echo "Configuring server: ${SERVER_URL}"
-  "${DEST}" config server "${SERVER_URL}"
-  "${DEST}" doctor
-fi
-
 echo ""
 echo "SpecGate CLI ${SPECGATE_VERSION} installed successfully."
-if [ "$NO_CONFIG" -eq 1 ] || [ -z "$SERVER_URL" ]; then
-  echo "Run 'specgate init' to start with Local CLI or choose the Full appliance."
-fi
+echo "Run 'specgate init' from your Git repository to set up Local SpecGate."

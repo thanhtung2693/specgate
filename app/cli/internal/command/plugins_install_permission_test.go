@@ -17,13 +17,13 @@ import (
 // work stalls before any record exists, so the install has to grant what it asks
 // the agent to run.
 func TestPluginsInstallProjectLocalClaudeAllowsTheSpecgateCLI(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	workDir := t.TempDir()
 	t.Chdir(workDir)
 	deps, out := newPluginDeps(t.TempDir())
 
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--plain", "--server", srv.URL, "plugins", "install", "--project-local", "--agent", "claude")
+		"--plain", "plugins", "install", "--project-local", "--agent", "claude")
 	if code != output.ExitOK {
 		t.Fatalf("install exit = %d, output = %s", code, out.String())
 	}
@@ -40,7 +40,7 @@ func TestPluginsInstallProjectLocalClaudeAllowsTheSpecgateCLI(t *testing.T) {
 // Settings are the user's file. Installing must add its rule without discarding
 // anything already there.
 func TestPluginsInstallProjectLocalClaudePreservesExistingSettings(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	workDir := t.TempDir()
 	t.Chdir(workDir)
 	settings := filepath.Join(workDir, ".claude", "settings.json")
@@ -51,7 +51,7 @@ func TestPluginsInstallProjectLocalClaudePreservesExistingSettings(t *testing.T)
 	deps, out := newPluginDeps(t.TempDir())
 
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--plain", "--server", srv.URL, "plugins", "install", "--project-local", "--agent", "claude")
+		"--plain", "plugins", "install", "--project-local", "--agent", "claude")
 	if code != output.ExitOK {
 		t.Fatalf("install exit = %d, output = %s", code, out.String())
 	}
@@ -97,7 +97,7 @@ func TestPluginsInstallProjectLocalClaudePreservesExistingSettings(t *testing.T)
 }
 
 func TestPluginsInstallProjectLocalClaudeRejectsMalformedSettingsBeforeWriting(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	workDir := t.TempDir()
 	t.Chdir(workDir)
 	settings := filepath.Join(workDir, ".claude", "settings.json")
@@ -105,7 +105,7 @@ func TestPluginsInstallProjectLocalClaudeRejectsMalformedSettingsBeforeWriting(t
 	deps, out := newPluginDeps(t.TempDir())
 
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--json", "--server", srv.URL, "plugins", "install", "--project-local", "--agent", "claude")
+		"--json", "plugins", "install", "--project-local", "--agent", "claude")
 	if code != output.ExitUsage {
 		t.Fatalf("install exit = %d, want usage failure; output = %s", code, out.String())
 	}
@@ -135,13 +135,13 @@ func TestPluginsInstallProjectLocalClaudeRejectsMalformedSettingsBeforeWriting(t
 // install that ships skills but no hook leaves the agent with no instruction to
 // load a phase, which is the whole point of installing into a governed repo.
 func TestPluginsInstallProjectLocalClaudeRegistersTheSessionHook(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	workDir := t.TempDir()
 	t.Chdir(workDir)
 	deps, out := newPluginDeps(t.TempDir())
 
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--plain", "--server", srv.URL, "plugins", "install", "--project-local", "--agent", "claude")
+		"--plain", "plugins", "install", "--project-local", "--agent", "claude")
 	if code != output.ExitOK {
 		t.Fatalf("install exit = %d, output = %s", code, out.String())
 	}
@@ -179,7 +179,7 @@ func TestPluginsInstallProjectLocalClaudeRegistersTheSessionHook(t *testing.T) {
 }
 
 func TestPluginsInstallProjectLocalClaudeRejectsUnownedHookDirectory(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	workDir := t.TempDir()
 	t.Chdir(workDir)
 	hook := filepath.Join(workDir, ".claude", "specgate-hooks", "custom")
@@ -187,7 +187,7 @@ func TestPluginsInstallProjectLocalClaudeRejectsUnownedHookDirectory(t *testing.
 	deps, out := newPluginDeps(t.TempDir())
 
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
-		"--json", "--server", srv.URL, "plugins", "install", "--project-local", "--agent", "claude")
+		"--json", "plugins", "install", "--project-local", "--agent", "claude")
 	if code != output.ExitUsage {
 		t.Fatalf("install exit = %d, want usage failure; output = %s", code, out.String())
 	}
@@ -204,13 +204,13 @@ func TestPluginsInstallProjectLocalClaudeRejectsUnownedHookDirectory(t *testing.
 }
 
 func TestPluginsInstallProjectLocalClaudeAdoptsLegacyHookDirectory(t *testing.T) {
-	srv := newPluginRegistry(t)
+
 	workDir := t.TempDir()
 	t.Chdir(workDir)
 	homeDir := t.TempDir()
 
 	deps, out := newPluginDeps(homeDir)
-	args := []string{"--json", "--server", srv.URL, "plugins", "install", "--project-local", "--agent", "claude"}
+	args := []string{"--json", "plugins", "install", "--project-local", "--agent", "claude"}
 	if code := command.ExecuteForCode(command.NewRootCommand(deps), args...); code != output.ExitOK {
 		t.Fatalf("first install exit = %d, output = %s", code, out.String())
 	}

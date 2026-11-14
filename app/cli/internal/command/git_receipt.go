@@ -10,49 +10,53 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/specgate/specgate/app/cli/internal/deploy"
+	"github.com/specgate/specgate/app/cli/internal/executil"
 	"github.com/specgate/specgate/app/cli/internal/provenance"
 )
 
 // gitReceipt is local repository identity and status metadata. It deliberately
 // contains no patch text or file contents; the digest is computed locally.
 type gitReceipt struct {
-	Repository     string   `json:"repository"`
-	CheckoutID     string   `json:"checkout_id,omitempty"`
-	Availability   string   `json:"availability"`
-	FreshnessScope string   `json:"freshness_scope"`
-	Branch         string   `json:"branch"`
-	BaseRevision   string   `json:"base_revision"`
-	HeadRevision   string   `json:"head_revision"`
-	ChangedFiles   []string `json:"changed_files"`
-	ReportedFiles  []string `json:"reported_files,omitempty"`
-	DiffDigest     string   `json:"diff_digest"`
-	Warnings       []string `json:"warnings"`
+	Repository         string   `json:"repository"`
+	CheckoutID         string   `json:"checkout_id,omitempty"`
+	CheckoutGeneration string   `json:"checkout_generation,omitempty"`
+	Availability       string   `json:"availability"`
+	FreshnessScope     string   `json:"freshness_scope"`
+	Branch             string   `json:"branch"`
+	BaseRevision       string   `json:"base_revision"`
+	HeadRevision       string   `json:"head_revision"`
+	ChangedFiles       []string `json:"changed_files"`
+	ReportedFiles      []string `json:"reported_files,omitempty"`
+	DiffDigest         string   `json:"diff_digest"`
+	Warnings           []string `json:"warnings"`
+	Dirty              bool     `json:"-"`
 }
 
 type gitStatusEntry struct {
-	status string
-	path   string
+	status       string
+	path         string
+	renameSource bool
 }
 
 // collectGitReceipt gathers enough local Git identity to bind a delivery
 // report to a checkout. A missing origin yields a local-only receipt; a missing
 // Git repository remains unavailable.
-func collectGitReceipt(ctx context.Context, runner deploy.CommandRunner, dir string, reported []string) gitReceipt {
-	return collectGitReceiptWithPriorBase(ctx, runner, dir, reported, "")
+func collectGitReceipt(ctx context.Context, runner executil.CommandRunner, dir string, reported []string, generation string) gitReceipt {
+	return collectGitReceiptWithPriorBase(ctx, runner, dir, reported, "", generation)
 }
 
 // collectGitReceiptWithPriorBase retains a prior receipt's base only when the
 // current tracking base has caught up to HEAD and that prior base is still an
 // ancestor. This preserves a delivered commit range after its branch is pushed.
-func collectGitReceiptWithPriorBase(ctx context.Context, runner deploy.CommandRunner, dir string, reported []string, priorBase string) gitReceipt {
+func collectGitReceiptWithPriorBase(ctx context.Context, runner executil.CommandRunner, dir string, reported []string, priorBase, generation string) gitReceipt {
 	receipt := gitReceipt{
-		Availability: "unavailable",
-		ChangedFiles: []string{},
-		Warnings:     []string{},
+		Availability:       "unavailable",
+		CheckoutGeneration: generation,
+		ChangedFiles:       []string{},
+		Warnings:           []string{},
 	}
 	if runner == nil {
-		runner = deploy.ExecRunner{}
+		runner = executil.ExecRunner{}
 	}
 	if strings.TrimSpace(dir) == "" {
 		dir = "."
@@ -65,8 +69,7 @@ func collectGitReceiptWithPriorBase(ctx context.Context, runner deploy.CommandRu
 	}
 	repoRoot := filepath.Clean(strings.TrimSpace(string(root)))
 	if canonical, err := filepath.EvalSymlinks(repoRoot); err == nil {
-		identity := sha256.Sum256([]byte(canonical))
-		receipt.CheckoutID = fmt.Sprintf("%x", identity)
+		receipt.CheckoutID = checkoutIdentity(canonical, generation)
 	}
 	for _, name := range normalizeReportedPaths(reported, dir, repoRoot) {
 		clean := filepath.Clean(name)
@@ -111,6 +114,7 @@ func collectGitReceiptWithPriorBase(ctx context.Context, runner deploy.CommandRu
 		receipt.Warnings = append(receipt.Warnings, "Git status could not be determined")
 	} else {
 		statusEntries = parseGitStatus(status)
+		receipt.Dirty = len(statusEntries) != 0
 	}
 
 	committedEntries := []gitStatusEntry{}
@@ -169,6 +173,14 @@ func collectGitReceiptWithPriorBase(ctx context.Context, runner deploy.CommandRu
 	return receipt
 }
 
+// Keep the original path-only identity for stores that have never been received.
+func checkoutIdentity(canonicalRoot, generation string) string {
+	if generation != "" {
+		canonicalRoot = generation + "\x00" + canonicalRoot
+	}
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(canonicalRoot)))
+}
+
 // normalizeReportedPaths makes absolute paths and paths that resolve from the
 // invocation directory comparable with Git's repository-root-relative status.
 func normalizeReportedPaths(reported []string, dir, repoRoot string) []string {
@@ -192,7 +204,7 @@ func normalizeReportedPaths(reported []string, dir, repoRoot string) []string {
 	return normalized
 }
 
-func gitOutput(ctx context.Context, runner deploy.CommandRunner, dir string, args ...string) ([]byte, error) {
+func gitOutput(ctx context.Context, runner executil.CommandRunner, dir string, args ...string) ([]byte, error) {
 	return runner.Output(ctx, "git", append([]string{"-C", dir}, args...)...)
 }
 
@@ -211,7 +223,9 @@ func parseGitStatus(data []byte) []gitStatusEntry {
 		entries = append(entries, entry)
 		if (entry.status[0] == 'R' || entry.status[0] == 'C' || entry.status[1] == 'R' || entry.status[1] == 'C') && i+1 < len(parts) && len(parts[i+1]) > 0 {
 			i++
-			entries = append(entries, gitStatusEntry{status: entry.status, path: string(parts[i])})
+			entries = append(entries, gitStatusEntry{
+				status: entry.status, path: string(parts[i]), renameSource: strings.ContainsRune(entry.status, 'R'),
+			})
 		}
 	}
 	return entries
@@ -290,17 +304,47 @@ func gitStatusDigest(dir, repository, branch, base, head string, entries []gitSt
 	})
 	h := sha256.New()
 	fmt.Fprintf(h, "repository\x00%s\x00branch\x00%s\x00base\x00%s\x00head\x00%s\n", repository, branch, base, head)
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return ""
+	}
+	defer root.Close()
 	for _, entry := range entries {
 		path := filepath.Clean(entry.path)
-		info, err := os.Stat(filepath.Join(dir, path))
-		if err != nil {
+		info, err := root.Lstat(path)
+		mayBeAbsent := entry.status == "committed" || entry.renameSource || strings.ContainsRune(entry.status, 'D')
+		if os.IsNotExist(err) && mayBeAbsent {
 			fmt.Fprintf(h, "%s\x00%s\x00missing\n", entry.status, path)
 			continue
 		}
-		contentDigest := ""
-		if data, readErr := os.ReadFile(filepath.Join(dir, path)); readErr == nil {
-			contentDigest = fmt.Sprintf("sha256:%x", sha256.Sum256(data))
+		if err != nil {
+			return ""
 		}
+		var data []byte
+		switch {
+		case info.Mode()&os.ModeSymlink != 0:
+			var target string
+			target, err = root.Readlink(path)
+			data = []byte(target)
+		case info.Mode().IsRegular():
+			data, err = root.ReadFile(path)
+		case info.IsDir() && mayBeAbsent:
+			// A tracked file replaced by a directory is a deletion. Git
+			// reports that directory's untracked files as separate paths.
+			fmt.Fprintf(h, "%s\x00%s\x00missing\n", entry.status, path)
+			continue
+		default:
+			return ""
+		}
+		if err != nil {
+			return ""
+		}
+		after, err := root.Lstat(path)
+		if err != nil || !os.SameFile(info, after) || info.Size() != after.Size() ||
+			info.Mode() != after.Mode() || !info.ModTime().Equal(after.ModTime()) {
+			return ""
+		}
+		contentDigest := fmt.Sprintf("sha256:%x", sha256.Sum256(data))
 		fmt.Fprintf(h, "%s\x00%s\x00%d\x00%d\x00%d\x00%s\n", entry.status, path, info.Size(), info.ModTime().UnixNano(), info.Mode(), contentDigest)
 	}
 	return fmt.Sprintf("sha256:%x", h.Sum(nil))

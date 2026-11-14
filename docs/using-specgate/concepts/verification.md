@@ -4,7 +4,7 @@ SpecGate's promise is that a verdict means something: when a gate says `pass`
 or a delivery review says `met`, a team should be able to say exactly what was
 checked, against what context, and with what confidence. This page explains
 how the checkers work and where their limits are. It describes what the code
-does in the v0.1 implementation, not an aspiration.
+does in the Local CLI.
 
 If you want to act on a specific verdict, see
 [Respond to gate failures](../guides/respond-to-gate-failures.md). If you want
@@ -29,83 +29,29 @@ Delivery status keeps four facts separate:
    has gaps, needs human interpretation, or could not be evaluated because its
    governing policy was unavailable.
 2. **Assurance** — where confidence comes from, such as an agent report, a
-   locally captured citation, a reproduced check, peer review, CI, or a
-   repository event.
+   locally grounded citation, a reproduced check, or peer review.
 3. **Decision** — whether a human has accepted or rejected the delivery.
 4. **Receipt** — which Git revision was recorded with the report. A recorded
    receipt is a comparison target, not proof that it is still the current
    checkout.
 
-A model can review the submitted evidence, but it does not thereby inspect the
-code, replace CI, or make the human acceptance decision.
-
 ## What a readiness gate sees
 
-The model-based descriptions below apply to Full mode with a configured
-platform model. Local mode and model-less Full mode instead dispatch frozen
-IDE gate tasks; their results are `agent_attested`, not independent platform
-model judgments. Both paths keep readiness separate from human approval.
-
-When gates run, the platform fetches the artifact's documents and groups them
-by role: spec, design, plan, verification, reference. Each gate receives only
-the sections relevant to its question. The scope gate reads the spec; the
-acceptance-criteria gates read the spec, plan, and optional verification
-material; implementation traceability also reads optional design material; the
-completeness gate reads everything. A framework may keep its verification
-method inside its native spec or plan—SpecGate does not require a separate
-verification document. Feature attachments pinned with the `gate` audience
-(bug reproductions, examples, links) are added to the acceptance-criteria and
-scope gates. The artifact's work type is included so a bug fix is not judged by
-new-feature standards.
-
-SpecGate does not intentionally truncate this bundle. A document that fails
-to fetch is skipped rather than aborting the run, and the model's own context
-window is the remaining ceiling; typical spec packages are far below it.
-
-Each model-judged gate is an opinionated prompt, not a generic "review this"
-request. The acceptance-criteria gate, for example, hunts for untestable phrasing
-("works well", "is fast", "handles errors gracefully") and must restate any
-offender as an observable check in its hint. When the resolved automatic policy binds
-a team Skill to a gate, that Skill's text is appended as team policy, so the
-gate judges by your standards, not only its built-in ones.
-
-## How a gate verdict is derived
-
-The model must return structured output: a verdict, a confidence between 0
-and 1, an actionable hint, and an evidence quote naming what in the artifact
-decided it. Two rules are then applied in code, outside the model:
-
-- a `pass` or `fail` below the confidence threshold (default 0.7) is
-  downgraded to `needs_human_review` — an unsure checker never quietly
-  decides;
-- the completeness gate aggregates per-topic coverage and never exceeds
-  `warn` — it advises, it does not block.
-
-The full judgment, including the evidence quote, confidence, and which judge
-produced it, is persisted with the gate run.
+The CLI dispatches frozen semantic tasks to the IDE agent. Each task carries
+the artifact and policy digests, gate definition and rubric. The agent reads
+the relevant explicitly mapped document roles and submits a structured result
+with evidence. Store provenance identifies the result as `agent_attested`.
+A successful dispatch may remain `not_run` while required tasks are pending.
+Deterministic checks enforce required roles and the artifact snapshot pin.
 
 ## What the delivery reviewer sees
 
-The reviewer receives the work item's acceptance criteria and the coding
-agent's completion report: one claim per criterion (`satisfied`, `partial`,
-`not_done`), automated check results (tests, types, lint), the affected
-files, and evidence citations. Its prompt is skeptical by design: default to
-`unclear` rather than `met`, do not give the benefit of the doubt, quote the
-deciding evidence.
-
-The model judges each criterion; the overall verdict is then deterministic
-code:
-
-| Outcome | Condition |
-|---|---|
-| `pass` | every criterion `met` and no automated check failed |
-| `fail` | any criterion `unmet`, or any check failed |
-| `needs_human_review` | any criterion `unclear`, no criteria to judge, or low confidence |
-
-The reviewer does not read the git diff. It verifies the agent's account of
-the work: every criterion claimed with evidence, claims internally
-consistent, automated checks corroborating them. Your tests, CI, and the
-human approval step remain the code-level truth.
+Local delivery review compares the exact stored acceptance criteria with the
+completion report. Each canonical criterion needs exactly one supported
+`satisfied` claim. Bound criteria use the named check result. Missing,
+duplicate, unknown, skipped, and failed evidence remains visible in review.
+The review covers submitted evidence. The human may also inspect the Git diff
+and current source before recording a decision.
 
 Before work exists, the coding agent reads every explicitly mapped spec-role
 document and submits each confirmed criterion explicitly. SpecGate does not
@@ -171,8 +117,7 @@ across agents or resumes, not as a default quick-work step. Before confirming,
 the human reviews the work's current Context Pack digest, each binding and
 criterion, and each literal command and checkout-relative directory. A dry-run
 checks eligibility but neither writes a pin nor runs its commands. The agreement
-is immutable for the work: changing it requires replacement work, and a pin
-also prevents portable/v1 export to Full mode; a Local database backup remains.
+is immutable for the work. Changing it requires replacement work.
 
 Local acceptance and rejection require the exact `--review-id` displayed by
 the status the human reviewed. A new review requires a new decision against
@@ -188,7 +133,7 @@ SpecGate trusted that row:
   opened before submission, storing a short excerpt and SHA-256 digest with the
   completion report.
 - `peer_reviewed` means a later `coding_agent.peer_reviewed` feedback event
-  from a different agent confirmed the criterion.
+  from a different agent confirmed the criterion. Peer review is optional.
 
 `grounded` and `peer_reviewed` are useful review signals, but they do not
 pretend to prove that an automated check exercised the acceptance criterion.
@@ -199,10 +144,7 @@ The CLI may attach a `git_receipt` containing repository/branch/revision
 metadata, changed-file names, a local digest, and `freshness_scope`. This is self-attested
 (`agent_attested`): it detects checkout staleness or drift between report and
 submit and gives a new IDE agent a compare-target, but it is not cryptographic
-proof of what was built. It contains no source diff or file contents. A merged
-PR/MR observes the submitted commit only when its normalized `head_sha` matches
-the latest receipt's normalized `head_revision`; do not treat the local digest
-as tamper-proof.
+proof of what was built. It contains no source diff or file contents.
 
 When a completion report is refreshed after its branch is pushed, the CLI keeps
 the prior receipt base only if it is still an ancestor of `HEAD`; this preserves
@@ -233,37 +175,6 @@ scope while `work resume --since` describes only a compatible Local checkout
 delta. Neither checkpoint data nor a current freshness observation changes a
 historical evidence result or grants acceptance.
 
-## Corroborated evidence
-
-Webhook events from git integrations are matched to the specific work item and
-the latest completion receipt:
-
-- a **merged-PR/MR event** records `repository_observed` only when its
-  normalized `head_sha` equals the latest completion receipt's normalized
-  `git_receipt.head_revision`; missing, mismatched, and stale events do not
-  corroborate;
-- under the `corroborated_required` evidence policy, a pass without that
-  repository observation or deterministic bindings for every criterion is
-  clamped to `needs_human_review`. CI results do not automatically become
-  SpecGate-produced assurance.
-
-## Verification without a server model
-
-The loop still runs when no server-side model is configured, at a recorded
-lower trust tier. Readiness gates dispatch as tasks to your IDE coding agent,
-which fetches the artifact, applies the same rubric, and submits a result
-marked agent-attested; platform-evaluated and agent-attested results are
-distinguished in the stored record. Delivery review falls back to mapping the
-agent's own per-criterion claims, and the stored review names its origin as
-agent-attested rather than a platform model judge.
-
-Gate runs and artifact readiness history expose the evaluator as a
-first-class `executor` field (`platform` or `ide_agent`), and agent-attested
-runs appear in the history labeled as such; the platform-only filter applies
-to the approval aggregate, not to what you can see. One remaining caveat:
-delivery reviews mark their origin through the judge name rather than the
-same field.
-
 ## Automatic policy decides which gates run
 
 Every artifact version freezes a policy snapshot: enabled gates,
@@ -273,22 +184,19 @@ the artifact-level and work-item-level paths. Because the snapshot is immutable,
 editing a Skill or tightening policy applies to new artifact versions, not
 retroactively to in-flight ones.
 
-## Honest limits
+## Observation limits
 
-Worth knowing when you rely on a verdict:
+An agent report records what the agent says it ran. With `--run-checks`, the
+CLI records the command outcome. When a check pins selected JUnit cases,
+the CLI also records what the fresh report says about those exact cases. A
+passing command can coexist with a missing selected case.
 
-1. Delivery review verifies the agent's evidence-backed account, not the
-   diff. Misreported claims are caught by check contradictions, the skeptical
-   default, corroboration policy, and human approval — not by code reading.
-2. Readiness gates judge the artifact in isolation. They have no repository
-   context, so they cannot assess whether criteria are achievable in your
-   codebase.
-3. Completeness measures topic coverage, not depth. A shallow mention counts
-   as covered, which is why that gate only warns.
-4. Corroboration checks that a matching webhook event exists for the work
-   item; it does not independently verify the event's contents.
-5. A Skill bound to a gate becomes part of that gate's policy verbatim.
-   Review team rubrics with the same care as the gates they steer.
+If a criterion requires an end-to-end flow or a real provider call, run that
+path and show what it exercised. A unit test with a mock or stub verifies the
+behavior of that setup. Review the command, runner, case assertions, and
+environment alongside the output to decide whether the evidence covers the
+requirement. Git and watched-input observations describe the compared endpoints. A handoff file is an unsigned
+request to review evidence and carries no shared decision authority.
 
 ## Related
 
