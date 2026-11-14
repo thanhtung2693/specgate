@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
-import { sample, beginDecision, recordDecision, reset } from "./sample.mjs";
+import { sample, beginDecision, recordDecision, reset, tourStep } from "./sample.mjs";
 
 test("the built page uses the shared presentation without starting the production app", async () => {
   const html = await readFile(new URL("index.html", import.meta.url), "utf8");
@@ -43,4 +43,28 @@ test("the revised sample, acceptance and reset remain reversible and local", () 
   assert.equal(next.decision.verdict, "approve");
   assert.equal(next.version, 2);
   assert.deepEqual(reset(), { version: 1, decision: null });
+});
+
+test("the tour goes from 503 evidence to the diff and then the decision", () => {
+  const state = reset();
+  assert.deepEqual(
+    [0, 1, 2].map((index) => tourStep(state, index).target),
+    [
+      { tab: "evidence", criterion: "local-2", source: "code" },
+      { tab: "evidence", criterion: "local-2", source: "diff" },
+      { tab: "decision" },
+    ],
+  );
+  assert.equal(tourStep(state, -1), undefined);
+  assert.equal(tourStep(state, 3), undefined);
+});
+
+test("restarting the tour explains the current sample and preserves its exact decision", () => {
+  const revised = reset(2);
+  const accepted = recordDecision(revised, beginDecision(revised, "approve", "Looks good"));
+  assert.match(tourStep(accepted, 0).text, /passing 503/);
+  assert.match(tourStep(revised, 2).text, /AC-03.*agent’s claim/);
+  assert.match(tourStep(accepted, 2).text, /already has a decision/);
+  assert.equal(sample(accepted.version).completion, "sample-delivery-2");
+  assert.deepEqual(accepted.decision, { verdict: "approve", note: "Looks good" });
 });

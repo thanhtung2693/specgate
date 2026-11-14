@@ -38,7 +38,8 @@ browser review and private transfer of a Local store between checkouts.
 - The landing page presents the four-step Local workflow alongside an
   interactive delivery example for inspecting criteria and evidence.
 - The public interactive UI demo replaces the short video. Inspect sample
-  requirements, evidence and source, then try a review decision and reset it.
+  requirements, evidence and source with a three-step guided tour, then try a
+  review decision and reset it. Skip or restart the tour without losing a draft.
 - The redesigned Local review UI makes the work queue, criteria, cited source,
   and review decisions easier to navigate on desktop and narrow screens.
 - Local review announces a newer delivery without replacing the open review or
