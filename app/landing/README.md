@@ -24,6 +24,13 @@ hero and closing band use the dark palette in both themes.
 
 Keep commands aligned with the [Quickstart](../../docs/using-specgate/quickstart.md)
 and [IDE setup guide](../../docs/using-specgate/guides/install-ide-plugins.md).
+The install selector shows the Local CLI, Codex and Claude Code marketplace
+setup, project-local Cursor setup via the SpecGate CLI, and a copyable prompt
+for the agent. The icon-only choices carry names in their accessible labels and
+tooltips. The selector uses the Codex app icon bundled with OpenAI's ChatGPT
+desktop app, the Claude star from the [official Claude site](https://claude.com/),
+and both Cursor Cube 2D theme variants from the
+[Cursor brand kit](https://cursor.com/brand).
 The CLI owns Local scope, evidence, and decisions. The
 [Local review guide](../../docs/using-specgate/guides/local-review.md) explains
 the optional browser opened by `specgate ui`. The public hero is an

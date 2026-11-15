@@ -81,8 +81,8 @@ code, pre, .mono { font-family: var(--f-mono); font-size: .9em; }
 .codebox { position: relative; min-width: 0; max-width: 100%; background: var(--sunk); border-radius: var(--r); }
 .codebox pre { margin: 0; padding: 14px 16px; max-width: 100%; overflow-x: auto; font-size: 13px; line-height: 1.6; white-space: pre; }
 #code-prompt { white-space: pre-wrap; overflow-wrap: anywhere; }
-.win .codebox:has(.copy:not([hidden])) pre { padding-right: 104px; }
-.codebox .copy { position: absolute; top: 8px; right: 8px; }
+.codebox:has(.copy:not([hidden])) { display: grid; }
+.codebox .copy { grid-row: 1; justify-self: end; margin: 8px 8px 0; }
 .copy.done { color: var(--ok); border-color: var(--ok); }
 
 /* 5 ── Hero stage. One composition: the gate (logo arch) with three sheets stacked in depth inside it.
@@ -222,10 +222,18 @@ code, pre, .mono { font-family: var(--f-mono); font-size: .9em; }
 .install h2 { margin-bottom: 8px; }
 .win { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow), 10px 10px 0 -1px var(--bg), 10px 10px 0 0 var(--line); }
 .win-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 10px; border-bottom: 1px solid var(--line-soft); background: var(--surface); }
+#ins-tabs { flex-wrap: wrap; gap: 2px; }
+#ins-tabs button { position: relative; display: inline-grid; place-items: center; width: 44px; min-height: 44px; padding: 0; }
+#ins-tabs button :is(.ic, img) { width: 22px; height: 22px; object-fit: contain; }
+#ins-tabs button:focus-visible::after {
+  content: attr(title); position: absolute; z-index: 1; top: 100%; left: 50%; translate: -50% 4px;
+  padding: 3px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink);
+}
+#ins-tabs button:last-child:focus-visible::after { left: auto; right: 0; translate: 0 4px; }
 .win-top .dots { display: flex; gap: 5px; margin-right: 4px; }
 .win-top .dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
 .win .codebox { border-radius: 0; }
-.win .codebox pre { padding: 18px 18px 22px; min-height: 104px; }
+.win .codebox pre { padding: 12px 18px 18px; min-height: 68px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .install .note { margin-top: 18px; font-size: 13px; color: var(--muted); }
 
 .faq { max-width: 720px; }

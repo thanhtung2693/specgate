@@ -305,29 +305,42 @@
               <div class="win-top">
                 <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
                 <div class="seg" role="group" aria-label="Install options" data-i18n-attr="aria-label:ins.aria" id="ins-tabs" hidden>
-                  <button type="button" data-ins="cli" aria-pressed="true">CLI</button>
-                  <button type="button" data-ins="claude" aria-pressed="false">Claude Code</button>
-                  <button type="button" data-ins="prompt" aria-pressed="false" data-i18n="ins.tabPrompt">Ask your agent</button>
+                  <button type="button" data-ins="cli" aria-pressed="true" aria-label="CLI" title="CLI"><svg class="ic" aria-hidden="true"><use href="#i-agent" /></svg></button>
+                  <button type="button" data-ins="codex" aria-pressed="false" aria-label="Codex" title="Codex"><img src="assets/brands/codex.png" alt="" width="22" height="22" loading="lazy" decoding="async" /></button>
+                  <button type="button" data-ins="claude" aria-pressed="false" aria-label="Claude Code" title="Claude Code"><img src="assets/brands/claude.svg" alt="" width="22" height="22" /></button>
+                  <button type="button" data-ins="cursor" aria-pressed="false" aria-label="Cursor" title="Cursor"><img class="theme-light" src="assets/brands/cursor-light.svg" alt="" width="22" height="22" /><img class="theme-dark" src="assets/brands/cursor-dark.svg" alt="" width="22" height="22" /></button>
+                  <button type="button" data-ins="prompt" aria-pressed="false" aria-label="Ask your agent" title="Ask your agent" data-i18n-attr="aria-label,title:ins.tabPrompt"><svg class="ic" aria-hidden="true"><use href="#i-word" /></svg></button>
                 </div>
               </div>
               <div class="codebox" data-panel="cli">
+                <button class="btn sm copy" type="button" data-copy="code-cli" hidden><svg class="ic sm" aria-hidden="true"><use href="#i-copy" /></svg><span data-i18n="copy.copy">Copy</span></button>
                 <pre class="mono" id="code-cli" tabindex="0">curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/scripts/install-cli.sh | sh
 specgate init --mode local
 specgate doctor</pre>
-                <button class="btn sm copy" type="button" data-copy="code-cli" hidden><svg class="ic sm" aria-hidden="true"><use href="#i-copy" /></svg><span data-i18n="copy.copy">Copy</span></button>
+              </div>
+              <div class="codebox" data-panel="codex" hidden>
+                <button class="btn sm copy" type="button" data-copy="code-codex" hidden><svg class="ic sm" aria-hidden="true"><use href="#i-copy" /></svg><span data-i18n="copy.copy">Copy</span></button>
+                <pre class="mono" id="code-codex" tabindex="0">codex plugin marketplace add thanhtung2693/specgate</pre>
               </div>
               <div class="codebox" data-panel="claude" hidden>
+                <button class="btn sm copy" type="button" data-copy="code-claude" hidden><svg class="ic sm" aria-hidden="true"><use href="#i-copy" /></svg><span data-i18n="copy.copy">Copy</span></button>
                 <pre class="mono" id="code-claude" tabindex="0">claude plugin marketplace add thanhtung2693/specgate
 claude plugin install specgate@specgate</pre>
-                <button class="btn sm copy" type="button" data-copy="code-claude" hidden><svg class="ic sm" aria-hidden="true"><use href="#i-copy" /></svg><span data-i18n="copy.copy">Copy</span></button>
+              </div>
+              <div class="codebox" data-panel="cursor" hidden>
+                <button class="btn sm copy" type="button" data-copy="code-cursor" hidden><svg class="ic sm" aria-hidden="true"><use href="#i-copy" /></svg><span data-i18n="copy.copy">Copy</span></button>
+                <pre class="mono" id="code-cursor" tabindex="0">specgate plugins install --agent cursor --project-local
+specgate plugins doctor --agent cursor --project-local</pre>
               </div>
               <div class="codebox" data-panel="prompt" hidden>
-                <pre class="mono" id="code-prompt" data-i18n="ins.prompt">Prepare this change in SpecGate. Show me the scope, acceptance criteria, and any proposed check commands. Wait for my scope approval. Then implement the change, submit per-criterion evidence, and stop for my delivery decision.</pre>
                 <button class="btn sm copy" type="button" data-copy="code-prompt" hidden><svg class="ic sm" aria-hidden="true"><use href="#i-copy" /></svg><span data-i18n="copy.copy">Copy</span></button>
+                <pre class="mono" id="code-prompt" data-i18n="ins.prompt">Prepare this change in SpecGate. Show me the scope, acceptance criteria, and any proposed check commands. Wait for my scope approval. Then implement the change, submit per-criterion evidence, and stop for my delivery decision.</pre>
               </div>
             </div>
             <span class="sr-only" id="copy-status" role="status"></span>
-            <p class="note" data-install-note="claude" hidden><span data-i18n="ins.first">Install the CLI first.</span> <a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/install-ide-plugins.md" data-i18n="ins.ide">IDE setup guide</a></p>
+            <p class="note" data-install-note="codex" data-i18n="ins.codex" hidden>In Codex, open <code>/plugins</code> and install <code>specgate@specgate</code>.</p>
+            <p class="note" data-install-note="cursor" data-i18n="ins.cursor" hidden>Run both commands from your Git project. They install and verify the setup for this project.</p>
+            <p class="note" data-install-note="codex claude cursor" hidden><span data-i18n="ins.first">Install the CLI first. Use one plugin install method per IDE, then restart your IDE.</span> <a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/install-ide-plugins.md" data-i18n="ins.ide">IDE setup guide</a></p>
             <p class="note"><span data-i18n="ins.then">Free Local CLI. Keep your coding agent. Open <code>specgate ui</code> if you prefer browser review.</span> <a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/quickstart.md" rel="noopener" data-i18n="ins.link">Full quickstart</a></p>
           </div>
         </div>

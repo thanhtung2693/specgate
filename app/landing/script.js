@@ -26,7 +26,9 @@ const strings = {
     "flow.decision.h": "Duyệt và chuyển giao", "flow.decision.start": "Duyệt hoặc yêu cầu sửa đúng bản đã xem. Đổi máy thì ", "flow.decision.link": "chuyển toàn bộ kho dữ liệu Local",
     "ins.h": "Bắt đầu với CLI.", "ins.aria": "Cách cài đặt", "ins.tabPrompt": "Nhờ agent",
     "ins.prompt": "Dùng SpecGate để chuẩn bị thay đổi này. Cho tôi xem phạm vi, tiêu chí chấp nhận và các lệnh kiểm tra đề xuất. Chờ tôi duyệt phạm vi, sau đó triển khai, nộp bằng chứng theo từng tiêu chí và dừng để tôi quyết định có chấp nhận kết quả hay không.",
-    "ins.first": "Cài CLI trước khi cài plugin.", "ins.ide": "Hướng dẫn cài plugin",
+    "ins.codex": "Trong Codex, mở <code>/plugins</code> rồi cài <code>specgate@specgate</code>.",
+    "ins.cursor": "Chạy cả hai lệnh trong repo Git để cài và kiểm tra cấu hình cho dự án này.",
+    "ins.first": "Cài CLI trước. Mỗi IDE chỉ dùng một cách cài plugin, rồi khởi động lại IDE.", "ins.ide": "Hướng dẫn cài plugin",
     "ins.then": "CLI miễn phí, chạy cục bộ với agent bạn đang dùng. Muốn duyệt trên trình duyệt thì chạy <code>specgate ui</code>.", "ins.link": "Hướng dẫn bắt đầu",
     "faq.h": "Hỏi nhanh", "faq.1q": "Test xanh vẫn có thể sót yêu cầu?", "faq.1a": "Có. Cả bộ test có thể xanh dù ca 503 đã chốt vẫn chưa có kết quả.",
     "faq.2q": "SpecGate kiểm tra những gì?", "faq.2a": "Bạn xem được agent báo gì, mã thoát của các lệnh đã chạy và kết quả của những test đã chọn xuất hiện trong báo cáo. Bạn quyết định bằng chứng đã đủ chưa.",
@@ -50,12 +52,13 @@ function savePreference(key, value) {
 
 const languageButtons = all("[data-lang]");
 const translations = all("[data-i18n], [data-i18n-attr]").map((element) => {
-  const [attribute, key] = element.dataset.i18nAttr?.split(":") ?? [];
+  const [names, key] = element.dataset.i18nAttr?.split(":") ?? [];
+  const attributes = names?.split(",");
   return {
     element,
-    attribute,
+    attributes,
     key: element.dataset.i18n ?? key,
-    english: attribute ? element.getAttribute(attribute) : element.innerHTML,
+    english: attributes ? element.getAttribute(attributes[0]) : element.innerHTML,
   };
 });
 
@@ -92,9 +95,9 @@ function updatePlayer() {
 
 function setLanguage(language) {
   root.lang = language === "vi" ? "vi" : "en";
-  for (const { element, attribute, key, english } of translations) {
+  for (const { element, attributes, key, english } of translations) {
     const value = string(key) ?? english;
-    if (attribute) element.setAttribute(attribute, value);
+    if (attributes) for (const attribute of attributes) element.setAttribute(attribute, value);
     else element.innerHTML = value;
   }
   for (const button of languageButtons) button.setAttribute("aria-pressed", String(button.dataset.lang === root.lang));
@@ -191,7 +194,7 @@ installTabs.addEventListener("click", (event) => {
   if (!tab) return;
   for (const button of all("[data-ins]")) button.setAttribute("aria-pressed", String(button === tab));
   for (const panel of all("[data-panel]")) panel.hidden = panel.dataset.panel !== tab.dataset.ins;
-  for (const note of all("[data-install-note]")) note.hidden = note.dataset.installNote !== tab.dataset.ins;
+  for (const note of all("[data-install-note]")) note.hidden = !note.dataset.installNote.split(" ").includes(tab.dataset.ins);
 });
 
 const copyStatus = select("#copy-status");
