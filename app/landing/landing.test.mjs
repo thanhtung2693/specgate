@@ -29,10 +29,10 @@ test("the published stage stands alone with three sheets and a readable review",
   }
 });
 
-test("install panels match the documented Local and Claude Code setup", () => {
+test("install panels match the documented Local and IDE setup", () => {
   const guide = read("../../docs/using-specgate/quickstart.md");
   const ide = read("../../docs/using-specgate/guides/install-ide-plugins.md");
-  for (const [id, doc] of [["cli", guide], ["claude", ide]]) {
+  for (const [id, doc] of [["cli", guide], ["codex", ide], ["claude", ide], ["cursor", ide]]) {
     const block = html.match(new RegExp(`id="code-${id}"[^>]*>(.*?)</pre>`, "s"))?.[1];
     assert.ok(block);
     for (const line of block.split("\n")) assert.ok(doc.includes(line), line);
@@ -44,6 +44,26 @@ test("install panels match the documented Local and Claude Code setup", () => {
   }
   assert.equal([...html.matchAll(/class="btn lg primary[^"]*" href="#install"/g)].length, 2);
   assert.match(html, /guides\/local-review\.md/);
+  const choices = [...html.matchAll(/<button type="button" data-ins="([^"]+)"([^>]+)>(.*?)<\/button>/g)];
+  const names = { cli: "CLI", codex: "Codex", claude: "Claude Code", cursor: "Cursor", prompt: "Ask your agent" };
+  const icons = {
+    cli: '<svg class="ic" aria-hidden="true"><use href="#i-agent" /></svg>',
+    codex: '<img src="assets/brands/codex.png" alt="" width="22" height="22" loading="lazy" decoding="async" />',
+    claude: '<img src="assets/brands/claude.svg" alt="" width="22" height="22" />',
+    cursor: '<img class="theme-light" src="assets/brands/cursor-light.svg" alt="" width="22" height="22" />'
+      + '<img class="theme-dark" src="assets/brands/cursor-dark.svg" alt="" width="22" height="22" />',
+    prompt: '<svg class="ic" aria-hidden="true"><use href="#i-word" /></svg>',
+  };
+  assert.deepEqual(choices.map(([, id]) => id), Object.keys(names));
+  for (const [, id, attrs, icon] of choices) {
+    assert.ok(attrs.includes(`aria-label="${names[id]}"`), id);
+    assert.ok(attrs.includes(`title="${names[id]}"`), id);
+    assert.equal(icon.trim(), icons[id], id);
+  }
+  assert.match(choices.at(-1)[2], /data-i18n-attr="aria-label,title:ins.tabPrompt"/);
+  assert.match(css, /#ins-tabs button:focus-visible::after \{[^}]*content: attr\(title\)/);
+  assert.match(html, /data-install-note="codex"[^>]*>.*?<code>\/plugins<\/code>.*?<code>specgate@specgate<\/code>/);
+  assert.doesNotMatch(html.match(/id="code-codex"[^>]*>(.*?)<\/pre>/s)[1], /\/plugins/);
   assert.match(html, /guides\/install-ide-plugins\.md/);
   assert.match(html, /quickstart\.md/);
   assert.doesNotMatch(html + js, /specgate stats|full mode|production-ready|trusted by|guarantee|automatically detects|official (?:Codex|Claude|plugin) marketplace|approved (?:by|for) (?:OpenAI|Anthropic|Codex|Claude)/i);
@@ -51,7 +71,7 @@ test("install panels match the documented Local and Claude Code setup", () => {
 
 test("every localizable label has a Vietnamese translation", () => {
   const strings = runInNewContext(js.slice(0, js.indexOf("const root =")) + "strings");
-  for (const [, key] of html.matchAll(/data-i18n(?:-attr)?="(?:[\w-]+:)?([\w.]+)"/g)) {
+  for (const [, key] of html.matchAll(/data-i18n(?:-attr)?="(?:[\w,-]+:)?([\w.]+)"/g)) {
     assert.ok(strings.vi[key], key);
   }
   for (const key of Object.keys(strings.en)) assert.ok(strings.vi[key], key);
@@ -151,11 +171,19 @@ function playerHarness({ reduce = false, lang = null, hash = "", watchWorkflow =
     "#copy-status": node("copy-status"),
     ".workflow-block": node("workflow"),
   };
-  const installOptions = ["cli", "claude", "prompt"].map((ins) => node(ins, { ins }));
+  const installOptions = [...html.matchAll(/data-ins="([^"]+)"/g)].map(([, ins]) => node(ins, { ins }));
+  const prompt = installOptions.find(({ id }) => id === "prompt");
+  const promptMarkup = html.match(/<button type="button" data-ins="prompt"([^>]+)>(.*?)<\/button>/);
+  prompt.innerHTML = promptMarkup[2];
+  prompt.dataset.i18nAttr = promptMarkup[1].match(/data-i18n-attr="([^"]+)"/)?.[1];
+  for (const [, name, value] of promptMarkup[1].matchAll(/(aria-label|title)="([^"]+)"/g)) prompt.setAttribute(name, value);
   const installPanels = installOptions.map(({ id }) => node(`panel-${id}`, { panel: id }));
-  const claudeNote = node("claude-note", { installNote: "claude" });
-  const copyLabel = node("copy-label");
-  const copy = { ...node("copy", { copy: "code-cli" }), querySelector: () => copyLabel };
+  const installNotes = [...html.matchAll(/data-install-note="([^"]+)"/g)].map(([, installNote]) => node(installNote, { installNote }));
+  const copyLabels = new Map(installOptions.map(({ id }) => [id, node(`copy-label-${id}`)]));
+  const copyButtons = installOptions.map(({ id }) => ({
+    ...node(`copy-${id}`, { copy: `code-${id}` }),
+    querySelector: () => copyLabels.get(id),
+  }));
   let copied;
   const timers = new Map();
   let now = 0;
@@ -174,10 +202,11 @@ function playerHarness({ reduce = false, lang = null, hash = "", watchWorkflow =
       querySelector: (selector) => selectors[selector],
       querySelectorAll: (selector) => ({
         "[data-step]": steps, "[data-ins]": installOptions, "[data-panel]": installPanels,
-        "[data-install-note]": [claudeNote], "[data-copy]": [copy],
+        "[data-install-note]": installNotes, "[data-copy]": copyButtons,
+        "[data-i18n], [data-i18n-attr]": [prompt],
         ".reveal, .workflow-block": [selectors[".workflow-block"]],
       })[selector] ?? [],
-      getElementById: (id) => ({ textContent: id === "code-cli" ? "  specgate doctor  " : "" }),
+      getElementById: (id) => ({ textContent: html.match(new RegExp(`id="${id}"[^>]*>(.*?)</pre>`, "s"))?.[1] }),
     },
     window: { ...node("window"), ...(watchWorkflow ? { IntersectionObserver: viewportObserver } : {}) },
     matchMedia: () => ({ ...node("media"), matches: reduce }),
@@ -189,7 +218,7 @@ function playerHarness({ reduce = false, lang = null, hash = "", watchWorkflow =
     clearTimeout: (id) => timers.delete(id),
   });
   return {
-    scene, steps, animation, selectors, installOptions, installPanels, claudeNote, copyLabel,
+    scene, steps, animation, selectors, installOptions, installPanels, installNotes, copyLabels,
     get copied() { return copied; },
     observed,
     intersect(target, isIntersecting) { intersection([{ target, isIntersecting }]); },
@@ -256,18 +285,37 @@ test("reduced motion stays on the review until explicit navigation, including ke
 
 test("install options switch the panel and the copy button reports the copied command", async () => {
   const harness = playerHarness({ reduce: true });
-  const { installOptions, installPanels, claudeNote, selectors, copyLabel, fire, advance } = harness;
-  fire("install", "click", { target: { closest: () => installOptions[1] } });
-  assert.deepEqual(installPanels.map(({ hidden }) => hidden), [true, false, true]);
-  assert.equal(installOptions[1].getAttribute("aria-pressed"), "true");
-  assert.equal(claudeNote.hidden, false);
-  fire("install", "click", { target: { closest: () => installOptions[0] } });
-  assert.equal(claudeNote.hidden, true);
-  await fire("copy", "click");
-  assert.equal(harness.copied, "specgate doctor");
-  assert.equal(selectors["#copy-status"].textContent, "Copied");
-  advance(1500);
-  assert.equal(copyLabel.textContent, "Copy");
+  const { installOptions, installPanels, installNotes, selectors, copyLabels, fire, advance } = harness;
+  const expected = {
+    cli: /specgate doctor$/,
+    codex: /^codex plugin marketplace add thanhtung2693\/specgate$/,
+    claude: /claude plugin install specgate@specgate$/,
+    cursor: /^specgate plugins install --agent cursor --project-local\nspecgate plugins doctor --agent cursor --project-local$/,
+    prompt: /^Prepare this change in SpecGate\./,
+  };
+  assert.equal(installOptions.length, 5);
+  for (const option of installOptions) {
+    const { id } = option;
+    fire("install", "click", { target: { closest: () => option } });
+    assert.deepEqual(installPanels.filter(({ hidden }) => !hidden).map(({ id }) => id), [`panel-${id}`]);
+    assert.deepEqual(installOptions.filter((tab) => tab.getAttribute("aria-pressed") === "true").map(({ id }) => id), [id]);
+    const visibleNotes = installNotes.filter(({ hidden }) => !hidden).map(({ dataset }) => dataset.installNote);
+    assert.deepEqual(visibleNotes, id === "codex" ? ["codex", "codex claude cursor"]
+      : id === "cursor" ? ["cursor", "codex claude cursor"] : id === "claude" ? ["codex claude cursor"] : []);
+    await fire(`copy-${id}`, "click");
+    assert.match(harness.copied, expected[id]);
+    assert.equal(selectors["#copy-status"].textContent, "Copied");
+    advance(1500);
+    assert.equal(copyLabels.get(id).textContent, "Copy");
+  }
+});
+
+test("install prompt icon keeps its Vietnamese accessible name and tooltip", () => {
+  const page = playerHarness({ reduce: true, lang: "vi" });
+  const prompt = page.installOptions.find(({ id }) => id === "prompt");
+  assert.equal(prompt.getAttribute("aria-label"), "Nhờ agent");
+  assert.equal(prompt.getAttribute("title"), "Nhờ agent");
+  assert.match(prompt.innerHTML, /<svg/);
 });
 
 test("inspect turns the full-size evidence toward the reader before the separate decision view", () => {

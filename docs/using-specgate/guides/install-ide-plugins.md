@@ -143,6 +143,13 @@ IDE tools detected on your machine and falls back to all supported agents when
 none are detected. Interactive install also asks whether to write global user
 files or project-local files. Restart the selected IDEs after installation.
 
+From a Git project, install and verify Cursor for that project:
+
+```bash
+specgate plugins install --agent cursor --project-local
+specgate plugins doctor --agent cursor --project-local
+```
+
 Non-interactive examples:
 
 ```bash
