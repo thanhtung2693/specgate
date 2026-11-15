@@ -309,7 +309,7 @@ test("install options switch the panel and the copy button reports the copied co
     codex: /^codex plugin marketplace add thanhtung2693\/specgate$/,
     claude: /claude plugin install specgate@specgate$/,
     cursor: /^specgate plugins install --agent cursor --project-local\nspecgate plugins doctor --agent cursor --project-local$/,
-    prompt: /^Prepare this change in SpecGate\./,
+    prompt: /^Prepare this change as SpecGate Quick Work\..*After I approve them,/,
   };
   assert.equal(installOptions.length, 5);
   for (const option of installOptions) {
@@ -358,14 +358,17 @@ test("the flow offers four ordered stations with documented Local continuations"
   const titles = [...flow.matchAll(/<h3[^>]*>(.*?)<\/h3>/g)].map(([, title]) => title);
   assert.deepEqual(titles, ["Agree on scope", "Let your agent work", "Review the evidence", "Decide and hand off"]);
   const linkText = [...flow.matchAll(/<a href[^>]*>(.*?)<\/a>/g)].map(([, text]) => text);
-  assert.deepEqual(linkText, ["Project rubrics", "Resume the same work", "Selected tests", "Move the Local store"]);
+  assert.deepEqual(linkText, ["Start with Quick Work", "Resume the same work", "Selected tests", "Move the Local store"]);
   assert.match(flow, /OpenSpec · Spec Kit · Superpowers · Markdown/);
   assert.match(flow, /Claude Code · Codex · Cursor/);
   assert.match(flow, /class="mine"[^>]*><span class="tile"><img src="logo\.svg"/);
-  const links = [...flow.matchAll(/href="https:\/\/github\.com\/thanhtung2693\/specgate\/blob\/main\/(docs\/using-specgate\/[^"#]+)#([^"]+)"/g)];
+  const links = [...flow.matchAll(/href="https:\/\/github\.com\/thanhtung2693\/specgate\/blob\/main\/(docs\/using-specgate\/[^"#]+)(?:#([^"]+))?"/g)];
   assert.equal(links.length, 4);
+  assert.equal(links[0][1], "docs/using-specgate/quickstart.md");
   for (const [, file, anchor] of links) {
-    const headings = [...read("../../" + file).matchAll(/^#+ (.+)$/gm)]
+    const doc = read("../../" + file);
+    if (!anchor) continue;
+    const headings = [...doc.matchAll(/^#+ (.+)$/gm)]
       .map(([, heading]) => heading.toLowerCase().replace(/[^\w\s-]/g, "").replaceAll(" ", "-"));
     assert.ok(headings.includes(anchor), file + "#" + anchor);
   }

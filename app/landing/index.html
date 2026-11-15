@@ -115,7 +115,7 @@
                 "name": "What does it actually check?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "Review agent claims, recorded check exit codes, and selected tests found in the observed reports. You decide whether the evidence is enough."
+                  "text": "See what the agent reported, which commands ran, and the results of any selected tests that were observed. A passing result can still miss the behavior you care about. Review the code and decide whether the evidence is enough."
                 }
               },
               {
@@ -187,7 +187,7 @@
         <div class="wrap">
           <div class="hero-copy">
             <h1 id="h-hero" data-i18n="hero.h1">“Done.” <em>Done with what, exactly?</em></h1>
-            <p class="lede" data-i18n="hero.lede">Check what meets the agreed requirements and where evidence is missing.</p>
+            <p class="lede" data-i18n="hero.lede">A Local CLI for reviewing your agent’s work. See the evidence for each requirement before you accept.</p>
             <div class="cta">
               <a class="btn lg primary" href="#install"><span data-i18n="cta.install">Start with the CLI</span><svg class="ic go" aria-hidden="true"><use href="#i-arrow" /></svg></a>
               <a href="demo/" data-i18n="cta.demo">Try the UI demo</a>
@@ -235,10 +235,11 @@
 
       <section class="wrap band" id="fit" aria-labelledby="h-fit">
         <h2 id="h-fit" class="reveal" data-i18n="fit.h">Keep your tools. SpecGate keeps the record.</h2>
+        <p class="fit-note reveal" data-i18n="fit.note">Use it when a requirement could slip through or another session needs to pick up. For a typo or a label change, your usual agent and tests are enough.</p>
         <ol class="lane">
-          <li style="--i: 0"><span class="tile"><svg class="ic" aria-hidden="true"><use href="#i-pen" /></svg></span><h3 data-i18n="flow.scope.h">Agree on scope</h3><p>OpenSpec · Spec Kit · Superpowers · Markdown</p><a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/customize-governance.md#add-local-project-instructions" data-i18n="flow.scope.link">Project rubrics</a></li>
+          <li style="--i: 0"><span class="tile"><svg class="ic" aria-hidden="true"><use href="#i-pen" /></svg></span><h3 data-i18n="flow.scope.h">Agree on scope</h3><p>OpenSpec · Spec Kit · Superpowers · Markdown</p><a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/quickstart.md" data-i18n="flow.scope.link">Start with Quick Work</a></li>
           <li style="--i: 1"><span class="tile"><svg class="ic" aria-hidden="true"><use href="#i-code" /></svg></span><h3 data-i18n="flow.agent.h">Let your agent work</h3><p>Claude Code · Codex · Cursor</p><a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/operate-specgate.md#operate-local-cli" data-i18n="flow.agent.link">Resume the same work</a></li>
-          <li style="--i: 2"><span class="tile"><svg class="ic" aria-hidden="true"><use href="#i-evidence" /></svg></span><h3 data-i18n="flow.evidence.h">Review the evidence</h3><p data-i18n="flow.evidence.p">Claim, source, command and test for each requirement.</p><a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/observe-selected-tests.md#use-this-in-your-project" data-i18n="flow.evidence.link">Selected tests</a></li>
+          <li style="--i: 2"><span class="tile"><svg class="ic" aria-hidden="true"><use href="#i-evidence" /></svg></span><h3 data-i18n="flow.evidence.h">Review the evidence</h3><p data-i18n="flow.evidence.p">See the evidence for each requirement and what’s missing.</p><a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/observe-selected-tests.md#use-this-in-your-project" data-i18n="flow.evidence.link">Selected tests</a></li>
           <li class="mine" style="--i: 3"><span class="tile"><img src="logo.svg" alt="" width="36" height="36" /></span><h3 data-i18n="flow.decision.h">Decide and hand off</h3><p data-i18n="flow.decision.p">Accept or send it back, on the exact delivery.</p><a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/operate-specgate.md#move-a-local-store-to-another-checkout" data-i18n="flow.decision.link">Move the Local store</a></li>
         </ol>
       </section>
@@ -283,14 +284,14 @@ specgate plugins doctor --agent cursor --project-local</pre>
               </div>
               <div class="codebox" data-panel="prompt" hidden>
                 <button class="btn sm copy" type="button" data-copy="code-prompt" hidden><svg class="ic sm copy-i" aria-hidden="true"><use href="#i-copy" /></svg><svg class="ic sm done-i" aria-hidden="true"><use href="#i-ok" /></svg><span data-i18n="copy.copy">Copy</span></button>
-                <pre class="mono" id="code-prompt" data-i18n="ins.prompt">Prepare this change in SpecGate. Show me the scope, acceptance criteria, and any proposed check commands. Wait for my scope approval. Then implement the change, submit per-criterion evidence, and stop for my delivery decision.</pre>
+                <pre class="mono" id="code-prompt" data-i18n="ins.prompt">Prepare this change as SpecGate Quick Work. Show me the criteria and proposed test commands first. After I approve them, implement the change, submit evidence for each criterion, and stop for my decision.</pre>
               </div>
             </div>
             <span class="sr-only" id="copy-status" role="status"></span>
             <p class="note" data-install-note="codex" data-i18n="ins.codex" hidden>In Codex, open <code>/plugins</code> and install <code>specgate@specgate</code>.</p>
             <p class="note" data-install-note="cursor" data-i18n="ins.cursor" hidden>Run both commands from your Git project. They install and verify the setup for this project.</p>
             <p class="note" data-install-note="codex claude cursor" hidden><span data-i18n="ins.first">Install the CLI first. Use one plugin install method per IDE, then restart your IDE.</span> <a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/install-ide-plugins.md" data-i18n="ins.ide">IDE setup guide</a></p>
-            <p class="note"><span data-i18n="ins.then">Free Local CLI. Keep your coding agent. Open <code>specgate ui</code> if you prefer browser review.</span> <a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/quickstart.md" rel="noopener" data-i18n="ins.link">Full quickstart</a></p>
+            <p class="note"><span data-i18n="ins.then">Free Local CLI. Keep your coding agent. Open <code>specgate ui</code> if you prefer browser review.</span> <a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/quickstart.md" rel="noopener" data-i18n="ins.link">Quick Work guide</a></p>
           </div>
         </div>
       </section>
@@ -299,7 +300,7 @@ specgate plugins doctor --agent cursor --project-local</pre>
         <h2 id="h-faq" class="reveal" data-i18n="faq.h">Quick answers</h2>
         <div class="faq reveal">
           <details open><summary><span data-i18n="faq.1q">Can green tests miss a requirement?</span><svg class="ic sm" aria-hidden="true"><use href="#i-chev" /></svg></summary><p data-i18n="faq.1a">Yes. The suite can pass while the agreed 503 case has no test result.</p></details>
-          <details><summary><span data-i18n="faq.2q">What does it actually check?</span><svg class="ic sm" aria-hidden="true"><use href="#i-chev" /></svg></summary><p data-i18n="faq.2a">Review agent claims, recorded check exit codes, and selected tests found in the observed reports. You decide whether the evidence is enough.</p></details>
+          <details><summary><span data-i18n="faq.2q">What does it actually check?</span><svg class="ic sm" aria-hidden="true"><use href="#i-chev" /></svg></summary><p data-i18n="faq.2a">See what the agent reported, which commands ran, and the results of any selected tests that were observed. A passing result can still miss the behavior you care about. Review the code and decide whether the evidence is enough.</p></details>
           <details id="delivery-proof"><summary><span data-i18n="faq.3q">Do I need the browser UI?</span><svg class="ic sm" aria-hidden="true"><use href="#i-chev" /></svg></summary><p data-i18n="faq.3a">The Local CLI records the scope, evidence, and decisions. Run <code>specgate ui</code> if you want to review and decide in a browser.</p>
             <p><a href="demo/" data-i18n="cta.demo">Try the UI demo</a><span data-i18n="faq.demo"> with sample data.</span> <a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/local-review.md" data-i18n="faq.guide">Review your own work</a>.</p>
           </details>
