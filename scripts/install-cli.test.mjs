@@ -15,7 +15,7 @@ const replacement = "#!/bin/sh\necho replacement\n";
 function installerFixture(t, { corruptChecksum = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), "specgate-installer-test-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const installDir = join(root, "install with spaces");
+  const installDir = join(root, "install with 'quotes'");
   const home = join(root, "home");
   const tools = join(root, "tools");
   const release = join(root, "release");
@@ -35,10 +35,10 @@ case "$2" in
   *) exit 1 ;;
 esac
 `, { mode: 0o755 });
-  const run = () => spawnSync("sh", [installer, "--version", "v9.9.9", "--install-dir", installDir], {
+  const run = ({ onPath = false } = {}) => spawnSync("sh", [installer, "--version", "v9.9.9", "--install-dir", installDir], {
     cwd: root,
     encoding: "utf8",
-    env: { ...process.env, HOME: home, PATH: tools + delimiter + process.env.PATH, RELEASE_FIXTURE: release, TMPDIR: root },
+    env: { ...process.env, HOME: home, PATH: [tools, ...(onPath ? [installDir] : []), "/usr/bin", "/bin"].join(delimiter), RELEASE_FIXTURE: release, TMPDIR: root },
   });
   return { root, installDir, dest: join(installDir, "specgate"), run };
 }
@@ -87,4 +87,20 @@ test("the installer replaces an existing binary only after verifying the downloa
       assert.equal(readFileSync(unrelated, "utf8"), "user data");
     });
   }
+});
+
+test("the installer prints a copyable PATH command only when the binary is missing from PATH", (t) => {
+  const { root, run } = installerFixture(t);
+  const missing = run();
+  assert.equal(missing.status, 0, missing.stdout + missing.stderr);
+  const exportLine = missing.stdout.split("\n").find((line) => line.trimStart().startsWith("export PATH="));
+  assert.ok(exportLine, missing.stdout);
+  const invoked = spawnSync("sh", ["-c", exportLine + "\nspecgate"], {
+    cwd: root, encoding: "utf8", env: { ...process.env, PATH: "/usr/bin:/bin" },
+  });
+  assert.equal(invoked.status, 0, invoked.stderr);
+  assert.equal(invoked.stdout, "replacement\n");
+  const ready = run({ onPath: true });
+  assert.equal(ready.status, 0, ready.stdout + ready.stderr);
+  assert.doesNotMatch(ready.stdout, /export PATH=/);
 });

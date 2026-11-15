@@ -308,8 +308,11 @@ func ParseAcceptanceCriterionBinding(raw string) (string, string) {
 	if binding == "" {
 		return trimmed, ""
 	}
-	text := strings.TrimSpace(trimmed[:m[0]] + " " + trimmed[m[1]:])
-	text = strings.Join(strings.Fields(text), " ")
+	// Normalize only the join where the token was removed. Whitespace inside
+	// either part may be meaningful, for example in a quoted test input.
+	before := strings.TrimSpace(trimmed[:m[0]])
+	after := strings.TrimSpace(trimmed[m[1]:])
+	text := strings.TrimSpace(before + " " + after)
 	if text == "" {
 		return trimmed, ""
 	}

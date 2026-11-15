@@ -13,11 +13,13 @@ On macOS, Linux, or WSL2, install the CLI:
 curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/scripts/install-cli.sh | sh
 ```
 
+If the installer prints an `export PATH=…` command, run it in your current
+shell before continuing. For future shells, add that directory to your shell's
+startup configuration.
+
 On native Windows, extract `specgate.exe` from `windows_amd64.zip` in the
 [latest release](https://github.com/thanhtung2693/specgate/releases/latest) to a
 folder on `PATH`. Install a POSIX `sh` on `PATH` to rerun delivery checks.
-If the shell cannot find `specgate`, add the installer's
-printed directory to `PATH` (typically `~/.local/bin` on macOS and Linux).
 
 From the Git repository root, run:
 
@@ -26,8 +28,9 @@ specgate init --mode local
 specgate doctor
 ```
 
-Setup creates a Local user and workspace and binds the repository. If you
-skipped IDE integration during setup, install it now. For Codex:
+Setup creates a Local user and workspace and binds the repository. In the
+wizard, type a value for each required field. The examples are placeholders.
+If you skipped IDE integration during setup, install it now. For Codex:
 
 ```bash
 specgate plugins install --agent codex --project-local
@@ -46,11 +49,13 @@ a test, but there is no check for a name that becomes empty after trimming.
 Ask your coding agent:
 
 > Prepare a Quick Work item to normalize names. It must trim surrounding
-> whitespace and reject names that are empty after trimming. Show me the two
-> criteria and the proposed test commands. Wait for me to approve them.
+> whitespace and reject names that are empty after trimming. Show each
+> criterion, its proposed `@check:name`, and the exact test command. Wait for
+> my approval before creating work, editing code, or running any tests.
 
-After you approve, the agent creates the work item. For a JavaScript project
-with these test filenames, the command is:
+After you approve the criteria and commands together, the agent creates the
+work item with those bindings. For a JavaScript project with these test
+filenames, the command is:
 
 ```bash
 specgate work create-quick "Normalize user names" \

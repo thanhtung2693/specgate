@@ -224,4 +224,10 @@ echo "Installed: ${DEST}"
 
 echo ""
 echo "SpecGate CLI ${SPECGATE_VERSION} installed successfully."
+if ! command -v "$BINARY_NAME" >/dev/null 2>&1; then
+  absolute_dir=$(CDPATH= cd -P "$INSTALL_DIR" && pwd -P)
+  escaped_dir=$(printf '%s' "$absolute_dir" | sed "s/'/'\\\\''/g")
+  echo "SpecGate is not on PATH. Run this in your current shell:"
+  printf "  export PATH='%s':%s\n" "$escaped_dir" '"$PATH"'
+fi
 echo "Run 'specgate init' from your Git repository to set up Local SpecGate."

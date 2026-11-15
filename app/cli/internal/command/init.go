@@ -265,19 +265,19 @@ func initUsageError(deps *Deps, message string) error {
 }
 
 func promptIdentityBootstrap(deps *Deps) (local.InitInput, error) {
-	workspaceName, err := deps.Prompter.Input("Workspace name", "My workspace", requiredPrompt("workspace name"))
+	workspaceName, err := deps.Prompter.Input("Workspace name (required)", "e.g. My workspace", requiredPrompt("workspace name"))
 	if err != nil {
 		return local.InitInput{}, err
 	}
-	displayName, err := deps.Prompter.Input("Your display name", "Jane Doe", requiredPrompt("display name"))
+	displayName, err := deps.Prompter.Input("Your display name (required)", "e.g. Jane Doe", requiredPrompt("display name"))
 	if err != nil {
 		return local.InitInput{}, err
 	}
-	username, err := deps.Prompter.Input("Username", "jane", validateUsernamePrompt)
+	username, err := deps.Prompter.Input("Username (required)", "e.g. jane", validateUsernamePrompt)
 	if err != nil {
 		return local.InitInput{}, err
 	}
-	email, err := deps.Prompter.Input("Email (optional)", "jane@example.com", nil)
+	email, err := deps.Prompter.Input("Email (optional)", "e.g. jane@example.com", nil)
 	if err != nil {
 		return local.InitInput{}, err
 	}

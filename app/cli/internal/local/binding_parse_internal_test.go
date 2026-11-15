@@ -18,6 +18,9 @@ func TestBindingSurvivesTheShapesPeopleWrite(t *testing.T) {
 		{"mixed case", "Retries stop @Check:Unit", "Retries stop", "Unit"},
 		{"binding first", "@check:unit Retries stop", "Retries stop", "unit"},
 		{"binding mid-sentence", "Retries @check:unit stop cleanly", "Retries stop cleanly", "unit"},
+		{"padded example", "normalize('  Alice  ') returns Alice @check:trim", "normalize('  Alice  ') returns Alice", "trim"},
+		{"literal tabs and line breaks", "@check:format Preserve A\t\tB\nC", "Preserve A\t\tB\nC", "format"},
+		{"inline join only", "Keep ' A  B '   @check:unit   and ' C  D '", "Keep ' A  B ' and ' C  D '", "unit"},
 		{"no binding", "Retries stop cleanly", "Retries stop cleanly", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
