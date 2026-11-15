@@ -46,17 +46,21 @@ test("install panels match the documented Local and IDE setup", () => {
   assert.match(html, /guides\/local-review\.md/);
   const choices = [...html.matchAll(/<button type="button" data-ins="([^"]+)"([^>]+)>(.*?)<\/button>/g)];
   const names = { cli: "CLI", codex: "Codex", claude: "Claude Code", cursor: "Cursor", prompt: "Ask your agent" };
+  const icons = {
+    cli: '<svg class="ic" aria-hidden="true"><use href="#i-agent" /></svg>',
+    codex: '<img src="assets/brands/codex.png" alt="" width="22" height="22" loading="lazy" decoding="async" />',
+    claude: '<img src="assets/brands/claude.svg" alt="" width="22" height="22" />',
+    cursor: '<img class="theme-light" src="assets/brands/cursor-light.svg" alt="" width="22" height="22" />'
+      + '<img class="theme-dark" src="assets/brands/cursor-dark.svg" alt="" width="22" height="22" />',
+    prompt: '<svg class="ic" aria-hidden="true"><use href="#i-word" /></svg>',
+  };
   assert.deepEqual(choices.map(([, id]) => id), Object.keys(names));
   for (const [, id, attrs, icon] of choices) {
     assert.ok(attrs.includes(`aria-label="${names[id]}"`), id);
     assert.ok(attrs.includes(`title="${names[id]}"`), id);
-    assert.equal(icon.replace(/<[^>]+>/g, "").trim(), "", id);
-    assert.match(icon, /^(?:<svg[^>]+aria-hidden="true"[^>]*>.*?<\/svg>|(?:<img[^>]+alt=""[^>]*>)+)$/);
+    assert.equal(icon.trim(), icons[id], id);
   }
   assert.match(choices.at(-1)[2], /data-i18n-attr="aria-label,title:ins.tabPrompt"/);
-  assert.match(choices[1][3], /src="assets\/brands\/codex\.png"/);
-  assert.match(choices[2][3], /src="assets\/brands\/claude\.svg"/);
-  assert.match(choices[3][3], /class="theme-light" src="assets\/brands\/cursor-light\.svg".*class="theme-dark" src="assets\/brands\/cursor-dark\.svg"/);
   assert.match(css, /#ins-tabs button:focus-visible::after \{[^}]*content: attr\(title\)/);
   assert.match(html, /data-install-note="codex"[^>]*>.*?<code>\/plugins<\/code>.*?<code>specgate@specgate<\/code>/);
   assert.doesNotMatch(html.match(/id="code-codex"[^>]*>(.*?)<\/pre>/s)[1], /\/plugins/);
