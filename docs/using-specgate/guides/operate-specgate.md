@@ -46,21 +46,39 @@ receiving CLI or browser before deciding.
 
 ## Move a Local store to another checkout
 
+Before exporting, make sure the receiving Git checkout can be identified as
+the same repo. Use the same Git origin on both machines. If the source has no
+origin, make at least one commit before exporting and carry its Git history to
+the receiving checkout so it contains the recorded commit and tree.
+
 1. Stop agents, CLI jobs and browser UI sessions that write to the source
-   store. From the bound source checkout, prepare the **entire selected Local
-   store**. The work and optional checkpoint only identify where to pick up.
-   Review the included workspace and user inventory before confirming.
+   store. From the bound source checkout, you can record a pickup checkpoint:
+
+   ```sh
+   specgate work checkpoint "$work_ref" --note "What is done and what remains"
+   ```
+
+   The first checkpoint may ask to upgrade the store even after a fresh
+   install. Review the confirmation. It shows where SpecGate will save
+   `state.db.pre-enhanced.bak` before upgrading. Older CLIs cannot write to
+   the upgraded store. If you prefer to skip this step, prepare the snapshot
+   without `--checkpoint`.
+
+   Prepare the **entire selected Local store**. The work reference and optional
+   checkpoint identify where to resume. Review the workspace and user inventory
+   before confirming. If you made a checkpoint, add `--checkpoint` followed by
+   the ID the CLI printed.
 
    ```sh
    specgate transfer prepare --work "$work_ref" --file "$archive" \
-     --checkpoint "$checkpoint_id" --note "What to pick up"
+     --note "What to pick up"
    ```
 
-2. Record the displayed archive SHA-256 and move the private archive through
-   a channel you trust. Move your Git checkout separately, including any
-   uncommitted or untracked files you need. A checkpoint records observations
-   and hashes. External images, logs or other referenced files such as ignored
-   `.specgate/work` evidence also need their own transfer.
+2. Record the archive SHA-256 and move the private archive through a channel
+   you trust. Move the Git checkout separately. Include uncommitted and untracked
+   files you need, any completion draft you want to reuse, and referenced
+   evidence files such as logs under `.specgate/work`. A checkpoint records
+   observations and hashes. It carries no working files.
 
 3. On the receiving machine, use a supporting CLI to inspect the archive.
    Compare its SHA-256 with the one you recorded. Receive into a new directory
@@ -74,10 +92,10 @@ receiving CLI or browser before deciding.
    ```
 
 4. Run the returned `work resume` command from the receiving checkout. Follow
-   the existing next actor and next action. Historical evidence and decisions
-   remain available. A selected source checkpoint appears as historical pickup
-   context. Review any pending decision in the receiving checkout. Check
-   local paths and toolchains before manually running a pinned command.
+   the existing next actor and next action. The source checkpoint, checks and
+   decisions remain available as history. When the work needs fresh evidence,
+   check local paths and tools before rerunning its checks on the receiving
+   checkout. Review any pending decision there before accepting it.
 
 Preparing and receiving preserve work and workspace IDs, approved artifacts
 and policy snapshots, verification, checkpoints, evidence and decisions

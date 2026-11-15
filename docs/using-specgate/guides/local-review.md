@@ -133,7 +133,8 @@ intent and acceptance criteria prominent. Authored documents keep all their
 sections in the reading view. Source HTML is shown as text, images show their
 alternative text, and only HTTP(S) links open in a separate tab.
 
-Choose accept or request changes after inspecting the evidence. A change
+Choose accept or request changes after inspecting the evidence. The note field
+keeps its height while you type and move to the decision buttons. A change
 request needs a note containing at least one non-whitespace character. The
 confirmation applies to the review/completion and basis you inspected. If those
 changed meanwhile, choose **Refresh review** in the confirmation. Your draft
