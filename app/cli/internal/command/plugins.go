@@ -366,7 +366,7 @@ specgate plugins doctor --agent codex --project-local`),
 }
 
 func resolvePluginAgentPrompt(cmd *cobra.Command, deps *Deps, agent *string, title, flagName string) error {
-	if !canPrompt(deps) || cmd.Flags().Changed(flagName) {
+	if !sessionInteractive(deps) || cmd.Flags().Changed(flagName) {
 		return nil
 	}
 	values, err := deps.Prompter.MultiSelect(title, pluginAgentPromptOptions(), defaultPluginAgents(deps))
@@ -381,7 +381,7 @@ func resolvePluginAgentPrompt(cmd *cobra.Command, deps *Deps, agent *string, tit
 }
 
 func resolvePluginScopePrompt(cmd *cobra.Command, deps *Deps, projectLocal *bool) error {
-	if !canPrompt(deps) || cmd.Flags().Changed("project-local") {
+	if !sessionInteractive(deps) || cmd.Flags().Changed("project-local") {
 		return nil
 	}
 	scope, err := deps.Prompter.Select("Install scope", []interactive.Option{

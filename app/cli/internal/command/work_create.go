@@ -141,7 +141,7 @@ func newWorkCreateQuickCmd(deps *Deps) *cobra.Command {
 				if len(criteria) > 0 {
 					body["acceptance_criteria"] = acceptanceCriteriaBody(criteria)
 				}
-			case !canPrompt(deps):
+			case !sessionInteractive(deps):
 				return &output.ExitError{Code: output.ExitUsage, Err: ErrInputRequired}
 			default:
 				// Interactive: prompt for title, description, and acceptance criteria.

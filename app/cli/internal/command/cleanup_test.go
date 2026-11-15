@@ -164,13 +164,12 @@ func TestCleanupWorkFlagsFailBeforeWorkspaceMaintenance(t *testing.T) {
 }
 
 func TestCleanupWorkPromptsForSelection(t *testing.T) {
-	t.Parallel()
 	deps, out := newTestDeps(t)
 	fp := &fakePrompter{}
 	deps.Prompter = fp
 	dir := t.TempDir()
 	deps.WorkingDir = dir
-	deps.StdinIsTTY = func() bool { return true }
+	setInteractiveTestTerminal(t, deps)
 	fp.multiValues = []string{"plan.md"}
 	fp.confirmValue = true
 	for path := range map[string]string{

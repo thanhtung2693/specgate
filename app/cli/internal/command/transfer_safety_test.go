@@ -227,7 +227,6 @@ func TestTransferActivationDetectsConfigEditAndCancellation(t *testing.T) {
 	receiver, prompt, result := newWorkflowTestDeps(t)
 	from := filepath.Join(t.TempDir(), "unbound")
 	runTransfer(t, receiver, result, output.ExitOK, "receive", "--file", archive, "--into", from, "--expect-snapshot", prepared["snapshot_sha256"].(string))
-	receiver.StdinIsTTY = func() bool { return true }
 	receiver.Stderr = result
 	args := []string{"transfer", "activate", "--from", from, "--repo", repo}
 	if code := command.ExecuteForCode(command.NewRootCommand(receiver), args...); code != output.ExitOK {
@@ -398,7 +397,6 @@ func TestTransferRejectsSymlinkAndLosesNoRacingExistingTarget(t *testing.T) {
 		runTransfer(t, receiver, result, output.ExitUsage, "inspect", "--file", archiveLink)
 		runTransfer(t, receiver, result, output.ExitUsage, "receive", "--file", archiveLink, "--into", target, "--expect-snapshot", sha)
 	}
-	receiver.StdinIsTTY = func() bool { return true }
 	prompt.confirmValue = true
 	prompt.confirmObserver = func() {
 		if err := os.Mkdir(target, 0700); err != nil {

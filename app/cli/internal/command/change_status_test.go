@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -313,4 +316,88 @@ func TestChangeStatusLocalStalePeerEvidenceIsSeparateFromAuthority(t *testing.T)
 	if !got.Stale || got.Decision != "Awaiting human acceptance" || got.State != "awaiting_acceptance" {
 		t.Fatalf("stale peer changed delivery authority: %#v", got)
 	}
+}
+
+func TestChangeSubmitRetryKeepsCustomCompletionAndReadbackRequiresItsPath(t *testing.T) {
+	t.Chdir(t.TempDir())
+	deps, out := newTestDeps(t)
+	stateDir, store, _, work := newLocalChangeWork(t, deps)
+	closeLocalChangeStore(t, deps, stateDir, store)
+	f := writeDeliveryJSON(t, map[string]any{
+		"event_type": "coding_agent.completed", "summary": "custom",
+		"context_digest": work.ContextDigest, "custom_completion_file": false,
+		"checks":   []map[string]any{{"name": "tests", "command": "go test ./...", "status": "fail"}},
+		"criteria": []map[string]any{{"criterion_id": "local-1", "claim": "not_done"}},
+	})
+	customPath := filepath.Join(t.TempDir(), "a draft with 'quotes'.json")
+	if err := os.Rename(f, customPath); err != nil {
+		t.Fatal(err)
+	}
+	deps.RunCheckCommand = func(context.Context, string) (int, string) { return 1, "fail" }
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "change", "submit", work.Key, "--file", customPath, "--run-checks", "--yes", "--json"); code != output.ExitGovernanceFailed {
+		t.Fatalf("exit = %d, output = %s", code, out)
+	}
+	var envelope changeStatusEnvelope
+	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	prefix := "specgate --yes change submit " + work.Key + " --run-checks --json --file"
+	quoted := "'" + strings.ReplaceAll(customPath, "'", "'\"'\"'") + "'"
+	if envelope.Data.NextCommand != prefix+" "+quoted {
+		t.Fatalf("submit next command = %q", envelope.Data.NextCommand)
+	}
+	out.Reset()
+	status := runChangeStatusJSON(t, deps, out, work.Key)
+	if status.NextCommand != prefix || !strings.Contains(strings.Join(status.Missing, " "), "--file") || strings.Contains(out.String(), customPath) {
+		t.Fatalf("status should require a path without retaining the draft location: %#v", status)
+	}
+
+	defaultPath := filepath.Join(".specgate", "completion-"+work.Key+".json")
+	data, err := os.ReadFile(customPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A stale default exists. The incomplete custom retry must stop before opening it.
+	writeTestFile(t, defaultPath, string(data))
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), strings.Fields(strings.TrimPrefix(status.NextCommand, "specgate "))...); code != output.ExitUsage || !strings.Contains(out.String(), "flag needs an argument: --file") {
+		t.Fatalf("readback retry selected a file without an explicit path: exit = %d, output = %s", code, out)
+	}
+
+	// A real canonical draft remains eligible for the established default retry,
+	// even if the input report tries to supply its own origin marker.
+	writeTestFile(t, defaultPath, strings.Replace(string(data), `"custom_completion_file":false`, `"custom_completion_file":true`, 1))
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "change", "submit", work.Key, "--file", defaultPath, "--run-checks", "--yes", "--json"); code != output.ExitGovernanceFailed {
+		t.Fatalf("canonical submit exit = %d, output = %s", code, out)
+	}
+	out.Reset()
+	status = runChangeStatusJSON(t, deps, out, work.Key)
+	if want := strings.TrimSuffix(prefix, " --file"); status.NextCommand != want {
+		t.Fatalf("canonical retry = %q, want %q", status.NextCommand, want)
+	}
+
+	t.Run("parent traversal through symlink cannot select canonical draft", func(t *testing.T) {
+		other := t.TempDir()
+		if err := os.Mkdir(filepath.Join(other, "nested"), 0700); err != nil {
+			t.Fatal(err)
+		}
+		writeTestFile(t, filepath.Join(other, defaultPath), string(data))
+		if err := os.Symlink(filepath.Join(other, "nested"), "jump"); err != nil {
+			if runtime.GOOS == "windows" {
+				t.Skipf("symlink unavailable: %v", err)
+			}
+			t.Fatal(err)
+		}
+		rawPath := "jump" + string(filepath.Separator) + ".." + string(filepath.Separator) + defaultPath
+		out.Reset()
+		if code := command.ExecuteForCode(command.NewRootCommand(deps), "change", "submit", work.Key, "--file", rawPath, "--run-checks", "--yes", "--json"); code != output.ExitGovernanceFailed {
+			t.Fatalf("submit exit = %d, output = %s", code, out)
+		}
+		out.Reset()
+		status := runChangeStatusJSON(t, deps, out, work.Key)
+		if status.NextCommand != prefix {
+			t.Fatalf("noncanonical retry must require --file, got %q", status.NextCommand)
+		}
+	})
 }

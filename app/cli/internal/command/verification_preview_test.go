@@ -42,7 +42,6 @@ func TestVerificationHumanPreviewIncludesSelectorsAndWatchedHashes(t *testing.T)
 			if dryRun {
 				args = append(args, "--dry-run")
 			} else {
-				deps.StdinIsTTY = func() bool { return true }
 				prompt.confirmObserver = assertPreview
 				prompt.confirmValue = true
 			}

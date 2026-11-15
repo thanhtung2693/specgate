@@ -95,5 +95,13 @@ func newWorkflowTestDeps(t *testing.T) (*command.Deps, *fakePrompter, *bytes.Buf
 	deps, out := newTestDeps(t)
 	prompt := &fakePrompter{}
 	deps.Prompter = prompt
+	setInteractiveTestTerminal(t, deps)
 	return deps, prompt, out
+}
+
+func setInteractiveTestTerminal(t *testing.T, deps *command.Deps) {
+	t.Helper()
+	t.Setenv("CI", "")
+	deps.StdinIsTTY = func() bool { return true }
+	deps.StderrIsTTY = func() bool { return true }
 }

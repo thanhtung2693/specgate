@@ -143,7 +143,6 @@ func TestTransferPrepareConfirmsTheExactStagedSnapshot(t *testing.T) {
 	if err := cfg.SaveTo(deps.ConfigPath); err != nil {
 		t.Fatal(err)
 	}
-	deps.StdinIsTTY = func() bool { return true }
 	deps.Stderr = out
 	prompt.confirmValue = true
 	prompt.confirmObserver = func() {

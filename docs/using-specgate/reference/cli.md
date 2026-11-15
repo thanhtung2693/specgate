@@ -357,8 +357,17 @@ output is redirected or piped, in CI, with `NO_COLOR` set, or with `TERM=dumb`.
 Use `--plain` to request portable text explicitly. `--plain` and `--json` never
 include color escapes or Unicode dashboard glyphs; `--json` also implies
 `--no-input` and emits only its final JSON envelope on stdout. `--plain` also
-disables interactive prompts, so commands that need user input require explicit
-flags or a file body in plain mode.
+disables interactive prompts. Prompts require terminal input and terminal
+stderr outside CI. They always write to stderr, including in accessible mode.
+Without prompts, supply explicit flags or a file body when a command needs
+input.
+
+Bare command groups such as `specgate --json` and `specgate work --json`
+return one success envelope with group help in `data.help`. Explicit
+`--help`, the `help` command, and `--version` retain their normal text.
+A valid `completion <shell>` invocation emits a raw completion script, even
+with `--json`. Use `specgate version --json` for the version envelope.
+
 Invalid flags and positional arguments return a `usage` error with exit code
 `2`; in `--json` mode both use the same JSON error envelope as command
 validation failures and include the relevant `--help` command.
@@ -530,6 +539,13 @@ available separately.
 `delivery submit --json` returns the delivery review; use `change status --detail`
 to inspect criterion evidence and the current next action.
 
+If `change submit` needs a retry after reading an explicit `--file`, its
+immediate `next_command` includes that exact path, quoted for a POSIX shell.
+Later status reads remember whether the submission used a non-default file
+without storing its path. If `next_command` ends in `--file`, append the path
+to the revised report from the same work. The normal default-file retry stays
+runnable as shown.
+
 `change status` gives the next safe action. Human output names the same concepts
 as the JSON fields below; JSON emits the standard success envelope with this
 object in `data`. Default Local output keeps each criterion's verdict and Why
@@ -569,7 +585,7 @@ outcomes; acceptance does not erase recorded gaps.
 | `guidance` | Optional human rework note, preserved for the implementing agent after `request-changes`. |
 | `stale` | Whether peer-review evidence is stale or the current checkout differs from the stored Git receipt. |
 | `stale_reason` | Optional; omitted unless `stale` is true. |
-| `next_command` | Exact next CLI command for the returned state and mode. |
+| `next_command` | Next CLI command for the returned state and mode. When a retry ends in `--file`, supply the revised completion file path. |
 | `review_id` | Local delivery review shown by this payload; pass it as `--review-id` when accepting or requesting changes. Omitted before a report exists. |
 | `basis_digest` | Present when the decision requires an exact acceptance basis, including reviews in a received Local store. Pass the current value as `--basis-digest`. |
 | `historical_verification` | The recorded completion comes from another Local store generation. Its check outcomes and provenance remain available as history. |
@@ -898,7 +914,9 @@ feature.
 
 `specgate ui [work-ref]` starts an embedded browser review surface for the
 selected Local workspace and current repository. It listens on `127.0.0.1`;
-`--port 0` (the default) asks the OS for an available port. `--no-open` skips
+`--port 0` (the default) asks the OS for an available port. Values outside
+`0`–`65535` return usage exit `2`. A listen failure returns unavailable, exit
+`5`. `--no-open` skips
 launching the browser. `--json` emits a startup envelope with the actual URL;
 the process remains in the foreground until interrupted.
 

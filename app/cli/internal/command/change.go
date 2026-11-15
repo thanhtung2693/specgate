@@ -481,7 +481,7 @@ func deriveLocalChangeStatus(work local.WorkItem, review *local.DeliveryReview, 
 	}
 	if review.HumanDecision == "reject" {
 		result.Guidance = strings.TrimSpace(review.Note)
-		return reworkRequestedChangeStatus(result)
+		return withDeliveryRetry(reworkRequestedChangeStatus(result), report)
 	}
 	if peer.State == "failed" {
 		return humanReviewRequiredChangeStatus(result, "Peer review found evidence gaps")
@@ -489,7 +489,7 @@ func deriveLocalChangeStatus(work local.WorkItem, review *local.DeliveryReview, 
 	if review.Verdict == "passed" {
 		return awaitingAcceptanceChangeStatus(result)
 	}
-	return implementationRequiredChangeStatus(result)
+	return withDeliveryRetry(implementationRequiredChangeStatus(result), report)
 }
 
 func implementationChangeStatus(result changeStatusResult) changeStatusResult {
@@ -537,7 +537,6 @@ func reworkRequestedChangeStatus(result changeStatusResult) changeStatusResult {
 	result.State = "rework_requested"
 	result.NextActor = "implementing_agent"
 	result.Missing = []string{"Revised completion addressing requested changes"}
-	result.NextCommand = deliveryReportResubmit(result.Ref)
 	return result
 }
 
@@ -545,7 +544,15 @@ func implementationRequiredChangeStatus(result changeStatusResult) changeStatusR
 	result.State = "implementation"
 	result.NextActor = "implementing_agent"
 	result.Missing = []string{"Passing delivery evidence"}
+	return result
+}
+
+func withDeliveryRetry(result changeStatusResult, report *local.DeliveryReport) changeStatusResult {
 	result.NextCommand = deliveryReportResubmit(result.Ref)
+	if custom, recorded := report.Body[customCompletionFileField]; recorded && custom != false {
+		result.NextCommand += " --file"
+		result.Missing = append(result.Missing, "Supply the revised completion file path after --file")
+	}
 	return result
 }
 

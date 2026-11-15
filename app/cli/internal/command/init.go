@@ -54,7 +54,7 @@ func newInitCmd(deps *Deps) *cobra.Command {
 				return localExitError(deps, "init", err)
 			}
 			writeInitWelcome(deps)
-			if canPrompt(deps) && !installPlugins {
+			if sessionInteractive(deps) && !installPlugins {
 				confirmed, err := deps.Prompter.Confirm("Install IDE plugins now?", false)
 				if err != nil {
 					return err
@@ -62,7 +62,7 @@ func newInitCmd(deps *Deps) *cobra.Command {
 				installPlugins = confirmed
 			}
 			if installPlugins && strings.TrimSpace(pluginAgentList) == "" {
-				if canPrompt(deps) {
+				if sessionInteractive(deps) {
 					if err := resolvePluginAgentPrompt(cmd, deps, &pluginAgentList, "Select IDE plugins", "plugin-agent"); err != nil {
 						return err
 					}
@@ -70,7 +70,7 @@ func newInitCmd(deps *Deps) *cobra.Command {
 					pluginAgentList = "codex"
 				}
 			}
-			if installPlugins && canPrompt(deps) && !cmd.Flags().Changed("plugin-scope") {
+			if installPlugins && sessionInteractive(deps) && !cmd.Flags().Changed("plugin-scope") {
 				selected, err := deps.Prompter.Select("Install scope", []interactive.Option{
 					{Label: "Global — available in every project; does not modify this repository", Value: "global"},
 					{Label: "This project — writes IDE files into this repository", Value: "project"},
@@ -125,7 +125,7 @@ func runLocalInit(cmd *cobra.Command, deps *Deps, cfg config.Config, stateDir, w
 		}
 	}
 	if strings.TrimSpace(workspaceName) == "" || strings.TrimSpace(displayName) == "" || strings.TrimSpace(username) == "" {
-		if canPrompt(deps) {
+		if sessionInteractive(deps) {
 			input, promptErr := promptIdentityBootstrap(deps)
 			if promptErr != nil {
 				return promptErr

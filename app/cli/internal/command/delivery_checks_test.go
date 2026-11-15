@@ -69,7 +69,6 @@ func TestDeliverySubmitRunChecksNeverExecutesPaddedSkippedStatus(t *testing.T) {
 
 func TestDeliverySubmitRunChecksShowsCommandsBeforeInteractiveConfirmation(t *testing.T) {
 	deps, fp, out := newWorkflowTestDeps(t)
-	deps.StdinIsTTY = func() bool { return true }
 	fp.confirmValue = false
 	var stderr bytes.Buffer
 	deps.Stderr = &stderr

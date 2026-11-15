@@ -645,6 +645,7 @@ func TestPluginsInstallPromptsForAgentSelection(t *testing.T) {
 	deps, out := newPluginDeps(home)
 	prompter := &fakePrompter{multiValues: []string{"cursor", "codex"}}
 	deps.Prompter = prompter
+	setInteractiveTestTerminal(t, deps)
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
 		"plugins", "install",
 	)
@@ -677,6 +678,7 @@ func TestPluginsInstallUsesDetectedAgentDefaults(t *testing.T) {
 	deps.PluginAgentDefaults = func() []string { return []string{"codex"} }
 	prompter := &fakePrompter{}
 	deps.Prompter = prompter
+	setInteractiveTestTerminal(t, deps)
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
 		"plugins", "install",
 	)
@@ -700,6 +702,7 @@ func TestPluginsInstallDoesNotPreselectSeveralDetectedIDEs(t *testing.T) {
 	deps.PluginAgentDefaults = func() []string { return []string{"cursor", "codex", "claude"} }
 	prompter := &fakePrompter{multiValues: []string{"codex"}}
 	deps.Prompter = prompter
+	setInteractiveTestTerminal(t, deps)
 
 	code := command.ExecuteForCode(command.NewRootCommand(deps), "plugins", "install")
 	if code != output.ExitOK {
@@ -721,6 +724,7 @@ func TestPluginsInstallPlainModeDoesNotPromptForAgent(t *testing.T) {
 	deps, out := newPluginDeps(home)
 	prompter := &fakePrompter{multiValues: []string{"codex"}}
 	deps.Prompter = prompter
+	setInteractiveTestTerminal(t, deps)
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
 		"--plain", "plugins", "install",
 	)
@@ -750,6 +754,7 @@ func TestPluginsInstallPromptsForScope(t *testing.T) {
 	deps, out := newPluginDeps(home)
 	prompter := &fakePrompter{multiValues: []string{"codex"}, selectedValue: "project"}
 	deps.Prompter = prompter
+	setInteractiveTestTerminal(t, deps)
 	code := command.ExecuteForCode(command.NewRootCommand(deps),
 		"plugins", "install",
 	)

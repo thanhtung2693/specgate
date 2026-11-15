@@ -12,6 +12,8 @@ import (
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
+const customCompletionFileField = "custom_completion_file"
+
 func newDeliverySubmitCmd(deps *Deps) *cobra.Command {
 	return newDeliverySubmitCommand(deps, deliverySubmitCommandSpec{
 		Use:       "submit [ref]",
@@ -105,6 +107,17 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 			if err != nil {
 				return localExitError(deps, spec.Operation, err)
 			}
+			delete(body, customCompletionFileField)
+			draft, draftErr := filepath.Abs(effectiveFilePath)
+			canonicalDraft, canonicalErr := filepath.Abs(filepath.Join(".specgate", "completion-"+work.Key+".json"))
+			// Abs cleans ".." before resolving symlinks; the file was opened using
+			// the original spelling, so a parent step cannot prove canonical origin.
+			parentStep := strings.Contains("/"+filepath.ToSlash(effectiveFilePath)+"/", "/../")
+			if draftErr != nil || canonicalErr != nil || draft != canonicalDraft || parentStep {
+				// Record only the origin class. The file may be outside this checkout
+				// or available only on the machine that submitted it.
+				body[customCompletionFileField] = true
+			}
 			if work.Phase == "delivered" {
 				return localExitError(deps, spec.Operation, local.ErrDeliveryApproved)
 			}
@@ -171,12 +184,28 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 					return localExitError(deps, spec.Operation, err)
 				}
 				status.Risks = acceptanceRisks(status)
+				// Acceptance readback can see a newer concurrent submission.
+				// The invocation's file is known only for the report it wrote.
+				if status.CompletionID == report.ID {
+					retry := deliveryReportResubmit(status.Ref)
+					switch status.NextCommand {
+					case retry + " --file":
+						status.NextCommand += " " + shellQuote(effectiveFilePath)
+					case retry:
+						if filePath != "" {
+							status.NextCommand += " --file " + shellQuote(effectiveFilePath)
+						}
+					}
+				}
 				result = status
 			}
 			if deps.Printer.Mode() == output.ModeJSON {
 				deps.Printer.Success(spec.Operation, result)
 			} else {
 				fmt.Fprintf(deps.Stdout, "%s %s for %s\n", title(deps, "Delivery review"), styledStatus(deps, review.Verdict), styled(deps, output.StyleBold, args[0]))
+				if status, ok := result.(changeStatusResult); ok && status.CompletionID == review.ReportID && status.NextActor == "implementing_agent" && filePath != "" {
+					fmt.Fprintln(deps.Stdout, nextStep(deps, "Retry with the revised completion file", status.NextCommand))
+				}
 			}
 			if review.Verdict != "passed" {
 				return &output.ExitError{Code: output.ExitGovernanceFailed}

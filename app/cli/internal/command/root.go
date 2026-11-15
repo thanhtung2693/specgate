@@ -23,7 +23,10 @@ import (
 
 const defaultTimeout = 180 * time.Second
 
-const requestedJSONAnnotation = "specgate.io/requested-json"
+const (
+	requestedJSONAnnotation = "specgate.io/requested-json"
+	groupHelpAnnotation     = "specgate.io/group-help"
+)
 
 const (
 	commandGroupStart    = "start"
@@ -215,10 +218,14 @@ Use specgate ui when you want to inspect a delivery in your browser.`,
 			deps.Timeout = timeout
 		}
 		if deps.Prompter == nil {
-			deps.Prompter = interactive.NewHuhPrompter()
+			deps.Prompter = interactive.NewHuhPrompter(deps.Stdin, deps.Stderr)
+		}
+		if cmd.Annotations[groupHelpAnnotation] == "true" ||
+			(cmd.Parent() != nil && cmd.Parent().Parent() == root && cmd.Parent().Name() == "completion") {
+			return nil
 		}
 		switch commandOutputName(cmd) {
-		case "version", "completion", "delivery.handoff.show", "transfer.inspect", "transfer.receive", "transfer.activate":
+		case "help", "version", "delivery.handoff.show", "transfer.inspect", "transfer.receive", "transfer.activate":
 			return nil
 		}
 
@@ -263,7 +270,8 @@ Use specgate ui when you want to inspect a delivery in your browser.`,
 	root.AddCommand(newCapabilitiesCmd(deps))
 	root.AddCommand(newCoverageCmd(deps))
 	root.AddCommand(newVerifyCmd(deps))
-	defaultArgumentPolicies(root)
+	root.InitDefaultCompletionCmd()
+	defaultArgumentPolicies(root, deps)
 	wrapArgumentErrors(root, renderUsageError)
 	guaranteeErrorEnvelope(root, deps)
 	assignRootCommandGroups(root)
@@ -287,18 +295,34 @@ Use specgate ui when you want to inspect a delivery in your browser.`,
 	return root
 }
 
-func defaultArgumentPolicies(cmd *cobra.Command) {
+func defaultArgumentPolicies(cmd *cobra.Command, deps *Deps) {
 	children := cmd.Commands()
 	if cmd.Args == nil {
 		cmd.Args = cobra.NoArgs
 	}
 	if len(children) > 0 && cmd.Run == nil && cmd.RunE == nil {
+		if cmd.Annotations == nil {
+			cmd.Annotations = map[string]string{}
+		}
+		cmd.Annotations[groupHelpAnnotation] = "true"
 		cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-			return cmd.Help()
+			if deps.Mode != output.ModeJSON {
+				return cmd.Help()
+			}
+			var help bytes.Buffer
+			previous := cmd.OutOrStdout()
+			cmd.SetOut(&help)
+			err := cmd.Help()
+			cmd.SetOut(previous)
+			if err != nil {
+				return err
+			}
+			deps.Printer.Success(commandOutputName(cmd), map[string]string{"help": help.String()})
+			return nil
 		}
 	}
 	for _, child := range children {
-		defaultArgumentPolicies(child)
+		defaultArgumentPolicies(child, deps)
 	}
 }
 
