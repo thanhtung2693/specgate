@@ -760,8 +760,7 @@ test("the demo bar drops the back link and position and keeps the logo link, ref
 
 test("the top bar is full width, sticky and 48px, and collapses on narrow screens", () => {
   const css = readFileSync(`${__dirname}/local_ui_assets/style.css`, "utf8");
-  const rule = (selector) => css.match(new RegExp(`(?:^|\\n)${selector.replace(/[.]/g, "\\.")}\\s*\\{([^}]*)\\}`))?.[1] || "";
-  const navbar = rule(".navbar");
+  const navbar = css.match(/(?:^|\n)\.navbar\s*\{([^}]*)\}/)?.[1] || "";
   assert.match(navbar, /position:\s*sticky/);
   assert.match(navbar, /height:\s*48px/);
   assert.match(navbar, /padding:\s*0 12px 0 16px/);
