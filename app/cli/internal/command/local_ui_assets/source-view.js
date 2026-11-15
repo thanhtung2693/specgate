@@ -211,13 +211,12 @@
   }
   function mount(root, readWork, api, readLang) {
     const loader = createSourceLoader(api),
-      opened = new Set(),
       views = new Map(),
       displayed = new WeakMap();
-    async function show(details) {
+    async function show(pane) {
       const status = readWork()?.status,
-        criterion = details.dataset.criterion,
-        slot = details.querySelector("[data-source-slot]");
+        criterion = pane.dataset.criterion,
+        slot = pane.querySelector("[data-source-slot]");
       if (!status || !criterion || !slot) return;
       const inspected = scope(status),
         c = copy(readLang());
@@ -226,7 +225,7 @@
       const result = await loader.load(status, criterion);
       if (
         !result ||
-        !root.contains(details) ||
+        !root.contains(pane) ||
         scope(readWork()?.status) !== inspected
       )
         return;
@@ -241,32 +240,16 @@
               lang: readLang(),
             });
     }
-    root.addEventListener(
-      "toggle",
-      (event) => {
-        const details = event.target;
-        if (
-          !details.matches?.("details.criterion[data-criterion]") ||
-          !root.contains(details)
-        )
-          return;
-        if (details.open) {
-          opened.add(details.dataset.criterion);
-          show(details);
-        } else opened.delete(details.dataset.criterion);
-      },
-      true,
-    );
     root.addEventListener("click", (event) => {
       const button = event.target.closest("[data-source-view]");
       if (!button || button.disabled) return;
-      const details = button.closest("details.criterion");
-      const slot = details?.querySelector("[data-source-slot]");
+      const pane = button.closest("[data-source-pane]");
+      const slot = pane?.querySelector("[data-source-slot]");
       const snapshot = displayed.get(slot);
       if (!snapshot || snapshot.inspected !== scope(readWork()?.status)) return;
       const view = button.dataset.sourceView;
       if (button.getAttribute("aria-pressed") === "true") return;
-      views.set(details.dataset.criterion, view);
+      views.set(pane.dataset.criterion, view);
       slot.querySelector('[data-source-view="code"]').setAttribute("aria-pressed", String(view === "code"));
       slot.querySelector('[data-source-view="diff"]').setAttribute("aria-pressed", String(view === "diff"));
       slot.querySelector("[data-source-content]").innerHTML = renderSourceContent(snapshot.data, view, readLang());
@@ -274,18 +257,11 @@
     return {
       clear() {
         loader.clear();
-        opened.clear();
         views.clear();
       },
+      /* Loads the cited source for the evidence pane currently on screen. */
       restore() {
-        root
-          .querySelectorAll("details.criterion[data-criterion]")
-          .forEach((details) => {
-            if (opened.has(details.dataset.criterion)) {
-              details.open = true;
-              show(details);
-            }
-          });
+        root.querySelectorAll("[data-source-pane]").forEach(show);
       },
     };
   }

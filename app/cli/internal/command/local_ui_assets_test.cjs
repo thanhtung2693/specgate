@@ -181,6 +181,16 @@ test("expanded evidence omits enum claims and empty fields without losing source
   );
 });
 
+test("a long recorded decision note remains complete and keyboard-scrollable", () => {
+  const note = Array.from({ length: 50 }, (_, i) => `Line ${i + 1} <&>`).join("\n");
+  const html = presentation.decisionDock({
+    status: { ref: "LOCAL-test" },
+    review: { human_decision: "approve", note },
+  }, "", () => "Human reviewer", (x) => x);
+  const region = html.match(/<q tabindex="0">([\s\S]*?)<\/q>/)?.[1];
+  assert.equal(region, note.replaceAll("<&>", "&lt;&amp;&gt;"));
+});
+
 test("legacy recorded decisions preserve feedback and IDs without inventing actor or decision time", () => {
   const data = {
     status: { ref: "LOCAL-test" },
@@ -222,23 +232,17 @@ test("legacy recorded decisions preserve feedback and IDs without inventing acto
   );
 });
 
-test("header appearance buttons expose current language and named theme action without selects", () => {
+test("the language toggle shows the current code, switches to the other language and names that action", () => {
   const html = ui.appearanceControls(
     { lang: "vi", theme: "light" },
-    {
-      language: "Language",
-      dark: "Switch to dark theme",
-      light: "Switch to light theme",
-    },
+    { language: "Switch to English", dark: "Switch to dark theme", light: "Switch to light theme" },
     "<svg></svg>",
   );
-  assert.match(html, /data-language="vi"[^>]*aria-pressed="true"/);
-  assert.match(html, /data-language="en"[^>]*aria-pressed="false"/);
-  assert.match(
-    html,
-    /data-action="theme"[^>]*aria-label="Switch to dark theme"/,
-  );
-  assert.doesNotMatch(html, /<select/);
+  assert.match(html, /<button[^>]*class="ibtn txt"[^>]*data-language="en"[^>]*aria-label="Switch to English">VI<\/button>/);
+  assert.equal((html.match(/data-language=/g) || []).length, 1);
+  assert.match(ui.appearanceControls({ lang: "en", theme: "light" }, { language: "x" }, "").trim(), /data-language="vi"[^>]*>EN<\/button>/);
+  assert.match(html, /data-action="theme"[^>]*aria-label="Switch to dark theme"/);
+  assert.doesNotMatch(html, /<select|class="seg/);
 });
 test("appearance actions persist only supported language or explicit theme choices", () => {
   const state = { lang: "vi", theme: "system" },
@@ -275,7 +279,7 @@ test("legacy maintenance links open settings without losing the inspected work U
   );
 });
 
-test("header tab order follows its visible language, notification, theme and settings order", () => {
+test("header tab order follows the visible language, notification, theme and settings order", () => {
   const html = ui.appearanceControls(
     { lang: "en", theme: "dark" },
     { language: "Language", dark: "Dark", light: "Light" },
@@ -284,7 +288,6 @@ test("header tab order follows its visible language, notification, theme and set
     '<button data-action="settings"></button>',
   );
   const positions = [
-    'data-language="en"',
     'data-language="vi"',
     'data-action="notifications"',
     'data-action="theme"',
@@ -452,8 +455,8 @@ test("Local attention reflects work transitions independently of Settings update
     contains() { return false; },
     showModal() { this.open = true; },
   });
-  const app = element(), dialog = element(), settings = element();
-  const nodes = { app, dialog, "settings-dialog": settings };
+  const app = element(), dialog = element(), settings = element(), scope = element();
+  const nodes = { app, dialog, "settings-dialog": settings, "scope-dialog": scope };
   const reply = (data) => ({ ok: true, json: async () => ({ ok: true, data }) });
   const browser = {
     SpecGateUI: ui,
@@ -591,7 +594,7 @@ test("shared status glyphs map waiting, accepted, agent and rework states to act
     "warning",
   );
 });
-test("test column describes observations only and never repeats an agent claim", () => {
+test("test rung describes observations only and never repeats an agent claim", () => {
   const claim = { claim: "satisfied", grounding_status: "grounded" };
   assert.deepEqual(presentation.testObservation(claim, "vi"), {
     text: "Chưa gắn test riêng cho tiêu chí này.",
@@ -619,7 +622,7 @@ test("test column describes observations only and never repeats an agent claim",
     presentation.testObservation(failed, "en").text,
     /no |absent|missing/i,
   );
-  const html = presentation.criterionView(
+  const html = presentation.evidencePane(
     {
       ...claim,
       id: "local-1",
@@ -631,13 +634,11 @@ test("test column describes observations only and never repeats an agent claim",
     "vi",
     (x) => x,
   );
-  const column = html
-    .split('<section class="test-result">')[1]
-    .split("</section>")[0];
-  assert.match(column, /Chưa gắn test riêng cho tiêu chí này\./);
+  const column = html.split("<dt>Test</dt>")[1].split("</div>")[0];
+  assert.match(column, /No selected test/);
+  assert.doesNotMatch(html.split("<dt>Test</dt>")[0].split("<div").pop(), /gap|bad/);
   assert.doesNotMatch(column, /Agent báo đạt/);
   assert.match(html, /Dòng 73/);
-  assert.match(html, /line: 73/);
 });
 test("source citation translates only canonical known line syntax and preserves all other original content", () => {
   assert.equal(presentation.citationLabel("line: 73", "vi"), "Dòng 73");
@@ -710,35 +711,95 @@ test("diff viewer renders actual escaped change lines and never fabricates unava
   assert.doesNotMatch(unavailable, /source-line/);
 });
 
-test("the source inspector can scroll independently inside both criterion grids", () => {
+const bar = (options) => presentation.topBar({ t: (x) => x, href: (ref) => `/?ref=${ref}`, lang: "en", theme: "light", version: "v1", ...options });
+const waitingRefs = ["A", "B", "C"];
+
+test("the queue bar holds brand, version, workspace name and the refresh, language, notification, theme and settings controls", () => {
+  const html = bar({ workspace: "Alpha", notifications: '<button data-action="notifications"></button>', settings: '<button data-action="settings"></button>' });
+  assert.equal((html.match(/<header/g) || []).length, 1);
+  assert.doesNotMatch(html, /wrap|navbar-inner|review-bar|class="back"|data-scope/);
+  const order = ['class="brand" href="/"', 'class="version"', "Alpha", 'data-action="refresh"', "data-language", 'data-action="notifications"', 'data-action="theme"', 'data-action="settings"'].map((x) => html.indexOf(x));
+  assert.ok(order.every((x) => x >= 0), order.join());
+  assert.deepEqual(order, [...order].sort((x, y) => x - y));
+  assert.match(html, /<button[^>]*class="ibtn"[^>]*data-action="refresh" aria-label="Refresh"/);
+});
+
+test("the review bar is the only bar: back to the queue, ref, Scope and controls, with no refresh", () => {
+  const html = bar({ ref: "A", scopeHref: "/?ref=A&tab=context", waiting: waitingRefs });
+  assert.equal((html.match(/<header/g) || []).length, 1);
+  assert.doesNotMatch(html, /review-bar|data-action="refresh"|workspace-name/);
+  assert.match(html, /<a class="back" href="\/" data-nav>[\s\S]*Queue<\/a>/);
+  assert.match(html, /<code class="ref">A<\/code>/);
+  assert.match(html, /<a class="button quiet" href="\/\?ref=A&amp;tab=context" data-nav data-scope aria-haspopup="dialog">/);
+  assert.ok(html.indexOf('class="back"') < html.indexOf('class="ref"') && html.indexOf('class="ref"') < html.indexOf("data-scope") && html.indexOf("data-scope") < html.indexOf("data-language"));
+});
+
+test("previous and next follow the waiting list: neighbours link, the ends are disabled, a work outside it shows no position", () => {
+  const middle = bar({ ref: "B", scopeHref: "#", waiting: waitingRefs });
+  assert.match(middle, /<span class="pos">2 \/ 3<\/span>/);
+  assert.match(middle, /href="\/\?ref=A" data-nav aria-label="Previous work"/);
+  assert.match(middle, /href="\/\?ref=C" data-nav aria-label="Next work"/);
+  const first = bar({ ref: "A", scopeHref: "#", waiting: waitingRefs });
+  assert.match(first, /<span class="pos">1 \/ 3<\/span>/);
+  assert.match(first, /<a class="ibtn" aria-disabled="true" aria-label="Previous work">/);
+  assert.match(first, /href="\/\?ref=B" data-nav aria-label="Next work"/);
+  const last = bar({ ref: "C", scopeHref: "#", waiting: waitingRefs });
+  assert.match(last, /<span class="pos">3 \/ 3<\/span>/);
+  assert.match(last, /<a class="ibtn" aria-disabled="true" aria-label="Next work">/);
+  const elsewhere = bar({ ref: "Z", scopeHref: "#", waiting: waitingRefs });
+  assert.doesNotMatch(elsewhere, /class="pos"|Previous work|Next work|class="pager"/);
+});
+
+test("the demo bar drops the back link and position and keeps the logo link, ref, Scope and controls", () => {
+  const html = bar({ ref: "DEMO-001", scopeHref: "#", back: false, home: "../", logo: "../logo.svg", version: "" });
+  assert.match(html, /href="\.\.\/"[^>]*><img src="\.\.\/logo\.svg"/);
+  assert.doesNotMatch(html, /class="back"|class="pos"|class="version"/);
+  assert.match(html, /<code class="ref">DEMO-001<\/code>/);
+  assert.match(html, /data-scope/);
+});
+
+test("the top bar is full width, sticky and 48px, and collapses on narrow screens", () => {
   const css = readFileSync(`${__dirname}/local_ui_assets/style.css`, "utf8");
-  for (const grid of ["criteria", "criterion-body"]) {
-    assert.match(css, new RegExp(`\\.${grid}\\s*\\{[^}]*grid-template-columns:\\s*minmax\\(0,\\s*1fr\\)`));
-  }
+  const rule = (selector) => css.match(new RegExp(`(?:^|\\n)${selector.replace(/[.]/g, "\\.")}\\s*\\{([^}]*)\\}`))?.[1] || "";
+  const navbar = rule(".navbar");
+  assert.match(navbar, /position:\s*sticky/);
+  assert.match(navbar, /height:\s*48px/);
+  assert.match(navbar, /padding:\s*0 12px 0 16px/);
+  assert.doesNotMatch(navbar, /max-width|width:/);
+  assert.doesNotMatch(css, /navbar-inner|review-bar|queue-meta|\.seg\b/);
+  assert.match(css, /\.review\s*\{[^}]*height:\s*calc\(100dvh - 48px\)/);
+  const narrow = css.match(/@media \(max-width: 760px\)\s*\{([\s\S]*?)\n\}/)[1];
+  assert.match(narrow, /\.navbar:not\(:has\(\.workspace-name\)\) \.wordmark, \.navbar \.pager \{ display: none/);
+  assert.match(css, /@media \(pointer: coarse\)[\s\S]*\.ibtn[\s\S]*min-height:\s*44px/);
+});
+
+test("the evidence pane and the source inspector scroll independently inside the two-pane grid", () => {
+  const css = readFileSync(`${__dirname}/local_ui_assets/style.css`, "utf8");
+  assert.match(css, /\.detail\s*\{[^}]*min-width:\s*0[^}]*overflow:\s*auto/);
+  assert.match(css, /\.list\s*\{[^}]*overflow:\s*auto/);
   assert.match(css, /\.source-code\s*\{[^}]*overflow:\s*auto/);
+  assert.match(css, /@media \(max-width: 760px\)\s*\{\s*\.review\s*\{[^}]*grid-template:[^}]*height:\s*auto/);
+  assert.doesNotMatch(css, /style=|@import|url\(["']?https?:/);
 });
 test("switching from code to diff updates only the content and preserves the focused toolbar", async () => {
   const status = { ref: "LOCAL-real", review_id: "r1", completion_id: "c1" };
   const callbacks = {};
   const body = { innerHTML: "" };
   const code = { setAttribute(name, value) { this[name] = value; }, getAttribute(name) { return this[name]; }, focus() {} };
-  const diff = Object.assign({}, code, { dataset: { sourceView: "diff" }, closest: () => details });
+  const diff = Object.assign({}, code, { dataset: { sourceView: "diff" }, closest: () => pane });
   let requests = 0;
   const slot = {
     innerHTML: "", setAttribute() {},
     querySelector: (selector) => selector === "[data-source-content]" ? body
       : selector === '[data-source-view="code"]' ? code : diff,
   };
-  const details = {
-    open: true, dataset: { criterion: "local-1" }, matches: () => true,
-    querySelector: () => slot,
-  };
-  const root = { contains: () => true, addEventListener: (type, fn) => callbacks[type] = fn };
-  sourceUI.mount(root, () => ({ status }), async () => {
+  const pane = { dataset: { criterion: "local-1" }, querySelector: () => slot };
+  const root = { contains: () => true, querySelectorAll: () => [pane], addEventListener: (type, fn) => callbacks[type] = fn };
+  const reader = sourceUI.mount(root, () => ({ status }), async () => {
     requests++;
     return { completion_id: "c1", source: { available: true }, diff: { available: true, text: "+actual diff" } };
   }, () => "en");
-  callbacks.toggle({ target: details });
+  reader.restore();
   await new Promise(setImmediate);
   const original = slot.innerHTML;
   callbacks.click({ target: { closest: () => diff } });
@@ -747,6 +808,9 @@ test("switching from code to diff updates only the content and preserves the foc
   assert.equal(code["aria-pressed"], "false");
   assert.equal(diff["aria-pressed"], "true");
   assert.equal(requests, 1);
+  reader.restore();
+  await new Promise(setImmediate);
+  assert.equal(requests, 1, "re-selecting a criterion reuses the cached source");
 });
 test("source requests deduplicate by inspected completion and reject stale responses after scope changes", async () => {
   const pending = [],

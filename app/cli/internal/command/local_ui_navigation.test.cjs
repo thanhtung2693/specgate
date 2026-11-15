@@ -114,15 +114,18 @@ test("documents sharing a path show their exact roles and only the selected one 
   const browser = localReviewBrowser("/?ref=LOCAL-a&tab=context");
   await browser.flush();
   await browser.click("document", "1");
-  assert.match(browser.app.innerHTML, /data-document="0" class=""[^>]*>.*?shared\.md.*?spec/);
-  assert.match(browser.app.innerHTML, /data-document="1" class="active"[^>]*>.*?shared\.md.*?plan/);
-  assert.match(browser.app.innerHTML, /Role: plan/);
-  assert.match(browser.app.innerHTML, /Content for plan/);
+  const drawer = () => browser.scope.innerHTML;
+  assert.equal(browser.scope.open, true);
+  assert.match(drawer(), /data-document="0" class=""[^>]*>.*?shared\.md.*?spec/);
+  assert.match(drawer(), /data-document="1" class="active"[^>]*>.*?shared\.md.*?plan/);
+  assert.match(drawer(), /Role: plan/);
+  assert.match(drawer(), /Content for plan/);
   await browser.click("document", "0");
-  assert.match(browser.app.innerHTML, /data-document="0" class="active"/);
-  assert.match(browser.app.innerHTML, /data-document="1" class=""/);
-  assert.match(browser.app.innerHTML, /Role: spec/);
-  assert.match(browser.app.innerHTML, /Content for spec/);
+  assert.match(drawer(), /data-document="0" class="active"/);
+  assert.match(drawer(), /data-document="1" class=""/);
+  assert.match(drawer(), /Role: spec/);
+  assert.match(drawer(), /Content for spec/);
+  assert.doesNotMatch(browser.app.innerHTML, /data-document|Role: spec/);
 });
 
 test("browser history across tabs preserves the same work's draft", async () => {
@@ -130,7 +133,10 @@ test("browser history across tabs preserves the same work's draft", async () => 
   await browser.flush();
   browser.enterNote("Keep this note while reviewing scope");
   await browser.navigate("/?ref=LOCAL-a&tab=context");
+  assert.equal(browser.scope.open, true);
   await browser.navigate("/?ref=LOCAL-a&tab=decision");
+  assert.equal(browser.scope.open, false);
+  await browser.click("language", "vi");
   assert.match(browser.app.innerHTML, /id="decision-note"[^>]*>Keep this note while reviewing scope<\/textarea>/);
 });
 
@@ -212,9 +218,10 @@ test("a completion-only change updates the Vietnamese notice without replacing s
   await browser.action("settings");
   await browser.flush();
   const before = browser.app.innerHTML;
+  const drawer = browser.scope.innerHTML;
   const settingsRenders = browser.settingsRenders();
   const sourceActivity = browser.sourceActivity();
-  assert.match(before, /class="context-raw"/);
+  assert.match(drawer, /class="context-raw"/);
   browser.publish("LOCAL-b", "-new");
   await browser.poll();
   assert.equal(browser.deliveryHTML(), "");
@@ -223,6 +230,8 @@ test("a completion-only change updates the Vietnamese notice without replacing s
   assert.match(browser.deliveryHTML(), /Có bản giao mới/);
   assert.match(browser.deliveryHTML(), /Xem bản mới/);
   assert.equal(browser.app.innerHTML, before);
+  assert.equal(browser.scope.innerHTML, drawer);
+  assert.equal(browser.scope.open, true);
   assert.deepEqual(browser.sourceActivity(), sourceActivity);
   assert.equal(browser.settings.open, true);
   assert.equal(browser.settingsRenders(), settingsRenders);
@@ -250,6 +259,203 @@ test("late queue observations cannot signal a stale delivery after a route chang
   assert.equal(browser.deliveryHTML(), "");
 });
 
+test("the review shows criteria, evidence and the decision dock together without a tab switch", async () => {
+  const browser = localReviewBrowser("/?ref=LOCAL-a");
+  await browser.flush();
+  const html = browser.app.innerHTML;
+  assert.match(html, /class="review enter"/);
+  assert.match(html, /<code class="ref">LOCAL-a<\/code>/);
+  assert.match(html, /id="crit-list"><ol class="crit-list"/);
+  assert.match(html, /id="evidence-pane"><div class="evidence"[^>]*data-criterion="local-1"/);
+  assert.match(html, /id="decision-note" maxlength="20000"/);
+  assert.match(html, /data-action="request-changes"/);
+  assert.match(html, /data-action="accept"/);
+  assert.match(html, /id="note-error"/);
+  assert.doesNotMatch(html, /class="tabs"|scope-reader|scope-view|Back to review/);
+  assert.match(html, /href="\/\?ref=LOCAL-a&amp;tab=context" data-nav data-scope/);
+  assert.equal(browser.scope.open, false);
+  assert.equal(browser.noteFocused(), false);
+});
+
+test("deep links open the review with the scope drawer or focus the decision note", async () => {
+  const scope = localReviewBrowser("/?ref=LOCAL-a&tab=context");
+  await scope.flush();
+  assert.match(scope.app.innerHTML, /id="decision-note"/);
+  assert.match(scope.app.innerHTML, /id="crit-list"/);
+  assert.equal(scope.scope.open, true);
+  assert.match(scope.scope.innerHTML, /<header>[\s\S]*data-close-scope[\s\S]*Approved documents[\s\S]*Content for context/);
+  assert.doesNotMatch(scope.scope.innerHTML, /Back to review/);
+  const decision = localReviewBrowser("/?ref=LOCAL-a&tab=decision");
+  await decision.flush();
+  assert.match(decision.app.innerHTML, /class="review/);
+  assert.equal(decision.noteFocused(), true);
+  assert.equal(decision.scope.open, false);
+});
+
+test("the Scope control opens a drawer over the review and every close path returns to the review", async () => {
+  const browser = localReviewBrowser("/?ref=LOCAL-a");
+  await browser.flush();
+  browser.enterNote("Draft kept behind the drawer");
+  const review = browser.app.innerHTML;
+  await browser.clickLink("/?ref=LOCAL-a&tab=context");
+  assert.equal(browser.scope.open, true);
+  assert.equal(browser.location.search, "?ref=LOCAL-a&tab=context");
+  assert.equal(browser.app.innerHTML, review, "the review stays rendered behind the drawer");
+  assert.match(browser.scope.innerHTML, /Content for context/);
+
+  for (const close of [() => browser.closeScope(), () => browser.clickBackdrop(), () => browser.pressEscape()]) {
+    const focuses = browser.scopeLinkFocuses();
+    await browser.clickLink("/?ref=LOCAL-a&tab=context");
+    assert.equal(browser.scope.open, true);
+    close();
+    await browser.flush();
+    assert.equal(browser.scope.open, false);
+    assert.equal(browser.location.search, "?ref=LOCAL-a");
+    assert.equal(browser.scopeLinkFocuses(), focuses + 1, "focus returns to the Scope control");
+    assert.equal(browser.app.innerHTML, review);
+  }
+  await browser.click("language", "vi");
+  assert.match(browser.app.innerHTML, /id="decision-note"[^>]*>Draft kept behind the drawer<\/textarea>/);
+});
+
+test("browser Back closes the drawer and focuses the Scope control", async () => {
+  const browser = localReviewBrowser("/?ref=LOCAL-a");
+  await browser.flush();
+  await browser.clickLink("/?ref=LOCAL-a&tab=context");
+  const focuses = browser.scopeLinkFocuses();
+  await browser.navigate("/?ref=LOCAL-a");
+  assert.equal(browser.scope.open, false);
+  assert.equal(browser.scopeLinkFocuses(), focuses + 1);
+});
+
+test("background updates keep the drawer's scroll position and switching documents resets it", async () => {
+  const browser = localReviewBrowser("/?ref=LOCAL-a&tab=context");
+  await browser.flush();
+  browser.drawerBody.scrollTop = 120;
+  await browser.action("context-source");
+  assert.equal(browser.drawerBody.scrollTop, 120);
+  assert.match(browser.scope.innerHTML, /class="context-raw"/);
+  browser.publish("LOCAL-a", "-new");
+  await browser.poll();
+  assert.equal(browser.scope.open, true);
+  assert.equal(browser.drawerBody.scrollTop, 120);
+  await browser.click("document", "1");
+  assert.equal(browser.drawerBody.scrollTop, 0);
+  assert.match(browser.scope.innerHTML, /Content for plan/);
+});
+
+test("criterion shortcuts only consume keys that move from the focused criterion", async () => {
+  const browser = localReviewBrowser("/?ref=LOCAL-a");
+  await browser.flush();
+  const selected = () => browser.critList.innerHTML.match(/data-criterion-select="([^"]+)"[^>]*aria-current/)[1];
+  const rows = ["local-1", "local-2"].map((criterionSelect) => {
+    const button = { tagName: "BUTTON", dataset: { criterionSelect }, focused: false, focus() { this.focused = true; } };
+    button.closest = (selector) => selector === "[data-criterion-select]" ? button : null;
+    button.getAttribute = () => browser.critList.innerHTML.includes(`data-criterion-select="${criterionSelect}" aria-current`) ? "true" : null;
+    button.parentElement = { querySelector: () => button };
+    return button;
+  });
+  rows[0].parentElement.nextElementSibling = rows[1].parentElement;
+  rows[1].parentElement.previousElementSibling = rows[0].parentElement;
+  assert.equal(browser.key("ArrowDown"), false, "body keeps native scrolling");
+  assert.equal(browser.key("j", { tagName: "BUTTON", closest: () => null }), false, "Scope and other controls keep their keys");
+  assert.equal(browser.key("ArrowDown", rows[1]), false, "navigation starts at focus, even on an unselected row");
+  assert.equal(browser.key("j", rows[0]), true);
+  assert.equal(selected(), "local-2");
+  assert.match(browser.pane.innerHTML, /data-criterion="local-2"[\s\S]*Second criterion/);
+  assert.equal(browser.key("j", rows[0]), true);
+  assert.equal(rows[1].focused, true, "focus moves when the adjacent criterion already has selection");
+  assert.equal(browser.key("j", rows[1]), false, "the last criterion keeps native scrolling");
+  assert.equal(browser.key("ArrowUp", rows[1]), true);
+  assert.equal(selected(), "local-1");
+  assert.equal(browser.key("k", rows[0]), false);
+  assert.equal(browser.key("j", { tagName: "TEXTAREA" }), false);
+  browser.dialog.open = true;
+  assert.equal(browser.key("j", rows[0]), false);
+  browser.dialog.open = false;
+  browser.scope.open = true;
+  assert.equal(browser.key("j", rows[0]), false);
+  browser.scope.open = false;
+  assert.equal(selected(), "local-1");
+  await browser.app.clickListener({ target: rows[1] });
+  assert.equal(selected(), "local-2");
+});
+
+test("the queue shows one full-width bar with the workspace, refresh and controls and no second row", async () => {
+  const browser = localReviewBrowser("/");
+  await browser.flush();
+  const html = browser.app.innerHTML;
+  assert.equal((html.match(/<header class="navbar"/g) || []).length, 1);
+  assert.match(html, /^<header class="navbar"><a class="brand" href="\/" data-nav aria-label="SpecGate">[\s\S]*class="version"[^>]*>fixture<\/span>/);
+  assert.match(html, /<span class="workspace-name">Alpha<\/span>/);
+  for (const control of ['data-action="refresh"', "data-language=", 'data-action="notifications"', 'data-action="theme"', 'data-action="settings"'])
+    assert.ok(html.includes(control), control);
+  assert.doesNotMatch(html, /navbar-inner|nav-controls|review-bar|queue-meta|class="seg|class="back"/);
+  assert.match(html, /<\/header><main id="main" class="wrap"/);
+  assert.match(html, /<div class="q"><header class="queue-head">/);
+});
+
+test("the review shows exactly one bar with back, ref, position, neighbours, Scope and controls", async () => {
+  const first = localReviewBrowser("/?ref=LOCAL-a");
+  await first.flush();
+  const html = first.app.innerHTML;
+  assert.equal((html.match(/<header class="navbar"/g) || []).length, 1);
+  assert.doesNotMatch(html, /review-bar|data-action="refresh"|workspace-name/);
+  assert.match(html, /<a class="brand" href="\/" data-nav aria-label="SpecGate">/);
+  assert.match(html, /<a class="back" href="\/" data-nav>[\s\S]*Queue<\/a><code class="ref">LOCAL-a<\/code>/);
+  assert.match(html, /<span class="pos">1 \/ 2<\/span><a class="ibtn" aria-disabled="true" aria-label="Previous work"[\s\S]*href="\/\?ref=LOCAL-b" data-nav aria-label="Next work"/);
+  assert.match(html, /data-scope aria-haspopup="dialog"[\s\S]*data-language=/);
+  assert.match(html, /<\/header><main id="main" class="review-main"/);
+  const last = localReviewBrowser("/?ref=LOCAL-b");
+  await last.flush();
+  assert.match(last.app.innerHTML, /<span class="pos">2 \/ 2<\/span><a class="ibtn" href="\/\?ref=LOCAL-a" data-nav aria-label="Previous work">[\s\S]*<a class="ibtn" aria-disabled="true" aria-label="Next work">/);
+  const vi = localReviewBrowser("/?ref=LOCAL-a", "vi");
+  await vi.flush();
+  assert.match(vi.app.innerHTML, /Hàng chờ<\/a>[\s\S]*aria-label="Công việc sau"/);
+  const outside = localReviewBrowser("/?ref=LOCAL-z");
+  await outside.flush();
+  assert.match(outside.app.innerHTML, /<code class="ref">LOCAL-z<\/code>/);
+  assert.doesNotMatch(outside.app.innerHTML, /class="pos"|Previous work|Next work/);
+});
+
+test("the language toggle switches between English and Vietnamese and persists the choice", async () => {
+  const browser = localReviewBrowser("/");
+  await browser.flush();
+  assert.match(browser.app.innerHTML, /data-language="vi"[^>]*aria-label="Switch to Vietnamese">EN</);
+  await browser.click("language", "vi");
+  assert.deepEqual(browser.stored, [["specgate-local-language", "vi"]]);
+  assert.match(browser.app.innerHTML, /data-language="en"[^>]*aria-label="Chuyển sang tiếng Anh">VI</);
+  await browser.click("language", "en");
+  assert.deepEqual(browser.stored.at(-1), ["specgate-local-language", "en"]);
+  assert.match(browser.app.innerHTML, /data-language="vi"[^>]*>EN</);
+});
+
+test("the theme toggle still switches and persists the theme", async () => {
+  const browser = localReviewBrowser("/");
+  await browser.flush();
+  await browser.action("theme");
+  assert.deepEqual(browser.stored, [["specgate-local-theme", "dark"]]);
+  assert.match(browser.app.innerHTML, /data-action="theme"[^>]*aria-label="Switch to light theme" aria-pressed="true"/);
+});
+
+test("queue rows are one line without evidence marks and keep an exact creation time", async () => {
+  const browser = localReviewBrowser("/");
+  await browser.flush();
+  const html = browser.app.innerHTML;
+  assert.match(html, /<a class="row" href="\/\?ref=LOCAL-a"/);
+  assert.match(html, /<strong class="t" data-title-ref="LOCAL-a">/);
+  assert.match(html, /<time class="age" datetime="2026-11-01T00:00:00Z" title="Created /);
+  assert.doesNotMatch(html, /ladder|class="why"|tally|crit/);
+  const t = (text) => text;
+  const rows = presentation.queueList([
+    { ref: "A", title: "Plain", state: "awaiting_acceptance", next_actor: "human_reviewer" },
+    { ref: "B", title: "Stale", state: "awaiting_acceptance", next_actor: "human_reviewer", stale: true, stale_reason: "Context changed" },
+    { ref: "C", title: "Rework", state: "rework_requested", next_actor: "implementing_agent" },
+    { ref: "D", title: "Blocked", state: "blocked", next_actor: "maintainer" },
+  ], { items: [], filter: "all", search: "", lang: "en" }, t, (ref) => `/?ref=${ref}`);
+  assert.deepEqual([...rows.matchAll(/class="why">([^<]*)</g)].map((m) => m[1]), ["Review freshness · Context changed", "Changes requested", "Needs maintainer"]);
+});
+
 function localReviewBrowser(path, language = "en", reducedMotion = false) {
   const element = () => ({
     innerHTML: "", textContent: "", style: {}, open: false,
@@ -260,7 +466,12 @@ function localReviewBrowser(path, language = "en", reducedMotion = false) {
     showModal() { this.open = true; },
     close() { this.open = false; this.closeListener?.(); },
   });
-  const app = element(), dialog = element(), settings = element(), notice = element(), window = element();
+  const app = element(), dialog = element(), settings = element(), scope = element(), notice = element(), window = element();
+  window.scrollTo = () => {};
+  const drawerBody = element(), scopeLink = element();
+  let scopeLinkFocuses = 0;
+  scopeLink.focus = () => { scopeLinkFocuses++; };
+  scope.querySelector = (selector) => selector === ".drawer-body" ? drawerBody : element();
   const notification = element(), delivery = element();
   let bellAnimated = false;
   Object.defineProperty(notification, "innerHTML", { set() { bellAnimated = false; } });
@@ -268,7 +479,10 @@ function localReviewBrowser(path, language = "en", reducedMotion = false) {
   let confirm, error, status, decision, finish, finishWork, deferredRead, finishList, listOptions, tick, failWorkRead;
   let sourceClears = 0, sourceRestores = 0;
   let settingsRenders = 0;
-  const nodes = { app, dialog, "settings-dialog": settings, notice };
+  const critList = element(), pane = element(), note = element();
+  let noteFocused = false;
+  note.focus = () => { noteFocused = true; };
+  const nodes = { app, dialog, "settings-dialog": settings, "scope-dialog": scope, notice, "crit-list": critList, "evidence-pane": pane, "decision-note": note };
   Object.defineProperty(app, "innerHTML", {
     set(html) {
       this.html = html;
@@ -277,6 +491,7 @@ function localReviewBrowser(path, language = "en", reducedMotion = false) {
     get() { return this.html; },
   });
   app.querySelector = (selector) => selector === ".notification" ? notification
+    : selector === "[data-scope]" ? scopeLink
     : selector === '[data-action="notifications"] .icon' ? { animate() { bellAnimated = true; } }
     : element();
   Object.defineProperty(settings, "innerHTML", {
@@ -297,16 +512,16 @@ function localReviewBrowser(path, language = "en", reducedMotion = false) {
   const location = new URL(path, "http://127.0.0.1:1234");
   const reply = (data) => ({ ok: true, json: async () => ({ ok: true, data }) });
   const failure = (message) => ({ ok: false, json: async () => ({ ok: false, error: { message } }) });
-  const versions = new Map();
+  const versions = new Map(), stored = [];
   const work = (ref) => ({
     can_decide: true,
     status: {
-      ref, state: "awaiting_acceptance", next_actor: "human_reviewer",
+      ref, state: "awaiting_acceptance", next_actor: "human_reviewer", created_at: "2026-11-01T00:00:00Z",
       review_id: `review-${ref}${versions.get(ref)?.review || ""}`,
       completion_id: `completion-${ref}${versions.get(ref)?.completion || ""}`,
       basis_digest: `basis-${ref}${versions.get(ref)?.basis || ""}`,
     },
-    work: { title: `Work ${ref}` },
+    work: { title: `Work ${ref}`, acceptance_criteria: ["First criterion", "Second criterion"] },
     documents: [{ path: "shared.md", role: "spec" }, { path: "shared.md", role: "plan" }],
   });
   const browser = {
@@ -318,15 +533,16 @@ function localReviewBrowser(path, language = "en", reducedMotion = false) {
       querySelector: element, documentElement: { dataset: {} }, activeElement: element(),
     },
     location, URLSearchParams, window,
+    history: { pushState(_, __, url) { location.href = new URL(url, location).href; }, replaceState() {} },
     matchMedia: (query) => ({ ...element(), matches: query === "(prefers-reduced-motion: reduce)" && reducedMotion }),
-    localStorage: { getItem: (key) => key.endsWith("language") ? language : null },
+    localStorage: { getItem: (key) => key.endsWith("language") ? language : null, setItem: (key, value) => stored.push([key, value]) },
     setInterval(callback, ms) { if (ms === 30000) tick = callback; },
     setTimeout() {}, clearTimeout() {},
     fetch: async (url, options) => {
       const { pathname, searchParams } = new URL(url, location);
       switch (pathname) {
         case "/api/session": return reply({ csrf_token: "test" });
-        case "/api/meta": return reply({ version: "fixture" });
+        case "/api/meta": return reply({ version: "fixture", workspace: { name: "Alpha" } });
         case "/api/works": {
           const { error, delay } = listOptions || {};
           listOptions = null;
@@ -361,8 +577,17 @@ function localReviewBrowser(path, language = "en", reducedMotion = false) {
     await app.clickListener({ target: { closest: (selector) => selector === `[data-${kind}]` ? { dataset: { [kind]: value } } : null } });
     await flush();
   };
+  const clickLink = async (href) => {
+    await app.clickListener({ ctrlKey: false, preventDefault() {}, target: { closest: (selector) => selector === "a[data-nav]" ? { getAttribute: () => href } : null } });
+    await flush();
+  };
   return {
-    app, dialog, settings, notice, click, flush, confirm: () => confirm, confirmStatus: () => status,
+    stored, scope, drawerBody, clickLink, scopeLinkFocuses: () => scopeLinkFocuses, critList, pane,
+    closeScope: () => scope.clickListener({ target: { closest: (selector) => selector === "[data-close-scope]" ? {} : null } }),
+    clickBackdrop: () => scope.clickListener({ target: scope }),
+    pressEscape: () => scope.close(), noteFocused: () => noteFocused,
+    key: (key, target = { tagName: "BODY" }) => { let prevented = false; window.keydownListener({ key, target, preventDefault() { prevented = true; } }); return prevented; },
+    app, dialog, settings, notice, location, click, flush, confirm: () => confirm, confirmStatus: () => status,
     dialogError: () => error, posted: () => decision,
     deliveryHTML: () => delivery.innerHTML || "",
     notificationLabel: () => notification["aria-label"],
