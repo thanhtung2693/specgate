@@ -23,6 +23,7 @@
     blocked: '<path d="m9 3-6 6v6l6 6h6l6-6V9l-6-6Z M12 8v5m0 4h.01"/>',
     minus: '<path d="M5 12h14"/>',
     chevron: '<path d="m9 5 7 7-7 7"/>',
+    "chevron-left": '<path d="m15 5-7 7 7 7"/>',
     info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/>',
     code: '<path d="m8 6-6 6 6 6m8-12 6 6-6 6"/>',
     bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-9 12h6"/>',
@@ -180,23 +181,89 @@
       : row.selected_tests_required || observedTests ? t("Test needs attention")
       : observedCheck ? t(checkResult || "Observed check") : t(row.claim ? "Agent claim" : "Not reviewed");
     const tone = observation.tone === "danger" ? "danger" : hasGap || row.selected_tests_required && !observedTests ? "warning" : observedTests ? p.tone : "neutral";
-    const glyph = tone === "success" ? "check-circle" : tone === "warning" || tone === "danger" ? "blocked" : "circle";
-    const markers = [
-      ["quote", claimLabel(row.claim, t), row.claim && row.claim !== "missing" ? "neutral" : "unmarked"],
-      ["terminal", observedCheck ? t("Observed check") + " · " + checkStatusLabel(row.check_status, t) : t("No CLI-observed check"), observedCheck ? row.check_status === "pass" ? "success" : row.check_status === "fail" ? "danger" : "warning" : "unmarked"],
-      ["evidence", observation.text, observedTests || row.selected_tests_required ? observation.tone : "unmarked"],
-    ].map(([name, help, tone]) => `<span class="${tone}" title="${e(help)}">${icon(name)}<span class="visually-hidden">${e(help)}</span></span>`).join("");
-    return { ...p, label, tone, glyph, markers, observation, gap: hasGap && observedCheck };
+    return { ...p, label, tone, observation };
   }
 
-  function criterionView(row, reports, lang, t) {
-    const p = criterionSummary(row, lang, t),
-      original = reports.find((item) => item.criterion_id === row.criterion_id),
+  const lineCited = (citation) => /^lines?:\s*\d/i.test(citation || "");
+  const tested = (row) => row.check_provenance === "selected_test_observed" && Boolean(row.selected_cases?.length);
+
+  /* Four rungs of evidence. Only CLI-observed checks and selected-test results count as observed. */
+  function rungs(row) {
+    const cases = row.selected_cases || [];
+    const observed = row.check_source === "specgate_cli";
+    const claim = row.claim === "satisfied" ? "said" : row.claim === "partial" || row.claim === "not_done" ? "gap" : "none";
+    const source = row.evidence_path && lineCited(row.citation) ? "said" : "none";
+    const check = !observed ? "none" : own({ pass: "ok", fail: "bad", skipped: "gap" }, row.check_status) || "none";
+    const test = tested(row)
+      ? cases.some((item) => ["failed", "error"].includes(item.outcome)) ? "bad"
+        : cases.every((item) => item.outcome === "passed") ? "ok" : "gap"
+      : row.selected_tests_required ? "gap" : "none";
+    const bad = check === "bad" || test === "bad";
+    const problem = bad ? "bad" : row.gaps?.length || claim === "gap" || check === "gap" || test === "gap" ? "gap" : "";
+    return { claim, source, check, test, problem };
+  }
+  const rungNames = ["Claim", "Source", "Check", "Test"];
+
+  function rungStates(row, lang, t) {
+    const r = rungs(row), observation = testObservation(row, lang), cases = row.selected_cases || [];
+    const attested = row.check_source !== "specgate_cli" && row.check_status;
+    return {
+      Claim: [r.claim, claimLabel(row.claim, t)],
+      Source: [r.source, row.evidence_path ? `${row.evidence_path} · ${row.citation ? citationLabel(row.citation, lang) : t("No line cited")}` : t("No cited source")],
+      Check: [r.check, r.check !== "none" ? `${t("Observed check")} · ${checkStatusLabel(row.check_status, t)}` : attested ? `${t("Agent claim")} · ${checkStatusLabel(row.check_status, t)}` : t("No CLI-observed check")],
+      Test: [r.test, cases.length || row.selected_tests_required ? observation.text : t("No selected test")],
+    };
+  }
+
+  function ladder(r) {
+    const tones = [r.claim, r.source, r.check, r.test];
+    return `<span class="ladder" aria-hidden="true">${tones.map((tone, i) => `${i ? `<i class="l ${tone}"></i>` : ""}<i class="n ${tone}"></i>`).join("")}</span>`;
+  }
+
+  function criteriaList(rows, selectedId, lang, t) {
+    return `<ol class="crit-list" aria-label="${e(t("Acceptance criteria"))}">${rows.map((row) => {
+      const id = row.criterion_id || row.id, r = rungs(row), summary = criterionSummary(row, lang, t);
+      const selected = id === selectedId, shown = selected || r.problem;
+      const label = r.problem === "bad" ? summary.label : row.gaps?.length ? t("Evidence gap") : r.claim === "gap" ? claimLabel(row.claim, t) : summary.label;
+      const states = rungStates(row, lang, t);
+      const spoken = rungNames.map((name) => `${t(name)}: ${states[name][1]}`).join(". ");
+      return `<li><button type="button" class="crit${selected ? " sel" : ""}${r.problem ? " " + r.problem : ""}" data-criterion-select="${e(id)}"${selected ? ' aria-current="true"' : ""}><code>${e(summary.id)}</code><span class="tx">${e(row.text)}</span><span class="lad">${ladder(r)}<span class="res${shown ? "" : " visually-hidden"}">${e(label)}</span></span>${selected ? `<span class="names" aria-hidden="true">${rungNames.map((name) => `<span>${e(t(name))}</span>`).join("")}</span>` : ""}<span class="visually-hidden">${e(spoken)}</span></button></li>`;
+    }).join("")}</ol>`;
+  }
+
+  function reviewSummary(rows, t) {
+    if (!rows.length) return null;
+    const problems = rows.filter((row) => rungs(row).problem), observed = rows.filter((row) => rungs(row).check !== "none" || rungs(row).test !== "none");
+    const fill = (text, n) => t(text).replace("{n}", n).replace("{total}", rows.length);
+    if (problems.length) return { tone: problems.some((row) => rungs(row).problem === "bad") ? "bad" : "gap", text: fill("{n} of {total} criteria need attention", problems.length) };
+    if (!observed.length) return { tone: "none", text: t("Agent claims only. No criterion has a CLI-observed result.") };
+    return { tone: "ok", text: fill("{n} of {total} criteria have CLI-observed results", observed.length) };
+  }
+
+  function evidencePane(row, reports, lang, t) {
+    const id = row.criterion_id || row.id,
+      original = (reports || []).find((item) => item.criterion_id === id),
       detail = criterionDetails(row, original),
-      observation = p.observation;
-    const claim = claimLabel(row.claim, t);
-    const gaps = row.gaps?.length ? `<ul>${row.gaps.map((gap) => `<li>${e(gap)}</li>`).join("")}</ul>` : "";
-    return `<details class="criterion ${p.tone}" data-criterion="${e(row.criterion_id || row.id)}"><summary>${icon(p.glyph, "result-mark")}<span class="criterion-text"><code class="criterion-id">${e(p.id)}</code> ${e(row.text)}</span><span class="criterion-observation"><span class="markers">${p.markers}</span>${p.gap ? `<span class="gap-label">${e(t("Evidence gap"))} · </span>` : ""}${e(p.label)}</span>${icon("chevron", "chevron")}</summary><div class="criterion-body">${gaps ? `<div class="warning"><strong>${e(t("Evidence gaps"))}</strong>${gaps}</div>` : ""}<div class="evidence-columns"><section class="agent-report"><h3>${icon("quote")}${e(t("Agent report"))}</h3><p class="evidence-text">${e(detail.report || claim)}</p></section><section class="test-result"><h3>${icon("evidence")}${e(t("Run results"))}</h3><p class="observation ${observation.tone}-text">${e(observation.text)}</p>${detail.check ? `<code>${e(detail.check)}</code>` : ""}${detail.tests ? `<p class="mono evidence-text">${e(detail.tests)}</p>` : ""}${row.check_name && row.why ? `<p>${e(row.why)}</p>` : ""}</section></div>${detail.source ? `<div class="source-reference"><h3>${icon("code")}${e(t("Cited source"))}</h3><div class="source-inspector"><div class="source-location"><code>${e(row.evidence_path)}</code>${row.citation ? `<span>${e(citationLabel(row.citation, lang))}</span>` : ""}</div><div class="source-excerpt" data-source-slot></div></div></div>` : ""}<details class="raw-details"><summary>${icon("chevron", "chevron")}${e(t("View original data"))}</summary><pre tabindex="0">${e(JSON.stringify({ review: row, ...(original ? { original_report: original } : {}) }, null, 2))}</pre></details></div></details>`;
+      states = rungStates(row, lang, t),
+      cases = row.selected_cases || [],
+      attested = row.check_source !== "specgate_cli" && row.check_status;
+    const cell = (name, glyph, body) => `<div class="${states[name][0]}"><dt>${e(t(name))}</dt><dd>${icon(glyph)}${body}</dd></div>`;
+    const gaps = row.gaps?.length ? `<div class="gaps"><h3>${e(t("Evidence gaps"))}</h3><ul>${row.gaps.map((gap) => `<li>${e(gap)}</li>`).join("")}</ul></div>` : "";
+    const source = row.evidence_path ? `<code>${e(row.evidence_path)}</code><span>${e(row.citation ? citationLabel(row.citation, lang) : t("No line cited"))}</span>` : `<span>${e(states.Source[1])}</span>`;
+    const check = states.Check[0] !== "none" ? `<span>${e(states.Check[1])}</span>` : attested ? `<q>${e(checkStatusLabel(row.check_status, t))}</q><span>${e(t("Agent claim"))} · ${e(t("not observed"))}</span>` : `<span>${e(states.Check[1])}</span>`;
+    const test = `<span>${e(states.Test[1])}</span>${cases.length ? cases.map((item) => `<code>${e(`${item.classname || ""}/${item.name}: ${item.outcome}`)}</code>`).join("") : ""}`;
+    return `<div class="evidence" data-source-pane data-criterion="${e(id)}"><code class="id">${e(reviewPresentation(row, lang).id)}</code><h2>${e(row.text)}</h2>${gaps}<dl class="rr">${cell("Claim", "quote", `${detail.report ? `<q>${e(detail.report)}</q>` : ""}<span>${e(states.Claim[1])}</span>`)}${cell("Source", "code", source)}${cell("Check", "terminal", `${check}${row.check_name ? `<code>${e(row.check_name)}</code>` : ""}${row.check_name && row.why ? `<span>${e(row.why)}</span>` : ""}`)}${cell("Test", "evidence", test)}</dl>${row.evidence_path ? `<div class="source-reference"><h3>${e(t("Cited source"))}</h3><div class="source-inspector"><div class="source-excerpt" data-source-slot></div></div></div>` : ""}<details class="raw-details"><summary>${icon("chevron", "chevron")}${e(t("View original data"))}</summary><pre tabindex="0">${e(JSON.stringify({ review: row, ...(original ? { original_report: original } : {}) }, null, 2))}</pre></details></div>`;
+  }
+
+  function ageLabel(iso, lang, now = Date.now()) {
+    const time = Date.parse(iso);
+    if (!Number.isFinite(time)) return null;
+    const seconds = (time - now) / 1000;
+    const [unit, size] = [["year", 31536000], ["month", 2592000], ["week", 604800], ["day", 86400], ["hour", 3600], ["minute", 60]].find(([, size]) => Math.abs(seconds) >= size) || ["second", 1];
+    return {
+      text: new Intl.RelativeTimeFormat(lang, { numeric: "auto", style: "narrow" }).format(Math.trunc(seconds / size), unit),
+      date: new Date(time).toLocaleString(lang, { dateStyle: "medium", timeStyle: "short" }),
+    };
   }
 
   function reviewChecks(completion, t) {
@@ -273,11 +340,6 @@
     return rows.map((row) => ({ ...row, selected_tests_required: required.has(row.criterion_id || row.id) }));
   }
 
-  function evidenceReview(rows, work, lang, t) {
-    rows = withRequiredTests(rows, work);
-    return `${!work.status?.completion_id ? `<p class="empty">${icon("clock")}${e(t("No delivery yet."))}</p>` : ""}${rows.length ? `<div class="criteria" aria-label="${e(t("Acceptance criteria"))}">${rows.map((row) => criterionView(row, work.completion?.criteria || [], lang, t)).join("")}</div>` : ""}<div class="evidence-disclosures">${reviewChecks(work.completion, t)}${reviewComparison(work.review_comparison, t, { rows, completion: work.completion, lang })}</div>`;
-  }
-
   const kv = (values, t) =>
     `<dl class="kv">${values.map(([name, value]) => `<div><dt>${e(t(name))}</dt><dd>${e(value || "—")}</dd></div>`).join("")}</dl>`;
 
@@ -301,25 +363,15 @@
     )}${s.next_command ? `<p>${e(t("Continue in your terminal"))}</p><pre>${e(s.next_command)}</pre>` : ""}</details>`;
   }
 
-  function decisionView(d, note, actor, t, rows = [], lang = "en") {
+  function decisionDock(d, note, actor, t) {
     const s = d.status,
       pins = decisionPins(d),
       recorded = recordedDecision(d);
-    const checklist = withRequiredTests(rows, d).map((row) => {
-      const p = criterionSummary(row, lang, t);
-      return `<li class="${p.tone}">${icon(p.glyph, "result-mark")}<span><code>${e(p.id)}</code> ${e(row.text)}</span><small>${p.gap ? `<span class="gap-label">${e(t("Evidence gap"))} · </span>` : ""}${e(p.label)}</small></li>`;
-    }).join("");
-    const framing = (body) => `<div class="decision-layout">${checklist ? `<section><h2>${e(t("Acceptance criteria"))}</h2><ul class="decision-criteria">${checklist}</ul></section>` : ""}${body}</div>`;
     if (recorded)
-      return framing(`<section class="decision-form recorded"><div class="recorded-notice ${recorded.decision === "approve" ? "success" : "warning"}">${icon("check")}<div><h2>${e(t("Recorded decision"))}</h2><p>${e(t(recorded.decision === "approve" ? "Accepted" : "Rejected"))} · ${e(actor(s.next_actor))}</p></div></div>${recorded.note ? `<h3>${e(t("Your note"))}</h3><blockquote class="recorded-note">${e(recorded.note)}</blockquote>` : ""}${technicalView(s, t)}${kv(
-        [
-          ["Actor", recorded.actor],
-          ["Decision recorded at", recorded.observed_at],
-        ].filter(([, value]) => value), t,
-      )}</section>`);
+      return `<div class="dock done">${icon("check-circle")}<p><strong>${e(t("Recorded decision"))}</strong> · ${e(t(recorded.decision === "approve" ? "Accepted" : "Rejected"))} · ${e(actor(s.next_actor))}${recorded.observed_at ? ` · ${e(recorded.observed_at)}` : ""}${recorded.note ? `<q tabindex="0">${e(recorded.note)}</q>` : ""}</p></div>`;
     if (!pins)
-      return `<section class="decision-form"><h2>${e(t("Decision unavailable for this work."))}</h2><p>${e(t(s.decision))}</p><p class="muted">${e(t("This work is not currently actionable in the browser."))}</p></section>`;
-    return framing(`<section class="decision-form"><h2><label for="decision-note">${e(t("Your note"))}</label></h2><textarea id="decision-note" maxlength="20000" aria-describedby="note-hint note-error" placeholder="${e(t("What should change, or why are you accepting this delivery?"))}">${e(note)}</textarea><p class="field-hint" id="note-hint">${e(t("Required when requesting changes."))} ${e(t("The agent reads your decision and note through SpecGate."))}</p><p id="note-error" class="dialog-error" role="alert"></p><div class="decision-actions"><button data-action="request-changes">${e(t("Ask for changes"))}</button><button class="primary" data-action="accept">${icon("check")}${e(t("Accept delivery"))}</button></div><p class="field-hint">${e(t("You will confirm before saving the decision."))}</p></section>`);
+      return `<div class="dock done">${icon("lock")}<p><strong>${e(t("Decision unavailable for this work."))}</strong> ${e(t(s.decision))}</p></div>`;
+    return `<div class="dock"><textarea id="decision-note" maxlength="20000" aria-label="${e(t("Your note"))}" aria-describedby="note-error" placeholder="${e(t("Note · required to ask for changes"))}">${e(note)}</textarea><button type="button" class="button" data-action="request-changes">${e(t("Ask for changes"))}</button><button type="button" class="button primary" data-action="accept">${icon("check")}${e(t("Accept delivery"))}</button><p id="note-error" class="hint" role="alert"></p></div>`;
   }
 
   function contextView(d, doc, t, renderContext, button) {
@@ -344,6 +396,96 @@
     }
     return `<div class="scope-reader"><div><h2 class="eyebrow">${e(t("Approved documents"))}</h2><div class="document-list"><button data-document="-1" class="${(doc?.selected ?? -1) < 0 ? "active" : ""}" aria-pressed="${(doc?.selected ?? -1) < 0}">${icon("file")}<span>${e(t("Context Pack"))}</span></button>${docs.map((item, i) => `<button data-document="${i}" class="${doc?.selected === i ? "active" : ""}" aria-pressed="${doc?.selected === i}">${icon("file")}<code>${e(item.path)}</code><small>${e(item.role)}</small></button>`).join("")}</div><p class="field-hint">${e(t("Original content is shown without translation."))}</p></div>${body}</div>`;
   }
+
+  const drawerFrame = (heading, closeLabel, body) =>
+    `<header><h2 id="scope-title">${icon("file")}${e(heading)}</h2><button type="button" class="icon-button" data-close-scope aria-label="${e(closeLabel)}">${icon("close")}</button></header><div class="drawer-body">${body}</div>`;
+
+  const decisionConfirmation = (d, pins, note, t) =>
+    `<p>${e(t("Record this decision for the exact review shown below."))}</p>${kv([
+      ["Work", d.work.title],
+      ["Review ID", pins.review_id],
+      ["Completion ID", pins.completion_id],
+      ["Current evidence basis", pins.basis_digest],
+      ["Your note", note],
+    ], t)}<p>${e(t("If the review or evidence changed, SpecGate will refuse this decision. Refresh and inspect it again."))}</p>`;
+
+  const updateReview = (version, preview, t) =>
+    `${kv([["Running version", version], ["Available version", preview.latest_version], ["Install target", preview.target]], t)}<ul>${(preview.scope || []).map((line) => `<li>${e(t(line))}</li>`).join("")}</ul><p>${e(t("The running UI keeps its current version until restarted. Finish any open decision before updating."))}</p>`;
+
+  const selectedEvidence = (rows, work, id, lang, t) => {
+    const row = rows.find((item) => (item.criterion_id || item.id) === id);
+    return row ? evidencePane(row, work.completion?.criteria, lang, t) : `<p class="muted">${e(t("No acceptance criteria recorded."))}</p>`;
+  };
+
+  const attention = (item, t) =>
+    item.stale ? core.staleNotice(item, t("Review freshness"))
+      : item.state === "rework_requested" ? t("Changes requested")
+      : item.next_actor === "maintainer" ? t("Needs maintainer")
+      : "";
+
+  function queueRow(item, lang, t, href) {
+    const status = statusPresentation(item), why = attention(item, t), age = item.created_at && ageLabel(item.created_at, lang);
+    const created = age && `${t("Created")} ${age.date}`;
+    return `<li><a class="row" href="${e(href(item.ref))}" data-nav><span class="mark ${status.tone}">${icon(status.icon)}<span class="visually-hidden">${e(t(status.label))}</span></span><strong class="t" data-title-ref="${e(item.ref)}">${e(item.title)}</strong>${why ? `<span class="why">${e(why)}</span>` : ""}${age ? `<time class="age" datetime="${e(item.created_at)}" title="${e(created)}"><span aria-hidden="true">${e(age.text)}</span><span class="visually-hidden">${e(created)}</span></time>` : ""}</a></li>`;
+  }
+
+  function queueList(items, { items: all, filter, search, lang }, t, href) {
+    const count = `<p class="list-count">${e(t("Showing {shown} of {total} work items").replace("{shown}", items.length).replace("{total}", all.length))}</p>`;
+    return items.length
+      ? `<ul class="rows">${items.map((item) => queueRow(item, lang, t, href)).join("")}</ul>${count}`
+      : `<section class="empty">${icon("inbox")}<h2>${e(t(!search && filter === "human" ? "No decisions waiting." : "No work matches this view."))}</h2><p>${e(t(!all.length ? "Work preparation and approval start with your agent or CLI." : "Try another filter or search."))}</p></section>${count}`;
+  }
+
+  function queueResults(state, t, href) {
+    if (state.queueError) return queueError(state.queueError, t);
+    const search = state.search.toLocaleLowerCase();
+    const items = state.items.filter((item) =>
+      (state.filter === "all" || (state.filter === "human" ? core.needsHuman(item) : item.next_actor === "implementing_agent")) &&
+      `${item.title} ${item.ref}`.toLocaleLowerCase().includes(search));
+    return queueList(items, state, t, href);
+  }
+
+  function cacheBody(preview, t) {
+    const entries = preview.entries || [];
+    return `<p>${e(t(preview.scope))}</p>${entries.length ? `<ul class="file-list">${entries.map((file) => `<li><strong>${e(file.name)}</strong><code>${e(file.path)}</code><span>${e(file.bytes)} bytes</span></li>`).join("")}</ul><p>${e(t("Total"))}: ${e(preview.count)} ${e(t("Files"))} · ${e(preview.bytes)} bytes</p>` : `<p>${e(t(preview.reason || "No eligible cache files."))}</p>`}<p>${e(t("Work, specs, evidence, acceptance records and backups are kept."))}</p>`;
+  }
+
+  function reviewScreen(d, rows, { selected, enter, note, lang, t, actor }) {
+    const s = d.status, status = statusPresentation(s), summary = reviewSummary(rows, t);
+    const shortDate = d.review?.created_at && new Date(d.review.created_at).toLocaleDateString(lang, { dateStyle: "medium" });
+    const meta = [e(t(status.label)), shortDate && e(shortDate), d.completion?.agent?.name && e(d.completion.agent.name), s.completion_id ? "" : e(t("No delivery yet."))].filter(Boolean).join(" · ");
+    const sumIcon = summary && icon(summary.tone === "ok" ? "check-circle" : summary.tone === "none" ? "quote" : "blocked");
+    return `<div class="review${enter ? " enter" : ""}"><div id="delivery-notice" role="status" aria-live="polite"></div><section class="list" aria-label="${e(t("Acceptance criteria"))}"><h1 data-title-ref="${e(s.ref)}">${e(d.work.title)}</h1>${summary ? `<p class="sum ${summary.tone}">${sumIcon}${e(summary.text)}</p>` : ""}<p class="meta">${icon(status.icon)}<span>${meta}</span></p>${s.historical_verification ? `<p class="warning">${e(t("Recorded verification comes from another Local store generation."))}</p>` : ""}${s.stale ? `<p class="warning">${e(core.staleNotice(s, t("Review freshness")))}</p>` : ""}<div id="crit-list">${criteriaList(rows, selected, lang, t)}</div><details class="more"><summary>${icon("chevron", "chevron")}${e(t("Delivery details"))}</summary>${reviewChecks(d.completion, t)}${reviewComparison(d.review_comparison, t, { rows, completion: d.completion, lang })}${technicalView(s, t)}</details></section><section class="detail" id="evidence-pane">${selectedEvidence(rows, d, selected, lang, t)}</section>${decisionDock(d, note, actor, t)}</div>`;
+  }
+
+  const queueTitle = (filter, t) => t({ human: "Waiting on you", agent: "Agent’s next step", all: "All work" }[filter]);
+
+  function queueScreen({ filter, search }, counts, results, t) {
+    const tabs = ["human", "agent", "all"].map((key, i) => `<button type="button" data-filter="${key}" aria-pressed="${filter === key}">${e(queueTitle(key, t))}<span>${counts[i]}</span></button>`).join("");
+    const label = e(t("Search work or reference"));
+    return `<div class="q"><header class="queue-head"><h1 class="visually-hidden">${e(queueTitle(filter, t))}</h1><div class="filters tabs" role="group" aria-label="${e(t("Filter work"))}">${tabs}</div><input class="search" id="search" type="search" value="${e(search)}" aria-label="${label}" placeholder="${label}"></header><div id="queue-results">${results}</div></div>`;
+  }
+
+  /* The one full-width bar: brand and version, then the queue or review context, then the controls. */
+  function topBar({ t, href, lang, theme, notifications, settings, version, workspace, ref, scopeHref, back = true, waiting = [], home = "/", logo = "/assets/logo.svg" }) {
+    const brand = `<a class="brand" href="${e(home)}" data-nav aria-label="SpecGate"><img src="${e(logo)}" alt="" width="26" height="26"><span class="wordmark">SpecGate</span>${version ? ` <span class="version" title="${e(t("Running version"))}">${e(version)}</span>` : ""}</a>`;
+    const at = waiting.indexOf(ref);
+    const step = (to, label, glyph) => `<a class="ibtn"${to ? ` href="${e(href(to))}" data-nav` : ' aria-disabled="true"'} aria-label="${e(t(label))}">${icon(glyph)}</a>`;
+    const pager = at < 0 ? "" : `<span class="pager"><span class="pos">${at + 1} / ${waiting.length}</span>${step(waiting[at - 1], "Previous work", "chevron-left")}${step(waiting[at + 1], "Next work", "chevron")}</span>`;
+    const context = ref
+      ? `${back ? `<a class="back" href="/" data-nav>${icon("chevron-left")}${e(t("Queue"))}</a>` : ""}<code class="ref">${e(ref)}</code>${pager}<span class="grow"></span><a class="button quiet" href="${e(scopeHref)}" data-nav data-scope aria-haspopup="dialog">${icon("file")}<span class="scope-label">${e(t("Scope"))}</span></a>`
+      : `<span class="workspace-name">${e(workspace || t("Local workspace"))}</span><span class="grow"></span><button type="button" class="ibtn" data-action="refresh" aria-label="${e(t("Refresh"))}">${icon("refresh")}</button>`;
+    const labels = { language: t(lang === "vi" ? "Switch to English" : "Switch to Vietnamese"), dark: t("Switch to dark theme"), light: t("Switch to light theme") };
+    return `<header class="navbar">${brand}${context}${core.appearanceControls({ lang, theme }, labels, icon(theme === "dark" ? "sun" : "moon"), notifications, settings)}</header>`;
+  }
+
+  const errorScreen = (message, t, retry) =>
+    `<section class="error" role="alert"><h1>${e(t("The Local session is unavailable."))}</h1><p>${e(message)}</p><p>${e(t("Refresh to read the workspace again. Decisions require current workspace data."))}</p>${retry}</section>`;
+  const queueError = (message, t) =>
+    `<p class="warning" role="alert">${e(t("Work list unavailable"))} · ${e(message)}</p>`;
+  const noticeItems = (items, t, href, actor) => items.length
+    ? items.map((item) => `<a class="notice-item" href="${e(href(item.ref))}" data-dialog-nav><strong>${e(item.title)}</strong><small>${e(actor(item.next_actor))} · ${e(t(core.workAction(item)))} · ${e(item.ref)}</small></a>`).join("")
+    : `<p>${e(t("Nothing needs your attention."))}</p>`;
 
   function updateLabel(update, t) {
     return t(
@@ -372,14 +514,32 @@
     updateLabel,
     kv,
     technicalView,
-    decisionView,
+    decisionDock,
     statusPresentation,
     contextView,
+    drawerFrame,
+    decisionConfirmation,
+    updateReview,
+    queueResults,
     testObservation,
     citationLabel,
-    criterionView,
+    rungs,
+    selectedEvidence,
+    reviewScreen,
+    queueList,
+    queueScreen,
+    topBar,
+    errorScreen,
+    queueError,
+    noticeItems,
+    queueTitle,
+    cacheBody,
+    criteriaList,
+    evidencePane,
+    reviewSummary,
+    withRequiredTests,
+    ageLabel,
     reviewChecks,
     reviewComparison,
-    evidenceReview,
   };
 });

@@ -153,7 +153,6 @@
       <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></symbol>
       <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></symbol>
       <symbol id="i-evidence" viewBox="0 0 24 24"><path d="m3 6 1.5 1.5L7 5M3 12l1.5 1.5L7 11M3 18l1.5 1.5L7 17M11 6h10M11 12h10M11 18h10"/></symbol>
-      <symbol id="i-gap" viewBox="0 0 24 24"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17v.01"/></symbol>
       <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></symbol>
       <symbol id="i-ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></symbol>
       <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
@@ -161,7 +160,6 @@
       <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></symbol>
       <symbol id="i-replay" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8"/><path d="M4 4v4h4"/></symbol>
       <symbol id="i-review" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M16 11l2 2 4-4"/></symbol>
-      <symbol id="i-scope" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="m9 14 2 2 4-4"/></symbol>
       <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/></symbol>
       <symbol id="i-word" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></symbol>
     </svg>
@@ -196,65 +194,40 @@
             </div>
           </div>
 
-          <div class="scene3d" id="scene" data-phase="2">
-            <div class="scene-art" role="img" aria-label="Illustration: an approved scope, the agent's code and the test results stack up; the results face you as a scan reveals the missing 503 test result; the review then shows your decision options." data-i18n-attr="aria-label:story.aria">
+          <div class="gate">
+            <div class="stage" id="scene" data-phase="2">
               <svg class="arch" viewBox="380 350 487 500" aria-hidden="true">
                 <path class="arch-body" d="M432 834 V555 C432 521 449 500 477 483 L586 417 C611 402 636 402 661 417 L770 483 C798 500 815 521 815 555 V834" />
                 <path class="arch-edge" pathLength="1" d="M432 834 V555 C432 521 449 500 477 483 L586 417 C611 402 636 402 661 417 L770 483 C798 500 815 521 815 555 V834" />
               </svg>
-              <span class="floor" aria-hidden="true"></span>
-              <ul class="legend" aria-hidden="true">
-                <li style="--i: 2"><svg class="ic sm"><use href="#i-evidence" /></svg><span data-i18n="lg.tests">Test results</span></li>
-                <li style="--i: 1"><svg class="ic sm"><use href="#i-code" /></svg><span data-i18n="lg.code">Agent's code</span></li>
-                <li style="--i: 0"><svg class="ic sm"><use href="#i-scope" /></svg><span data-i18n="lg.scope">Approved scope</span></li>
-              </ul>
-              <div class="stack" aria-hidden="true">
-                <div class="layer" style="--z: -1">
-                  <p class="lh"><svg class="ic sm"><use href="#i-scope" /></svg><span class="mono">health-endpoint.md</span></p>
-                  <p class="lr"><svg class="ic sm muted"><use href="#i-ok" /></svg><span class="mono">GET /health → 200</span></p>
-                  <p class="lr"><svg class="ic sm muted"><use href="#i-ok" /></svg><span class="mono">DB down → 503</span></p>
-                  <p class="lr"><svg class="ic sm muted"><use href="#i-ok" /></svg><span class="mono">No error text in body</span></p>
-                  <span class="stamp" data-i18n="s.stamp">Approved</span>
-                </div>
-                <div class="layer" style="--z: 0">
-                  <p class="lh"><svg class="ic sm"><use href="#i-code" /></svg><span class="mono">health.go</span></p>
-                  <pre class="lcode">func (s *Server) handleHealth(w, r) {
-  if err := s.db.PingContext(ctx); err != nil {
-<b>    writeJSON(w, 503, degraded)</b>
-    return
-  }
-  writeJSON(w, 200, ok)
-}</pre>
-                </div>
-                <div class="layer top" style="--z: 1">
-                  <p class="lh"><svg class="ic sm"><use href="#i-evidence" /></svg><span class="swap"><span class="before" data-i18n="l.claim">Agent: done · exit 0</span><span class="after"><span class="inspect-head" data-i18n="c.inspect">Evidence by criterion</span><span class="decision-head t-gap" data-i18n="c.head">1 item to check</span></span></span></p>
-                  <p class="lr" style="--i: 0"><span class="swap"><svg class="ic sm muted before"><use href="#i-ok" /></svg><svg class="ic sm t-pass after"><use href="#i-ok" /></svg></span><span><span class="mono">GET /health → 200</span><span class="swap lab"><span class="before muted" data-i18n="l.met">Agent says met</span><span class="after t-pass" data-i18n="r.pass">Test passed</span></span></span></p>
-                  <p class="lr miss" style="--i: 1"><span class="swap"><svg class="ic sm muted before"><use href="#i-ok" /></svg><svg class="ic sm t-gap after"><use href="#i-gap" /></svg></span><span><span class="mono">DB down → 503</span><span class="swap lab"><span class="before muted" data-i18n="l.met">Agent says met</span><span class="after t-gap" data-i18n="r.miss">Test result missing</span></span></span></p>
-                  <p class="lr" style="--i: 2"><span class="swap"><svg class="ic sm muted before"><use href="#i-ok" /></svg><svg class="ic sm t-read after"><use href="#i-word" /></svg></span><span><span class="mono">No error text in body</span><span class="swap lab"><span class="before muted" data-i18n="l.met">Agent says met</span><span class="after t-read" data-i18n="r.none">No test attached</span></span></span></p>
-                  <p class="lact"><span data-i18n="c.fix">Request a fix</span><span data-i18n="c.ok">Approve</span></p>
-                </div>
-                <span class="scanp"></span>
-              </div>
-              <div class="token" aria-hidden="true">
-                <span class="whole"><svg class="ic sm"><use href="#i-agent" /></svg>“Done.” · exit 0</span>
-                <span class="shard t-pass" style="--k: -1"><svg class="ic sm"><use href="#i-ok" /></svg>200</span>
-                <span class="shard t-gap" style="--k: 0"><svg class="ic sm"><use href="#i-gap" /></svg>503</span>
-                <span class="shard t-read" style="--k: 1"><svg class="ic sm"><use href="#i-word" /></svg>body</span>
+              <p class="chip"><svg class="ic sm" aria-hidden="true"><use href="#i-agent" /></svg>“Done.” · exit 0</p>
+              <div class="card">
+                <p class="sum swap">
+                  <span class="before"><span class="tally" aria-hidden="true"><i class="k-claim"></i><i class="k-claim"></i><i class="k-claim"></i></span><span data-i18n="w.said">Agent says 3 of 3 met</span></span>
+                  <span class="after"><span class="tally" aria-hidden="true"><i class="k-test"></i><i class="k-gap"></i><i class="k-cited"></i></span><span class="t-gap" data-i18n="w.sum">1 of 3 without proof</span></span>
+                </p>
+                <p class="names" aria-hidden="true"><span data-i18n="r.claim">Claim</span><span data-i18n="r.source">Source</span><span data-i18n="r.check">Check</span><span data-i18n="r.test">Test</span></p>
+                <ol>
+                  <li class="hrow"><span class="tx">GET /health → 200</span><span class="ladder" aria-hidden="true"><i class="n said"></i><i class="l said"></i><i class="n said"></i><i class="l ok"></i><i class="n ok"></i><i class="l ok"></i><i class="n ok"></i></span></li>
+                  <li class="hrow miss"><span class="tx">DB down → 503</span><span class="ladder" aria-hidden="true"><i class="n said"></i><i class="l said"></i><i class="n said"></i><i class="l ok"></i><i class="n ok"></i><i class="l gap"></i><i class="n gap"></i></span><span class="res"><span data-i18n="r.miss">Test result missing</span></span></li>
+                  <li class="hrow"><span class="tx">No error text in body</span><span class="ladder" aria-hidden="true"><i class="n said"></i><i class="l said"></i><i class="n said"></i><i class="l none"></i><i class="n none"></i><i class="l none"></i><i class="n none"></i></span></li>
+                </ol>
+                <div class="deck"><div><span class="btn sm" data-i18n="c.fix">Request a fix</span><span class="btn sm primary" data-i18n="c.ok">Approve</span></div></div>
               </div>
             </div>
-          </div>
 
-          <div class="ctl">
-            <p class="cap" id="cap">Accept or request changes for the delivery you reviewed.</p>
-            <div class="ctl-bar" hidden>
-              <div role="tablist" aria-label="Story steps" id="steps" data-i18n-attr="aria-label:steps.aria">
-                <button class="step" type="button" role="tab" id="step-0" aria-label="Agent says done" data-i18n-attr="aria-label:st.0" aria-controls="scene" aria-selected="false" tabindex="-1" data-step="0"><svg class="ic sm" aria-hidden="true"><use href="#i-agent" /></svg><span class="txt" data-i18n="st.0">Agent says done</span></button>
-                <button class="step" type="button" role="tab" id="step-1" aria-label="Inspect results" data-i18n-attr="aria-label:st.1" aria-controls="scene" aria-selected="false" tabindex="-1" data-step="1"><svg class="ic sm" aria-hidden="true"><use href="#i-evidence" /></svg><span class="txt" data-i18n="st.1">Inspect results</span></button>
-                <button class="step" type="button" role="tab" id="step-2" aria-label="You decide" data-i18n-attr="aria-label:st.2" aria-controls="scene" aria-selected="true" data-step="2"><svg class="ic sm" aria-hidden="true"><use href="#i-review" /></svg><span class="txt" data-i18n="st.2">You decide</span></button>
+            <div class="ctl">
+              <p class="cap" id="cap">Accept or request changes for the delivery you reviewed.</p>
+              <div class="ctl-bar" hidden>
+                <div role="tablist" aria-label="Story steps" id="steps" data-i18n-attr="aria-label:steps.aria">
+                  <button class="step" type="button" role="tab" id="step-0" aria-label="Agent says done" data-i18n-attr="aria-label:st.0" aria-controls="scene" aria-selected="false" tabindex="-1" data-step="0"><svg class="ic sm" aria-hidden="true"><use href="#i-agent" /></svg><span class="txt" data-i18n="st.0">Agent says done</span></button>
+                  <button class="step" type="button" role="tab" id="step-1" aria-label="Inspect results" data-i18n-attr="aria-label:st.1" aria-controls="scene" aria-selected="false" tabindex="-1" data-step="1"><svg class="ic sm" aria-hidden="true"><use href="#i-evidence" /></svg><span class="txt" data-i18n="st.1">Inspect results</span></button>
+                  <button class="step" type="button" role="tab" id="step-2" aria-label="You decide" data-i18n-attr="aria-label:st.2" aria-controls="scene" aria-selected="true" data-step="2"><svg class="ic sm" aria-hidden="true"><use href="#i-review" /></svg><span class="txt" data-i18n="st.2">You decide</span></button>
+                </div>
+                <span class="sep" aria-hidden="true"></span>
+                <button class="icon-btn" type="button" id="pp" aria-label="Play"><svg class="ic" aria-hidden="true"><use href="#i-play" /></svg></button>
+                <button class="icon-btn" type="button" id="replay" aria-label="Replay" data-i18n-attr="aria-label:pp.replay"><svg class="ic" aria-hidden="true"><use href="#i-replay" /></svg></button>
               </div>
-              <span class="sep" aria-hidden="true"></span>
-              <button class="icon-btn" type="button" id="pp" aria-label="Play"><svg class="ic" aria-hidden="true"><use href="#i-play" /></svg></button>
-              <button class="icon-btn" type="button" id="replay" aria-label="Replay" data-i18n-attr="aria-label:pp.replay"><svg class="ic" aria-hidden="true"><use href="#i-replay" /></svg></button>
             </div>
           </div>
         </div>
@@ -262,36 +235,12 @@
 
       <section class="wrap band" id="fit" aria-labelledby="h-fit">
         <h2 id="h-fit" class="reveal" data-i18n="fit.h">Keep your tools. SpecGate keeps the record.</h2>
-        <ol class="lane reveal">
-          <li style="--i: 0"><span class="tile"><svg class="ic" aria-hidden="true"><use href="#i-pen" /></svg></span><h3 data-i18n="fit.1h">You write the spec</h3><p>OpenSpec · Spec Kit · Superpowers · Markdown</p></li>
-          <li style="--i: 1"><span class="tile"><svg class="ic" aria-hidden="true"><use href="#i-code" /></svg></span><h3 data-i18n="fit.2h">Your agent writes the code</h3><p>Claude Code · Codex · Cursor</p></li>
-          <li class="mine" style="--i: 2"><span class="tile"><img src="logo.svg" alt="" width="36" height="36" /></span><h3 data-i18n="fit.3h">SpecGate keeps the record</h3><p data-i18n="fit.3p">See what each requirement has to back it up.</p></li>
+        <ol class="lane">
+          <li style="--i: 0"><span class="tile"><svg class="ic" aria-hidden="true"><use href="#i-pen" /></svg></span><h3 data-i18n="flow.scope.h">Agree on scope</h3><p>OpenSpec · Spec Kit · Superpowers · Markdown</p><a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/customize-governance.md#add-local-project-instructions" data-i18n="flow.scope.link">Project rubrics</a></li>
+          <li style="--i: 1"><span class="tile"><svg class="ic" aria-hidden="true"><use href="#i-code" /></svg></span><h3 data-i18n="flow.agent.h">Let your agent work</h3><p>Claude Code · Codex · Cursor</p><a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/operate-specgate.md#operate-local-cli" data-i18n="flow.agent.link">Resume the same work</a></li>
+          <li style="--i: 2"><span class="tile"><svg class="ic" aria-hidden="true"><use href="#i-evidence" /></svg></span><h3 data-i18n="flow.evidence.h">Review the evidence</h3><p data-i18n="flow.evidence.p">Claim, source, command and test for each requirement.</p><a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/observe-selected-tests.md#use-this-in-your-project" data-i18n="flow.evidence.link">Selected tests</a></li>
+          <li class="mine" style="--i: 3"><span class="tile"><img src="logo.svg" alt="" width="36" height="36" /></span><h3 data-i18n="flow.decision.h">Decide and hand off</h3><p data-i18n="flow.decision.p">Accept or send it back, on the exact delivery.</p><a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/operate-specgate.md#move-a-local-store-to-another-checkout" data-i18n="flow.decision.link">Move the Local store</a></li>
         </ol>
-        <div class="workflow-block">
-          <h3 id="h-workflow" data-i18n="flow.h">From scope to decision</h3>
-          <ol class="workflow" aria-labelledby="h-workflow">
-            <li>
-              <svg class="ic" aria-hidden="true"><use href="#i-scope" /></svg>
-              <div><h4 data-i18n="flow.scope.h">Agree on scope</h4>
-                <p><span data-i18n="flow.scope.start">Keep the spec version you approved, with optional </span><a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/customize-governance.md#add-local-project-instructions" data-i18n="flow.scope.link">project rubrics for four readiness gates</a>.</p></div>
-            </li>
-            <li>
-              <svg class="ic" aria-hidden="true"><use href="#i-code" /></svg>
-              <div><h4 data-i18n="flow.agent.h">Let your agent work</h4>
-                <p><span data-i18n="flow.agent.start">Use the same Context Pack to </span><a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/operate-specgate.md#operate-local-cli" data-i18n="flow.agent.link">resume the same work</a><span data-i18n="flow.agent.end"> without losing the agreed scope</span>.</p></div>
-            </li>
-            <li>
-              <svg class="ic" aria-hidden="true"><use href="#i-evidence" /></svg>
-              <div><h4 data-i18n="flow.evidence.h">Review the evidence</h4>
-                <p><span data-i18n="flow.evidence.start">Spot gaps in cited code, command results, and </span><a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/observe-selected-tests.md#use-this-in-your-project" data-i18n="flow.evidence.link">selected tests</a>.</p></div>
-            </li>
-            <li>
-              <svg class="ic" aria-hidden="true"><use href="#i-review" /></svg>
-              <div><h4 data-i18n="flow.decision.h">Decide and hand off</h4>
-                <p><span data-i18n="flow.decision.start">Decide on the exact delivery you reviewed. Switching machines? </span><a href="https://github.com/thanhtung2693/specgate/blob/main/docs/using-specgate/guides/operate-specgate.md#move-a-local-store-to-another-checkout" data-i18n="flow.decision.link">Move the entire Local store</a>.</p></div>
-            </li>
-          </ol>
-        </div>
       </section>
 
       <section class="wrap band" id="install" aria-labelledby="h-install">
@@ -305,35 +254,35 @@
               <div class="win-top">
                 <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
                 <div class="seg" role="group" aria-label="Install options" data-i18n-attr="aria-label:ins.aria" id="ins-tabs" hidden>
-                  <button type="button" data-ins="cli" aria-pressed="true" aria-label="CLI" title="CLI"><svg class="ic" aria-hidden="true"><use href="#i-agent" /></svg></button>
-                  <button type="button" data-ins="codex" aria-pressed="false" aria-label="Codex" title="Codex"><img src="assets/brands/codex.png" alt="" width="22" height="22" loading="lazy" decoding="async" /></button>
-                  <button type="button" data-ins="claude" aria-pressed="false" aria-label="Claude Code" title="Claude Code"><img src="assets/brands/claude.svg" alt="" width="22" height="22" /></button>
-                  <button type="button" data-ins="cursor" aria-pressed="false" aria-label="Cursor" title="Cursor"><img class="theme-light" src="assets/brands/cursor-light.svg" alt="" width="22" height="22" /><img class="theme-dark" src="assets/brands/cursor-dark.svg" alt="" width="22" height="22" /></button>
-                  <button type="button" data-ins="prompt" aria-pressed="false" aria-label="Ask your agent" title="Ask your agent" data-i18n-attr="aria-label,title:ins.tabPrompt"><svg class="ic" aria-hidden="true"><use href="#i-word" /></svg></button>
+                  <button type="button" data-ins="cli" aria-pressed="true" aria-label="CLI" title="CLI"><svg class="ic" aria-hidden="true"><use href="#i-agent" /></svg><span class="lbl">CLI</span></button>
+                  <button type="button" data-ins="codex" aria-pressed="false" aria-label="Codex" title="Codex"><img src="assets/brands/codex.png" alt="" width="22" height="22" loading="lazy" decoding="async" /><span class="lbl">Codex</span></button>
+                  <button type="button" data-ins="claude" aria-pressed="false" aria-label="Claude Code" title="Claude Code"><img src="assets/brands/claude.svg" alt="" width="22" height="22" /><span class="lbl">Claude Code</span></button>
+                  <button type="button" data-ins="cursor" aria-pressed="false" aria-label="Cursor" title="Cursor"><img class="theme-light" src="assets/brands/cursor-light.svg" alt="" width="22" height="22" /><img class="theme-dark" src="assets/brands/cursor-dark.svg" alt="" width="22" height="22" /><span class="lbl">Cursor</span></button>
+                  <button type="button" data-ins="prompt" aria-pressed="false" aria-label="Ask your agent" title="Ask your agent" data-i18n-attr="aria-label,title:ins.tabPrompt"><svg class="ic" aria-hidden="true"><use href="#i-word" /></svg><span class="lbl" data-i18n="ins.tabPrompt">Ask your agent</span></button>
                 </div>
               </div>
               <div class="codebox" data-panel="cli">
-                <button class="btn sm copy" type="button" data-copy="code-cli" hidden><svg class="ic sm" aria-hidden="true"><use href="#i-copy" /></svg><span data-i18n="copy.copy">Copy</span></button>
+                <button class="btn sm copy" type="button" data-copy="code-cli" hidden><svg class="ic sm copy-i" aria-hidden="true"><use href="#i-copy" /></svg><svg class="ic sm done-i" aria-hidden="true"><use href="#i-ok" /></svg><span data-i18n="copy.copy">Copy</span></button>
                 <pre class="mono" id="code-cli" tabindex="0">curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/scripts/install-cli.sh | sh
 specgate init --mode local
 specgate doctor</pre>
               </div>
               <div class="codebox" data-panel="codex" hidden>
-                <button class="btn sm copy" type="button" data-copy="code-codex" hidden><svg class="ic sm" aria-hidden="true"><use href="#i-copy" /></svg><span data-i18n="copy.copy">Copy</span></button>
+                <button class="btn sm copy" type="button" data-copy="code-codex" hidden><svg class="ic sm copy-i" aria-hidden="true"><use href="#i-copy" /></svg><svg class="ic sm done-i" aria-hidden="true"><use href="#i-ok" /></svg><span data-i18n="copy.copy">Copy</span></button>
                 <pre class="mono" id="code-codex" tabindex="0">codex plugin marketplace add thanhtung2693/specgate</pre>
               </div>
               <div class="codebox" data-panel="claude" hidden>
-                <button class="btn sm copy" type="button" data-copy="code-claude" hidden><svg class="ic sm" aria-hidden="true"><use href="#i-copy" /></svg><span data-i18n="copy.copy">Copy</span></button>
+                <button class="btn sm copy" type="button" data-copy="code-claude" hidden><svg class="ic sm copy-i" aria-hidden="true"><use href="#i-copy" /></svg><svg class="ic sm done-i" aria-hidden="true"><use href="#i-ok" /></svg><span data-i18n="copy.copy">Copy</span></button>
                 <pre class="mono" id="code-claude" tabindex="0">claude plugin marketplace add thanhtung2693/specgate
 claude plugin install specgate@specgate</pre>
               </div>
               <div class="codebox" data-panel="cursor" hidden>
-                <button class="btn sm copy" type="button" data-copy="code-cursor" hidden><svg class="ic sm" aria-hidden="true"><use href="#i-copy" /></svg><span data-i18n="copy.copy">Copy</span></button>
+                <button class="btn sm copy" type="button" data-copy="code-cursor" hidden><svg class="ic sm copy-i" aria-hidden="true"><use href="#i-copy" /></svg><svg class="ic sm done-i" aria-hidden="true"><use href="#i-ok" /></svg><span data-i18n="copy.copy">Copy</span></button>
                 <pre class="mono" id="code-cursor" tabindex="0">specgate plugins install --agent cursor --project-local
 specgate plugins doctor --agent cursor --project-local</pre>
               </div>
               <div class="codebox" data-panel="prompt" hidden>
-                <button class="btn sm copy" type="button" data-copy="code-prompt" hidden><svg class="ic sm" aria-hidden="true"><use href="#i-copy" /></svg><span data-i18n="copy.copy">Copy</span></button>
+                <button class="btn sm copy" type="button" data-copy="code-prompt" hidden><svg class="ic sm copy-i" aria-hidden="true"><use href="#i-copy" /></svg><svg class="ic sm done-i" aria-hidden="true"><use href="#i-ok" /></svg><span data-i18n="copy.copy">Copy</span></button>
                 <pre class="mono" id="code-prompt" data-i18n="ins.prompt">Prepare this change in SpecGate. Show me the scope, acceptance criteria, and any proposed check commands. Wait for my scope approval. Then implement the change, submit per-criterion evidence, and stop for my delivery decision.</pre>
               </div>
             </div>
@@ -360,6 +309,7 @@ specgate plugins doctor --agent cursor --project-local</pre>
       <section class="final ink" aria-labelledby="h-final">
         <svg class="arch" viewBox="380 350 487 500" aria-hidden="true">
           <path class="arch-body" d="M432 834 V555 C432 521 449 500 477 483 L586 417 C611 402 636 402 661 417 L770 483 C798 500 815 521 815 555 V834" />
+          <path class="arch-edge" pathLength="1" d="M432 834 V555 C432 521 449 500 477 483 L586 417 C611 402 636 402 661 417 L770 483 C798 500 815 521 815 555 V834" />
         </svg>
         <div class="wrap">
           <h2 id="h-final" class="reveal" data-i18n="fin.h">Try it on one small change.</h2>
@@ -369,7 +319,7 @@ specgate plugins doctor --agent cursor --project-local</pre>
     </main>
 
     <footer class="wrap foot">
-      <span>SpecGate · Apache-2.0</span>
+      <span class="foot-id"><a class="brand" href="#top"><img src="logo.svg" alt="" width="22" height="22" /><span>SpecGate</span></a><span>Apache-2.0</span></span>
       <nav aria-label="Footer" data-i18n-attr="aria-label:foot.aria">
         <a href="https://github.com/thanhtung2693/specgate" rel="noopener">GitHub</a>
         <a href="https://github.com/thanhtung2693/specgate/tree/main/docs/using-specgate" rel="noopener" data-i18n="foot.docs">Docs</a>

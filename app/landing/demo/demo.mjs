@@ -1,7 +1,7 @@
 import { sample, beginDecision, recordDecision, reset, tourStep } from "./sample.mjs";
 
-const { escape: e, appearanceControls } = globalThis.SpecGateUI;
-const { icon, decisionView, kv } = globalThis.SpecGatePresentation;
+const { escape: e } = globalThis.SpecGateUI;
+const { icon, kv, rungs, reviewScreen, topBar, withRequiredTests, drawerFrame } = globalThis.SpecGatePresentation;
 const { renderMarkdown } = globalThis.SpecGateMarkdown;
 const { renderSource } = globalThis.SpecGateSource;
 const vi = {
@@ -10,31 +10,15 @@ const vi = {
   "Interactive demo": "Demo tương tác",
   "Reset demo": "Đặt lại demo",
   "Review a /health delivery": "Duyệt bản giao /health",
-  "Sample delivery {n}": "Bản giao mẫu {n}",
-  "Check which requirements have test evidence before deciding.": "Kiểm tra bằng chứng cho từng tiêu chí trước khi quyết định.",
-  "Agent claim · Requirement met": "Agent báo đã đáp ứng tiêu chí",
-  "The sample report claims this requirement is met.": "Báo cáo mẫu ghi đã đáp ứng tiêu chí này.",
-  "Sample command · Exit 0": "Lệnh mẫu · Mã thoát 0",
-  "The sample suite passed. The selected 503 test has no result in this delivery.": "Bộ test mẫu chạy đạt. Bản giao này thiếu kết quả cho test 503.",
-  "The revised sample includes passing results for the 200 and 503 tests.": "Bản mẫu đã sửa có kết quả đạt cho hai test 200 và 503.",
-  "Sample test passed": "Test mẫu đạt",
-  "Sample selected-test result missing": "Thiếu kết quả test mẫu",
-  "No test attached": "Chưa gắn test riêng",
-  "Cited sample source": "Mã nguồn mẫu được trích dẫn",
   "Sample code": "Mã mẫu",
   "Sample diff": "Diff mẫu",
   "Compared with the baseline sample file.": "So sánh với tệp mẫu ban đầu.",
   "Approved sample scope": "Phạm vi mẫu đã duyệt",
-  "Review demo decision": "Thử quyết định",
-  "The note is used only within this demo.": "Ghi chú chỉ dùng trong demo này.",
-  "You will confirm before recording the sample decision.": "Bạn sẽ xác nhận trước khi ghi quyết định mẫu.",
   "Record this decision for the sample review below.": "Ghi quyết định cho bản duyệt mẫu dưới đây.",
   "This decision is only reflected in this demo.": "Quyết định chỉ được ghi trong demo này.",
   "Sample decision recorded": "Đã ghi quyết định mẫu",
   "Open revised sample": "Mở bản mẫu đã sửa",
   "Demo reset.": "Đã đặt lại demo.",
-  "Demo changes requested": "Đã yêu cầu sửa trong demo",
-  "Demo delivery accepted": "Đã duyệt bản giao trong demo",
   "Restart tour": "Xem lại hướng dẫn",
   "Tour step {n} of 3": "Hướng dẫn · Bước {n}/3",
   "Back": "Quay lại",
@@ -53,18 +37,18 @@ const vi = {
 };
 const overrides = {
   "Recorded decision": "Sample decision recorded",
-  "The agent reads your decision and note through SpecGate.": "The note is used only within this demo.",
-  "You will confirm before saving the decision.": "You will confirm before recording the sample decision.",
+  "Note · required to ask for changes": "Demo note, kept in this demo · required to ask for changes",
 };
+vi["Demo note, kept in this demo · required to ask for changes"] = "Ghi chú trong demo, không rời trang này · bắt buộc khi yêu cầu sửa";
 
 const main = document.querySelector("#main");
 const dialog = document.querySelector("#dialog");
-const controls = document.querySelector("#controls");
+const scopeDialog = document.querySelector("#scope-dialog");
+const bar = document.querySelector("#bar");
 const banner = document.querySelector("#demo-banner");
 const feedback = document.querySelector("#feedback");
 const themePreference = matchMedia("(prefers-color-scheme: dark)");
-let lang = "en", theme = null, tab = "evidence", state = reset(), draft = "", pending = null;
-const expanded = new Set();
+let lang = "en", theme = null, selected = "", state = reset(), draft = "", pending = null;
 const sourceModes = new Map();
 let tourIndex = 0;
 const t = (label) => {
@@ -95,8 +79,9 @@ Báo tình trạng để hệ thống giám sát phân biệt dịch vụ khỏe
 Cần có kết quả từ test riêng cho từng nhánh.`,
 };
 
-function displaySource(container, delivery, criterion, view) {
-  const source = { ...delivery.source.source, highlight_start: criterion.line, highlight_end: criterion.line };
+function displaySource(container, delivery, row, view) {
+  const line = Number(/\d+/.exec(row.citation)?.[0]);
+  const source = { ...delivery.source.source, highlight_start: line, highlight_end: line };
   const template = document.createElement("template");
   template.innerHTML = renderSource({ ...delivery.source, source }, { view, lang });
   const bar = template.content.querySelector(".source-view-toolbar");
@@ -116,57 +101,27 @@ function displaySource(container, delivery, criterion, view) {
   }
 }
 
-const outcomes = {
-  passed: ["Sample test passed", "success", "check-circle"],
-  missing: ["Sample selected-test result missing", "warning", "blocked"],
-  claim: ["No test attached", "neutral", "quote"],
-};
+const rowId = (row) => row.criterion_id;
+const actor = () => t("Human reviewer");
 
-function evidenceView(delivery) {
-  const reportLabel = state.version === 1
-    ? "The sample suite passed. The selected 503 test has no result in this delivery."
-    : "The revised sample includes passing results for the 200 and 503 tests.";
-  return `<p class="demo-note">${e(t(reportLabel))}</p><div class="criteria">${delivery.criteria.map((criterion, i) => {
-    const [outcome, tone, glyph] = outcomes[criterion.outcome];
-    return `<details class="criterion demo-criterion ${tone}" data-criterion="${criterion.id}" ${expanded.has(criterion.id) ? "open" : ""}>
-      <summary>${icon(glyph, "result-mark")}<span class="criterion-text"><code class="criterion-id">AC-0${i + 1}</code> ${e(criterion.requirement)}</span><span class="criterion-observation">${e(t(outcome))}</span>${icon("chevron", "chevron")}</summary>
-      <div class="criterion-body"><div class="evidence-columns">
-        <section class="agent-report"><h3>${icon("quote")}${e(t("Agent claim · Requirement met"))}</h3><p>${e(t("The sample report claims this requirement is met."))}</p></section>
-        <section class="test-result"><h3>${icon("evidence")}${e(t(outcome))}</h3>${criterion.symbol ? `<code>${e(criterion.symbol)}</code>` : ""}</section>
-      </div><div class="source-reference"><h3>${icon("code")}${e(t("Cited sample source"))}</h3>
-      <div class="source-inspector"><div class="source-location"><code>health.go</code><span>${e(globalThis.SpecGatePresentation.citationLabel("line: " + criterion.line, lang))}</span></div><div class="source-excerpt" data-sample-source></div></div></div></div>
-    </details>`;
-  }).join("")}</div>
-  <details class="evidence-disclosure"><summary>${icon("chevron", "chevron")}${e(t("Sample command · Exit 0"))}</summary><p>${e(t(reportLabel))}</p><pre><code>go test ./...</code></pre></details>
-  <div class="evidence-footer">${button("tab", "Review demo decision", 'data-tab="decision"', true)}</div>`;
-}
-
-function decisionPane(delivery) {
-  const view = {
-    can_decide: !state.decision,
-    status: { ref: "DEMO-001", review_id: delivery.review, completion_id: delivery.completion },
-    ...(state.decision && {
-      review: { id: delivery.review, report_id: delivery.completion, human_decision: state.decision.verdict, note: state.decision.note },
-    }),
+function view() {
+  const delivery = sample(state.version), decision = state.decision;
+  const rows = withRequiredTests(delivery.rows, { completion: delivery.completion_data });
+  const chosen = rows.find((row) => rowId(row) === selected) || rows.find((row) => rungs(row).problem) || rows[0];
+  const work = {
+    work: { title: t("Review a /health delivery") },
+    can_decide: !decision,
+    status: {
+      ref: "DEMO-001", review_id: delivery.review, completion_id: delivery.completion, next_actor: "human_reviewer",
+      state: decision ? (decision.verdict === "approve" ? "accepted" : "rework_requested") : "awaiting_acceptance",
+    },
+    completion: delivery.completion_data,
+    ...(decision && { review: { id: delivery.review, report_id: delivery.completion, human_decision: decision.verdict, note: decision.note } }),
   };
-  const end = state.decision?.verdict === "reject" && state.version === 1
-    ? `<div class="demo-after">${button("revised", "Open revised sample", "", true)}</div>`
-    : "";
-  const title = state.decision?.verdict === "approve" ? "Demo delivery accepted" : "Demo changes requested";
-  const template = document.createElement("template");
-  template.innerHTML = decisionView(view, draft, () => "", t);
-  template.content.querySelector(".recorded-notice p")?.replaceChildren(t(title));
-  template.content.querySelector(".version-details")?.remove();
-  template.content.querySelector(".kv")?.remove();
-  const checklist = delivery.criteria.map((criterion, i) => {
-    const [outcome, tone, glyph] = outcomes[criterion.outcome];
-    return `<li class="${tone}">${icon(glyph, "result-mark")}<span><code>AC-0${i + 1}</code> ${e(criterion.requirement)}</span><small>${e(t(outcome))}</small></li>`;
-  }).join("");
-  return `<div class="decision-layout"><section><h2>${e(t("Acceptance criteria"))}</h2><ul class="decision-criteria">${checklist}</ul></section>${template.content.querySelector(".decision-form").outerHTML}</div>${end}`;
+  return { delivery, rows, work, selected: rowId(chosen) };
 }
 
-function tourView(step) {
-  if (!step) return "";
+function tourCard(step) {
   const progress = t("Tour step {n} of 3").replace("{n}", tourIndex + 1);
   return `<section class="demo-tour" aria-labelledby="tour-title"><div>
     <p class="eyebrow">${e(progress)}</p>
@@ -179,18 +134,48 @@ function tourView(step) {
     </div></section>`;
 }
 
+/* The shared review screen, with the Scope control and the decision dock adapted for the demo. */
+function reviewHtml(v, step) {
+  const template = document.createElement("template");
+  template.innerHTML = reviewScreen(v.work, v.rows, { selected: v.selected, enter: false, note: draft, lang, t, actor });
+  const root = template.content;
+  const delivery = v.delivery, row = v.rows.find((item) => rowId(item) === v.selected);
+  const slot = root.querySelector("[data-source-slot]");
+  if (slot) displaySource(slot, delivery, row, sourceModes.get(v.selected) || "code");
+  const dock = root.querySelector(".dock");
+  const wrap = document.createElement("div");
+  wrap.className = "dock-wrap";
+  dock.replaceWith(wrap);
+  wrap.append(dock);
+  if (state.decision?.verdict === "reject" && state.version === 1)
+    wrap.insertAdjacentHTML("beforeend", `<div class="demo-after">${button("revised", "Open revised sample", "", true)}</div>`);
+  if (step) {
+    const place = { evidence: root.querySelector(".evidence > .rr"), source: root.querySelector(".source-reference"), dock };
+    place[step.target.anchor].insertAdjacentHTML("beforebegin", tourCard(step));
+  }
+  return template.innerHTML;
+}
+
 function goToTour(index, focus = true) {
   const step = tourStep(state, index);
   if (!step) return;
   tourIndex = index;
-  const { tab: nextTab, criterion, source } = step.target;
-  tab = nextTab;
+  const { criterion, source } = step.target;
   if (criterion) {
-    expanded.add(criterion);
+    selected = criterion;
     sourceModes.set(criterion, source);
   }
   render();
   if (focus) document.querySelector("#tour-title").focus();
+}
+
+function select(id) {
+  if (id === view().selected) return;
+  selected = id;
+  const target = tourIndex === null ? null : tourStep(state, tourIndex).target.criterion;
+  if (target && target !== id) tourIndex = null;
+  render();
+  main.querySelector(`[data-criterion-select="${id}"]`)?.focus({ preventScroll: true });
 }
 
 function render() {
@@ -199,46 +184,24 @@ function render() {
   document.documentElement.lang = lang;
   document.title = "SpecGate · " + t("Interactive demo");
   document.querySelector("#skip").textContent = t("Skip to content");
-  controls.innerHTML = appearanceControls({ lang, theme: dark ? "dark" : "light" }, {
-    language: t("Language"), light: t("Switch to light theme"), dark: t("Switch to dark theme"),
-  }, icon(dark ? "sun" : "moon"));
+  bar.innerHTML = topBar({ t, href: () => "#", lang, theme: dark ? "dark" : "light", ref: "DEMO-001", scopeHref: "#", back: false, home: "../", logo: "../logo.svg" });
   banner.innerHTML = `<strong>${e(t("Demo · sample data · changes only affect this demo."))}</strong><div class="demo-banner-actions">
     ${tourIndex === null ? button("tour-start", "Restart tour") : ""}${button("reset", "Reset demo")}</div>`;
-  const step = tourIndex === null ? null : tourStep(state, tourIndex);
-  const delivery = sample(state.version);
-  const body = tab === "evidence" ? evidenceView(delivery)
-    : tab === "scope" ? `<article class="context-reader demo-scope" aria-label="${e(t("Approved sample scope"))}"><div class="markdown-body">${renderMarkdown(scopeText[lang])}</div></article>`
-    : decisionPane(delivery);
-  main.innerHTML = `<header class="page-head"><span class="tile accent">${icon("person")}</span><div><h1>${e(t("Review a /health delivery"))}</h1><div class="work-meta"><code>DEMO-001</code><span>${e(t("Sample delivery {n}").replace("{n}", state.version))}</span></div></div><p class="work-need">${e(t("Check which requirements have test evidence before deciding."))}</p></header>
-    <nav class="tabs demo-tabs" aria-label="${e(t("Review details"))}">${[["evidence", "Evidence", "evidence"], ["scope", "Scope", "file"], ["decision", "Decision", "person"]].map(([key, label, glyph]) =>
-      `<button type="button" class="button quiet" data-action="tab" data-tab="${key}" ${tab === key ? 'aria-current="page"' : ""}>${icon(glyph)}${e(t(label))}</button>`,
-    ).join("")}</nav>${tourView(step)}<div class="demo-view">${body}</div>`;
-  for (const details of main.querySelectorAll(".demo-criterion")) {
-    const id = details.dataset.criterion;
-    const mount = () => displaySource(details.querySelector("[data-sample-source]"), delivery, delivery.criteria.find((item) => item.id === id), sourceModes.get(id) || "code");
-    if (details.open) mount();
-    details.addEventListener("toggle", () => {
-      if (details.open) {
-        expanded.add(id);
-        if (!details.querySelector("[data-source-content]")) mount();
-      } else expanded.delete(id);
-    });
-    details.addEventListener("click", (event) => {
-      const control = event.target.closest("[data-source-view]");
-      if (!control || control.getAttribute("aria-pressed") === "true") return;
-      sourceModes.set(id, control.dataset.sourceView);
-      mount();
-    });
-  }
+  main.className = "review-main";
+  main.innerHTML = reviewHtml(view(), tourIndex === null ? null : tourStep(state, tourIndex));
+}
+
+function openScope() {
+  scopeDialog.innerHTML = drawerFrame(t("Scope"), t("Close dialog"), `<article class="context-reader" aria-label="${e(t("Approved sample scope"))}"><div class="markdown-body">${renderMarkdown(scopeText[lang])}</div></article>`);
+  scopeDialog.showModal();
 }
 
 function replaceSample(version) {
   state = reset(version);
   pending = null;
   draft = "";
-  tab = "evidence";
+  selected = "";
   tourIndex = null;
-  expanded.clear();
   sourceModes.clear();
   render();
   main.focus();
@@ -273,11 +236,24 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("click", (event) => {
+  if (event.target.closest("[data-scope]")) {
+    event.preventDefault();
+    return openScope();
+  }
   const language = event.target.closest("[data-language]");
   if (language) {
     lang = language.dataset.language;
     render();
-    controls.querySelector(`[data-language="${lang}"]`).focus();
+    bar.querySelector("[data-language]").focus();
+    return;
+  }
+  const criterion = event.target.closest("[data-criterion-select]");
+  if (criterion) return select(criterion.dataset.criterionSelect);
+  const mode = event.target.closest("[data-source-view]");
+  if (mode && mode.getAttribute("aria-pressed") !== "true") {
+    const pane = mode.closest("[data-source-pane]"), v = view();
+    sourceModes.set(pane.dataset.criterion, mode.dataset.sourceView);
+    displaySource(pane.querySelector("[data-source-slot]"), v.delivery, v.rows.find((row) => rowId(row) === pane.dataset.criterion), mode.dataset.sourceView);
     return;
   }
   const control = event.target.closest("[data-action]");
@@ -286,13 +262,7 @@ document.addEventListener("click", (event) => {
     case "theme":
       theme = !(theme ?? themePreference.matches);
       render();
-      controls.querySelector(".theme-button").focus();
-      break;
-    case "tab":
-      tab = control.dataset.tab;
-      if (tourStep(state, tourIndex)?.target.tab !== tab) tourIndex = null;
-      render();
-      main.querySelector(`.demo-tabs [data-tab="${tab}"]`).focus();
+      bar.querySelector(".theme-button").focus();
       break;
     case "tour-start":
       goToTour(0);
@@ -306,7 +276,7 @@ document.addEventListener("click", (event) => {
     case "tour-stop":
       tourIndex = null;
       render();
-      (main.querySelector("#decision-note") || main.querySelector('.demo-tabs [aria-current="page"]')).focus();
+      (main.querySelector("#decision-note") || main.querySelector(".crit.sel")).focus();
       break;
     case "reset":
       replaceSample(1);
@@ -334,6 +304,20 @@ document.addEventListener("click", (event) => {
       break;
   }
 });
+window.addEventListener("keydown", (event) => {
+  const step = { j: 1, ArrowDown: 1, k: -1, ArrowUp: -1 }[event.key];
+  if (!step || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || scopeDialog.open || dialog.open) return;
+  const row = event.target?.closest?.("[data-criterion-select]")?.parentElement;
+  const next = (step > 0 ? row?.nextElementSibling : row?.previousElementSibling)?.querySelector("[data-criterion-select]");
+  if (!next) return;
+  event.preventDefault();
+  if (next.getAttribute("aria-current") === "true") next.focus();
+  else select(next.dataset.criterionSelect);
+});
 dialog.addEventListener("close", () => { if (!dialog.open) pending = null; });
+scopeDialog.addEventListener("click", (event) => {
+  if (event.target === scopeDialog || event.target.closest("[data-close-scope]")) scopeDialog.close();
+});
+scopeDialog.addEventListener("close", () => bar.querySelector("[data-scope]")?.focus());
 themePreference.addEventListener("change", () => { if (theme === null) render(); });
 goToTour(0, false);

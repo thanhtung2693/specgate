@@ -19,18 +19,16 @@
   </head>
   <body>
     <a class="skip" href="#main" id="skip">Skip to content</a>
-    <header class="navbar">
-      <div class="navbar-inner wrap">
-        <a href="../" class="brand"><img src="../logo.svg" alt="" width="26" height="26">SpecGate</a>
-        <div class="nav-controls" id="controls"></div>
-      </div>
+    <div class="top">
+      <div id="bar"></div>
       <aside aria-label="Demo">
-        <div class="wrap demo-banner" id="demo-banner">Demo · sample data · changes only affect this demo.</div>
+        <div class="demo-banner" id="demo-banner">Demo · sample data · changes only affect this demo.</div>
       </aside>
-    </header>
+    </div>
     <main id="main" class="wrap" tabindex="-1">
       <noscript><p>Enable JavaScript to explore the interactive demo. <a href="../">Return to SpecGate</a>.</p></noscript>
     </main>
+    <dialog id="scope-dialog" class="drawer" aria-labelledby="scope-title"></dialog>
     <dialog id="dialog" aria-labelledby="dialog-title"></dialog>
     <div class="visually-hidden" role="status" id="feedback"></div>
   </body>

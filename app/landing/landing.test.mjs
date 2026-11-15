@@ -9,9 +9,17 @@ const html = read("index.html");
 const css = read("styles.css");
 const js = read("script.js");
 
-test("the published stage stands alone with three sheets and a readable review", () => {
-  assert.equal([...html.matchAll(/class="layer\b/g)].length, 3);
-  assert.equal([...html.matchAll(/class="shard\b/g)].length, 3);
+test("the published stage stands alone with the gate, one review card and a readable review", () => {
+  const gate = html.slice(html.indexOf('<div class="gate">'), html.indexOf('id="fit"'));
+  assert.equal([...gate.matchAll(/class="arch-edge" pathLength="1"/g)].length, 1);
+  assert.equal([...gate.matchAll(/<li class="hrow\b/g)].length, 3);
+  assert.equal([...gate.matchAll(/class="ladder"/g)].length, 3);
+  for (const [, ladder] of gate.matchAll(/class="ladder"[^>]*>(.*?)<\/span>/g)) assert.equal([...ladder.matchAll(/<i class="[nl] /g)].length, 7);
+  for (const text of ["“Done.” · exit 0", "Agent says 3 of 3 met", "1 of 3 without proof", "Claim", "Source", "Check", "Test", "Request a fix", "Approve"]) {
+    assert.ok(gate.includes(`>${text}<`) || gate.includes(text), text);
+  }
+  assert.ok(gate.indexOf('id="scene"') < gate.indexOf('id="cap"'));
+  assert.doesNotMatch(css, /perspective|preserve-3d|rotateX/);
   assert.match(html, /id="scene" data-phase="2"/);
   assert.match(html, /DB down → 503[\s\S]*?Test result missing/);
   assert.match(html, /href="#main"[^>]*>Skip to content/);
@@ -44,7 +52,7 @@ test("install panels match the documented Local and IDE setup", () => {
   }
   assert.equal([...html.matchAll(/class="btn lg primary[^"]*" href="#install"/g)].length, 2);
   assert.match(html, /guides\/local-review\.md/);
-  const choices = [...html.matchAll(/<button type="button" data-ins="([^"]+)"([^>]+)>(.*?)<\/button>/g)];
+  const choices = [...html.matchAll(/<button type="button" data-ins="([^"]+)"([^>]+)>(.*?)<span class="lbl"[^>]*>(.*?)<\/span><\/button>/g)];
   const names = { cli: "CLI", codex: "Codex", claude: "Claude Code", cursor: "Cursor", prompt: "Ask your agent" };
   const icons = {
     cli: '<svg class="ic" aria-hidden="true"><use href="#i-agent" /></svg>',
@@ -55,11 +63,16 @@ test("install panels match the documented Local and IDE setup", () => {
     prompt: '<svg class="ic" aria-hidden="true"><use href="#i-word" /></svg>',
   };
   assert.deepEqual(choices.map(([, id]) => id), Object.keys(names));
-  for (const [, id, attrs, icon] of choices) {
+  for (const [, id, attrs, icon, label] of choices) {
     assert.ok(attrs.includes(`aria-label="${names[id]}"`), id);
     assert.ok(attrs.includes(`title="${names[id]}"`), id);
     assert.equal(icon.trim(), icons[id], id);
+    assert.equal(label, names[id], id);
   }
+  assert.match(css, /@media \(max-width: 640px\) \{[^@]*#ins-tabs \.lbl \{ display: none; \}/);
+  assert.equal([...html.matchAll(/class="ic sm done-i"/g)].length, 5);
+  assert.match(css, /\.copy\.done \.done-i \{ display: block; \}/);
+  assert.match(css, /\.motion \.codebox:not\(\[hidden\]\) pre \{ animation:/);
   assert.match(choices.at(-1)[2], /data-i18n-attr="aria-label,title:ins.tabPrompt"/);
   assert.match(css, /#ins-tabs button:focus-visible::after \{[^}]*content: attr\(title\)/);
   assert.match(html, /data-install-note="codex"[^>]*>.*?<code>\/plugins<\/code>.*?<code>specgate@specgate<\/code>/);
@@ -169,7 +182,8 @@ function playerHarness({ reduce = false, lang = null, hash = "", watchWorkflow =
     '[data-i18n-attr="aria-label:lang.aria"]': node("language"),
     "#delivery-proof": node("delivery-proof"),
     "#copy-status": node("copy-status"),
-    ".workflow-block": node("workflow"),
+    ".lane": node("lane"),
+    ".final": node("final"),
   };
   const installOptions = [...html.matchAll(/data-ins="([^"]+)"/g)].map(([, ins]) => node(ins, { ins }));
   const prompt = installOptions.find(({ id }) => id === "prompt");
@@ -204,7 +218,7 @@ function playerHarness({ reduce = false, lang = null, hash = "", watchWorkflow =
         "[data-step]": steps, "[data-ins]": installOptions, "[data-panel]": installPanels,
         "[data-install-note]": installNotes, "[data-copy]": copyButtons,
         "[data-i18n], [data-i18n-attr]": [prompt],
-        ".reveal, .workflow-block": [selectors[".workflow-block"]],
+        ".reveal, .lane, .final": [selectors[".lane"], selectors[".final"]],
       })[selector] ?? [],
       getElementById: (id) => ({ textContent: html.match(new RegExp(`id="${id}"[^>]*>(.*?)</pre>`, "s"))?.[1] }),
     },
@@ -218,7 +232,7 @@ function playerHarness({ reduce = false, lang = null, hash = "", watchWorkflow =
     clearTimeout: (id) => timers.delete(id),
   });
   return {
-    scene, steps, animation, selectors, installOptions, installPanels, installNotes, copyLabels,
+    scene, steps, animation, selectors, classes, installOptions, installPanels, installNotes, copyLabels,
     get copied() { return copied; },
     observed,
     intersect(target, isIntersecting) { intersection([{ target, isIntersecting }]); },
@@ -238,8 +252,9 @@ function playerHarness({ reduce = false, lang = null, hash = "", watchWorkflow =
 }
 
 test("pause freezes the stage and resumes its timer, replay restarts the story", () => {
-  const { scene, animation, selectors, fire, advance } = playerHarness();
+  const { scene, animation, selectors, classes, fire, advance } = playerHarness();
   assert.equal(scene.dataset.phase, "0");
+  assert.ok(classes.has("go"), "the gate draws on load");
   advance(1000);
   fire("pp", "click");
   assert.equal(animation.playState, "paused");
@@ -258,13 +273,16 @@ test("pause freezes the stage and resumes its timer, replay restarts the story",
   assert.equal(scene.getAttribute("aria-labelledby"), "step-2");
   advance(1600);
   assert.equal(selectors["#pp"].getAttribute("aria-label"), "Play");
+  classes.delete("go");
   fire("replay", "click");
   assert.equal(scene.dataset.phase, "0");
+  assert.ok(classes.has("go"), "replay redraws the gate");
 });
 
 test("reduced motion stays on the review until explicit navigation, including keyboard", () => {
   const harness = playerHarness({ reduce: true, lang: "vi", hash: "#delivery-proof" });
   const { scene, steps, selectors, fire, advance } = harness;
+  assert.ok(!harness.classes.has("go"), "reduced motion does not draw the gate");
   advance(10000);
   assert.equal(scene.dataset.phase, "2");
   assert.equal(selectors["#pp"].getAttribute("aria-label"), "Chạy");
@@ -318,27 +336,32 @@ test("install prompt icon keeps its Vietnamese accessible name and tooltip", () 
   assert.match(prompt.innerHTML, /<svg/);
 });
 
-test("inspect turns the full-size evidence toward the reader before the separate decision view", () => {
-  assert.match(css, /\.stack \{[^}]*rotateX\(57deg\) rotateZ\(-41deg\)/);
-  assert.match(css, /\.scene3d\[data-phase="1"\] \.stack \{[^}]*transform: scale\(var\(--inspect\)\)/);
-  assert.match(css, /\.scene3d\[data-phase="1"\] \.layer:not\(\.top\) \{[^}]*translate3d\([^}]*rotateZ/);
-  assert.match(css, /\.layer\.top \.lr \.mono \{[^}]*font-size: 16px; white-space: normal/);
-  assert.match(css, /\.layer\.top \.lr \.lab \{[^}]*font-size: 16px/);
-  assert.match(css, /\.scene3d\[data-phase="2"\] \.lact \{[^}]*opacity: 1/);
-  const sheet = html.slice(html.indexOf('class="layer top"'), html.indexOf('class="scanp"'));
-  for (const label of ["Evidence by criterion", "Test passed", "Test result missing", "No test attached"]) {
-    assert.ok(sheet.includes(label), label);
-  }
+test("phases reveal the claim, then the ladders, then the decision row", () => {
+  assert.match(css, /\.stage\[data-phase="0"\] \.card \{[^}]*opacity: 0/);
+  assert.match(css, /\.stage\[data-phase="0"\] \.ladder \.n:not\(:first-child\) \{[^}]*opacity: 0/);
+  assert.match(css, /\.stage:not\(\[data-phase="0"\]\) \.ladder \.n\.gap::after \{ animation: ping/);
+  assert.match(css, /\.stage\[data-phase="2"\] \.deck \{ grid-template-rows: 1fr/);
+  assert.match(css, /\.go \.arch-edge \{ animation: draw 2s/);
+  assert.match(css, /\.final\.in \.arch-edge \{ animation: draw/);
+  const card = html.slice(html.indexOf('class="card"'), html.indexOf('id="cap"'));
+  assert.match(card, /DB down → 503[\s\S]*?Test result missing/);
+  assert.match(card, /class="k-claim"[\s\S]*class="k-test"[\s\S]*class="k-gap"[\s\S]*class="k-cited"/);
+  assert.match(card, /class="deck"[\s\S]*Request a fix[\s\S]*Approve/);
+  const final = html.slice(html.indexOf('<section class="final'), html.indexOf("</main>"));
+  assert.match(final, /class="arch-edge" pathLength="1"[\s\S]*Try it on one small change\.[\s\S]*href="#install"/);
+  assert.match(html, /<footer[^>]*>\s*<span class="foot-id"><a class="brand"[^>]*><img src="logo\.svg"/);
 });
 
-test("the public workflow offers four ordered steps with documented Local continuations", () => {
-  const flow = html.match(/<ol class="workflow"[^>]*>([\s\S]*?)<\/ol>/)?.[1];
+test("the flow offers four ordered stations with documented Local continuations", () => {
+  const flow = html.match(/<ol class="lane">([\s\S]*?)<\/ol>/)?.[1];
   assert.ok(flow);
-  const titles = [...flow.matchAll(/<h4[^>]*>(.*?)<\/h4>/g)].map(([, title]) => title);
+  const titles = [...flow.matchAll(/<h3[^>]*>(.*?)<\/h3>/g)].map(([, title]) => title);
   assert.deepEqual(titles, ["Agree on scope", "Let your agent work", "Review the evidence", "Decide and hand off"]);
-  assert.match(flow, /spec version you approved.*project rubrics for four readiness gates.*Context Pack/s);
-  assert.match(flow, /Context Pack to .*resume the same work.*agreed scope/s);
-  assert.match(flow, /exact delivery you reviewed.*move the entire Local store/is);
+  const linkText = [...flow.matchAll(/<a href[^>]*>(.*?)<\/a>/g)].map(([, text]) => text);
+  assert.deepEqual(linkText, ["Project rubrics", "Resume the same work", "Selected tests", "Move the Local store"]);
+  assert.match(flow, /OpenSpec · Spec Kit · Superpowers · Markdown/);
+  assert.match(flow, /Claude Code · Codex · Cursor/);
+  assert.match(flow, /class="mine"[^>]*><span class="tile"><img src="logo\.svg"/);
   const links = [...flow.matchAll(/href="https:\/\/github\.com\/thanhtung2693\/specgate\/blob\/main\/(docs\/using-specgate\/[^"#]+)#([^"]+)"/g)];
   assert.equal(links.length, 4);
   for (const [, file, anchor] of links) {
@@ -355,16 +378,18 @@ test("phone player keeps the story steps on one line with named touch targets", 
   assert.match(html, /id="step-2" aria-label="You decide"/);
 });
 
-test("workflow motion starts once on entry and leaves the copy accessible", () => {
+test("flow and closing-band motion start once on entry and leave the copy accessible", () => {
   const page = playerHarness({ watchWorkflow: true });
-  const workflow = page.selectors[".workflow-block"];
-  assert.ok(page.observed.has(workflow));
-  page.intersect(workflow, false);
-  assert.ok(page.observed.has(workflow));
-  page.intersect(workflow, true);
-  assert.ok(!page.observed.has(workflow));
+  for (const target of [page.selectors[".lane"], page.selectors[".final"]]) {
+    assert.ok(page.observed.has(target));
+    page.intersect(target, false);
+    assert.ok(page.observed.has(target));
+    page.intersect(target, true);
+    assert.ok(!page.observed.has(target));
+  }
   assert.equal(playerHarness({ reduce: true, watchWorkflow: true }).observed.size, 0);
-  assert.match(html, /<div class="workflow-block">/);
-  assert.match(css, /\.motion \.workflow-block:not\(\.in\):not\(:focus-within\) \.workflow li::after/);
-  assert.match(css, /prefers-reduced-motion: reduce[\s\S]*?\.workflow li::after[^}]*transform: none/);
+  assert.match(css, /\.motion \.lane:not\(\.in\)::before \{ transform: scaleX\(0\)/);
+  assert.match(css, /\.motion \.final:not\(\.in\) \.arch-edge \{ stroke-dashoffset: 1/);
+  assert.match(css, /prefers-reduced-motion: reduce[\s\S]*?\.motion \.lane:not\(\.in\)::before, \.motion \.lane \.tile \{ transform: none/);
+  assert.match(css, /prefers-reduced-motion: reduce[\s\S]*?\.motion \.final:not\(\.in\) \.arch-edge \{ stroke-dashoffset: 0/);
 });

@@ -1,16 +1,17 @@
 # SpecGate Landing Page
 
 This static page introduces SpecGate Local for solo developers and small
-teams. The hero draws the gate from the SpecGate logo around three sheets:
-approved scope, the agent's code, and results per criterion. A single agent
-claim splits into those results. The evidence sheet turns toward the reader
-while the scope and code remain in depth behind it. The last step reveals the
-decision actions. The example shows a successful suite with the selected 503 test
-result missing. The developer makes the delivery decision.
+teams. The hero draws the gate from the SpecGate logo once, and a compact
+review card stands inside it. The agent's single "Done." claim becomes
+"1 of 3 without proof". Each requirement shows a four-rung ladder: claim,
+source, check and test. The example shows a successful suite with the selected
+503 test result missing. The last phase reveals the decision actions. The
+developer makes the delivery decision.
 
-The hero plays once. Its story tabs support arrow keys, Home and End. The
-play control pauses the phase timer and in-progress transitions, and replay
-starts from the first phase. Reduced motion and JavaScript-disabled visits
+The hero plays once. The caption and player sit inside the bottom of the
+gate. The story tabs support arrow keys, Home and End. The play control pauses
+the phase timer and in-progress transitions, and replay starts from the first
+phase and redraws the gate. Reduced motion and JavaScript-disabled visits
 start with the complete review. Keep the install command and documentation
 links usable when scripting is unavailable.
 
@@ -26,8 +27,10 @@ Keep commands aligned with the [Quickstart](../../docs/using-specgate/quickstart
 and [IDE setup guide](../../docs/using-specgate/guides/install-ide-plugins.md).
 The install selector shows the Local CLI, Codex and Claude Code marketplace
 setup, project-local Cursor setup via the SpecGate CLI, and a copyable prompt
-for the agent. The icon-only choices carry names in their accessible labels and
-tooltips. The selector uses the Codex app icon bundled with OpenAI's ChatGPT
+for the agent. Each choice shows its icon with a text label. At 640px and
+below the labels collapse to icon-only, and the names stay in the accessible
+labels and tooltips. The copy button shows "Copied" with a check, then
+reverts. The selector uses the Codex app icon bundled with OpenAI's ChatGPT
 desktop app, the Claude star from the [official Claude site](https://claude.com/),
 and both Cursor Cube 2D theme variants from the
 [Cursor brand kit](https://cursor.com/brand).
@@ -37,21 +40,27 @@ the optional browser opened by `specgate ui`. The public hero is an
 illustration. The setup link starts with the CLI and the demo link opens a
 review with sample data.
 
-The four-step workflow below the tool lane links to project rubrics, work
-resume, selected-test verification, and optional whole-store Local transfer.
-The links stay readable as the connectors draw in sequence when the strip
-first enters view. The icons respond to hover and keyboard focus. Reduced
-motion shows the full strip immediately.
+One four-station flow below the hero covers Agree on scope, Let your agent
+work, Review the evidence, and Decide and hand off. The stations link to
+project rubrics, work resume, selected-test verification, and optional
+whole-store Local transfer. The line draws across and the tiles appear in
+sequence when the section first enters view. The last station's tile is the
+SpecGate logo. Reduced motion shows the full flow immediately. The closing
+band draws the gate again around the call to action when it scrolls into
+view.
 Spec authors keep their tools and source documents. Coding agents implement
 in the repository. SpecGate records the approved scope and evidence so the
 developer can accept or request changes. Keep the selected-test example
 consistent with the
 [selected-test walkthrough](../../docs/using-specgate/guides/observe-selected-tests.md).
 
-The public demo at `demo/` uses the Local review presentation with sample
-data. Its guided tour opens the 503 evidence, shows the cited code diff, and
-leads to the Decision tab. Skip or restart the tour at any time. Restarting the
-tour keeps the current sample and any draft. **Reset demo** starts a fresh review.
+The public demo at `demo/` renders sample data through the same review
+renderer as the Local UI, so its criteria list, evidence pane and decision
+dock match the product. `sample.mjs` supplies the sample rows in the shape the
+Local UI reads. Its guided tour opens the 503 evidence, shows the cited code
+diff, and ends at the decision dock; each tour card appears beside the element
+it describes. Skip or restart the tour at any time. Restarting the tour keeps
+the current sample and any draft. **Reset demo** starts a fresh review.
 It runs in the browser without using a real repository, Local store, or
 account. The original `#delivery-proof` anchor opens the browser-review FAQ,
 which links to both the demo and the guide for real work.
