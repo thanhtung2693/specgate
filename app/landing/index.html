@@ -284,7 +284,10 @@ specgate plugins doctor --agent cursor --project-local</pre>
               </div>
               <div class="codebox" data-panel="prompt" hidden>
                 <button class="btn sm copy" type="button" data-copy="code-prompt" hidden><svg class="ic sm copy-i" aria-hidden="true"><use href="#i-copy" /></svg><svg class="ic sm done-i" aria-hidden="true"><use href="#i-ok" /></svg><span data-i18n="copy.copy">Copy</span></button>
-                <pre class="mono" id="code-prompt" data-i18n="ins.prompt">Prepare this change as SpecGate Quick Work. Show me the criteria and proposed test commands first. After I approve them, implement the change, submit evidence for each criterion, and stop for my decision.</pre>
+                <pre class="mono" id="code-prompt" data-i18n="ins.prompt">Prepare this change as SpecGate Quick Work.
+Show each testable criterion, its proposed @check:name, and the exact test command.
+Wait for my approval before creating work, editing code, or running any tests.
+After approval, use those bindings, implement, submit evidence, and stop for my review.</pre>
               </div>
             </div>
             <span class="sr-only" id="copy-status" role="status"></span>

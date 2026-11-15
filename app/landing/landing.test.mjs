@@ -309,7 +309,7 @@ test("install options switch the panel and the copy button reports the copied co
     codex: /^codex plugin marketplace add thanhtung2693\/specgate$/,
     claude: /claude plugin install specgate@specgate$/,
     cursor: /^specgate plugins install --agent cursor --project-local\nspecgate plugins doctor --agent cursor --project-local$/,
-    prompt: /^Prepare this change as SpecGate Quick Work\..*After I approve them,/,
+    prompt: /^Prepare this change as SpecGate Quick Work\.[\s\S]*Wait for my approval/,
   };
   assert.equal(installOptions.length, 5);
   for (const option of installOptions) {
@@ -326,6 +326,15 @@ test("install options switch the panel and the copy button reports the copied co
     advance(1500);
     assert.equal(copyLabels.get(id).textContent, "Copy");
   }
+});
+
+test("both Quick Work prompts propose check bindings before authorizing execution", () => {
+  const en = html.match(/id="code-prompt"[^>]*>(.*?)<\/pre>/s)[1];
+  const { vi } = runInNewContext(js.slice(0, js.indexOf("const root =")) + "strings");
+  assert.match(en, /criterion, its proposed @check:name, and the exact test command/);
+  assert.match(en, /Wait for my approval before creating work, editing code, or running any tests/);
+  assert.match(vi["ins.prompt"], /tiêu chí, @check:tên đề xuất và lệnh test cụ thể/);
+  assert.match(vi["ins.prompt"], /Chờ tôi duyệt trước khi tạo work, sửa code hoặc chạy bất kỳ test nào/);
 });
 
 test("install prompt icon keeps its Vietnamese accessible name and tooltip", () => {

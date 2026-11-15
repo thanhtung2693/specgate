@@ -22,7 +22,7 @@ const strings = {
     "flow.evidence.h": "Kiểm chứng", "flow.evidence.p": "Xem bằng chứng cho từng yêu cầu và biết mục nào còn thiếu.", "flow.evidence.link": "Test đã chọn",
     "flow.decision.h": "Duyệt và chuyển giao", "flow.decision.p": "Duyệt hoặc trả lại, trên đúng bản giao đó.", "flow.decision.link": "Chuyển kho dữ liệu Local",
     "ins.h": "Bắt đầu với CLI.", "ins.aria": "Cách cài đặt", "ins.tabPrompt": "Nhờ agent",
-    "ins.prompt": "Tạo Quick Work cho thay đổi này. Cho tôi xem tiêu chí và lệnh test dự kiến trước. Khi tôi duyệt, hãy triển khai, nộp bằng chứng cho từng tiêu chí rồi dừng để tôi quyết định.",
+    "ins.prompt": "Tạo Quick Work trong SpecGate cho thay đổi này.\nVới mỗi mục có thể test, cho tôi xem tiêu chí, @check:tên đề xuất và lệnh test cụ thể.\nChờ tôi duyệt trước khi tạo work, sửa code hoặc chạy bất kỳ test nào.\nSau khi duyệt, dùng đúng các liên kết này, triển khai, nộp bằng chứng rồi dừng để tôi xem.",
     "ins.codex": "Trong Codex, mở <code>/plugins</code> rồi cài <code>specgate@specgate</code>.",
     "ins.cursor": "Chạy cả hai lệnh trong repo Git để cài và kiểm tra cấu hình cho dự án này.",
     "ins.first": "Cài CLI trước. Mỗi IDE chỉ dùng một cách cài plugin, rồi khởi động lại IDE.", "ins.ide": "Hướng dẫn cài plugin",

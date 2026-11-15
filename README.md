@@ -91,9 +91,10 @@ or update native plugins through their IDE plugin manager.
 
 Once setup is ready, tell your coding agent:
 
-> Prepare this change as SpecGate Quick Work. Show me the criteria and proposed
-> test commands first. After I approve them, implement the change, submit
-> evidence for each criterion, and stop for my decision.
+> Prepare this change as SpecGate Quick Work. Show each testable criterion,
+> its proposed `@check:name`, and the exact test command. Wait for my approval
+> before creating work, editing code, or running any tests. After approval,
+> use those bindings, implement, submit evidence, and stop for my review.
 
 Follow the [Quickstart](docs/using-specgate/quickstart.md) for the commands and
 decision steps.
