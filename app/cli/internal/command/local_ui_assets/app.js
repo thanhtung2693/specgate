@@ -3,20 +3,18 @@
   "use strict";
   const {
     escape: e,
-    appearanceControls,
     maintenanceLocation,
     setAppearance,
     criteria,
     decisionPins,
     requestGate,
     needsHuman,
-    workAction,
-    staleNotice,
   } = SpecGateUI;
-  const { icon, statusPresentation, evidenceReview, technicalView, decisionView, contextView, toolsView, updateLabel, kv } = SpecGatePresentation;
+  const { icon, technicalView, contextView, drawerFrame, decisionConfirmation, updateReview, toolsView, updateLabel, rungs, criteriaList, selectedEvidence, reviewScreen, queueScreen, topBar, queueTitle, errorScreen, queueError, noticeItems, queueResults: renderQueueResults, cacheBody, withRequiredTests } = SpecGatePresentation;
   const app = document.getElementById("app");
   const dialog = document.getElementById("dialog");
   const settings = document.getElementById("settings-dialog");
+  const scope = document.getElementById("scope-dialog");
   const legacySettings = maintenanceLocation(location.href);
   if (legacySettings.openSettings)
     history.replaceState(history.state, "", legacySettings.url);
@@ -26,7 +24,7 @@
     contextGate = requestGate(),
     routeGate = requestGate(),
     dialogGate = requestGate();
-  let updateTimer, loadedRef;
+  let updateTimer, loadedRef, enteredWork;
   const saved = (key) => {
     try {
       return localStorage.getItem(key);
@@ -56,6 +54,7 @@
     filter: "human",
     search: "",
     note: "",
+    selected: "",
     csrf: "",
     maintenanceError: "",
   };
@@ -145,15 +144,20 @@
       target.innerHTML = gear();
     }
   }
+  const reviewing = (r) => Boolean(r.ref && !state.error && !state.loading && state.work);
+  const scopeWanted = () => reviewing(route()) && route().tab === "context";
+  const focusScope = () => app.querySelector("[data-scope]")?.focus({ preventScroll: true });
   function render() {
     applyTheme();
     const r = route();
     const theme = document.documentElement.dataset.theme;
-    const notifications = `<button type="button" class="icon-button notification" data-action="notifications" aria-label="${e(notificationsText())}" aria-haspopup="dialog">${bell()}</button>`;
-    const settingsControl = `<button type="button" class="icon-button settings-button" data-action="settings" aria-label="${e(settingsLabel())}" aria-haspopup="dialog" aria-controls="settings-dialog">${gear()}</button>`;
-    app.innerHTML = `<header class="navbar"><div class="navbar-inner wrap"><a class="brand" href="/" data-nav><img src="/assets/logo.svg" alt="" width="26" height="26">SpecGate <span class="version" title="${e(t("Running version"))}">${e(state.meta?.version || "…")}</span></a><div class="nav-controls">${appearanceControls({ lang: state.lang, theme }, { language: t("Language"), dark: t("Switch to dark theme"), light: t("Switch to light theme") }, icon(theme === "dark" ? "sun" : "moon"), notifications, settingsControl)}</div></div></header><main id="main" class="wrap" tabindex="-1"><div class="view">${state.error ? errorView(state.error) : state.loading ? `<p class="busy" role="status">${e(t("Connecting to SpecGate…"))}</p>` : r.ref ? workView(r) : queueView()}</div></main>`;
+    const notifications = `<button type="button" class="ibtn notification" data-action="notifications" aria-label="${e(notificationsText())}" aria-haspopup="dialog">${bell()}</button>`;
+    const settingsControl = `<button type="button" class="ibtn settings-button" data-action="settings" aria-label="${e(settingsLabel())}" aria-haspopup="dialog" aria-controls="settings-dialog">${gear()}</button>`;
+    const bar = topBar({ t, href, lang: state.lang, theme, notifications, settings: settingsControl, version: state.meta?.version || "…", workspace: state.meta?.workspace?.name, ref: reviewing(r) ? r.ref : "", scopeHref: href(r.ref, "context"), waiting: attentionItems().map((item) => item.ref) });
+    app.innerHTML = `${bar}<main id="main" class="${reviewing(r) ? "review-main" : "wrap"}" tabindex="-1"><div class="view">${state.error ? errorView(state.error) : state.loading ? `<p class="busy" role="status">${e(t("Connecting to SpecGate…"))}</p>` : r.ref ? workView(r) : queueView()}</div></main>`;
     updateDeliveryNotice();
     sourceReader.restore();
+    renderScope();
   }
   function updateDeliveryNotice() {
     const target = document.getElementById("delivery-notice");
@@ -184,81 +188,43 @@
       highlight();
     });
   }
-  function errorView(message) {
-    return `<section class="error" role="alert"><h1>${e(t("The Local session is unavailable."))}</h1><p>${e(message)}</p><p>${e(t("Refresh to read the workspace again. Decisions require current workspace data."))}</p>${button("refresh", "Retry connection")}</section>`;
-  }
-  const queueErrorView = (message) =>
-    `<p class="warning" role="alert">${e(t("Work list unavailable"))} · ${e(message)}</p>`;
-  const queueTitle = () => t({
-    human: "Waiting on you",
-    agent: "Agent’s next step",
-    all: "All work",
-  }[state.filter]);
-  const workspace = () => `<span class="workspace-name">${icon("folder")}<span>${e(state.meta?.workspace?.name || t("Local workspace"))} · Local</span></span>`;
-  const queueHeading = () => e(queueTitle()) + (state.filter === "human" ? `<span class="queue-number">${queueCount("human")}</span>` : "");
-  function queueView() {
-    return `<header class="queue-head"><h1>${queueHeading()}</h1><div class="queue-tools"><div class="filters seg" role="group" aria-label="${e(t("Filter work"))}">${[
-      ["human", "Waiting on you"],
-      ["agent", "Agent’s next step"],
-      ["all", "All work"],
-    ].map(([key, label]) =>
-      `<button type="button" data-filter="${key}" aria-pressed="${state.filter === key}">${e(t(label))}<span>${queueCount(key)}</span></button>`,
-    ).join("")}</div><input class="search" id="search" type="search" value="${e(state.search)}" aria-label="${e(t("Search work or reference"))}" placeholder="${e(t("Search work or reference"))}"></div></header><div class="queue-meta">${workspace()}${refreshButton()}</div><div id="queue-results">${queueResults()}</div>`;
-  }
+  const errorView = (message) => errorScreen(message, t, button("refresh", "Retry connection"));
+  const queueErrorView = (message) => queueError(message, t);
+  const queueHeading = () => e(queueTitle(state.filter, t));
+  const queueResults = () => renderQueueResults(state, t, href);
+  const queueView = () => queueScreen(state, ["human", "agent", "all"].map((key) => queueCount(key)), queueResults(), t);
   function queueCount(filter) {
     if (state.queueError) return "—";
     if (filter === "human") return notificationsCount();
-    if (filter === "all") return state.items.length;
-    return state.items.filter((item) => item.next_actor === "implementing_agent").length;
+    return filter === "all" ? state.items.length : state.items.filter((item) => item.next_actor === "implementing_agent").length;
   }
-  function queueResults() {
-    if (state.queueError) return queueErrorView(state.queueError);
-    const items = state.items.filter(
-      (item) =>
-        (state.filter === "all" ||
-          (state.filter === "human"
-            ? needsHuman(item)
-            : item.next_actor === "implementing_agent")) &&
-        `${item.title} ${item.ref}`
-          .toLocaleLowerCase()
-          .includes(state.search.toLocaleLowerCase()),
-    );
-    const count = `<p class="list-count">${e(t("Showing {shown} of {total} work items").replace("{shown}", items.length).replace("{total}", state.items.length))}</p>`;
-    return items.length
-      ? `<ul class="queue">${items.map((item) => {
-          const status = statusPresentation(item);
-          const why = item.stale ? staleNotice(item, t("Review freshness")) : t(workAction(item));
-          return `<li><a class="work-row ${item.completion_id ? "delivered" : ""}" href="${e(href(item.ref))}" data-nav><span class="tile ${status.tone}">${icon(status.icon)}</span><span><strong class="work-title" data-title-ref="${e(item.ref)}">${e(item.title)}</strong><span class="work-reason">${e(why)} · <code>${e(item.ref)}</code></span></span><span class="work-state">${e(t(status.label))}</span>${icon("arrow", "row-arrow")}</a></li>`;
-        }).join("")}</ul>${count}`
-      : `<section class="empty">${icon("inbox")}<h2>${e(t(!state.search && state.filter === "human" ? "No decisions waiting." : "No work matches this view."))}</h2><p>${e(t(!state.items.length ? "Work preparation and approval start with your agent or CLI." : "Try another filter or search."))}</p></section>${count}`;
-  }
-  const refreshButton = () =>
-    `<button data-action="refresh" class="button quiet">${icon("refresh")}${e(t("Refresh"))}</button>`;
+  const rowId = (row) => row.criterion_id || row.id;
+  const reviewRows = (d) => withRequiredTests(criteria(d.status, d.work.acceptance_criteria), d);
   function workView(r) {
     const d = state.work;
     if (!d)
       return `<p class="busy" role="status">${e(t("Connecting to SpecGate…"))}</p>`;
-    const s = d.status,
-      rows = criteria(s, d.work.acceptance_criteria);
-    const status = statusPresentation(s);
-    const gaps = rows.filter((row) => row.gaps?.length);
-    const shortDate = d.review?.created_at && new Date(d.review.created_at).toLocaleDateString(state.lang, { dateStyle: "medium" });
-    const action = needsHuman(s) && gaps.length
-      ? t("Review the evidence gaps before deciding.")
-      : state.work.can_decide
-        ? t("Inspect evidence, compare approved requirements, then decide.")
-        : t(workAction(s));
-    return `<a class="back" href="/" data-nav>${icon("back")}${e(t("Back to decisions"))}</a><header class="page-head"><span class="tile ${status.tone}">${icon(status.icon)}</span><div><h1 data-title-ref="${e(s.ref)}">${e(d.work.title)}</h1><div class="work-meta"><code>${e(s.ref)}</code><span>${e(t(status.label))}${shortDate ? ` · ${e(shortDate)}` : ""}${d.completion?.agent?.name ? ` · ${e(d.completion.agent.name)}` : ""}</span>${technicalView(s, t)}</div></div><p class="work-need">${e(action)}</p></header><div id="delivery-notice" role="status" aria-live="polite"></div><nav class="tabs" aria-label="${e(t("Review details"))}">${[
-      ["evidence", "Evidence", "evidence"],
-      ["context", "Scope", "file"],
-      ["decision", "Decision", "person"],
-    ].map(([tab, label, glyph]) =>
-      `<a href="${e(href(s.ref, tab))}" data-nav ${r.tab === tab ? 'aria-current="page"' : ""}>${icon(glyph)}${e(t(label))}</a>`,
-    ).join("")}</nav><div class="tab-content">${s.historical_verification ? `<p class="warning">${e(t("Recorded verification comes from another Local store generation."))}</p>` : ""}${s.stale ? `<p class="warning">${e(staleNotice(s, t("Review freshness")))}</p>` : ""}${r.tab === "context" ? contextView(d, state.context, t, SpecGateMarkdown.renderContext, button) : r.tab === "decision" ? decisionView(d, state.note, actor, t, rows, state.lang) : evidenceView(rows)}</div>`;
+    const rows = reviewRows(d);
+    const selected = rows.find((row) => rowId(row) === state.selected) || rows.find((row) => rungs(row).problem) || rows[0];
+    state.selected = selected ? rowId(selected) : "";
+    const enter = enteredWork !== d;
+    enteredWork = d;
+    return reviewScreen(d, rows, { selected: state.selected, enter, note: state.note, lang: state.lang, t, actor });
   }
-  function evidenceView(rows) {
+  function select(id) {
     const d = state.work;
-    return `${evidenceReview(rows, d, state.lang, t)}${decisionPins(d) ? `<div class="evidence-footer"><a class="button primary" href="${e(href(d.status.ref, "decision"))}" data-nav>${e(t("Review decision"))}${icon("arrow")}</a></div>` : ""}`;
+    const list = document.getElementById("crit-list"), pane = document.getElementById("evidence-pane");
+    if (!d || !list || !pane || id === state.selected) return;
+    const rows = reviewRows(d);
+    if (!rows.some((row) => rowId(row) === id)) return;
+    state.selected = id;
+    list.innerHTML = criteriaList(rows, id, state.lang, t);
+    pane.innerHTML = selectedEvidence(rows, d, id, state.lang, t);
+    pane.scrollTop = 0;
+    sourceReader.restore();
+    const current = [...app.querySelectorAll("[data-criterion-select]")].find((node) => node.dataset.criterionSelect === id);
+    current?.focus({ preventScroll: true });
+    current?.scrollIntoView?.({ block: "nearest" });
   }
   async function api(path, body) {
     const response = await fetch(path, {
@@ -301,6 +267,7 @@
     state.context = null;
     state.newDelivery = false;
     if (!keepNote || loadedRef !== r.ref) state.note = "";
+    if (loadedRef !== r.ref) state.selected = "";
     loadedRef = r.ref;
     if (!motionRef) render();
     try {
@@ -326,7 +293,7 @@
         render();
         updateAttentionControls();
         if (r.tab === "context" && r.ref) loadContext(-1);
-        if (motionRef || keepNote) document.getElementById("main")?.focus({ preventScroll: true });
+        if (motionRef || keepNote || r.tab === "decision") focusRoute(r);
       };
       if (motionRef) transition(updatePage, motionRef);
       else updatePage();
@@ -351,20 +318,45 @@
       query.set("role", doc.role);
     }
     state.context = { selected: index };
-    render();
+    renderScope(true);
     try {
       const result = await api("/api/context?" + query);
       if (!contextGate.current(ticket) || state.work?.status.ref !== ref)
         return;
       state.context = { ...result, selected: index };
-      render();
+      renderScope();
     } catch (error) {
       if (contextGate.current(ticket)) {
         state.context = { error: error.message, selected: index };
-        render();
+        renderScope();
       }
     }
   }
+  /* The drawer sits outside #app, so review re-renders never touch it. Keep its scroll and focus across its own updates. */
+  function renderScope(reset = false) {
+    if (!scopeWanted()) {
+      if (scope.open) scope.close();
+      return;
+    }
+    const at = document.activeElement;
+    const kept = scope.contains(at) && at.closest("[data-document],[data-action],[data-close-scope]");
+    const focus = kept && (kept.dataset.document !== undefined ? `[data-document="${kept.dataset.document}"]` : kept.dataset.action ? `[data-action="${kept.dataset.action}"]` : "[data-close-scope]");
+    const scroll = reset ? 0 : scope.querySelector(".drawer-body")?.scrollTop || 0;
+    const opening = !scope.open;
+    scope.innerHTML = drawerFrame(t("Scope"), t("Close dialog"), contextView(state.work, state.context, t, SpecGateMarkdown.renderContext, button));
+    if (opening) scope.showModal();
+    scope.querySelector(".drawer-body").scrollTop = scroll;
+    if (focus || opening) scope.querySelector(focus || "[data-close-scope]")?.focus({ preventScroll: true });
+  }
+  scope.addEventListener("click", (event) => {
+    if (event.target === scope || event.target.closest("[data-close-scope]")) scope.close();
+    else handleClick(event);
+  });
+  scope.addEventListener("close", () => {
+    if (scope.open || !scopeWanted()) return;
+    go(href(state.work.status.ref), false, false);
+    focusScope();
+  });
   function renderSettings() {
     if (!settings.open || dialog.open) return;
     const focusAction = settings.contains(document.activeElement)
@@ -440,23 +432,23 @@
       }
     }, 1000);
   }
-  function go(url, reload = false) {
+  const focusRoute = (r) =>
+    ((r.tab === "decision" && document.getElementById("decision-note")) || document.getElementById("main"))?.focus({ preventScroll: true });
+  function go(url, reload = false, animate = true) {
     routeGate.start();
     const before = route();
     history.pushState(null, "", url);
-    navigate(before.ref, { reload, animate: true });
-    window.scrollTo(0, 0);
+    navigate(before.ref, { reload, animate });
+    if (before.ref !== route().ref) window.scrollTo(0, 0);
   }
   function navigate(beforeRef, { reload = false, animate = false } = {}) {
     const after = route();
     if (!reload && beforeRef === after.ref && state.work) {
-      const updateTab = () => {
-        render();
-        if (after.tab === "context" && !state.context) loadContext(-1);
-        document.getElementById("main")?.focus({ preventScroll: true });
-      };
-      if (animate) transition(updateTab);
-      else updateTab();
+      const closing = scope.open;
+      renderScope();
+      if (after.tab === "context" && !state.context) loadContext(-1);
+      else if (after.tab !== "context") focusRoute(after);
+      if (closing && after.tab === "evidence") focusScope();
       return;
     }
     const motionRef = animate && (!beforeRef || !after.ref) ? beforeRef || after.ref : "";
@@ -521,15 +513,7 @@
       decision === "approve"
         ? "Confirm acceptance"
         : "Confirm request for changes",
-      `<p>${e(t("Record this decision for the exact review shown below."))}</p>${kv(
-        [
-          ["Work", state.work.work.title],
-          ["Review ID", pins.review_id],
-          ["Completion ID", pins.completion_id],
-          ["Current evidence basis", pins.basis_digest],
-          ["Your note", note],
-        ], t,
-      )}<p>${e(t("If the review or evidence changed, SpecGate will refuse this decision. Refresh and inspect it again."))}</p>`,
+      decisionConfirmation(state.work, pins, note, t),
       async (active) => {
         const result = await api("/api/decision", { ...pins, decision, note });
         if (state.work === inspected && routeGate.current(ticket) && active()) {
@@ -561,11 +545,7 @@
       }
       showDialog(
         "Review the update",
-        `${kv([
-          ["Running version", state.meta.version],
-          ["Available version", preview.latest_version],
-          ["Install target", preview.target],
-        ], t)}<ul>${(preview.scope || []).map((line) => `<li>${e(t(line))}</li>`).join("")}</ul><p>${e(t("The running UI keeps its current version until restarted. Finish any open decision before updating."))}</p>`,
+        updateReview(state.meta.version, preview, t),
         async () => {
           state.update = await api("/api/update", {
             version: preview.latest_version,
@@ -591,7 +571,7 @@
       const entries = preview.entries || [];
       showDialog(
         "Preview cache cleanup",
-        `<p>${e(t(preview.scope))}</p>${entries.length ? `<ul class="file-list">${entries.map((file) => `<li><strong>${e(file.name)}</strong><code>${e(file.path)}</code><span>${e(file.bytes)} bytes</span></li>`).join("")}</ul><p>${e(t("Total"))}: ${e(preview.count)} ${e(t("Files"))} · ${e(preview.bytes)} bytes</p>` : `<p>${e(t(preview.reason || "No eligible cache files."))}</p>`}<p>${e(t("Work, specs, evidence, acceptance records and backups are kept."))}</p>`,
+        cacheBody(preview, t),
         entries.length
           ? async () => {
               await api("/api/cache", {
@@ -610,10 +590,7 @@
       return queueErrorView(state.error || state.queueError);
     if (state.loading)
       return `<p role="status">${e(t("Connecting to SpecGate…"))}</p>`;
-    const items = attentionItems();
-    return items.length
-      ? items.map((item) => `<a class="notice-item" href="${e(href(item.ref))}" data-dialog-nav><strong>${e(item.title)}</strong><small>${e(actor(item.next_actor))} · ${e(t(workAction(item)))} · ${e(item.ref)}</small></a>`).join("")
-      : `<p>${e(t("Nothing needs your attention."))}</p>`;
+    return noticeItems(attentionItems(), t, href, actor);
   }
   dialog.addEventListener("click", (event) => {
     if (event.target === dialog && dialog.className === "attention-dialog") dialog.close();
@@ -682,7 +659,7 @@
       ) {
         render();
         app
-          .querySelector(`[data-language="${state.lang}"]`)
+          .querySelector("[data-language]")
           ?.focus({ preventScroll: true });
       }
       return;
@@ -701,6 +678,11 @@
       state.filter = filter.dataset.filter;
       render();
       app.querySelector(`[data-filter="${state.filter}"]`)?.focus({ preventScroll: true });
+      return;
+    }
+    const criterion = event.target.closest("[data-criterion-select]");
+    if (criterion) {
+      select(criterion.dataset.criterionSelect);
       return;
     }
     const doc = event.target.closest("[data-document]");
@@ -724,8 +706,7 @@
     }
     if (action === "context-source") {
       state.context.showSource = !state.context.showSource;
-      render();
-      app.querySelector('[data-action="context-source"]')?.focus({ preventScroll: true });
+      renderScope();
       return;
     }
     if (action === "settings") {
@@ -778,6 +759,17 @@
         if (error) error.textContent = "";
       }
     }
+  });
+  window.addEventListener("keydown", (event) => {
+    const step = { j: 1, ArrowDown: 1, k: -1, ArrowUp: -1 }[event.key];
+    if (!step || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+    if (!state.work || !reviewing(route()) || dialog.open || settings.open || scope.open) return;
+    const row = event.target?.closest?.("[data-criterion-select]")?.parentElement;
+    const next = (step > 0 ? row?.nextElementSibling : row?.previousElementSibling)?.querySelector("[data-criterion-select]");
+    if (!next) return;
+    event.preventDefault();
+    if (next.getAttribute("aria-current") === "true") next.focus();
+    else select(next.dataset.criterionSelect);
   });
   window.addEventListener("popstate", () => {
     routeGate.start();

@@ -124,8 +124,10 @@
       ...(matchingBasis?.digest ? { basis_digest: matchingBasis.digest } : {}),
     };
   }
+  // One compact toggle shows the current language and switches to the other one.
   function appearanceControls(state, labels, themeIcon, notifications = "", settings = "") {
-    return `<div class="language seg" role="group" aria-label="${escape(labels.language)}">${["en", "vi"].map((lang) => `<button type="button" data-language="${lang}" aria-pressed="${state.lang === lang}"><span>${lang.toUpperCase()}</span></button>`).join("")}</div>${notifications}<button class="icon-button theme-button" data-action="theme" aria-label="${escape(state.theme === "dark" ? labels.light : labels.dark)}" aria-pressed="${state.theme === "dark"}">${themeIcon}</button>${settings}`;
+    const other = state.lang === "vi" ? "en" : "vi";
+    return `<button type="button" class="ibtn txt" data-language="${other}" aria-label="${escape(labels.language)}">${state.lang.toUpperCase()}</button>${notifications}<button type="button" class="ibtn theme-button" data-action="theme" aria-label="${escape(state.theme === "dark" ? labels.light : labels.dark)}" aria-pressed="${state.theme === "dark"}">${themeIcon}</button>${settings}`;
   }
   function setAppearance(state, kind, value, persist) {
     if (kind === "language" && ["en", "vi"].includes(value)) state.lang = value;

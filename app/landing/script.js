@@ -8,22 +8,18 @@ const strings = {
   vi: {
     skip: "Đến nội dung chính", "brand.aria": "Trang chủ SpecGate", "lang.aria": "Ngôn ngữ",
     "theme.aria": "Đổi giao diện sáng hoặc tối", "steps.aria": "Các bước minh họa",
-    "story.aria": "Minh hoạ: phạm vi đã chốt, code của agent và kết quả test xếp chồng lên nhau; tờ kết quả xoay thẳng để bạn thấy test 503 còn thiếu, rồi hiện các lựa chọn để bạn quyết định.",
     "hero.h1": "Agent báo xong. <em>Xong những gì?</em>", "hero.lede": "Xem bản giao đáp ứng yêu cầu nào, còn thiếu bằng chứng gì.",
     "cta.demo": "Thử UI demo", "cta.install": "Bắt đầu với CLI",
-    "lg.tests": "Kết quả test", "lg.code": "Code của agent", "lg.scope": "Phạm vi đã chốt", "s.stamp": "Đã chốt",
-    "l.claim": "Agent: done · exit 0", "l.met": "Agent báo đạt", "r.pass": "Test đạt", "r.miss": "Thiếu kết quả test", "r.none": "Chưa gắn test riêng",
-    "c.inspect": "Bằng chứng từng tiêu chí", "c.head": "1 mục cần xem lại", "c.fix": "Gửi yêu cầu sửa", "c.ok": "Duyệt bản này",
+    "w.said": "Agent báo đạt 3/3", "w.sum": "1 trong 3 chưa có bằng chứng", "r.miss": "Thiếu kết quả test",
+    "r.claim": "Báo cáo", "r.source": "Nguồn", "r.check": "Lệnh", "r.test": "Test", "c.fix": "Gửi yêu cầu sửa", "c.ok": "Duyệt bản này",
     "st.0": "Agent báo xong", "st.1": "Soi từng tiêu chí", "st.2": "Bạn quyết định",
     "cap.0": "Agent báo xong. Vậy ba tiêu chí đã đạt chưa?", "cap.1": "Test xanh, nhưng ca 503 vẫn chưa có kết quả.", "cap.2": "Duyệt hoặc yêu cầu sửa đúng bản giao bạn vừa xem.",
     "pp.pause": "Tạm dừng", "pp.play": "Chạy", "pp.replay": "Xem lại", "copy.copy": "Sao chép", "copy.done": "Đã chép", "copy.fail": "Chép thất bại",
-    "fit.h": "Công cụ quen cứ dùng. SpecGate lo khâu đối chiếu.", "fit.1h": "Bạn viết spec", "fit.2h": "Agent viết code",
-    "fit.3h": "SpecGate ghi lại", "fit.3p": "Xem bằng chứng cho từng yêu cầu đã chốt.",
-    "flow.h": "Từ yêu cầu đến quyết định",
-    "flow.scope.h": "Chốt yêu cầu", "flow.scope.start": "Giữ đúng phiên bản bạn đã duyệt, kèm ", "flow.scope.link": "rubric riêng của dự án",
-    "flow.agent.h": "Agent làm", "flow.agent.start": "Dùng lại Context Pack để agent ", "flow.agent.link": "tiếp tục đúng việc", "flow.agent.end": " khi đổi phiên",
-    "flow.evidence.h": "Kiểm chứng", "flow.evidence.start": "Xem tiêu chí nào còn thiếu bằng chứng từ code, lệnh đã chạy hay ", "flow.evidence.link": "test đã chọn",
-    "flow.decision.h": "Duyệt và chuyển giao", "flow.decision.start": "Duyệt hoặc yêu cầu sửa đúng bản đã xem. Đổi máy thì ", "flow.decision.link": "chuyển toàn bộ kho dữ liệu Local",
+    "fit.h": "Công cụ quen cứ dùng. SpecGate lo khâu đối chiếu.",
+    "flow.scope.h": "Chốt yêu cầu", "flow.scope.link": "Rubric riêng của dự án",
+    "flow.agent.h": "Agent làm", "flow.agent.link": "Tiếp tục đúng việc",
+    "flow.evidence.h": "Kiểm chứng", "flow.evidence.p": "Báo cáo, nguồn, lệnh và test cho từng yêu cầu.", "flow.evidence.link": "Test đã chọn",
+    "flow.decision.h": "Duyệt và chuyển giao", "flow.decision.p": "Duyệt hoặc trả lại, trên đúng bản giao đó.", "flow.decision.link": "Chuyển kho dữ liệu Local",
     "ins.h": "Bắt đầu với CLI.", "ins.aria": "Cách cài đặt", "ins.tabPrompt": "Nhờ agent",
     "ins.prompt": "Dùng SpecGate để chuẩn bị thay đổi này. Cho tôi xem phạm vi, tiêu chí chấp nhận và các lệnh kiểm tra đề xuất. Chờ tôi duyệt phạm vi, sau đó triển khai, nộp bằng chứng theo từng tiêu chí và dừng để tôi quyết định có chấp nhận kết quả hay không.",
     "ins.codex": "Trong Codex, mở <code>/plugins</code> rồi cài <code>specgate@specgate</code>.",
@@ -235,7 +231,7 @@ if (!reducedMotion.matches && "IntersectionObserver" in window) {
       observer.unobserve(target);
     }
   }, { rootMargin: "0px 0px -6% 0px" });
-  for (const section of all(".reveal, .workflow-block")) observer.observe(section);
+  for (const section of all(".reveal, .lane, .final")) observer.observe(section);
 }
 
 for (const button of languageButtons) {
