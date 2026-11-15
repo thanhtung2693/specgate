@@ -91,9 +91,9 @@ or update native plugins through their IDE plugin manager.
 
 Once setup is ready, tell your coding agent:
 
-> Prepare this change in SpecGate. Show me the scope, acceptance criteria, and
-> any proposed check commands before implementation. After I approve, implement
-> it, submit per-criterion evidence, and stop for my delivery decision.
+> Prepare this change as SpecGate Quick Work. Show me the criteria and proposed
+> test commands first. After I approve them, implement the change, submit
+> evidence for each criterion, and stop for my decision.
 
 Follow the [Quickstart](docs/using-specgate/quickstart.md) for the commands and
 decision steps.
@@ -107,8 +107,10 @@ approve scope and criteria
 -> human decides against the exact review
 ```
 
-Start with explicit criteria for a small change. When the work needs a
-reviewed spec or plan, publish the package and approve its exact version.
+Use Quick Work when requirements could slip through or another session needs
+to pick up the change. For a typo or a label change, your usual agent and tests
+are enough. When the work needs a reviewed spec or plan, publish the package
+and approve its exact version.
 See the [Local CLI workflow](docs/using-specgate/guides/cli-workflow.md).
 
 ## What you can do

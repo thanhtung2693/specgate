@@ -27,7 +27,7 @@ Keep commands aligned with the [Quickstart](../../docs/using-specgate/quickstart
 and [IDE setup guide](../../docs/using-specgate/guides/install-ide-plugins.md).
 The install selector shows the Local CLI, Codex and Claude Code marketplace
 setup, project-local Cursor setup via the SpecGate CLI, and a copyable prompt
-for the agent. Each choice shows its icon with a text label. At 640px and
+for the agent to start Quick Work. Each choice shows its icon with a text label. At 640px and
 below the labels collapse to icon-only, and the names stay in the accessible
 labels and tooltips. The copy button shows "Copied" with a check, then
 reverts. The selector uses the Codex app icon bundled with OpenAI's ChatGPT
@@ -41,9 +41,10 @@ illustration. The setup link starts with the CLI and the demo link opens a
 review with sample data.
 
 One four-station flow below the hero covers Agree on scope, Let your agent
-work, Review the evidence, and Decide and hand off. The stations link to
-project rubrics, work resume, selected-test verification, and optional
-whole-store Local transfer. The line draws across and the tiles appear in
+work, Review the evidence, and Decide and hand off. An introduction explains
+when the workflow pays off. The stations link to Quick Work, work resume,
+selected-test verification, and optional whole-store Local transfer. The FAQ
+sets expectations about what a passing check tells the reviewer. The line draws across and the tiles appear in
 sequence when the section first enters view. The last station's tile is the
 SpecGate logo. Reduced motion shows the full flow immediately. The closing
 band draws the gate again around the call to action when it scrolls into

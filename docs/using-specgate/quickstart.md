@@ -1,8 +1,9 @@
 # Quickstart
 
-Complete one Local work item with your coding agent and the CLI. You approve the
-scope, the agent submits evidence, and you accept the delivery or request
-changes. The whole loop runs through the CLI.
+Use Quick Work to finish one change with your coding agent and the Local CLI.
+It is useful when a requirement could slip through, a regression needs a test,
+or another session needs to pick up the work. For a typo or a label change,
+your usual agent and tests are enough.
 
 ## 1. Set up the CLI and coding agent
 
@@ -38,52 +39,65 @@ for Claude Code, Cursor and other installation options. Local works with SQLite
 on this machine and needs no Docker, server, or model API key. For scripted
 setup, see [Configuration](reference/configuration.md#cli).
 
-## 2. Prepare and approve the scope
+## 2. Agree on criteria and create Quick Work
 
-Ask your coding agent for a small, testable change:
+Pick a change with a clear outcome. In the example below, trimming already has
+a test, but there is no check for a name that becomes empty after trimming.
+Ask your coding agent:
 
-> Use SpecGate to prepare a change that adds a healthcheck. It must return
-> HTTP 200 at `/healthz` and have an automated test. Show me the artifact
-> preview before publishing. Stop for approval before implementing.
+> Prepare a Quick Work item to normalize names. It must trim surrounding
+> whitespace and reject names that are empty after trimming. Show me the two
+> criteria and the proposed test commands. Wait for me to approve them.
 
-The agent prepares the specification, previews and publishes the exact version
-with your confirmation, and completes the readiness tasks. Review that version
-and its criteria. The agent can supply the approval command, or you can run:
+After you approve, the agent creates the work item. For a JavaScript project
+with these test filenames, the command is:
 
 ```bash
-specgate --yes change approve <artifact-id> \
-  --title "Add healthcheck endpoint" \
-  --ac "GET /healthz returns HTTP 200" \
-  --ac "An automated test checks the healthcheck response @check:tests"
+specgate work create-quick "Normalize user names" \
+  --description "Trim surrounding whitespace and reject empty trimmed names." \
+  --ac "Trim surrounding whitespace @check:trim" \
+  --ac "Reject a name that is empty after trimming @check:reject-empty"
 ```
 
-Readiness results inform your approval. Use the work reference from the approval
-receipt for the rest of the loop. See [Use the SpecGate CLI](guides/cli-workflow.md)
-for artifact and gate commands or the smaller quick-work route.
+The `@check` labels connect each criterion to a named check in the agent's
+report. In this example, review `node --test trim.test.mjs` and
+`node --test reject-empty.test.mjs` before authorizing them. For your own
+project, ask your agent to propose the actual commands and adjust the criteria
+with you first. Quick Work gives the agent a Context Pack from those criteria
+without publishing an artifact. If the work needs a frozen version of a reviewed
+spec or plan, use [artifact-backed work](guides/cli-workflow.md#publish-artifact-backed-work).
 
 ## 3. Let the agent implement and submit evidence
 
-Give the agent the exact reference. For example, “Implement SpecGate work
-`LOCAL-123`. Submit evidence and stop when a human decision is needed.” The
-agent starts with:
+Give the agent the work reference returned by the CLI:
+
+> Implement this SpecGate work. Submit evidence for each criterion and stop
+> when it's my turn to review.
+
+The agent runs `specgate work resume <work-ref> --json`, reads the Context
+Pack, implements the change, and starts a report with
+`specgate delivery report <work-ref> --init --json`. It fills the returned
+file and submits it using the returned path. After you approve the check
+commands, the agent can use the following form. `--run-checks` runs those
+commands as your OS user.
 
 ```bash
-specgate work resume LOCAL-123 --json
+specgate --yes change submit "$work_ref" --file "$report_path" --run-checks
 ```
 
-The agent reads the approved scope and criteria, implements the change, runs
-checks, and prepares one evidence claim per criterion. It initializes the
-report with `specgate delivery report LOCAL-123 --init --json` and passes the
-returned report path to `specgate change submit`. Review the check commands
-before authorizing `--run-checks`, which runs them as your OS user. Ask for
-the receipt with the work reference, criterion evidence, and exact next command. See
-[Use SpecGate with a coding agent](guides/coding-agent-workflow.md) for the full
-agent sequence.
+If the trim test passes and the empty-name check was skipped, the latter
+criterion still lacks evidence. Give the agent the same work reference so it
+can add the missing behavior and test, rerun the checks, and submit again.
+If you want to try this on disposable data, follow the
+[Local delivery proof](guides/try-delivery-proof.md).
 
 ## 4. Review the evidence and decide
 
-Read the receipt and the current work status. Use `--json` for structured
-criterion evidence and the decision identifiers.
+Read the receipt and the current work status. A CLI-observed pass tells you
+the recorded command succeeded. It cannot tell you whether the test checks the
+right behavior or whether the code is sound. Inspect the checks and decide
+whether to ask for stronger evidence. Use `--json` for structured results
+and exact decision identifiers.
 
 ```bash
 specgate change status LOCAL-123
@@ -121,7 +135,8 @@ See [Local review](guides/local-review.md) and the [changelog](../../CHANGELOG.m
 - [Try Local review notifications](guides/local-notification-pilot.md) describes
   the optional foreground pilot from the source checkout. The participant study
   is pending.
-- [Operate SpecGate](guides/operate-specgate.md) covers backups and recovery for previous installations.
+- [Move a Local store](guides/operate-specgate.md#move-a-local-store-to-another-checkout)
+  shows how to continue the same work on another machine.
 - [Local CLI uninstall](reference/cli.md#local-cli-uninstall) explains
   how to remove the CLI and when Local state is kept.
 - [CLI reference](reference/cli.md) lists the commands by purpose.
