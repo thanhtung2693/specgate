@@ -9,16 +9,10 @@ import (
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
-// canPrompt reports whether command wizards may ask for input. `--plain` is
-// output-only and intentionally non-interactive; `--json` implies `--no-input`.
-func canPrompt(deps *Deps) bool {
-	return deps != nil && !deps.NoInput && deps.Printer != nil && deps.Printer.Mode() == output.ModeHuman
-}
-
-// sessionInteractive reports whether the CLI may show confirmation prompts:
-// prompt-capable output mode plus terminal stdin.
+// sessionInteractive reports whether the input and prompt output are terminals
+// and the command is running in human mode outside CI.
 func sessionInteractive(deps *Deps) bool {
-	if !canPrompt(deps) {
+	if deps == nil || deps.NoInput || deps.Printer == nil || deps.Printer.Mode() != output.ModeHuman || truthyEnv("CI") || !stderrIsTTY(deps) {
 		return false
 	}
 	if deps.StdinIsTTY != nil {

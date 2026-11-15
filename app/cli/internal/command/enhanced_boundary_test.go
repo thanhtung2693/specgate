@@ -194,7 +194,6 @@ func TestPinRejectsWatchedChangesDuringConfirmation(t *testing.T) {
 		t.Fatal(err)
 	}
 	deps.WorkingDir = root
-	deps.StdinIsTTY = func() bool { return true }
 	prompt.confirmValue = true
 	prompt.confirmObserver = func() {
 		if err := os.WriteFile(watched, []byte("changed"), 0600); err != nil {

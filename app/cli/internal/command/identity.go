@@ -38,7 +38,7 @@ func newUserLoginCmd(deps *Deps) *cobra.Command {
 			if strings.TrimSpace(workspaceName) == "" ||
 				strings.TrimSpace(displayName) == "" ||
 				strings.TrimSpace(username) == "" {
-				if !canPrompt(deps) {
+				if !sessionInteractive(deps) {
 					payload := output.ErrorPayload{
 						Code:    "validation",
 						Message: formatRequiredLoginFlags(workspaceName, displayName, username),

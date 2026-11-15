@@ -75,16 +75,16 @@ func newLocalUICmd(deps *Deps) *cobra.Command {
 	var noOpen bool
 	cmd := &cobra.Command{Use: "ui [work-ref]", Short: "Serve the Local inspection and human review UI on loopback", Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		if port < 0 || port > 65535 {
-			return fmt.Errorf("--port must be between 0 and 65535")
+			return &output.ExitError{Code: output.ExitUsage, Err: errors.New("--port must be between 0 and 65535")}
 		}
 		root, ok := config.FindProjectRoot(deps.WorkingDir)
 		if !ok {
-			return fmt.Errorf("local UI requires a repository; run from the intended repository")
+			return localExitError(deps, "ui", errors.New("local UI requires a repository; run from the intended repository"))
 		}
 		var err error
 		root, err = filepath.EvalSymlinks(root)
 		if err != nil {
-			return err
+			return localExitError(deps, "ui", err)
 		}
 		store, err := openLocalStore(deps)
 		if err != nil {
@@ -105,17 +105,17 @@ func newLocalUICmd(deps *Deps) *cobra.Command {
 		}
 		listener, err := net.Listen("tcp4", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
 		if err != nil {
-			return fmt.Errorf("start Local UI: %w", err)
+			return localExitError(deps, "ui", fmt.Errorf("start Local UI: %w", err))
 		}
 		defer listener.Close()
 		ui, err := newLocalUIServer(deps, store, selection, root, listener.Addr().String())
 		if err != nil {
-			return err
+			return localExitError(deps, "ui", err)
 		}
 		descriptor := localUIDiscovery{URL: "http://" + ui.host, SessionID: ui.id, WorkspaceID: selection.Workspace.ID, RepoRoot: root}
 		path, err := writeLocalUIDiscovery(deps, descriptor)
 		if err != nil {
-			return err
+			return localExitError(deps, "ui", err)
 		}
 		defer os.Remove(path)
 		target := descriptor.URL
@@ -149,7 +149,7 @@ func newLocalUICmd(deps *Deps) *cobra.Command {
 			if errors.Is(err, http.ErrServerClosed) {
 				return nil
 			}
-			return err
+			return &output.ExitError{Code: output.ExitUnavailable, Err: err}
 		}
 	}}
 	cmd.Flags().IntVar(&port, "port", 0, "Loopback port (0 chooses an available port)")

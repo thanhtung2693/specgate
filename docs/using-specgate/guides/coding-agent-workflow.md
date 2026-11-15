@@ -168,7 +168,8 @@ agent reviews that file before authorizing execution. Each claim points to
 reviewable evidence such as a test assertion, source line, API response, or UI
 observation. A skipped or failed check cannot support a satisfied claim.
 The submit response already includes the latest Change status, so the agent
-does not fetch it again.
+does not fetch it again. If later status ends its retry command with `--file`,
+supply the revised report path for the same work instead of switching drafts.
 
 ### 4. Add an independent review only when you request one
 

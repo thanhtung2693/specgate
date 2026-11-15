@@ -400,6 +400,13 @@ Delivery reports are append-only evidence. A completion report may include:
 what allows a later peer review to prove that a different agent inspected the
 same completion receipt.
 
+On CLI submission, a noncanonical draft is marked with the CLI-owned
+`custom_completion_file` field; the machine-local path stays out of the
+completion record. The submit response can use the path supplied to that
+invocation. Later status asks for the revised report path explicitly when
+this marker is present. Canonical and older unmarked completions retain the
+default-file retry.
+
 Canonical check names are free-form strings supplied by the reporter, but common
 CLI scaffolds use `tests`, `lint`, `types`, and `build`. Each runnable check's
 shell `command` is retained in the append-only receipt so an independent

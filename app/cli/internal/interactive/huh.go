@@ -1,6 +1,7 @@
 package interactive
 
 import (
+	"io"
 	"os"
 
 	"github.com/charmbracelet/huh"
@@ -8,13 +9,23 @@ import (
 
 // HuhPrompter is the production Prompter backed by charmbracelet/huh.
 type HuhPrompter struct {
+	input      io.Reader
+	output     io.Writer
 	accessible bool
 }
 
 // NewHuhPrompter creates a HuhPrompter. When SPECGATE_ACCESSIBLE=1 it
 // falls back to plain-text terminal input instead of the TUI.
-func NewHuhPrompter() *HuhPrompter {
-	return &HuhPrompter{accessible: os.Getenv("SPECGATE_ACCESSIBLE") == "1"}
+func NewHuhPrompter(input io.Reader, output io.Writer) *HuhPrompter {
+	return &HuhPrompter{input: input, output: output, accessible: os.Getenv("SPECGATE_ACCESSIBLE") == "1"}
+}
+
+func (h *HuhPrompter) run(field huh.Field) error {
+	return huh.NewForm(huh.NewGroup(field)).
+		WithInput(h.input).
+		WithOutput(h.output).
+		WithAccessible(h.accessible).
+		Run()
 }
 
 func (h *HuhPrompter) Select(title string, options []Option) (string, error) {
@@ -27,16 +38,8 @@ func (h *HuhPrompter) MultiSelect(title string, options []Option, defaults []str
 		huhopts[i] = huh.NewOption(o.Label, o.Value)
 	}
 	selected := append([]string(nil), defaults...)
-	f := huh.NewForm(huh.NewGroup(
-		huh.NewMultiSelect[string]().
-			Title(title).
-			Options(huhopts...).
-			Value(&selected),
-	))
-	if h.accessible {
-		f = f.WithAccessible(true)
-	}
-	return selected, f.Run()
+	err := h.run(huh.NewMultiSelect[string]().Title(title).Options(huhopts...).Value(&selected))
+	return selected, err
 }
 
 func (h *HuhPrompter) SearchSelect(title, description string, options []Option) (string, error) {
@@ -59,13 +62,8 @@ func (h *HuhPrompter) selectFromOptions(title, description string, options []Opt
 	if filterable {
 		field = field.Filtering(true).Height(12)
 	}
-	f := huh.NewForm(huh.NewGroup(
-		field,
-	))
-	if h.accessible {
-		f = f.WithAccessible(true)
-	}
-	return selected, f.Run()
+	err := h.run(field)
+	return selected, err
 }
 
 func (h *HuhPrompter) Input(title, placeholder string, validate func(string) error) (string, error) {
@@ -84,30 +82,19 @@ func (h *HuhPrompter) InputWithSuggestions(title, placeholder string, suggestion
 	if validate != nil {
 		field = field.Validate(validate)
 	}
-	f := huh.NewForm(huh.NewGroup(field))
-	if h.accessible {
-		f = f.WithAccessible(true)
-	}
-	return result, f.Run()
+	err := h.run(field)
+	return result, err
 }
 
 func (h *HuhPrompter) Secret(title string) (string, error) {
 	var result string
 	field := huh.NewInput().Title(title).Value(&result).EchoMode(huh.EchoModePassword)
-	f := huh.NewForm(huh.NewGroup(field))
-	if h.accessible {
-		f = f.WithAccessible(true)
-	}
-	return result, f.Run()
+	err := h.run(field)
+	return result, err
 }
 
 func (h *HuhPrompter) Confirm(title string, defaultValue bool) (bool, error) {
 	value := defaultValue
-	f := huh.NewForm(huh.NewGroup(
-		huh.NewConfirm().Title(title).Value(&value),
-	))
-	if h.accessible {
-		f = f.WithAccessible(true)
-	}
-	return value, f.Run()
+	err := h.run(huh.NewConfirm().Title(title).Value(&value))
+	return value, err
 }

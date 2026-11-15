@@ -1,9 +1,12 @@
 package interactive_test
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/specgate/specgate/app/cli/internal/interactive"
@@ -37,15 +40,26 @@ func TestAccessiblePrompterReturnsEnteredAnswer(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			previous := os.Stdin
-			os.Stdin = input
-			t.Cleanup(func() {
-				os.Stdin = previous
-				_ = input.Close()
-			})
-			got, err := tc.prompt(interactive.NewHuhPrompter())
+			defer input.Close()
+			var stderr bytes.Buffer
+			stdoutFile, err := os.CreateTemp(t.TempDir(), "stdout")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer stdoutFile.Close()
+			previous := os.Stdout
+			os.Stdout = stdoutFile
+			t.Cleanup(func() { os.Stdout = previous })
+			got, err := tc.prompt(interactive.NewHuhPrompter(input, &stderr))
 			if err != nil || got != tc.want {
 				t.Fatalf("entered answer lost: got=%q want=%q err=%v", got, tc.want, err)
+			}
+			if _, err := stdoutFile.Seek(0, 0); err != nil {
+				t.Fatal(err)
+			}
+			stdout, err := io.ReadAll(stdoutFile)
+			if err != nil || len(stdout) != 0 || strings.TrimSpace(stderr.String()) == "" {
+				t.Fatalf("stdout = %q, stderr = %q, err = %v", stdout, &stderr, err)
 			}
 		})
 	}
