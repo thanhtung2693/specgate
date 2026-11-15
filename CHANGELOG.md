@@ -7,8 +7,8 @@ versioning.
 
 ## [0.3.0] - 2026-11-15
 
-Reissued with the redesigned landing page and Local review UI. This replaces
-the assets originally published as v0.3.0 on 2026-11-14.
+Reissued with the redesigned landing page, Local review UI, and CLI automation
+fixes. This replaces the assets originally published as v0.3.0 on 2026-11-14.
 
 This version packages SpecGate as a Local-only CLI, with optional loopback
 browser review and private transfer of a Local store between checkouts.
@@ -58,6 +58,11 @@ browser review and private transfer of a Local store between checkouts.
 
 ### Fixed
 
+- CLI wizards require terminal input and output outside CI. Prompts use stderr.
+- Bare command groups return help in a JSON envelope when run with `--json`.
+  Invalid shell completion arguments and UI ports return structured usage errors.
+- Delivery retries preserve the file supplied to the current submission. Later
+  status requires an explicit path for revised custom drafts.
 - CLI updates keep installer progress separate from JSON output. The installer
   refuses a directory at the binary destination and preserves unrelated files.
 - Data purge during uninstall requires explicit confirmation and refuses
