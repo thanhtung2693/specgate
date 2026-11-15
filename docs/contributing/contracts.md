@@ -433,8 +433,9 @@ specgate work create-quick "Title" --ac "Criterion @check:tests"
 specgate work create --feature feature-key --title "Title" --ac "Criterion @check:tests"
 ```
 
-The binding names a later delivery check. A bound criterion is resolved
-deterministically:
+The binding names a later delivery check. Removing the token for the criterion
+text preserves whitespace within the rest of the text, including literal test
+inputs. A bound criterion is resolved deterministically:
 
 | Check status | Criterion result |
 | --- | --- |

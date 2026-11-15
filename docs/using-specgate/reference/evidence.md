@@ -164,7 +164,8 @@ completion cannot escape enforcement by omitting `verification_binding`.
 
 The binding may sit anywhere in the criterion, is matched case-insensitively,
 and may carry trailing punctuation — `@check:unit.`, `@CHECK:unit`, and a
-leading `@check:unit` all bind to `unit`. What SpecGate will not do is guess.
+leading `@check:unit` all bind to `unit`. SpecGate preserves spacing inside
+the criterion itself, including spaces in a quoted input such as `'  Alice  '`.
 A criterion is rejected when it is written if its binding cannot be resolved:
 `@check:` with a space before the name, two bindings on one criterion, `@check`
 without the colon, or a binding with no criterion text left. Silently treating
