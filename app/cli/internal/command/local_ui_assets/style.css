@@ -197,8 +197,9 @@ p.warning, .error { margin-bottom: 10px; }
 .source-reference > h3 { margin-bottom: 5px; color: var(--muted); font-size: 13px; font-weight: 500; letter-spacing: 0; }
 .evidence .raw-details { margin-top: 12px; }
 .dock { grid-area: dock; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: start; padding: 10px 14px; border-top: 1px solid var(--line); background: var(--surface); }
-.dock textarea { height: 38px; min-height: 38px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); line-height: 1.45; resize: none; transition: height .18s var(--ease); }
-.dock textarea:focus { height: 84px; border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: -1px; }
+/* Keep the decision buttons still between pointer down and up when the note loses focus. */
+.dock textarea { height: 64px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); line-height: 1.45; resize: none; }
+.dock textarea:focus { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: -1px; }
 .dock textarea[aria-invalid="true"] { border-color: var(--warn); }
 .dock .hint { grid-column: 1 / -1; margin: 0; color: var(--warn); font-size: 12.5px; }
 .dock .hint:empty { display: none; }

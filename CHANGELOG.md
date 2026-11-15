@@ -7,8 +7,8 @@ versioning.
 
 ## [0.3.0] - 2026-11-15
 
-Reissued with the redesigned landing page, Local review UI, and CLI automation
-fixes. This replaces the assets originally published as v0.3.0 on 2026-11-14.
+Reissued with the redesigned landing page, Local review UI, CLI automation
+fixes, and improvements to review and transfer. This replaces the assets originally published as v0.3.0 on 2026-11-14.
 
 This version packages SpecGate as a Local-only CLI, with optional loopback
 browser review and private transfer of a Local store between checkouts.
@@ -35,6 +35,8 @@ browser review and private transfer of a Local store between checkouts.
 
 ### Improved
 
+- Explain the optional transfer checkpoint, its first-use backup and upgrade
+  prompt, and which files to carry separately when moving between checkouts.
 - The landing page presents the four-step Local workflow alongside an
   interactive delivery example for inspecting criteria and evidence.
 - The public interactive UI demo replaces the short video. Inspect sample
@@ -58,6 +60,8 @@ browser review and private transfer of a Local store between checkouts.
 
 ### Fixed
 
+- Keep the Local review buttons in place when the decision note loses focus, so
+  the first mouse click can open the confirmation.
 - CLI wizards require terminal input and output outside CI. Prompts use stderr.
 - Bare command groups return help in a JSON envelope when run with `--json`.
   Invalid shell completion arguments and UI ports return structured usage errors.

@@ -181,6 +181,13 @@ test("expanded evidence omits enum claims and empty fields without losing source
   );
 });
 
+test("focusing or leaving the decision note does not change the dock height", () => {
+  const css = readFileSync(`${__dirname}/local_ui_assets/style.css`, "utf8");
+  const focus = css.match(/\.dock textarea:focus\s*\{([^}]*)\}/)?.[1] || "";
+  assert.match(focus, /outline:/);
+  assert.doesNotMatch(focus, /(?:height|block-size|padding|margin)\s*:/);
+});
+
 test("a long recorded decision note remains complete and keyboard-scrollable", () => {
   const note = Array.from({ length: 50 }, (_, i) => `Line ${i + 1} <&>`).join("\n");
   const html = presentation.decisionDock({
