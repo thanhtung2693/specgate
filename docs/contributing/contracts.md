@@ -431,11 +431,17 @@ can stamp observation metadata.
 Check names and statuses are trimmed consistently for confirmation, execution,
 verdicts and evidence projections. A padded `skipped` status never executes;
 normalizing a read does not rewrite historical report rows.
+Local change status and resume project `completion_summary`, when present,
+from the same completion as `completion_id`. `change submit` shows the summary
+of its displayed review. JSON preserves the string verbatim. Plain output
+frames agent-reported lines and neutralizes terminal control characters.
+Criteria, check provenance, lifecycle state and decision commands use their own
+recorded inputs.
 
-The `deterministic` trust tier means a bound check decided the criterion, not
-that anything re-ran it, so it reads as `bound deterministic check`. Readback names the observer in a bound criterion's reason — `observed by the SpecGate CLI`
-or `reported by the coding agent, not re-run` — because the two are worth very
-different amounts to a human deciding acceptance.
+The `deterministic` trust tier identifies a `bound deterministic check` that
+supplies a required outcome for the criterion. Readback names the observer in
+the bound criterion's reason as `observed by the SpecGate CLI` or
+`reported by the coding agent, not re-run`.
 
 Acceptance criteria may include a human-authored `verification_binding`, created
 with:
@@ -451,7 +457,7 @@ inputs. A bound criterion is resolved deterministically:
 
 | Check status | Criterion result |
 | --- | --- |
-| `pass` | met |
+| `pass` | `met` with a satisfied claim. Other claims retain their verdict, including `unmet` for `partial` and `not_done`. |
 | `fail` | unmet |
 | missing or `skipped` | unclear |
 

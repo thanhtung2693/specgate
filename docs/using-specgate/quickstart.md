@@ -82,9 +82,10 @@ Give the agent the work reference returned by the CLI:
 The agent runs `specgate work resume <work-ref> --json`, reads the Context
 Pack, implements the change, and starts a report with
 `specgate delivery report <work-ref> --init --json`. It fills the returned
-file and submits it using the returned path. After you approve the check
-commands, the agent can use the following form. `--run-checks` runs those
-commands as your OS user.
+file and submits it using the returned path and the unchanged check commands
+you approved in step 2. If a command changes or the agent adds a new one,
+approve it before the agent runs it. `--run-checks` runs those commands as your
+OS user.
 
 ```bash
 specgate --yes change submit "$work_ref" --file "$report_path" --run-checks

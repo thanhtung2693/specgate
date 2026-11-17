@@ -71,6 +71,7 @@ func augmentAcceptanceStatus(cmd *cobra.Command, deps *Deps, store *local.Store,
 		return result, err
 	}
 	result = deriveLocalChangeStatus(inspection.Work, &inspection.Review, &inspection.Report, inspection.Peer)
+	result.CompletionSummary, _ = inspection.Report.Body["summary"].(string)
 	guidanceReviewID := result.ReviewID
 	if prior := inspection.PriorRejection; prior != nil {
 		result.Guidance = strings.TrimSpace(prior.Note)

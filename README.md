@@ -149,7 +149,7 @@ This README describes **v0.3.0**, including the
 Local-only distribution, optional browser review, and Local store transfer.
 The installer downloads the latest published version from
 [GitHub Releases](https://github.com/thanhtung2693/specgate/releases/latest).
-See the [v0.3.0 release notes](CHANGELOG.md#030---2026-11-14).
+See the [v0.3.0 release notes](CHANGELOG.md#030---2026-11-17).
 
 ## Previous installations
 

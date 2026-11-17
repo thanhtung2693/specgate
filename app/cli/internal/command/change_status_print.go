@@ -36,6 +36,7 @@ func printChangeStatus(deps *Deps, result changeStatusResult, detailed ...bool) 
 		if result.CompletionID != "" {
 			fmt.Fprintf(deps.Stdout, "Completion: %s; review: %s; peer: %s\n", result.CompletionID, result.ReviewID, result.PeerState)
 		}
+		printCompletionSummary(deps, result.CompletionSummary)
 		if result.SelectedCheckpoint != nil {
 			fmt.Fprintf(deps.Stdout, "Selected checkpoint: %s (%s)\n", result.SelectedCheckpoint.ID, result.SelectedCheckpoint.CreatedAt)
 			if result.SelectedCheckpointDelta != nil {
@@ -158,4 +159,14 @@ func printChangeStatus(deps *Deps, result changeStatusResult, detailed ...bool) 
 		fmt.Fprintf(deps.Stdout, "Stale reason: %s\n", result.StaleReason)
 	}
 	fmt.Fprintf(deps.Stdout, "Next: %s\n", result.NextCommand)
+}
+
+func printCompletionSummary(deps *Deps, summary string) {
+	if summary == "" {
+		return
+	}
+	fmt.Fprintln(deps.Stdout, "Agent-reported summary:")
+	for _, line := range strings.Split(summary, "\n") {
+		fmt.Fprintf(deps.Stdout, "  | %s\n", terminalText(line))
+	}
 }

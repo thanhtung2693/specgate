@@ -556,6 +556,11 @@ CLI observed the command without selected testcase observations;
 Missing legacy provenance stays `unknown`. `change status <ref> --detail` adds
 evidence paths, citation anchors, selected-test outcomes, and comparison details
 to the same criterion block. `work resume` uses the same default status display.
+`change submit`, `change status`, and `work resume` show the stored completion
+summary when present. JSON preserves it verbatim, and `work resume --json`
+includes it inside `data.status`. Plain output frames each line beneath
+**Agent-reported summary** and neutralizes terminal control characters. The
+summary is reported context for the reviewer.
 Checkout freshness and human decisions remain separate from historical check
 outcomes; acceptance does not erase recorded gaps.
 
@@ -575,6 +580,7 @@ outcomes; acceptance does not erase recorded gaps.
 | `artifact_id`, `artifact_version`, `artifact_digest` | Exact approved Local artifact snapshot for this work; absent on the quick route. A newer artifact is informational and never replaces this scope automatically. |
 | `context_digest` | Exact Local Context Pack digest for this work. |
 | `completion_id` | Exact Local delivery report ID associated with `review_id`. |
+| `completion_summary` | Optional agent-reported prose from that completion, preserved verbatim. |
 | `peer_state` | Peer-review state associated with the current completion. |
 | `criterion_evidence` | Per-criterion claim, bound check status and provenance (`selected_test_observed`, `command_only`, or `agent_attested`), selected testcase outcomes and report digest, citation grounding, verification-run freshness, and explicit gaps. Missing facts remain missing, not passing. `criteria[].why` also includes a CLI-observed selected-test report diagnostic when a bound Local check fails because its required case is missing or invalid. |
 | `source_coverage`, `source_requirements` | Exact artifact-version source inventory coverage, including unassigned or deferred requirements. These are separate from this work's criterion verdict. |
@@ -737,9 +743,9 @@ criteria.
 Append a trailing `@check:<name>` token to bind that criterion to a delivery
 report check, for example
 `--ac "POST /imports rejects bad CSV rows @check:integration"`. The check name
-must match a later `delivery report` / `delivery submit` `checks[].name`; the
-delivery reviewer treats that criterion deterministically from the submitted
-check result. Do not invent bindings on behalf of the human.
+must match a later `delivery report` / `delivery submit` `checks[].name`. A
+bound criterion requires an evidence-backed satisfied claim and a passing
+bound check. Do not invent bindings on behalf of the human.
 
 Every command that establishes acceptance criteria reports how many of them a
 check will decide: `work create-quick`, `work create`, and `change approve`. The human output carries a line such as `Enforcement: 1 of 2
@@ -754,11 +760,10 @@ claim for it. Quick work never runs the artifact route's
 `acceptance_criteria_verifiable` gate, so for quick work this count is the only
 enforcement signal available at creation time.
 
-The reader takes a bound criterion's verdict from its named check, and the stored
-acceptance criterion is the authority for the binding: omitting
-`verification_binding` from the completion body does not remove enforcement. A
-bound check that failed, was skipped, or is absent from `checks[]` never passes
-on the strength of a prose claim. Local review fails and names the criterion
+The reader shows the claim and the outcome of its named check. Binding comes
+from the stored acceptance criterion even when the completion body omits
+`verification_binding`. Local review fails when the bound check failed, was
+skipped, or is absent from `checks[]`, and names the criterion
 and check. Enforcement covers a missing or
 skipped check, not a falsely claimed `pass` — `checks[].status` remains
 agent-reported unless the submission ran with `--run-checks`.
