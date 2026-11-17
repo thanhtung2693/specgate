@@ -886,3 +886,13 @@ test("source unavailability uses friendly normal-flow copy and confines reason c
   assert.doesNotMatch(ordinary, /binary_or_invalid_utf8/);
   assert.match(html, /<details>[\s\S]*binary_or_invalid_utf8/);
 });
+
+test("source viewer labels HEAD unavailable only after Git HEAD inspection fails", () => {
+  for (const reason of ["unsupported_evidence_kind", "unsafe_path", "sensitive_path", "head_unavailable"]) {
+    const html = sourceUI.renderSource({
+      source: { available: false, reason },
+      diff: { available: false, reason },
+    });
+    assert.equal(html.includes("HEAD unavailable"), reason === "head_unavailable", reason);
+  }
+});

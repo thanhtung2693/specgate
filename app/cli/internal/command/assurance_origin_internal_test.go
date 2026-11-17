@@ -67,6 +67,9 @@ func TestLocalReportEvidenceUsesCanonicalCriterionVerdicts(t *testing.T) {
 			"Bound fail @check:failing",
 			"Bound skipped @check:skipped",
 			"Bound missing @check:missing",
+			"Bound partial claim @check:passing",
+			"Bound not done claim @check:passing",
+			"Bound absent claim @check:passing",
 		},
 		local.DeliveryReport{Body: map[string]any{
 			"checks": []any{
@@ -82,11 +85,15 @@ func TestLocalReportEvidenceUsesCanonicalCriterionVerdicts(t *testing.T) {
 				map[string]any{"criterion_id": "local-5", "claim": "satisfied"},
 				map[string]any{"criterion_id": "local-6", "claim": "satisfied"},
 				map[string]any{"criterion_id": "local-7", "claim": "satisfied"},
+				map[string]any{"criterion_id": "local-8", "claim": "partial", "evidence": map[string]any{
+					"path": "notes.md", "grounding": map[string]any{"status": "unanchored"},
+				}},
+				map[string]any{"criterion_id": "local-9", "claim": "not_done"},
 			},
 		}},
 	)
 
-	want := []string{"met", "unmet", "unmet", "met", "unmet", "unclear", "unclear"}
+	want := []string{"met", "unmet", "unmet", "met", "unmet", "unclear", "unclear", "unmet", "unmet", "pending"}
 	if len(reviews) != len(want) {
 		t.Fatalf("reviews = %+v, want %d", reviews, len(want))
 	}
@@ -95,12 +102,22 @@ func TestLocalReportEvidenceUsesCanonicalCriterionVerdicts(t *testing.T) {
 			t.Fatalf("criterion %d verdict = %q, want %q", index+1, reviews[index].Verdict, verdict)
 		}
 	}
+	for index, details := range map[int][]string{
+		4: {`check "failing" failed`},
+		6: {`check "missing" not found`},
+		7: {`criterion claim is "partial"`, `check "passing" passed`, "citation names notes.md with no line or heading"},
+		8: {`criterion claim is "not_done"`, `check "passing" passed`},
+		9: {"criterion claim is missing", `check "passing" passed`},
+	} {
+		for _, detail := range details {
+			if !strings.Contains(reviews[index].Why, detail) {
+				t.Errorf("criterion %d why = %q, want %q", index+1, reviews[index].Why, detail)
+			}
+		}
+	}
 }
 
-// A bound criterion takes its verdict from the named check, so a bad citation
-// must not flip it — a wrong pointer to the proof is not a broken feature. It
-// must still reach the decision line, because overwriting `why` with the check
-// outcome alone hid a fabricated citation behind a clean pass.
+// Show citation problems alongside a satisfied claim and a passing check.
 func TestLocalReportEvidenceShowsCitationWeaknessWithoutFlippingTheVerdict(t *testing.T) {
 	t.Parallel()
 	report := func(evidence map[string]any) local.DeliveryReport {
@@ -148,7 +165,7 @@ func TestLocalReportEvidenceShowsCitationWeaknessWithoutFlippingTheVerdict(t *te
 				t.Fatalf("reviews = %+v, want one", reviews)
 			}
 			if reviews[0].Verdict != "met" {
-				t.Fatalf("verdict = %q, want met — the bound check decides", reviews[0].Verdict)
+				t.Fatalf("verdict = %q, want met with a satisfied claim and a passing bound check", reviews[0].Verdict)
 			}
 			if tc.note == "" {
 				if strings.Contains(reviews[0].Why, ";") {

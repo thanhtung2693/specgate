@@ -11,7 +11,9 @@ import (
 	"testing"
 
 	"github.com/specgate/specgate/app/cli/internal/command"
+	"github.com/specgate/specgate/app/cli/internal/local"
 	"github.com/specgate/specgate/app/cli/internal/output"
+	"github.com/specgate/specgate/app/cli/internal/workflow"
 )
 
 func TestChangeApproveRequiresExplicitWorkContractBeforeMutation(t *testing.T) {
@@ -29,100 +31,148 @@ func TestChangeApproveRequiresExplicitWorkContractBeforeMutation(t *testing.T) {
 	}
 }
 
-func TestChangeSubmitRunChecksMarksLocalAssuranceAsReproduced(t *testing.T) {
+func TestChangeSubmitRunChecksDistinguishesInitialResultsAndCorrections(t *testing.T) {
 	t.Parallel()
-	deps, out := newTestDeps(t)
-	stateDir, store, _, work := newLocalChangeWork(t, deps)
-	closeLocalChangeStore(t, deps, stateDir, store)
-	deps.RunCheckCommand = func(_ context.Context, command string) (int, string) {
-		if command != "go test ./..." {
-			t.Fatalf("executed command = %q", command)
-		}
-		return 0, "ok"
-	}
-	f := writeDeliveryJSON(t, map[string]any{
-		"event_type":     "coding_agent.completed",
-		"summary":        "done",
-		"context_digest": work.ContextDigest,
-		"checks": []map[string]any{{
-			"name": "tests", "command": "go test ./...", "status": "pass",
-		}},
-		"criteria": []map[string]any{{
-			"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"heading": "verified"},
-		}},
-	})
+	for _, tc := range []struct {
+		name, claim, wantAssurance string
+		runnerExit, wantExit       int
+	}{
+		{"pending to pass", "pending", "Agent-reported; locally reproduced", 0, output.ExitOK},
+		{"pending to fail", "pending", "Agent-reported; locally reproduced", 1, output.ExitGovernanceFailed},
+		{"pass to fail", "pass", "Agent-reported; locally reproduced; corrected 1 agent-reported check result", 1, output.ExitGovernanceFailed},
+		{"fail to pass", "fail", "Agent-reported; locally reproduced; corrected 1 agent-reported check result", 0, output.ExitOK},
+		{"pass agrees", "pass", "Agent-reported; locally reproduced", 0, output.ExitOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			deps, out := newTestDeps(t)
+			stateDir, store, _, work := newLocalChangeWork(t, deps)
+			closeLocalChangeStore(t, deps, stateDir, store)
+			deps.RunCheckCommand = func(_ context.Context, command string) (int, string) {
+				if command != "go test ./..." {
+					t.Fatalf("executed command = %q", command)
+				}
+				return tc.runnerExit, ""
+			}
+			f := writeDeliveryJSON(t, map[string]any{
+				"event_type": "coding_agent.completed", "summary": "done", "context_digest": work.ContextDigest,
+				"checks": []map[string]any{{"name": "tests", "command": "go test ./...", "status": tc.claim}},
+				"criteria": []map[string]any{{
+					"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"heading": "verified"},
+				}},
+			})
 
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "change", "submit", work.Key, "--file", f, "--run-checks")
-	if code != output.ExitOK {
-		t.Fatalf("submit exit = %d, output = %s", code, out.String())
-	}
-	if !strings.Contains(out.String(), `"assurance":"Agent-reported; locally reproduced"`) {
-		t.Fatalf("submit assurance did not expose local reproduction: output=%s", out.String())
-	}
-	for _, field := range []string{`"context_digest":"` + work.ContextDigest + `"`, `"completion_id":"`, `"criterion_evidence":`, `"risks":`} {
-		if !strings.Contains(out.String(), field) {
-			t.Fatalf("submit omitted status material %s: %s", field, out.String())
-		}
-	}
-	out.Reset()
-	got := runChangeStatusJSON(t, deps, out, work.Key)
-	if got.Assurance != "Agent-reported; locally reproduced" {
-		t.Fatalf("stored assurance = %q", got.Assurance)
+			code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "change", "submit", work.Key, "--file", f, "--run-checks")
+			if code != tc.wantExit {
+				t.Fatalf("submit exit = %d, want %d; output = %s", code, tc.wantExit, out.String())
+			}
+			for _, field := range []string{`"context_digest":"` + work.ContextDigest + `"`, `"completion_id":"`, `"criterion_evidence":`, `"risks":`} {
+				if !strings.Contains(out.String(), field) {
+					t.Fatalf("submit omitted status material %s: %s", field, out.String())
+				}
+			}
+			var submitted changeStatusEnvelope
+			if err := json.Unmarshal(out.Bytes(), &submitted); err != nil {
+				t.Fatal(err)
+			}
+			out.Reset()
+			stored := runChangeStatusJSON(t, deps, out, work.Key)
+			if submitted.Data.Assurance != tc.wantAssurance || stored.Assurance != tc.wantAssurance {
+				t.Fatalf("submit assurance = %q; status assurance = %q; both want %q", submitted.Data.Assurance, stored.Assurance, tc.wantAssurance)
+			}
+		})
 	}
 }
 
-// A claimed check status that re-execution contradicts must survive in the
-// stored report so the delivery receipt reports what SpecGate corrected.
-func TestChangeSubmitRunChecksRecordsCorrectedClaimInAssurance(t *testing.T) {
+func TestChangeStatusLocalHistoricalPendingObservationIsNotCorrection(t *testing.T) {
 	t.Parallel()
 	deps, out := newTestDeps(t)
-	stateDir, store, _, work := newLocalChangeWork(t, deps)
-	closeLocalChangeStore(t, deps, stateDir, store)
-	deps.RunCheckCommand = func(_ context.Context, _ string) (int, string) {
-		return 1, "FAIL: TestRetryStops"
-	}
-	f := writeDeliveryJSON(t, map[string]any{
-		"event_type":     "coding_agent.completed",
-		"summary":        "done",
+	stateDir, store, selection, work := newLocalChangeWork(t, deps)
+	_, err := store.SubmitDelivery(t.Context(), selection.Workspace.ID, work.Key, map[string]any{
 		"context_digest": work.ContextDigest,
-		"checks": []map[string]any{{
-			"name": "tests", "command": "go test ./...", "status": "pass",
+		"agent":          map[string]any{"name": "builder"},
+		"checks": []any{map[string]any{
+			"name": "tests", "command": "go test ./...", "status": "pass", "source": "specgate_cli", "claimed_status": "pending",
 		}},
-		"criteria": []map[string]any{{
+		"criteria": []any{map[string]any{
 			"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"heading": "verified"},
 		}},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	closeLocalChangeStore(t, deps, stateDir, store)
+	if got := runChangeStatusJSON(t, deps, out, work.Key); got.Assurance != "Agent-reported; locally reproduced" {
+		t.Fatalf("stored pending observation assurance = %q", got.Assurance)
+	}
+}
 
-	code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "change", "submit", work.Key, "--file", f, "--run-checks")
-	if code != output.ExitGovernanceFailed {
-		t.Fatalf("submit exit = %d, want governance failure; output = %s", code, out.String())
+func TestLocalDeliveryShowsPartialCriterionDespitePassingCheck(t *testing.T) {
+	t.Parallel()
+	deps, out := newTestDeps(t)
+	stateDir, store, selection, _ := newLocalChangeWork(t, deps)
+	work, err := store.CreateQuickWork(t.Context(), selection.Workspace.ID, local.QuickWorkInput{
+		Title: "Reject empty names", AcceptanceCriteria: []string{"Reject empty names @check:legacy-suite"},
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	out.Reset()
-	got := runChangeStatusJSON(t, deps, out, work.Key)
-	if !strings.Contains(got.Assurance, "corrected 1 agent-reported check result") {
-		t.Fatalf("assurance = %q, want the corrected claim reported", got.Assurance)
-	}
-	if !strings.Contains(got.Assurance, "locally reproduced") {
-		t.Fatalf("assurance = %q, want local reproduction retained", got.Assurance)
+	closeLocalChangeStore(t, deps, stateDir, store)
+	file := writeDeliveryJSON(t, map[string]any{
+		"event_type": "coding_agent.completed", "context_digest": work.ContextDigest,
+		"checks":   []map[string]any{{"name": "legacy-suite", "command": "true", "status": "pass"}},
+		"criteria": []map[string]any{{"criterion_id": "local-1", "claim": "partial"}},
+	})
+	for _, tc := range []struct {
+		args []string
+		exit int
+	}{
+		{[]string{"change", "submit", work.Key, "--file", file}, output.ExitGovernanceFailed},
+		{[]string{"change", "status", work.Key}, output.ExitOK},
+		{[]string{"work", "resume", work.Key}, output.ExitOK},
+	} {
+		out.Reset()
+		if code := command.ExecuteForCode(command.NewRootCommand(deps), append([]string{"--json", "--yes"}, tc.args...)...); code != tc.exit {
+			t.Fatalf("%s %s exit = %d, want %d: %s", tc.args[0], tc.args[1], code, tc.exit, out.String())
+		}
+		var envelope struct {
+			Data struct {
+				changeStatusData
+				Status changeStatusData `json:"status"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
+			t.Fatal(err)
+		}
+		status := envelope.Data.changeStatusData
+		if tc.args[0] == "work" {
+			status = envelope.Data.Status
+		}
+		if status.Evidence != "Evidence gaps found" || len(status.Criteria) != 1 || status.Criteria[0].Verdict != "unmet" ||
+			!strings.Contains(status.Criteria[0].Why, `criterion claim is "partial"`) ||
+			!strings.Contains(status.Criteria[0].Why, `check "legacy-suite" passed`) {
+			t.Errorf("%s %s hid the incomplete criterion or the passing check: %s", tc.args[0], tc.args[1], out.String())
+		}
 	}
 }
 
 type changeStatusData struct {
-	Mode        string   `json:"mode"`
-	Ref         string   `json:"ref"`
-	Title       string   `json:"title"`
-	State       string   `json:"state"`
-	Evidence    string   `json:"evidence"`
-	Assurance   string   `json:"assurance"`
-	Decision    string   `json:"decision"`
-	Receipt     string   `json:"receipt"`
-	Freshness   string   `json:"freshness"`
-	NextActor   string   `json:"next_actor"`
-	Missing     []string `json:"missing"`
-	Guidance    string   `json:"guidance"`
-	Stale       bool     `json:"stale"`
-	StaleReason string   `json:"stale_reason"`
-	NextCommand string   `json:"next_command"`
+	Mode        string                     `json:"mode"`
+	Ref         string                     `json:"ref"`
+	Title       string                     `json:"title"`
+	State       string                     `json:"state"`
+	Evidence    string                     `json:"evidence"`
+	Assurance   string                     `json:"assurance"`
+	Criteria    []workflow.CriterionReview `json:"criteria"`
+	Decision    string                     `json:"decision"`
+	Receipt     string                     `json:"receipt"`
+	Freshness   string                     `json:"freshness"`
+	NextActor   string                     `json:"next_actor"`
+	Missing     []string                   `json:"missing"`
+	Guidance    string                     `json:"guidance"`
+	Stale       bool                       `json:"stale"`
+	StaleReason string                     `json:"stale_reason"`
+	NextCommand string                     `json:"next_command"`
 }
 
 type changeStatusEnvelope struct {

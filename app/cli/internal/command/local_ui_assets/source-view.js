@@ -204,10 +204,13 @@
   function renderSource(data, { view = "code", lang = "en" } = {}) {
     const c = copy(lang), source = data.source || {}, diff = data.diff || {};
     const showDiff = view === "diff" && diff.available === true;
-    const short = data.head_revision
-      ? `HEAD <code>${e(data.head_revision.slice(0, 8))}</code>`
-      : e(c.headUnavailable);
-    return `<div class="source-view-toolbar"><div class="source-view-controls"><button type="button" data-source-view="code" aria-pressed="${!showDiff}">${e(c.code)}</button><button type="button" data-source-view="diff" aria-pressed="${showDiff}" ${diff.available ? "" : "disabled"}${!diff.available && diff.reason ? ` title="${e(reasonText(diff.reason, lang))}"` : ""}>${e(c.diff)}</button></div><div class="source-version"><span>${short}</span><details><summary>${e(c.details)}</summary><code>${e(data.head_revision || "—")}</code>${source.reason ? `<p><code>${e(source.reason)}</code></p>` : ""}${diff.reason ? `<p><code>${e(diff.reason)}</code></p>` : ""}<p>${e(data.origin || "current_checkout")}</p></details></div></div><div data-source-content>${renderSourceContent(data, view, lang)}</div><p class="source-checkout-note">${e(c.note)}</p>`;
+    let head = "";
+    if (data.head_revision) {
+      head = `<span>HEAD <code>${e(data.head_revision.slice(0, 8))}</code></span>`;
+    } else if (diff.reason === "head_unavailable") {
+      head = `<span>${e(c.headUnavailable)}</span>`;
+    }
+    return `<div class="source-view-toolbar"><div class="source-view-controls"><button type="button" data-source-view="code" aria-pressed="${!showDiff}">${e(c.code)}</button><button type="button" data-source-view="diff" aria-pressed="${showDiff}" ${diff.available ? "" : "disabled"}${!diff.available && diff.reason ? ` title="${e(reasonText(diff.reason, lang))}"` : ""}>${e(c.diff)}</button></div><div class="source-version">${head}<details><summary>${e(c.details)}</summary>${data.head_revision ? `<code>${e(data.head_revision)}</code>` : ""}${source.reason ? `<p><code>${e(source.reason)}</code></p>` : ""}${diff.reason ? `<p><code>${e(diff.reason)}</code></p>` : ""}<p>${e(data.origin || "current_checkout")}</p></details></div></div><div data-source-content>${renderSourceContent(data, view, lang)}</div><p class="source-checkout-note">${e(c.note)}</p>`;
   }
   function mount(root, readWork, api, readLang) {
     const loader = createSourceLoader(api),

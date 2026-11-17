@@ -1,6 +1,7 @@
 package command_test
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -59,6 +60,59 @@ func TestDeliveryPeerReviewRejectsMissingEvidenceBeforeNetworkCall(t *testing.T)
 	}
 	if !strings.Contains(out.String(), "missing-proof.txt") {
 		t.Fatalf("error does not identify missing evidence: %s", out.String())
+	}
+}
+
+func TestDeliveryPeerReviewDiscardsCopiedGrounding(t *testing.T) {
+	t.Parallel()
+	deps, out := newTestDeps(t)
+	stateDir, store, selection, work := newLocalChangeWork(t, deps)
+	submitLocalChangeDelivery(t, store, selection.Workspace.ID, work, "builder", "peer-grounding-head")
+	reportID := latestLocalReportID(t, store, selection.Workspace.ID, work.Key)
+	closeLocalChangeStore(t, deps, stateDir, store)
+
+	var reviewID string
+	for _, tc := range []struct {
+		digest, heading string
+		exit            int
+	}{
+		{"sha256:forged-only", "", output.ExitUsage},
+		{"sha256:first", "Independent review note", output.ExitOK},
+		{"sha256:second", "Independent review note", output.ExitOK},
+	} {
+		evidence := map[string]any{"grounding": map[string]any{"status": "grounded", "digest": tc.digest}}
+		if tc.heading != "" {
+			evidence["heading"] = tc.heading
+		}
+		f := writeDeliveryJSON(t, map[string]any{
+			"event_type": "coding_agent.peer_reviewed",
+			"agent":      map[string]any{"name": "reviewer"},
+			"peer_review_of": map[string]any{
+				"completion_feedback_event_id": reportID, "git_receipt": map[string]any{"head_revision": "peer-grounding-head"},
+			},
+			"criteria": []map[string]any{{"criterion_id": "local-1", "claim": "satisfied", "evidence": evidence}},
+		})
+		out.Reset()
+		if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "delivery", "peer-review", work.Key, "--file", f); code != tc.exit {
+			t.Errorf("exit = %d, want %d: %s", code, tc.exit, out.String())
+			continue
+		}
+		if tc.exit != output.ExitOK {
+			if !strings.Contains(out.String(), "claims satisfied but has no evidence") {
+				t.Errorf("expected evidence validation: %s", out.String())
+			}
+			continue
+		}
+		var response struct {
+			Data struct{ ID string } `json:"data"`
+		}
+		if err := json.Unmarshal(out.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		if response.Data.ID == "" || reviewID != "" && response.Data.ID != reviewID {
+			t.Errorf("a changed copied digest created a different review: previous ID %q, current ID %q", reviewID, response.Data.ID)
+		}
+		reviewID = response.Data.ID
 	}
 }
 

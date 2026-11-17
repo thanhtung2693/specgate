@@ -35,6 +35,7 @@ type changeStatusResult struct {
 	NextActor               string                              `json:"next_actor"`
 	Missing                 []string                            `json:"missing"`
 	Guidance                string                              `json:"guidance,omitempty"`
+	GuidanceReviewID        string                              `json:"guidance_review_id,omitempty"`
 	Stale                   bool                                `json:"stale"`
 	StaleReason             string                              `json:"stale_reason,omitempty"`
 	NextCommand             string                              `json:"next_command"`

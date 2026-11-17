@@ -106,7 +106,9 @@ func (s *localUIServer) source(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	view.Path, _ = evidence["path"].(string)
-	if kind, _ := evidence["kind"].(string); kind != "file" {
+	switch kind, _ := evidence["kind"].(string); kind {
+	case "file", "test", "code":
+	default:
 		view.unavailable("unsupported_evidence_kind")
 		writeLocalUIJSON(w, 200, view)
 		return

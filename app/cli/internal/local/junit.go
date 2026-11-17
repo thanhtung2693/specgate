@@ -143,6 +143,31 @@ func ObserveJUnitReportFromRoot(root *os.Root, name string, selectors []Selected
 		if outcomes > 1 {
 			return JUnitObservation{}, fmt.Errorf("%w: ambiguous testcase outcome", ErrVerificationInvalid)
 		}
+		var status, result string
+		for _, attr := range start.Attr {
+			switch attr.Name {
+			case xml.Name{Local: "status"}:
+				if status != "" || (attr.Value != "run" && attr.Value != "notrun") {
+					return JUnitObservation{}, fmt.Errorf("%w: unsupported or duplicate testcase status attribute", ErrVerificationInvalid)
+				}
+				status = attr.Value
+			case xml.Name{Local: "result"}:
+				if result != "" || (attr.Value != "completed" && attr.Value != "suppressed" && attr.Value != "skipped") {
+					return JUnitObservation{}, fmt.Errorf("%w: unsupported or duplicate testcase result attribute", ErrVerificationInvalid)
+				}
+				result = attr.Value
+			}
+		}
+		skippedByAttribute := status == "notrun" || result == "suppressed" || result == "skipped"
+		if (status == "notrun" && (result == "completed" || result == "skipped")) ||
+			(status == "run" && result == "suppressed") ||
+			(outcome == "failed" && skippedByAttribute) ||
+			(outcome == "skipped" && result == "completed") {
+			return JUnitObservation{}, fmt.Errorf("%w: conflicting testcase outcome attributes or elements", ErrVerificationInvalid)
+		}
+		if skippedByAttribute {
+			outcome = "skipped"
+		}
 		switch outcome {
 		case "passed":
 			passed++

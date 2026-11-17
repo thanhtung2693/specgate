@@ -81,6 +81,7 @@ func newDeliveryPeerReviewCmd(deps *Deps) *cobra.Command {
 			if completionAgentName(body) == "" {
 				return completionValidationError(deps, "delivery.peer-review", "agent.name is required")
 			}
+			clearCompletionEvidenceGrounding(body)
 			if err := validateCompletionReport(deps, "delivery.peer-review", body, false); err != nil {
 				return err
 			}
@@ -325,8 +326,7 @@ type completionCriterionTemplate struct {
 	Text        string `json:"text"`
 	Claim       string `json:"claim"` // satisfied | partial | not_done
 	// VerificationBinding echoes any check-binding declared on the acceptance
-	// criterion. When set, delivery review takes this
-	// criterion's verdict from the named check instead of the LLM/claim path.
+	// criterion. A bound criterion requires a satisfied claim and a passing check.
 	VerificationBinding string                     `json:"verification_binding,omitempty"`
 	Evidence            completionEvidenceTemplate `json:"evidence"`
 }

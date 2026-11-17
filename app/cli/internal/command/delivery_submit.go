@@ -76,6 +76,7 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 				return completionValidationError(deps, spec.Operation, "event_type must be coding_agent.completed")
 			}
 			clearCheckObservations(body)
+			clearCompletionEvidenceGrounding(body)
 			if err := validateCompletionReport(deps, spec.Operation, body, runChecks); err != nil {
 				return err
 			}

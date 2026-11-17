@@ -26,6 +26,12 @@ Local report-enabled checks use exact JUnit identities, not text matching.
 Every reported failure/error fails the observation, including unselected cases;
 selected cases must each occur once and pass. Shared identities across criteria
 are deduplicated only for execution, not removed from criterion bindings.
+Optional testcase `status` attributes support `run` and `notrun`. Optional
+`result` attributes support `completed`, `suppressed`, and `skipped`. The
+`notrun`, `suppressed`, and `skipped` values count as skipped even without a
+`<skipped>` child. A `completed` result can still contain `<failure>` or
+`<error>`. Unknown, duplicate, or contradictory outcome information invalidates
+the report. Other metadata attributes do not affect the outcome.
 When a selected case is missing or the report is invalid, the Local criterion
 reason includes the CLI-observed report diagnostic; agent-supplied check details
 are not promoted to that trusted reason.
@@ -71,6 +77,10 @@ coverage, historical decision and the current basis from one SQLite snapshot.
 Concurrent writes must not produce a displayed old review with a newer basis
 token. Checkout freshness remains a separate endpoint observation, not an atomic
 filesystem/database snapshot.
+Undecided delivery retries retain the latest applicable human rework note from
+the same work and workspace. Status returns the note as `guidance` and its
+origin as `guidance_review_id`, separate from the current `review_id`. A newer
+human decision supersedes that guidance, and acceptance clears it from status.
 The basis retains normalized current-checkout freshness and peer-review state
 alongside their identities and gaps, so historical decisions remain inspectable
 without decoding opaque hashes. Matching endpoints do not prove continuous
@@ -220,8 +230,10 @@ current checkout bytes or promote them to observed test evidence.
 
 `source` contains `available`, `start_line`, `highlight_start`, `highlight_end`,
 `lines: [{number, text}]`, `truncated`, and an unavailable `reason` when needed.
-Only `evidence.kind: file` with a numeric positive integer `line` and optional
-`end_line` is readable. The viewer includes about five context lines and caps
+Only `evidence.kind` values `file`, `test`, and `code` with a numeric positive
+integer `line` and optional `end_line` are readable. Early citation rejections
+leave `head_revision` empty. `head_unavailable` means Git HEAD could not be
+resolved after inspection. The viewer includes about five context lines and caps
 output at 120 lines and 64 KiB of excerpt text. Files must be regular UTF-8 text
 without NUL, at most 1 MiB, confined through `os.OpenRoot` to the bound repository.
 Traversal, symlinks, Git internals, credential/private-key paths and Local
@@ -469,13 +481,17 @@ and a `checksum` computed over the bundle with the checksum field cleared. The
 current version is `specgate.delivery-handoff/v1`; a reader that does not
 recognize the value refuses the file rather than guessing.
 
-Export drops every `criteria[].evidence.grounding.excerpt`. Grounding cites any
-path the agent read, including files outside the checkout. The retained
+Export drops every `criteria[].evidence.grounding.excerpt`, including excerpts
+from older reports whose original source boundary is unknown. The retained
 `status` and `digest` record how it was anchored. The bundle reader inspects
 that record without re-verifying the original source. Export refuses the
 active Local SQLite file as a destination.
 
-`criteria[].evidence.grounding` is computed by the CLI. Its `status` uses:
+`criteria[].evidence.grounding` is computed by the CLI. New completion and
+peer-review input discards caller-supplied grounding before validation. Only a
+current read of a regular file inside the working tree can stamp it; absent
+paths and `--skip-evidence-check` cannot retain copied observations. Historical
+stored reports remain unchanged. Its `status` uses:
 
 | `status` | Meaning |
 |---|---|

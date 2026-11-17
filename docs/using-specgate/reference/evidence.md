@@ -69,7 +69,8 @@ Typical shape:
       "claim": "satisfied",
       "evidence": {
         "kind": "test",
-        "path": "internal/health/handler_test.go"
+        "path": "internal/health/handler_test.go",
+        "line": 42
       }
     }
   ],
@@ -124,9 +125,15 @@ status is `heading_not_found`, `line_out_of_range`, `empty_at_anchor`, or
 `unanchored`, and a reviewer can see that the citation did not resolve to
 content.
 
-Those field names are the whole contract: `kind`, `path`, `line`, `heading`,
-`url`, `file_key`, and the CLI-stamped `grounding`. Any other field is rejected
-before submission.
+For a Local browser source excerpt, use `kind` `file`, `test`, or `code` with a
+repository-relative `path` and a positive numeric `line`. The viewer shows
+current checkout text for that citation.
+
+Use `kind`, `path`, `line`, `heading`, `url`, and `file_key` in a
+citation. The CLI discards supplied `grounding` from new completion and peer
+review submissions and records fresh grounding when it reads a cited file.
+With `--skip-evidence-check`, local citations remain unverified. Unsupported
+fields are rejected before submission.
 
 ## Bound criteria
 
@@ -157,8 +164,8 @@ and watched files remain unchanged.
 Legacy records without that basis state still report an unknown risk when the
 current checkout comparison cannot run or its local identity is noncomparable.
 
-An acceptance criterion carrying `@check:<name>` is verified from the named
-`checks[]` row using that check’s recorded result.
+An acceptance criterion carrying `@check:<name>` requires an evidence-backed
+`satisfied` claim and a passing result from the named `checks[]` row.
 The stored acceptance criterion is the authority for the binding, so a
 completion cannot escape enforcement by omitting `verification_binding`.
 
@@ -174,7 +181,7 @@ deterministic check while review judged it on the agent's own claim.
 
 | Bound check | Result |
 |---|---|
-| `pass` | criterion met |
+| `pass` | criterion met if the claim is satisfied. A partial, not done, or missing claim remains visible alongside the passing result |
 | `fail` | criterion unmet |
 | `skipped` or absent from `checks[]` | review fails and names the criterion and check |
 
@@ -214,8 +221,15 @@ report.
 
 An exit code of zero is not enough for a report-enabled check. Missing,
 malformed, duplicate, selected skipped, or any failing/error case makes the
-check fail. Observed passed/failed/skipped totals retain unselected skips
-without treating them as a failure. Before/after checkout and explicitly watched-file observations show
+check fail. SpecGate counts GoogleTest cases marked `status="notrun"`,
+`result="suppressed"`, or `result="skipped"` as skipped even when the testcase
+has no `<skipped>` element. SpecGate also recognizes `status="run"` and
+`result="completed"` and checks the outcome elements for failures. Unknown,
+duplicate, or contradictory testcase status or result information makes the
+report invalid. Unselected skips appear in the totals and allow the check to
+pass when all selected cases pass and no case fails.
+
+Before/after checkout and explicitly watched-file observations show
 endpoint drift; equal endpoints do not prove that nothing changed during a run.
 For a criterion bound to that check, `change submit` and detailed status include
 the CLI-observed JUnit failure reason (for example, that a required testcase is

@@ -149,6 +149,9 @@ func printChangeStatus(deps *Deps, result changeStatusResult, detailed ...bool) 
 	fmt.Fprintf(deps.Stdout, "Missing: %s\n", missing)
 	if result.Guidance != "" {
 		fmt.Fprintf(deps.Stdout, "Requested changes: %s\n", result.Guidance)
+		if result.GuidanceReviewID != "" {
+			fmt.Fprintf(deps.Stdout, "Guidance review: %s\n", result.GuidanceReviewID)
+		}
 	}
 	fmt.Fprintf(deps.Stdout, "Stale: %t\n", result.Stale)
 	if result.StaleReason != "" {

@@ -14,8 +14,12 @@ import (
 
 func sourceFixture(t *testing.T, path string, line, end any) (*localUIServer, string) {
 	t.Helper()
+	return sourceFixtureKind(t, "file", path, line, end)
+}
+func sourceFixtureKind(t *testing.T, kind, path string, line, end any) (*localUIServer, string) {
+	t.Helper()
 	s, w := localUITestServer(t)
-	evidence := map[string]any{"kind": "file", "path": path}
+	evidence := map[string]any{"kind": kind, "path": path}
 	if line != nil {
 		evidence["line"] = line
 	}
@@ -88,7 +92,7 @@ func TestLocalUISourceRejectsUnsafeOrUnavailableEvidence(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			s, ref := sourceFixture(t, tc.path, tc.line, tc.end)
+			s, ref := sourceFixtureKind(t, "test", tc.path, tc.line, tc.end)
 			if tc.content != nil && !strings.Contains(tc.path, "..") && !filepath.IsAbs(tc.path) {
 				if err := os.WriteFile(filepath.Join(s.repoRoot, tc.path), tc.content, 0600); err != nil {
 					t.Fatal(err)
@@ -139,7 +143,16 @@ func sourceGit(t *testing.T, root string, args ...string) string {
 	return strings.TrimSpace(string(data))
 }
 func TestLocalUISourceActualTrackedDiffAndUntrackedSource(t *testing.T) {
-	s, ref := sourceFixture(t, "proof.txt", 1, nil)
+	for _, kind := range []string{"file", "test", "code"} {
+		t.Run(kind, func(t *testing.T) {
+			testLocalUISourceTrackedDiffAndUntrackedSource(t, kind)
+		})
+	}
+}
+
+func testLocalUISourceTrackedDiffAndUntrackedSource(t *testing.T, kind string) {
+	t.Helper()
+	s, ref := sourceFixtureKind(t, kind, "proof.txt", 1, nil)
 	sourceGit(t, s.repoRoot, "init", "-q")
 	sourceGit(t, s.repoRoot, "config", "user.name", "Fixture")
 	sourceGit(t, s.repoRoot, "config", "user.email", "fixture@example.invalid")
@@ -150,7 +163,8 @@ func TestLocalUISourceActualTrackedDiffAndUntrackedSource(t *testing.T) {
 	head := sourceGit(t, s.repoRoot, "rev-parse", "HEAD")
 	os.WriteFile(file, []byte("after\n"), 0600)
 	_, view := getSource(t, s, ref)
-	if !view.Source.Available || !view.Diff.Available || view.HeadRevision != head || !strings.Contains(view.Diff.Text, "-before") || !strings.Contains(view.Diff.Text, "+after") {
+	if !view.Source.Available || len(view.Source.Lines) != 1 || view.Source.Lines[0].Text != "after" || view.Source.HighlightStart != 1 ||
+		!view.Diff.Available || view.HeadRevision != head || !strings.Contains(view.Diff.Text, "-before") || !strings.Contains(view.Diff.Text, "+after") {
 		t.Fatalf("actual diff missing: %+v", view)
 	}
 	os.Remove(file)
@@ -227,8 +241,9 @@ func TestLocalUISourceDiffKeepsExactDeletedFiles(t *testing.T) {
 func TestLocalUISourceRejectsLinksAndNonregularFiles(t *testing.T) {
 	for _, kind := range []string{"outside_link", "secret_link", "directory"} {
 		t.Run(kind, func(t *testing.T) {
-			s, ref := sourceFixture(t, "proof.txt", 1, nil)
+			s, ref := sourceFixtureKind(t, "code", "proof.txt", 1, nil)
 			target := filepath.Join(s.repoRoot, "proof.txt")
+			wantReason := "symlink_not_allowed"
 			switch kind {
 			case "outside_link":
 				outside := filepath.Join(t.TempDir(), "secret.txt")
@@ -246,12 +261,13 @@ func TestLocalUISourceRejectsLinksAndNonregularFiles(t *testing.T) {
 					t.Fatal(err)
 				}
 			case "directory":
+				wantReason = "not_regular_file"
 				if err := os.Mkdir(target, 0700); err != nil {
 					t.Fatal(err)
 				}
 			}
 			_, view := getSource(t, s, ref)
-			if view.Source.Available || len(view.Source.Lines) != 0 {
+			if view.Source.Available || len(view.Source.Lines) != 0 || view.Source.Reason != wantReason || view.Diff.Available || view.HeadRevision != "" {
 				t.Fatalf("unsafe source exposed: %+v", view)
 			}
 		})
@@ -374,19 +390,18 @@ func TestLocalUISourceDiffLimitsDenseOrOversizedInputs(t *testing.T) {
 	}
 }
 
-func TestLocalUISourceRejectsNonFileEvidenceKind(t *testing.T) {
-	s, ref := sourceFixture(t, "proof.txt", 1, nil)
-	work, err := s.store.GetWork(t.Context(), s.selection.Workspace.ID, ref)
-	if err != nil {
-		t.Fatal(err)
-	}
-	report := map[string]any{"context_digest": work.ContextDigest, "agent": map[string]any{"name": "builder"}, "criteria": []any{map[string]any{"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{"kind": "command", "path": "proof.txt", "line": 1}}}}
-	if _, err := s.store.SubmitDelivery(t.Context(), s.selection.Workspace.ID, ref, report); err != nil {
-		t.Fatal(err)
-	}
-	_, view := getSource(t, s, ref)
-	if view.Source.Available || view.Source.Reason != "unsupported_evidence_kind" {
-		t.Fatalf("non-file evidence read: %+v", view)
+func TestLocalUISourceRejectsUnsupportedEvidenceKind(t *testing.T) {
+	for _, kind := range []string{"command", "url", "Test", ""} {
+		t.Run(kind, func(t *testing.T) {
+			s, ref := sourceFixtureKind(t, kind, "proof.txt", 1, nil)
+			if err := os.WriteFile(filepath.Join(s.repoRoot, "proof.txt"), []byte("fixture content\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			_, view := getSource(t, s, ref)
+			if view.Source.Available || view.Source.Reason != "unsupported_evidence_kind" || view.Diff.Reason != "unsupported_evidence_kind" || view.HeadRevision != "" {
+				t.Fatalf("unsupported evidence inspected: %+v", view)
+			}
+		})
 	}
 }
 

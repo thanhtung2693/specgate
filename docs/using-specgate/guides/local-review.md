@@ -159,10 +159,11 @@ bar. The running CLI version is still shown in **Settings**.
 
 ## Read cited source and current changes
 
-A file citation with a numeric line, or a line range, can show actual nearby
-lines from the repository running this UI. The view labels them **Current
-checkout** and identifies the captured Git HEAD. It reads the cited path from
-the completion report; it does not accept a browser-supplied path or revision.
+A `file`, `test`, or `code` citation with a local path and a numeric line can
+show nearby lines from the repository running this UI. The view labels them
+**Current checkout** and shows the Git HEAD when inspection resolves it. It
+reads the path and line from the completion report. The browser selects the
+work and criterion.
 If a newer completion appears, choose **View latest** before opening its references.
 
 For an exact tracked file, the diff compares current checkout text with the

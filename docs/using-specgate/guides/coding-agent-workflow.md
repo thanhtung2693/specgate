@@ -135,6 +135,10 @@ On resume, `implementation` or `rework_requested` owned by the implementing
 agent may have no receipt yet or stale evidence from before the edits. Continue
 within approved scope, inspect existing edits, and rerun checks before submitting
 fresh evidence. Do not treat stale results as proof of the new implementation.
+If a reviewer requested changes, use `data.status.guidance` from `work resume
+--json` to continue that work. The note remains available through undecided
+retries. `guidance_review_id` identifies the review that recorded it, while
+`review_id` identifies the current delivery review.
 
 ### 2. Implement and verify
 
