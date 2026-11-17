@@ -5,10 +5,11 @@ versioning.
 
 ## Unreleased
 
-## [0.3.0] - 2026-11-15
+## [0.3.0] - 2026-11-17
 
-Reissued with the redesigned landing page, Local review UI, CLI automation
-fixes, and improvements to review and transfer. This replaces the assets originally published as v0.3.0 on 2026-11-14.
+Reissued with more accurate delivery evidence, preserved reviewer feedback,
+and a clearer Quick Work setup and resume flow. This replaces the assets
+originally published as v0.3.0 on 2026-11-14.
 
 This version packages SpecGate as a Local-only CLI, with optional loopback
 browser review and private transfer of a Local store between checkouts.
@@ -35,6 +36,10 @@ browser review and private transfer of a Local store between checkouts.
 
 ### Improved
 
+- Quick Work prompts pair each testable criterion with its check and command
+  before approval. Setup explains PATH and wizard placeholders, and the
+  Quickstart includes English and Vietnamese prompts for resuming requested
+  changes in a fresh agent session.
 - Explain the optional transfer checkpoint, its first-use backup and upgrade
   prompt, and which files to carry separately when moving between checkouts.
 - The landing page presents the four-step Local workflow alongside an
@@ -60,6 +65,21 @@ browser review and private transfer of a Local store between checkouts.
 
 ### Fixed
 
+- Selected GoogleTest cases marked `notrun`, `suppressed`, or `skipped` no
+  longer count as passing evidence. Ambiguous outcome attributes fail closed.
+- Passing bound checks no longer hide partial, unfinished, or missing
+  criterion claims in status, resume, or the Local review projection.
+- Reviewer feedback survives undecided delivery retries and identifies its
+  originating review. A later decision replaces or clears that guidance.
+- New completion and peer-review submissions discard copied citation
+  grounding. Only files read by the current CLI receive an observed digest
+  and excerpt; historical reports remain unchanged.
+- A check's first run from `pending` is no longer labeled as a correction of
+  an agent-reported result.
+- Local browser source and diff inspection accepts path-backed `test` and
+  `code` citations with the same checks as `file` citations. It no longer
+  labels HEAD unavailable before inspecting Git.
+- Preserve whitespace inside criteria with `@check` bindings.
 - Keep the Local review buttons in place when the decision note loses focus, so
   the first mouse click can open the confirmation.
 - CLI wizards require terminal input and output outside CI. Prompts use stderr.

@@ -582,7 +582,8 @@ outcomes; acceptance does not erase recorded gaps.
 | `risks` | Local counts and affected criterion IDs for failed, missing, stale, and unknown observations. Counts are recorded issues, not a confidence score; source requirements outside this work are separate. |
 | `next_actor` | Actor expected to take the next action: `implementing_agent`, `human_reviewer`, `maintainer`, or `none`. |
 | `missing` | Always an array of named requirements still missing; empty after acceptance. |
-| `guidance` | Optional human rework note, preserved for the implementing agent after `request-changes`. |
+| `guidance` | Optional human rework note, retained across undecided retries until a later human decision replaces or clears it. |
+| `guidance_review_id` | Review that recorded the human guidance; it may precede the current `review_id`. Present only with guidance. |
 | `stale` | Whether peer-review evidence is stale or the current checkout differs from the stored Git receipt. |
 | `stale_reason` | Optional; omitted unless `stale` is true. |
 | `next_command` | Next CLI command for the returned state and mode. When a retry ends in `--file`, supply the revised completion file path. |
@@ -849,10 +850,11 @@ that merely exists is not evidence for one criterion, so the other statuses are
 reported rather than papered over with the head of the file. `submit --run-checks` previews and confirms the
 completion file's commands, re-executes the non-skipped checks through `sh -c`,
 marks those rows as observed by the SpecGate CLI, and submits the observed
-statuses. Local status then labels that assurance `locally reproduced`. When
-re-execution contradicts a reported status, the superseded claim stays in
-`checks[].claimed_status` and the same assurance line reports
-`corrected N agent-reported check result(s)`.
+statuses. Local status then labels that assurance `locally reproduced`. The
+prior status stays in `checks[].claimed_status` when it changes. Running a
+`pending` check records its first result. The assurance line reports
+`corrected N agent-reported check result(s)` only when a CLI result contradicts
+a reported `pass` or `fail`.
 
 Use [Hand a review to a teammate through the repository](#hand-a-review-to-a-teammate-through-the-repository)
 for the committable `delivery handoff` flow.

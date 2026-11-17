@@ -151,10 +151,14 @@ func localDeliveryAssuranceLabel(body map[string]any, peer local.PeerReviewStatu
 	corrected := 0
 	for _, raw := range checks {
 		entry, _ := raw.(map[string]any)
-		if strings.TrimSpace(fmt.Sprint(entry["source"])) == "specgate_cli" {
-			reproduced = true
+		if strings.TrimSpace(fmt.Sprint(entry["source"])) != "specgate_cli" {
+			continue
 		}
-		if claimed, _ := entry["claimed_status"].(string); strings.TrimSpace(claimed) != "" {
+		reproduced = true
+		claimed, _ := entry["claimed_status"].(string)
+		observed, _ := entry["status"].(string)
+		claimed, observed = strings.TrimSpace(claimed), strings.TrimSpace(observed)
+		if (claimed == "pass" && observed == "fail") || (claimed == "fail" && observed == "pass") {
 			corrected++
 		}
 	}

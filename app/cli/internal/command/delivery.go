@@ -286,6 +286,16 @@ func validateCompletionReport(deps *Deps, command string, body map[string]any, a
 	return nil
 }
 
+// Grounding belongs to the current CLI file read, not the submitted draft.
+func clearCompletionEvidenceGrounding(body map[string]any) {
+	criteria, _ := body["criteria"].([]any)
+	for _, raw := range criteria {
+		criterion, _ := raw.(map[string]any)
+		evidence, _ := criterion["evidence"].(map[string]any)
+		delete(evidence, "grounding")
+	}
+}
+
 // completionEvidenceFields is the evidence contract both modes share. Local
 // review used to count any non-empty key as evidence, so a completion citing an
 // invented field passed Local and was then refused by the appliance with

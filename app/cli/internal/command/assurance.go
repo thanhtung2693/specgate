@@ -309,22 +309,30 @@ func localReportEvidence(criteria []string, report local.DeliveryReport) ([]work
 		}
 		reviews[index].Verdict = verdict
 		reviews[index].Why = evidenceSummary(row)
+		if verdict != "met" && reviews[index].VerificationBinding != "" {
+			reviews[index].Why = fmt.Sprintf("criterion claim is %q", claim)
+		}
 		citations[index] = citationWeakness(row)
 	}
-	// A bound criterion reads its verdict from the named check, matching the
-	// review that produced the stored verdict; the claim never overrides it.
+	// The stored review requires both a satisfied claim and a passing bound check.
 	for index, review := range reviews {
 		if review.VerificationBinding == "" {
 			continue
 		}
 		verdict, why := boundCriterionOutcome(review.VerificationBinding, checks)
+		if verdict == "met" {
+			verdict = review.Verdict
+		}
+		switch review.Verdict {
+		case "pending":
+			why = "criterion claim is missing; " + why
+		case "unmet", "unclear":
+			why = review.Why + "; " + why
+		}
 		if diagnostic := selectedJUnitDiagnostic(review.VerificationBinding, checks); diagnostic != "" {
 			why += "; " + diagnostic
 		}
-		// The bound check decides, so a bad citation must not flip the verdict —
-		// a wrong pointer to the proof is not a broken feature. It still belongs
-		// on this line: overwriting `why` wholesale hid a fabricated citation
-		// behind a clean pass, which is what the human reads before accepting.
+		// Keep citation problems visible alongside the claim and check outcome.
 		if note := citations[index]; note != "" {
 			why += "; " + note
 		}

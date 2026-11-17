@@ -1,6 +1,7 @@
 package local_test
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -112,5 +113,63 @@ func TestObserveJUnitReportCountsUnselectedSkippedCases(t *testing.T) {
 	got, err := observeJUnitFixture(path, []local.SelectedTestCase{{ClassName: "pkg", Name: "selected"}})
 	if err != nil || !got.Passing || got.TotalCases != 2 || got.PassedCases != 1 || got.SkippedCases != 1 || got.FailedCases != 0 {
 		t.Fatalf("unselected skip lost or failed: %#v %v", got, err)
+	}
+}
+
+func TestObserveJUnitReportHonorsTestcaseOutcomeAttributes(t *testing.T) {
+	for _, tc := range []struct {
+		name, testcase, outcome string
+		passed, failed, skipped int
+	}{
+		{"completed", `status="run" result="completed" file="test.cc" time="0.000"/>`, "passed", 1, 0, 1},
+		{"completed but failed", `status="run" result="completed"><failure/></testcase>`, "failed", 0, 1, 1},
+		{"completed but errored", `status="run" result="completed"><error/></testcase>`, "failed", 0, 1, 1},
+		{"disabled", `status="notrun" result="suppressed"/>`, "skipped", 0, 0, 2},
+		{"notrun without result", `status="notrun"/>`, "skipped", 0, 0, 2},
+		{"suppressed without status", `result="suppressed"/>`, "skipped", 0, 0, 2},
+		{"skipped without child", `status="run" result="skipped"/>`, "skipped", 0, 0, 2},
+		{"skipped with child", `status="run" result="skipped"><skipped/></testcase>`, "skipped", 0, 0, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "report.xml")
+			report := `<testsuite><testcase classname="pkg" name="selected" ` + tc.testcase +
+				`<testcase classname="pkg" name="optional" status="notrun" result="suppressed"/></testsuite>`
+			if err := os.WriteFile(path, []byte(report), 0600); err != nil {
+				t.Fatal(err)
+			}
+			got, err := observeJUnitFixture(path, []local.SelectedTestCase{{ClassName: "pkg", Name: "selected"}})
+			if err != nil || got.Passing != (tc.outcome == "passed") ||
+				got.TotalCases != 2 || got.PassedCases != tc.passed || got.FailedCases != tc.failed || got.SkippedCases != tc.skipped ||
+				len(got.Selected) != 1 || got.Selected[0].Outcome != tc.outcome {
+				t.Fatalf("incorrect testcase outcome: %+v %v", got, err)
+			}
+		})
+	}
+}
+
+func TestObserveJUnitReportRejectsMalformedOutcomeAttributes(t *testing.T) {
+	for _, tc := range []struct{ testcase, diagnostic string }{
+		{`status="pending"/>`, "testcase status"},
+		{`result="unknown"/>`, "testcase result"},
+		{`result=""/>`, "testcase result"},
+		{`status="notrun" status="run"/>`, "testcase status"},
+		{`result="suppressed" result="completed"/>`, "testcase result"},
+		{`status="notrun" result="completed"/>`, "conflicting testcase outcome"},
+		{`status="notrun" result="skipped"/>`, "conflicting testcase outcome"},
+		{`status="run" result="suppressed"/>`, "conflicting testcase outcome"},
+		{`result="completed"><skipped/></testcase>`, "conflicting testcase outcome"},
+		{`status="notrun"><failure/></testcase>`, "conflicting testcase outcome"},
+		{`result="suppressed"><error/></testcase>`, "conflicting testcase outcome"},
+		{`result="skipped"><failure/></testcase>`, "conflicting testcase outcome"},
+	} {
+		path := filepath.Join(t.TempDir(), "report.xml")
+		report := `<testsuite><testcase classname="pkg" name="selected" ` + tc.testcase + `</testsuite>`
+		if err := os.WriteFile(path, []byte(report), 0600); err != nil {
+			t.Fatal(err)
+		}
+		got, err := observeJUnitFixture(path, []local.SelectedTestCase{{ClassName: "pkg", Name: "selected"}})
+		if got.Passing || !errors.Is(err, local.ErrVerificationInvalid) || !strings.Contains(err.Error(), tc.diagnostic) {
+			t.Errorf("%s: got %+v %v, want diagnostic %q", tc.testcase, got, err, tc.diagnostic)
+		}
 	}
 }

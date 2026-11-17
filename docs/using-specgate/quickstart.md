@@ -118,9 +118,20 @@ specgate --yes change request-changes LOCAL-123 --review-id <review-id> --note "
 ```
 
 If the status includes a basis digest, include its exact value and any selected
-comparison flags from the next command in your decision. After a request for
-changes, give the agent the same work reference and review its new submission
-before deciding again.
+comparison flags from the next command in your decision. After requesting
+changes, you can continue in a fresh agent session with the same work reference:
+
+> Continue work `<work-ref>`. Read the outstanding review feedback, fix it within
+> the approved scope, submit fresh evidence, and stop for my review.
+
+Tiếng Việt:
+
+> Tiếp tục work `<work-ref>`. Đọc yêu cầu sửa còn chờ, sửa trong phạm vi đã duyệt,
+> nộp bằng chứng mới rồi dừng để tôi review.
+
+Review the new submission before deciding again. If the intended behavior has
+changed, revise it with your specification tool and approve the new scope first.
+See [resume without losing scope](guides/coding-agent-workflow.md#resume-local-work-without-losing-scope).
 
 ## Optional browser review
 

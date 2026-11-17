@@ -1,7 +1,10 @@
 package command_test
 
 import (
+	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -253,6 +256,96 @@ func TestDeliverySubmitRejectsMissingEvidencePaths(t *testing.T) {
 	}
 	if !strings.Contains(got, "--skip-evidence-check") {
 		t.Fatalf("error should mention the escape hatch:\n%s", got)
+	}
+}
+
+func TestChangeSubmitUsesOnlyCurrentEvidenceGrounding(t *testing.T) {
+	t.Parallel()
+	deps, out := newTestDeps(t)
+	stateDir, store, selection, work := newLocalChangeWork(t, deps)
+	prior, err := store.SubmitDelivery(t.Context(), selection.Workspace.ID, work.Key, map[string]any{
+		"context_digest": work.ContextDigest,
+		"agent":          map[string]any{"name": "builder"},
+		"criteria": []any{map[string]any{"criterion_id": "local-1", "claim": "satisfied", "evidence": map[string]any{
+			"kind": "file", "grounding": map[string]any{"status": "grounded", "digest": "sha256:legacy"},
+		}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	closeLocalChangeStore(t, deps, stateDir, store)
+	const proof = "Current file evidence"
+	writeTestFile(t, filepath.Join(deps.WorkingDir, "proof.txt"), proof+"\n")
+	deps.RunCheckCommand = func(context.Context, string) (int, string) { return 0, "" }
+	for _, tc := range []struct {
+		name, kind, path, wantGrounding string
+		flags                           []string
+		wantExit                        int
+	}{
+		{name: "only copied grounding", wantExit: output.ExitUsage},
+		{name: "no path", kind: "file", wantExit: output.ExitOK},
+		{name: "skipped missing path", path: "missing.txt", wantGrounding: "unverified", flags: []string{"--skip-evidence-check"}, wantExit: output.ExitOK},
+		{name: "current file", path: "proof.txt", wantGrounding: "grounded", flags: []string{"--run-checks"}, wantExit: output.ExitOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			evidence := map[string]any{"grounding": map[string]any{"status": "grounded", "digest": "sha256:copied", "excerpt": "Copied evidence"}}
+			if tc.kind != "" {
+				evidence["kind"] = tc.kind
+			}
+			if tc.path != "" {
+				evidence["path"], evidence["line"] = tc.path, 1
+			}
+			f := writeDeliveryJSON(t, map[string]any{
+				"event_type": "coding_agent.completed", "context_digest": work.ContextDigest,
+				"checks":   []map[string]any{{"name": "tests", "command": "true", "status": "pass"}},
+				"criteria": []map[string]any{{"criterion_id": "local-1", "claim": "satisfied", "evidence": evidence}},
+			})
+			out.Reset()
+			args := append([]string{"--json", "--yes", "change", "submit", work.Key, "--file", f}, tc.flags...)
+			if code := command.ExecuteForCode(command.NewRootCommand(deps), args...); code != tc.wantExit {
+				t.Fatalf("exit = %d, want %d: %s", code, tc.wantExit, out.String())
+			}
+			if tc.wantExit != output.ExitOK {
+				if !strings.Contains(out.String(), "claims satisfied but has no evidence") {
+					t.Fatalf("expected evidence validation: %s", out.String())
+				}
+				return
+			}
+			var response struct {
+				Data struct {
+					Evidence []local.AcceptanceCriterionEvidence `json:"criterion_evidence"`
+				} `json:"data"`
+			}
+			if err := json.Unmarshal(out.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			if rows := response.Data.Evidence; len(rows) != 1 || rows[0].GroundingStatus != tc.wantGrounding || rows[0].EvidencePath != tc.path {
+				t.Errorf("submit criterion evidence = %+v, want grounding %q for %q", rows, tc.wantGrounding, tc.path)
+			}
+		})
+	}
+	store, err = local.Open(filepath.Join(stateDir, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	old, err := store.DeliveryReportForReview(t.Context(), selection.Workspace.ID, prior)
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest, err := store.LatestDeliveryReport(t.Context(), selection.Workspace.ID, work.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	grounding := func(report local.DeliveryReport) map[string]any {
+		criteria := report.Body["criteria"].([]any)
+		return criteria[0].(map[string]any)["evidence"].(map[string]any)["grounding"].(map[string]any)
+	}
+	if got := grounding(old)["digest"]; got != "sha256:legacy" {
+		t.Errorf("historical report digest = %q, want original legacy digest", got)
+	}
+	if got := grounding(latest); got["digest"] != fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(proof+"\n"))) || got["excerpt"] != proof {
+		t.Errorf("recorded current grounding = %+v", got)
 	}
 }
 

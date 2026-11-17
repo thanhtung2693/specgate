@@ -149,7 +149,9 @@ func TestLocalReportEnabledCheckRequiresFreshSelectedJUnitEvidence(t *testing.T)
 		t.Fatalf("git init: %v %s", err, b)
 	}
 	deps.WorkingDir = root
-	literal := `printf '%s' '<testsuite><testcase classname="pkg" name="works"/></testsuite>' > "$SPECGATE_TEST_REPORT"`
+	fixture := filepath.Join(root, "fixture.xml")
+	writeTestFile(t, fixture, `<testsuite><testcase classname="pkg" name="works" status="run" result="completed"/><testcase classname="pkg" name="optional" status="notrun" result="suppressed"/></testsuite>`)
+	literal := `cat fixture.xml > "$SPECGATE_TEST_REPORT"`
 	input := local.VerificationContractInput{ContextDigest: work.ContextDigest, Shell: "sh", Checks: []local.VerificationCheck{{
 		Name: "unit", Command: literal, Cwd: ".", TestReport: &local.JUnitTestReport{Format: "junit", Selectors: map[string][]local.SelectedTestCase{
 			"local-1": {{ClassName: "pkg", Name: "works"}},
@@ -178,6 +180,28 @@ func TestLocalReportEnabledCheckRequiresFreshSelectedJUnitEvidence(t *testing.T)
 	}
 	if _, ok := report.Body["checks"].([]any)[0].(map[string]any)["test_observation"]; !ok {
 		t.Fatalf("selected observation not retained: %#v", report.Body)
+	}
+	writeTestFile(t, fixture, `<testsuite><testcase classname="pkg" name="works" status="notrun" result="suppressed"/></testsuite>`)
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "--yes", "change", "submit", work.Key, "--file", file, "--run-checks"); code != output.ExitGovernanceFailed {
+		t.Fatalf("suppressed selected testcase passed: %d %s", code, out.String())
+	}
+	out.Reset()
+	if code := command.ExecuteForCode(command.NewRootCommand(deps), "--json", "change", "status", work.Key, "--detail"); code != output.ExitOK {
+		t.Fatalf("status %d: %s", code, out.String())
+	}
+	var suppressed struct {
+		Data struct {
+			CriterionEvidence []local.AcceptanceCriterionEvidence `json:"criterion_evidence"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &suppressed); err != nil {
+		t.Fatal(err)
+	}
+	rows := suppressed.Data.CriterionEvidence
+	if len(rows) != 1 || rows[0].CheckStatus != "fail" || rows[0].CheckProvenance != "selected_test_observed" ||
+		len(rows[0].Selected) != 1 || rows[0].Selected[0].Outcome != "skipped" {
+		t.Fatalf("suppressed outcome lost after persistence: %s", out.String())
 	}
 	// Replaying a genuine stored receipt through the untrusted input file
 	// without a new executor run must not reproduce its observed pass.

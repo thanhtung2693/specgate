@@ -10,22 +10,27 @@ import (
 // AcceptanceInspection supplies the displayed status and decision token from
 // one SQLite snapshot. Filesystem observations remain endpoint observations.
 type AcceptanceInspection struct {
-	Work      WorkItem
-	Review    DeliveryReview
-	Report    DeliveryReport
-	Peer      PeerReviewStatus
-	Contract  VerificationContract
-	Artifact  *Artifact
-	WorkItems []WorkItem
-	Basis     *AcceptanceBasis
-	Recorded  *AcceptanceBasis
+	Work           WorkItem
+	Review         DeliveryReview
+	PriorRejection *DeliveryReview
+	Report         DeliveryReport
+	Peer           PeerReviewStatus
+	Contract       VerificationContract
+	Artifact       *Artifact
+	WorkItems      []WorkItem
+	Basis          *AcceptanceBasis
+	Recorded       *AcceptanceBasis
 }
 
 // PreviousDecidedReview reads a predecessor of the displayed review. The
 // anchor keeps concurrent submissions from becoming part of the comparison.
 func (s *Store) PreviousDecidedReview(ctx context.Context, workspaceID string, current DeliveryReview) (DeliveryReview, error) {
+	return previousDecidedReview(ctx, s.db, workspaceID, current)
+}
+
+func previousDecidedReview(ctx context.Context, q verificationQuerier, workspaceID string, current DeliveryReview) (DeliveryReview, error) {
 	var review DeliveryReview
-	err := s.db.QueryRowContext(ctx, `
+	err := q.QueryRowContext(ctx, `
 		SELECT id, work_id, report_id, verdict, summary, human_decision, note, created_at
 		FROM delivery_reviews
 		WHERE workspace_id = ? AND work_id = ? AND human_decision IN ('approve', 'reject')
@@ -49,6 +54,15 @@ func (s *Store) InspectAcceptance(ctx context.Context, workspaceID, ref string, 
 	view.Review, err = deliveryStatus(ctx, tx, workspaceID, view.Work)
 	if err != nil {
 		return view, err
+	}
+	if view.Review.HumanDecision == "" {
+		previous, err := previousDecidedReview(ctx, tx, workspaceID, view.Review)
+		if err != nil && err != sql.ErrNoRows {
+			return view, err
+		}
+		if previous.HumanDecision == "reject" {
+			view.PriorRejection = &previous
+		}
 	}
 	view.Report, err = deliveryReportByID(ctx, tx, workspaceID, view.Work.ID, view.Review.ReportID)
 	if err != nil {
