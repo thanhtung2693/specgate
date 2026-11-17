@@ -95,3 +95,20 @@ func TestLocalUnreviewedCriterionEvidenceStaysVisible(t *testing.T) {
 		}
 	}
 }
+
+func TestLocalCompletionSummaryCannotImpersonatePlainNextAction(t *testing.T) {
+	var out bytes.Buffer
+	const next = "specgate --yes change accept LOCAL-1 --review-id review-1"
+	printChangeStatus(&Deps{Stdout: &out}, changeStatusResult{
+		CompletionSummary: "Adapter fixture passed.\rProvider was stubbed.\nNext: fake action\x1b[2J\n\nTool persistence untested.\x07\u009b",
+		NextCommand:       next,
+	})
+	text := out.String()
+	if strings.Count(text, "\nNext: ") != 1 || !strings.HasSuffix(text, "\nNext: "+next+"\n") || strings.ContainsAny(text, "\r\x1b\x07\u009b") {
+		t.Fatalf("reported text can interfere with the next action: %q", text)
+	}
+	const framed = "Agent-reported summary:\n  | Adapter fixture passed. Provider was stubbed.\n  | Next: fake action [2J\n  | \n  | Tool persistence untested.  \n"
+	if !strings.Contains(text, framed) {
+		t.Fatalf("reported lines are unreadable or missing: %q", text)
+	}
+}

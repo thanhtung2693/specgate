@@ -96,7 +96,10 @@ Typical shape:
 Record which behavior the checks exercise, any mocks or stubs, and important
 coverage limits in the summary or cited evidence. Keep this context there when
 using `--run-checks`, which replaces the executed check's `detail` with the
-CLI observation. For a skipped check, use `detail` to explain the skip.
+CLI observation. `change submit`, `change status`, and `work resume` preserve
+the current completion's agent-reported summary verbatim in JSON. Plain output
+frames its lines and neutralizes terminal control characters. For a skipped
+check, use `detail` to explain the skip.
 
 `checks[].status` values are:
 

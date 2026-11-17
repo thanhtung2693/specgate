@@ -158,6 +158,7 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 				return localExitError(deps, spec.Operation, err)
 			}
 			var result any = map[string]any{"review": localDeliveryReviewView(review)}
+			var submittedSummary string
 			if spec.CompactJSON {
 				work, workErr := store.GetWork(cmd.Context(), selection.Workspace.ID, args[0])
 				if workErr != nil {
@@ -167,6 +168,7 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 				if reportErr != nil {
 					return localExitError(deps, spec.Operation, reportErr)
 				}
+				submittedSummary, _ = report.Body["summary"].(string)
 				peer, peerErr := store.PeerReviewStatus(cmd.Context(), selection.Workspace.ID, work.Key)
 				if peerErr != nil {
 					return localExitError(deps, spec.Operation, peerErr)
@@ -204,6 +206,7 @@ func newDeliverySubmitCommand(deps *Deps, spec deliverySubmitCommandSpec) *cobra
 				deps.Printer.Success(spec.Operation, result)
 			} else {
 				fmt.Fprintf(deps.Stdout, "%s %s for %s\n", title(deps, "Delivery review"), styledStatus(deps, review.Verdict), styled(deps, output.StyleBold, args[0]))
+				printCompletionSummary(deps, submittedSummary)
 				if status, ok := result.(changeStatusResult); ok && status.CompletionID == review.ReportID && status.NextActor == "implementing_agent" && filePath != "" {
 					fmt.Fprintln(deps.Stdout, nextStep(deps, "Retry with the revised completion file", status.NextCommand))
 				}

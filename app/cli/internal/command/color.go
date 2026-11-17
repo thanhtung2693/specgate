@@ -8,7 +8,7 @@ import (
 	"github.com/specgate/specgate/app/cli/internal/output"
 )
 
-// terminalText keeps manifest-provided text on one harmless terminal line.
+// terminalText replaces control characters within one display line.
 func terminalText(text string) string {
 	return strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) {

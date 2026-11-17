@@ -41,6 +41,7 @@ type changeStatusResult struct {
 	NextCommand             string                              `json:"next_command"`
 	ReviewID                string                              `json:"review_id,omitempty"`
 	CompletionID            string                              `json:"completion_id,omitempty"`
+	CompletionSummary       string                              `json:"completion_summary,omitempty"`
 	ContextDigest           string                              `json:"context_digest,omitempty"`
 	ArtifactID              string                              `json:"artifact_id,omitempty"`
 	ArtifactVersion         int                                 `json:"artifact_version,omitempty"`

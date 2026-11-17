@@ -78,10 +78,12 @@ request-changes` record the existing human decision. The detailed command
 families remain available when the compact view is not enough: `work`,
 `artifact`, `gates`, `delivery`, `audit`, and `verify`.
 
-Preparation and approval orchestration deliberately remain outside this slice:
-there is no `change prepare` or snapshot-approval orchestration. That boundary
-keeps the facade focused on the implemented post-handoff loop rather than
-implying a new lifecycle or storage model.
+Keep source authoring in your existing tool. Use `artifact` to preview and
+publish the snapshot and `gates` to check readiness. For artifact-backed work,
+the Change facade starts at `change approve`, when the human supplies the
+reviewed title and acceptance criteria. SpecGate records approval of the exact
+snapshot, promotes that version to the feature's canonical artifact, creates or
+reuses the artifact-bound work item, and verifies its Context Pack.
 
 ## Why the CLI is the main interface
 

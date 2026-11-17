@@ -117,8 +117,9 @@ matches the Context Pack or status work ID and any `context_digest` matches the
 Context Pack. Never overwrite automatically; stop when attribution is unsafe.
 
 Fill `agent.name`, `summary`, `affected_files`, `checks[]`, and exactly one
-`criteria[]` entry per canonical criterion. Each claim must be independently
-reviewable. Anchor evidence with `line` or a verbatim `heading`; a path is
+`criteria[]` entry per canonical criterion. In `summary`, state what the checks
+exercised, any mocks or stubs, and relevant coverage limits. Each claim must be
+independently reviewable. Anchor evidence with `line` or a verbatim `heading`; a path is
 `unanchored`, and a missing heading is `heading_not_found`. Neither has an
 excerpt. A command name alone is not evidence. Set every check to `pass`,
 `fail`, or `skipped`, or leave it `pending` with a runnable command and use

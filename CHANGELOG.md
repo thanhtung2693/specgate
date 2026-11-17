@@ -40,6 +40,9 @@ browser review and private transfer of a Local store between checkouts.
   before approval. Setup explains PATH and wizard placeholders, and the
   Quickstart includes English and Vietnamese prompts for resuming requested
   changes in a fresh agent session.
+- The approval guide explains how `change approve` turns a reviewed snapshot
+  into an implementation handoff. Quickstart reuses unchanged approved checks
+  and asks for fresh approval before running new or changed commands.
 - Explain the optional transfer checkpoint, its first-use backup and upgrade
   prompt, and which files to carry separately when moving between checkouts.
 - The landing page presents the four-step Local workflow alongside an
@@ -71,6 +74,10 @@ browser review and private transfer of a Local store between checkouts.
   criterion claims in status, resume, or the Local review projection.
 - Reviewer feedback survives undecided delivery retries and identifies its
   originating review. A later decision replaces or clears that guidance.
+- `change submit`, `change status`, and `work resume` show the stored
+  agent-reported completion summary, including any reported test limits.
+  JSON preserves it verbatim. Plain output frames each line and neutralizes
+  terminal control characters.
 - New completion and peer-review submissions discard copied citation
   grounding. Only files read by the current CLI receive an observed digest
   and excerpt; historical reports remain unchanged.

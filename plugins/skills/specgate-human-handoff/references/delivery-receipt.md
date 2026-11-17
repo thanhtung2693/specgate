@@ -11,6 +11,7 @@ Assurance: <assurance>
 Decision: <decision>
 Receipt: <receipt>
 Freshness: <freshness>
+[Agent-reported summary: <completion_summary> — only when present]
 Acceptance criteria: <total> total · <met> met · <unmet> unmet · <unclear> unclear
 [<verdict>] <criterion text> — <why>   (one line per data.criteria entry)
 [Stale: <stale_reason> — only when stale]
@@ -26,3 +27,6 @@ not a state override. For any other state, show a `SpecGate delivery handoff`
 with state, missing, `next_actor`, `next_command`, and the same
 acceptance-criteria summary and lines; never success wording. Report a failed
 status as failure. Echo `accepted` without claiming this agent accepted it.
+
+In either format, quote `data.completion_summary` verbatim when present as
+agent-reported context. Use `next_command` for any action.
