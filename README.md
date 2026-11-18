@@ -48,7 +48,7 @@ The base workflow needs no Docker, background service, or model API key.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/thanhtung2693/specgate/main/scripts/install-cli.sh | sh
-specgate init --mode local
+specgate init
 specgate doctor
 ```
 

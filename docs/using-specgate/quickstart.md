@@ -24,7 +24,7 @@ folder on `PATH`. Install a POSIX `sh` on `PATH` to rerun delivery checks.
 From the Git repository root, run:
 
 ```bash
-specgate init --mode local
+specgate init
 specgate doctor
 ```
 
