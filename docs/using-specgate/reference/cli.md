@@ -1130,7 +1130,8 @@ A configuration that selects the retired remote setup returns incompatibility
 exit `6`. Preserve that configuration and use a prior compatible CLI if you
 still need to operate the deployment. Follow [independent Local setup](../guides/operate-specgate.md#previous-installations) for the separate configuration, legacy
 environment override, and repository binding steps.
-`specgate init --mode local` remains a compatibility spelling for Local setup.
+SpecGate has one supported setup mode: Local. The old `--mode local` spelling
+still works for compatibility, but new commands can omit it.
 
 ```bash
 specgate update

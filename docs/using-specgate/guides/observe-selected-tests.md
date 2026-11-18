@@ -54,7 +54,7 @@ node --test --test-reporter=junit health.test.mjs
 git add health.mjs health.test.mjs
 git -c user.name="Tutorial fixture" -c user.email=fixture@example.test \
   -c commit.gpgsign=false commit -qm "tutorial baseline"
-specgate init --mode local --workspace-name "Selected test tutorial" \
+specgate init --workspace-name "Selected test tutorial" \
   --username tutorial-user --display-name "Tutorial user" \
   --local-dir "$TUTORIAL_DIR/.specgate/local" --json
 specgate doctor --json
